@@ -34,7 +34,8 @@ modules: [
 			],
 			days: 1, // number of days to look ahead
 			fetchInterval: 5*60*1000, // update intervall in milliseconds
-			showStartTime: false // whether to show lesson number ('1.') or time ('07:40')
+			showStartTime: false, // whether to show lesson number ('1.') or time ('07:40')
+			showRegularLessons: false // whether to show also regular lessons or not
 		}
 	}
 ```
@@ -100,6 +101,13 @@ The following properties can be configured:
 				<br><b>Possible values:</b> <code>true</code> or <code>false</code>
 				<br><b>Default value:</b> <code>false</code></br></br>
 				The module tries to achieve the timetable of the school and currently assumes that Monday's lesson times are valid for the whole week. When set to <code>false</code> the module matches a start time like "07:40" to "1." for example.
+			</td>
+		</tr>
+		<tr>
+			<td><code>showRegularLessons</code></td>
+			<td>Whether to show also regular lessons or not<br>
+				<br><b>Possible values:</b> <code>true</code> or <code>false</code>
+				<br><b>Default value:</b> <code>false</code>
 			</td>
 		</tr>
 </table>
