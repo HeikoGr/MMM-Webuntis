@@ -12,7 +12,8 @@ Module.register("MMM-Webuntis", {
 		],
 		days: 7,
 		fetchInterval: 5 * 60 * 1000,
-		showStartTime: false
+		showStartTime: false,
+		showRegularLessons: false
 	},
 
 	getStyles: function () {
@@ -59,8 +60,11 @@ Module.register("MMM-Webuntis", {
 				var lesson = lessons[i];
 				var time = new Date(lesson.year,lesson.month-1,lesson.day,lesson.hour,lesson.minutes);
 
-				// skip if nothing special
 				if (lesson.code == "") {continue;}
+				if (!this.config.showRegularLessons) {
+					// skip if nothing special
+					if (lesson.code == "") {continue;}
+				}
 
 				// skip past lessons
 				if (time < new Date() && lesson.code != "error") {continue;}
