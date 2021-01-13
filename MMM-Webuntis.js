@@ -85,11 +85,11 @@ Module.register("MMM-Webuntis", {
 				row.appendChild(dateTimeCell);
 
 				// subject cell
+				var teacher = lesson.teacher ? "(" + this.capitalize(lesson.teacher) + ")" : "";
 				var subjectCell = document.createElement("td");
 				subjectCell.innerHTML = lesson.substText;
 				if (lesson.substText == "") {subjectCell.innerHTML =
-                this.capitalize(lesson.subject) + "&nbsp;(" +
-                this.capitalize(lesson.teacher) + ")";}
+                this.capitalize(lesson.subject) + "&nbsp;" + teacher;}
 				//if (lesson.text.length > 0 ) subjectCell.innerHTML += "</br><span class='xsmall dimmed'>" + lesson.text + "</span>";
 				subjectCell.className = "leftSpace align-left alignTop";
 				if (lesson.code == "cancelled") {subjectCell.className += " cancelled";}

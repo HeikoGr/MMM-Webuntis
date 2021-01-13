@@ -78,7 +78,7 @@ module.exports = NodeHelper.create({
 					lesson.minutes = minutes;
 					lesson.lessonNumber = startTimes[element.startTime];
 					element.su[0] ? lesson.subject = element.su[0].longname : lesson.subject = "";
-					element.te[0] ? lesson.teacher = element.te[0].longname : lesson.teacher = "";
+					element.te ? lesson.teacher = element.te[0].longname : lesson.teacher = "";
 					element.code ? lesson.code = element.code : lesson.code = "";
 					element.lstext ? lesson.text = element.lstext : lesson.text = "";
 					element.substText ? lesson.substText = element.substText : lesson.substText = "";
