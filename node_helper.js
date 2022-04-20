@@ -64,7 +64,7 @@ module.exports = NodeHelper.create({
 				return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
 			})
 			.then(timetable => {
-				lessons = timetableToLessons(timetable);
+				lessons = this.timetableToLessons(startTimes, timetable);
 				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
 			})
 			.catch(error => {
@@ -141,7 +141,7 @@ module.exports = NodeHelper.create({
 				return untis.getTimetableForRange(rangeStart, rangeEnd, classid, WebUntis.TYPES.CLASS);
 			})
 			.then(timetable => {
-				lessons = timetableToLessons(timetable);
+				lessons = this.timetableToLessons(startTimes, timetable);
 				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
 			})
 			.catch(error => {
@@ -164,7 +164,8 @@ module.exports = NodeHelper.create({
 
 		untis.logout();
 	},
-	timetableToLessons: function(timetable) {
+
+	timetableToLessons: function(startTimes, timetable) {
 		var lessons = [];
 		timetable.forEach(element => {
 			let lesson = {};
