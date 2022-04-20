@@ -14,7 +14,8 @@ Module.register("MMM-Webuntis", {
 		days: 7,
 		fetchInterval: 5 * 60 * 1000,
 		showStartTime: false,
-		showRegularLessons: false
+		showRegularLessons: false,
+		showTeacher: true
 	},
 
 	getStyles: function () {
@@ -83,8 +84,12 @@ Module.register("MMM-Webuntis", {
 				// date and time
 				var dateTimeCell = document.createElement("td");
 				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE",{weekday:"short"}).toUpperCase() + "&nbsp;";
-				if (this.config.showStartTime || lesson.lessonNumber === undefined) {dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", {hour:"2-digit",minute:"2-digit"});}
-				else {dateTimeCell.innerHTML += lesson.lessonNumber + ".";}
+				if (this.config.showStartTime || lesson.lessonNumber === undefined) {
+					dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", {hour:"2-digit",minute:"2-digit"});
+				}
+				else {
+					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
+				}
 				dateTimeCell.className = "leftSpace align-right alignTop";
 				row.appendChild(dateTimeCell);
 
@@ -92,12 +97,20 @@ Module.register("MMM-Webuntis", {
 				var teacher = lesson.teacher ? "(" + this.capitalize(lesson.teacher) + ")" : "";
 				var subjectCell = document.createElement("td");
 				subjectCell.innerHTML = lesson.substText;
-				if (lesson.substText == "") {subjectCell.innerHTML =
-                this.capitalize(lesson.subject) + "&nbsp;" + teacher;}
+				if (lesson.substText == "") {
+					subjectCell.innerHTML = this.capitalize(lesson.subject);
+					if (this.config.showTeacher) {
+						subjectCell.innerHTML += "&nbsp;" + teacher;
+					}
+				}
 				//if (lesson.text.length > 0 ) subjectCell.innerHTML += "</br><span class='xsmall dimmed'>" + lesson.text + "</span>";
 				subjectCell.className = "leftSpace align-left alignTop";
-				if (lesson.code == "cancelled") {subjectCell.className += " cancelled";}
-				if (lesson.code == "error") {subjectCell.className += " error";}
+				if (lesson.code == "cancelled") {
+					subjectCell.className += " cancelled";
+				}
+				else if (lesson.code == "error") {
+					subjectCell.className += " error";
+				}
 
 				row.appendChild(subjectCell);
 			} // end for lessons

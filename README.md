@@ -114,6 +114,13 @@ The following properties can be configured:
 				<br><b>Default value:</b> <code>false</code>
 			</td>
 		</tr>
+		<tr>
+			<td><code>showTeacher</code></td>
+			<td>Whether to show also teachers name or not<br>
+				<br><b>Possible values:</b> <code>true</code> or <code>false</code>
+				<br><b>Default value:</b> <code>true</code>
+			</td>
+		</tr>
 </table>
 
 ## How it works
