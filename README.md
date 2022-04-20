@@ -27,9 +27,8 @@ modules: [
 				{
 					title: "2nd child's name",
 					school: "your school",
-					username: "your untis username",
-					password: "your untis password",
-					server: "untis server"
+					server: "untis server",
+					class: "2nd child's class name"
 				},
 			],
 			days: 1, // number of days to look ahead
@@ -68,15 +67,20 @@ The following properties can be configured:
 					</tr>
 					<tr>
 						<td><code>username</code></td>
-						<td>Username used to login at Untis</td>
+						<td>Username used to login at Untis<br/>(Optional, only required if student has custom login)</td>
 					</tr>
 					<tr>
 						<td><code>password</code></td>
-						<td>Password used to login at Untis</td>
+						<td>Password used to login at Untis<br/>(Optional, only required if student has custom login)</td>
 					</tr>
 					<tr>
 						<td><code>server</code></td>
-						<td>Server as shown in the URL after having loged in at <a href="https://webuntis.com/">webuntis.com</a>, e.g. <code>kephiso.webuntis.com</code>
+						<td>Server as shown in the URL after having loged in at <a href="https://webuntis.com/">webuntis.com</a>, e.g. <code>kephiso.webuntis.com</code></td>
+					</tr>
+					<tr>
+						<td><code>class</code></td>
+						<td>Name of class to show<br/>(Optional, only required if Anonymous mode is used)</td>
+					</tr>
 				</table>
 			</td>
 		</tr>
