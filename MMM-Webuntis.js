@@ -61,7 +61,6 @@ Module.register("MMM-Webuntis", {
 				var lesson = lessons[i];
 				var time = new Date(lesson.year,lesson.month-1,lesson.day,lesson.hour,lesson.minutes);
 
-				if (lesson.code == "") {continue;}
 				if (!this.config.showRegularLessons) {
 					// skip if nothing special
 					if (lesson.code == "") {continue;}
