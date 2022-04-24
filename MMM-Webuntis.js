@@ -94,15 +94,25 @@ Module.register("MMM-Webuntis", {
 				row.appendChild(dateTimeCell);
 
 				// subject cell
-				var teacher = lesson.teacher ? "(" + this.capitalize(lesson.teacher) + ")" : "";
+				
 				var subjectCell = document.createElement("td");
-				subjectCell.innerHTML = lesson.substText;
+				subjectCell.innerHTML = "";
+				subjectCell.innerHTML += this.capitalize(lesson.subject);
+
 				if (lesson.substText == "") {
-					subjectCell.innerHTML = this.capitalize(lesson.subject);
+					//Teachers name
 					if (this.config.showTeacher) {
-						subjectCell.innerHTML += "&nbsp;" + teacher;
+						subjectCell.innerHTML += "&nbsp;" + "(";
+						subjectCell.innerHTML += this.capitalize(lesson.teacher);
+						subjectCell.innerHTML += ")";
 					}
 				}
+				else {
+					subjectCell.innerHTML += "&nbsp;" + "(";
+					subjectCell.innerHTML += lesson.substText;
+					subjectCell.innerHTML += ")";
+				}
+
 				//if (lesson.text.length > 0 ) subjectCell.innerHTML += "</br><span class='xsmall dimmed'>" + lesson.text + "</span>";
 				subjectCell.className = "leftSpace align-left alignTop";
 				if (lesson.code == "cancelled") {
@@ -110,6 +120,9 @@ Module.register("MMM-Webuntis", {
 				}
 				else if (lesson.code == "error") {
 					subjectCell.className += " error";
+				}
+				else if (lesson.code == "info") {
+					subjectCell.className += " info";
 				}
 
 				row.appendChild(subjectCell);

@@ -192,12 +192,18 @@ module.exports = NodeHelper.create({
 			lesson.code = element.code ? element.code : "";
 			lesson.text = element.lstext ? element.lstext : "";
 			lesson.substText = element.substText ? element.substText : "";
+
+			//Set code to "info" if there is an "substText" from WebUntis to display it if configuration "showRegularLessons" is set to false
+			if (lesson.substText != "" && lesson.code == "") {
+				lesson.code = "info";
+			}
 			
 			//Create sort string
 			lesson.sortString = lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
 			switch (lesson.code) {
 				case "cancelled": lesson.sortString += "1"; break;
 				case "irregular": lesson.sortString += "2"; break;
+				case "info": lesson.sortString += "3"; break;
 				default: lesson.sortString += "9";
 			}
 
