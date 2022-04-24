@@ -16,7 +16,8 @@ Module.register("MMM-Webuntis", {
 		showStartTime: false,
 		showRegularLessons: false,
 		showTeacher: true,
-		shortSubject: false
+		shortSubject: false,
+		debug: false
 	},
 
 	getStyles: function () {

@@ -9,14 +9,17 @@ module.exports = NodeHelper.create({
 
 		if (notification === "FETCH_DATA") {
 
+			//Copy and save config
+			this.config = payload;
+
 			// iterate through students, fetch and send lessons
-			for (let i in payload.students) {
-				var student = payload.students[i];
+			for (let i in this.config.students) {
+				var student = this.config.students[i];
 				if (student.username !== "") {
-					this.fetchLessonsLogin(student, payload.days);
+					this.fetchLessonsLogin(student, this.config.days);
 				}
 				else if (student.class !== "") {
-					this.fetchLessonsAnonymous(student, payload.days);
+					this.fetchLessonsAnonymous(student, this.config.days);
 				}
 				else {
 					console.log("Error: Student '" + student.title + "' has an configuration error!");
@@ -224,6 +227,10 @@ module.exports = NodeHelper.create({
 
 			lessons.push(lesson);
 		});
+
+		if (this.config.debug) {
+			console.log("MMM-Webuntis: Timetable and Lessons: ", JSON.stringify({timetable: timetable, lessons: lessons}));
+		}
 
 		return lessons;
 	},

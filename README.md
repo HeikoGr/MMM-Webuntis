@@ -136,6 +136,14 @@ The following properties can be configured:
                 <br><b>Default value:</b> <code>fasle</code>
             </td>
         </tr>
+        <tr>
+            <td><code>debug</code></td>
+            <td>
+                Use only for debug purposes!<br>If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
+                <br><b>Possible values:</b> <code>true</code> or <code>false</code>
+                <br><b>Default value:</b> <code>fasle</code>
+            </td>
+        </tr>
 </table>
 
 ## How it works
