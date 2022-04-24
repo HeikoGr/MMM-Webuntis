@@ -77,11 +77,14 @@ Module.register("MMM-Webuntis", {
 				var row = document.createElement("tr");
 				table.appendChild(row);
 
-				// title, i.e. class name or child name
-				var titleCell = document.createElement("td");
-				titleCell.innerHTML = studentTitle;
-				titleCell.className = "align-right alignTop";
-				row.appendChild(titleCell);
+				//Only display title cell if there are more than one student
+				if (this.config.students.length > 1) {
+					// title, i.e. class name or child name
+					var titleCell = document.createElement("td");
+					titleCell.innerHTML = studentTitle;
+					titleCell.className = "align-right alignTop";
+					row.appendChild(titleCell);
+				}
 
 				// date and time
 				var dateTimeCell = document.createElement("td");
