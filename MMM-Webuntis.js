@@ -15,7 +15,8 @@ Module.register("MMM-Webuntis", {
 		fetchInterval: 5 * 60 * 1000,
 		showStartTime: false,
 		showRegularLessons: false,
-		showTeacher: true
+		showTeacher: true,
+		shortSubject: false
 	},
 
 	getStyles: function () {
@@ -97,13 +98,26 @@ Module.register("MMM-Webuntis", {
 				
 				var subjectCell = document.createElement("td");
 				subjectCell.innerHTML = "";
-				subjectCell.innerHTML += this.capitalize(lesson.subject);
+				
+				// Subject
+				if (this.config.shortSubject) {
+					subjectCell.innerHTML += this.capitalize(lesson.subjectShort);
+				}
+				else {
+					subjectCell.innerHTML += this.capitalize(lesson.subject);
+				}
 
 				if (lesson.substText == "") {
 					//Teachers name
 					if (this.config.showTeacher) {
 						subjectCell.innerHTML += "&nbsp;" + "(";
-						subjectCell.innerHTML += this.capitalize(lesson.teacher);
+						if (this.config.showTeacher == "initial") {
+							subjectCell.innerHTML += this.capitalize(lesson.teacherInitial);
+						}
+						else {
+							subjectCell.innerHTML += this.capitalize(lesson.teacher);
+						}
+
 						subjectCell.innerHTML += ")";
 					}
 				}

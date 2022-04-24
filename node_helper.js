@@ -183,10 +183,24 @@ module.exports = NodeHelper.create({
 			lesson.lessonNumber = startTimes[element.startTime];
 
 			//Parse data about teacher
-			lesson.teacher = element.te[0] ? element.te[0].longname : "";
+			if (element.te) {
+				lesson.teacher = element.te[0].longname;
+				lesson.teacherInitial = element.te[0].name;
+			}
+			else {
+				lesson.teacher = "";
+				lesson.teacherInitial = "";
+			}
 
 			//Parse data about subject
-			lesson.subject = element.su[0] ? element.su[0].longname : "";
+			if (element.su[0]) {
+				lesson.subject = element.su[0].longname;
+				lesson.subjectShort = element.su[0].name;
+			}
+			else {
+				lesson.subject = "";
+				lesson.subjectShort = "";
+			}
 
 			//Parse other information
 			lesson.code = element.code ? element.code : "";
