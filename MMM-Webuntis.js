@@ -131,6 +131,8 @@ Module.register("MMM-Webuntis", {
 	},
 
 	capitalize: function(str) {
+		return str;
+		//Changed, because the strings does not look nice for me after capitalize function, is this necessary? 
 		str = str.toLowerCase().split(" ");
 
 		for (let i = 0, x = str.length; i < x; i++) {
