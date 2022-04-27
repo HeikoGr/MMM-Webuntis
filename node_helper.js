@@ -15,10 +15,10 @@ module.exports = NodeHelper.create({
 			// iterate through students, fetch and send lessons
 			for (let i in this.config.students) {
 				var student = this.config.students[i];
-				if (student.username !== "") {
+				if (student.username) {
 					this.fetchLessonsLogin(student, this.config.days);
 				}
-				else if (student.class !== "") {
+				else if (student.class) {
 					this.fetchLessonsAnonymous(student, this.config.days);
 				}
 				else {
