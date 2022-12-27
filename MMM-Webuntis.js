@@ -7,13 +7,17 @@ Module.register("MMM-Webuntis", {
 				school: "",
 				username: "",
 				password: "",
-				server: ""
+				server: "",
+				class: ""
 			},
 		],
 		days: 7,
 		fetchInterval: 5 * 60 * 1000,
 		showStartTime: false,
-		showRegularLessons: false
+		showRegularLessons: false,
+		showTeacher: true,
+		shortSubject: false,
+		debug: false
 	},
 
 	getStyles: function () {
@@ -60,7 +64,6 @@ Module.register("MMM-Webuntis", {
 				var lesson = lessons[i];
 				var time = new Date(lesson.year,lesson.month-1,lesson.day,lesson.hour,lesson.minutes);
 
-				if (lesson.code == "") {continue;}
 				if (!this.config.showRegularLessons) {
 					// skip if nothing special
 					if (lesson.code == "") {continue;}
@@ -74,30 +77,71 @@ Module.register("MMM-Webuntis", {
 				var row = document.createElement("tr");
 				table.appendChild(row);
 
-				// title, i.e. class name or child name
-				var titleCell = document.createElement("td");
-				titleCell.innerHTML = studentTitle;
-				titleCell.className = "align-right alignTop";
-				row.appendChild(titleCell);
+				//Only display title cell if there are more than one student
+				if (this.config.students.length > 1) {
+					// title, i.e. class name or child name
+					var titleCell = document.createElement("td");
+					titleCell.innerHTML = studentTitle;
+					titleCell.className = "align-right alignTop";
+					row.appendChild(titleCell);
+				}
 
 				// date and time
 				var dateTimeCell = document.createElement("td");
 				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE",{weekday:"short"}).toUpperCase() + "&nbsp;";
-				if (this.config.showStartTime || lesson.lessonNumber === undefined) {dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", {hour:"2-digit",minute:"2-digit"});}
-				else {dateTimeCell.innerHTML += lesson.lessonNumber + ".";}
+				if (this.config.showStartTime || lesson.lessonNumber === undefined) {
+					dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", {hour:"2-digit",minute:"2-digit"});
+				}
+				else {
+					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
+				}
 				dateTimeCell.className = "leftSpace align-right alignTop";
 				row.appendChild(dateTimeCell);
 
 				// subject cell
-				var teacher = lesson.teacher ? "(" + this.capitalize(lesson.teacher) + ")" : "";
+				
 				var subjectCell = document.createElement("td");
-				subjectCell.innerHTML = lesson.substText;
-				if (lesson.substText == "") {subjectCell.innerHTML =
-                this.capitalize(lesson.subject) + "&nbsp;" + teacher;}
+				subjectCell.innerHTML = "";
+				
+				// Subject
+				if (this.config.shortSubject) {
+					subjectCell.innerHTML += this.capitalize(lesson.subjectShort);
+				}
+				else {
+					subjectCell.innerHTML += this.capitalize(lesson.subject);
+				}
+
+				if (lesson.substText == "") {
+					//Teachers name
+					if (this.config.showTeacher) {
+						subjectCell.innerHTML += "&nbsp;" + "(";
+						if (this.config.showTeacher == "initial") {
+							subjectCell.innerHTML += this.capitalize(lesson.teacherInitial);
+						}
+						else {
+							subjectCell.innerHTML += this.capitalize(lesson.teacher);
+						}
+
+						subjectCell.innerHTML += ")";
+					}
+				}
+				else {
+					subjectCell.innerHTML += "&nbsp;" + "(";
+					subjectCell.innerHTML += lesson.substText;
+					subjectCell.innerHTML += ")";
+				}
+
 				//if (lesson.text.length > 0 ) subjectCell.innerHTML += "</br><span class='xsmall dimmed'>" + lesson.text + "</span>";
 				subjectCell.className = "leftSpace align-left alignTop";
-				if (lesson.code == "cancelled") {subjectCell.className += " cancelled";}
-				if (lesson.code == "error") {subjectCell.className += " error";}
+				if (lesson.code == "cancelled") {
+					subjectCell.className += " cancelled";
+				}
+				else if (lesson.code == "error") {
+					subjectCell.className += " error";
+				}
+				else if (lesson.code == "info") {
+					subjectCell.className += " info";
+				}
 
 				row.appendChild(subjectCell);
 			} // end for lessons
@@ -118,6 +162,8 @@ Module.register("MMM-Webuntis", {
 	},
 
 	capitalize: function(str) {
+		return str;
+		//Changed, because the strings does not look nice for me after capitalize function, is this necessary? 
 		str = str.toLowerCase().split(" ");
 
 		for (let i = 0, x = str.length; i < x; i++) {

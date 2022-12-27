@@ -12,5 +12,8 @@
 
 .error {
   color: red;
-  //font-weight: bold;
+}
+
+.info {
+  font-style: italic;
 }
