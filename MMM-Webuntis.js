@@ -8,7 +8,8 @@ Module.register("MMM-Webuntis", {
 				username: "",
 				password: "",
 				server: "",
-				class: ""
+				class: "",
+				useClassTimetable: false,
 			},
 		],
 		days: 7,
