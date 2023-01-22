@@ -55,6 +55,19 @@ Module.register("MMM-Webuntis", {
 		for (let studentTitle in this.lessonsByStudent) {
 			//for (const [studentTitle, lessons] of this.lessonsByStudent.entries()) {
 
+			// student name 
+			//Only display title cell if there are more than one student
+				if (this.config.students.length > 1) {
+					var studentRow = document.createElement("tr");
+					table.appendChild(studentRow);
+					var studentCell = document.createElement("td");
+					studentCell.colSpan = 2;
+					studentCell.innerHTML = studentTitle;
+					studentCell.className = "student small bold";
+					studentRow.appendChild(studentCell);
+				}			
+
+
 			var lessons = this.lessonsByStudent[studentTitle];
 
 			// sort lessons by start time
@@ -78,15 +91,6 @@ Module.register("MMM-Webuntis", {
 				var row = document.createElement("tr");
 				table.appendChild(row);
 
-				//Only display title cell if there are more than one student
-				if (this.config.students.length > 1) {
-					// title, i.e. class name or child name
-					var titleCell = document.createElement("td");
-					titleCell.innerHTML = studentTitle;
-					titleCell.className = "align-right alignTop";
-					row.appendChild(titleCell);
-				}
-
 				// date and time
 				var dateTimeCell = document.createElement("td");
 				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE",{weekday:"short"}).toUpperCase() + "&nbsp;";
@@ -96,7 +100,7 @@ Module.register("MMM-Webuntis", {
 				else {
 					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
 				}
-				dateTimeCell.className = "leftSpace align-right alignTop";
+				dateTimeCell.className = "align-right alignTop";
 				row.appendChild(dateTimeCell);
 
 				// subject cell
@@ -112,27 +116,47 @@ Module.register("MMM-Webuntis", {
 					subjectCell.innerHTML += this.capitalize(lesson.subject);
 				}
 
-				if (lesson.substText == "") {
-					//Teachers name
-					if (this.config.showTeacher) {
-						subjectCell.innerHTML += "&nbsp;" + "(";
-						if (this.config.showTeacher == "initial") {
+				
+				//Teachers name
+				if (this.config.showTeacher) {
+					
+					if (this.config.showTeacher == "initial") {
+						if (lesson.teacherInitial !== "") {
+							subjectCell.innerHTML += "&nbsp;" + "(";
 							subjectCell.innerHTML += this.capitalize(lesson.teacherInitial);
+							subjectCell.innerHTML += ")";
 						}
-						else {
-							subjectCell.innerHTML += this.capitalize(lesson.teacher);
-						}
-
-						subjectCell.innerHTML += ")";
 					}
+					else {
+						if (lesson.teacher !== "") {
+							subjectCell.innerHTML += "&nbsp;" + "(";
+							subjectCell.innerHTML += this.capitalize(lesson.teacher);
+							subjectCell.innerHTML += ")";							
+						}
+					}
+
 				}
-				else {
-					subjectCell.innerHTML += "&nbsp;" + "(";
-					subjectCell.innerHTML += lesson.substText;
-					subjectCell.innerHTML += ")";
+				
+				// lesson substitute text
+				
+				if (lesson.substText !== "")  {
+					subjectCell.innerHTML += "<br/>"
+					var subText = document.createElement("span");
+					subText.className = "xsmall dimmed";
+					subText.innerHTML = lesson.substText;
+					subjectCell.appendChild(subText);
 				}
 
-				//if (lesson.text.length > 0 ) subjectCell.innerHTML += "</br><span class='xsmall dimmed'>" + lesson.text + "</span>";
+				/*
+				if (lesson.text !== "")  {
+					subjectCell.innerHTML += "<br/>"
+					var lessonText = document.createElement("span");
+					lessonText.className = "xsmall dimmed";
+					lessonText.innerHTML = lesson.text;
+					subjectCell.appendChild(lessonText);
+				}
+				*/				
+
 				subjectCell.className = "leftSpace align-left alignTop";
 				if (lesson.code == "cancelled") {
 					subjectCell.className += " cancelled";
