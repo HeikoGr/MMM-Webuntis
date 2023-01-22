@@ -63,8 +63,11 @@ module.exports = NodeHelper.create({
 					.catch(error => {
 						console.log("Error in getTimegrid: " + error);
 					})
-
-				return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+				if (studentData.useClassTimetable) {
+					return untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
+				} else {
+					return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+				}
 			})
 			.then(timetable => {
 				lessons = this.timetableToLessons(startTimes, timetable);
