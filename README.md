@@ -84,6 +84,11 @@ The following properties can be configured:
                         <td><code>class</code></td>
                         <td>Name of class to show<br>(Optional, only required if Anonymous mode is used)</td>
                     </tr>
+                    <tr>
+                        <td><code>useClassTimetable</code></td>
+                        <td>It seems, that some schools do not provide an individual timetable but only the class timetable. Try to set this to <code>true<code> if you don't receive any elements.
+                        <br><br><b>Default value:</b> <code>false</code></td>
+                    </tr>                    
                 </table>
             </td>
         </tr>
