@@ -18,6 +18,7 @@ Module.register("MMM-Webuntis", {
 		showRegularLessons: false,
 		showTeacher: true,
 		shortSubject: false,
+		showSubstText: false,
 		debug: false
 	},
 
@@ -63,7 +64,7 @@ Module.register("MMM-Webuntis", {
 					var studentCell = document.createElement("td");
 					studentCell.colSpan = 2;
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "student align-left small bold";
+					studentCell.className = "student align-left bold";
 					studentRow.appendChild(studentCell);
 				}			
 
@@ -139,7 +140,7 @@ Module.register("MMM-Webuntis", {
 				
 				// lesson substitute text
 				
-				if (lesson.substText !== "")  {
+				if (this.config.showSubstText && lesson.substText !== "")  {
 					subjectCell.innerHTML += "<br/>"
 					var subText = document.createElement("span");
 					subText.className = "xsmall dimmed";
