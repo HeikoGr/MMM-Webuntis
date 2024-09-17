@@ -43,6 +43,30 @@ modules: [
     }
 ```
 
+## Checking functionality
+
+1. navigate to modules/MMM-Webuntis
+2. execute `npm run check`
+
+This calls check.js with your current configuration file. If there are one or more configurations for MMM-Webuntis these
+will be printed. Each configuration will be tried by requesting the current timetable.
+
+### Common Problems
+
+#### Error: getaddrinfo ENOTFOUND ...
+
+The server name seems to be invalid. Use the server as shown in the URL after having logged in at webuntis.com,
+e.g. kephiso.webuntis.com.
+
+#### Error: Failed to login. {"jsonrpc":"2.0","id":"error","error":{"message":"invalid schoolname","code":-8500}}
+
+The schools name seems to be wrong. Use the school name as in the URL after having logged in at webuntis.com. A plus
+sign (+) in the URL can be replaced by space.
+
+#### Error: Failed to login. {"jsonrpc":"2.0","id":"Awesome","error":{"message":"bad credentials","code":-8504}}
+
+Username or password seem to be wrong. Please check your credentials.
+
 ## Configuration options
 
 The following properties can be configured:
