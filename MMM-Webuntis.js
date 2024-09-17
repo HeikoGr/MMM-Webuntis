@@ -56,7 +56,7 @@ Module.register("MMM-Webuntis", {
 		for (let studentTitle in this.lessonsByStudent) {
 			//for (const [studentTitle, lessons] of this.lessonsByStudent.entries()) {
 
-			// student name 
+			// student name
 			//Only display title cell if there are more than one student
 				if (this.config.students.length > 1) {
 					var studentRow = document.createElement("tr");
@@ -66,7 +66,7 @@ Module.register("MMM-Webuntis", {
 					studentCell.innerHTML = studentTitle;
 					studentCell.className = "student align-left bold";
 					studentRow.appendChild(studentCell);
-				}			
+				}
 
 
 			var lessons = this.lessonsByStudent[studentTitle];
@@ -105,10 +105,10 @@ Module.register("MMM-Webuntis", {
 				row.appendChild(dateTimeCell);
 
 				// subject cell
-				
+
 				var subjectCell = document.createElement("td");
 				subjectCell.innerHTML = "";
-				
+
 				// Subject
 				if (this.config.shortSubject) {
 					subjectCell.innerHTML += this.capitalize(lesson.subjectShort);
@@ -117,10 +117,10 @@ Module.register("MMM-Webuntis", {
 					subjectCell.innerHTML += this.capitalize(lesson.subject);
 				}
 
-				
+
 				//Teachers name
 				if (this.config.showTeacher) {
-					
+
 					if (this.config.showTeacher == "initial") {
 						if (lesson.teacherInitial !== "") {
 							subjectCell.innerHTML += "&nbsp;" + "(";
@@ -132,14 +132,14 @@ Module.register("MMM-Webuntis", {
 						if (lesson.teacher !== "") {
 							subjectCell.innerHTML += "&nbsp;" + "(";
 							subjectCell.innerHTML += this.capitalize(lesson.teacher);
-							subjectCell.innerHTML += ")";							
+							subjectCell.innerHTML += ")";
 						}
 					}
 
 				}
-				
+
 				// lesson substitute text
-				
+
 				if (this.config.showSubstText && lesson.substText !== "")  {
 					subjectCell.innerHTML += "<br/>"
 					var subText = document.createElement("span");
@@ -148,15 +148,15 @@ Module.register("MMM-Webuntis", {
 					subjectCell.appendChild(subText);
 				}
 
-				/*
 				if (lesson.text !== "")  {
-					subjectCell.innerHTML += "<br/>"
+					if (subjectCell.innerHTML.trim() !== "") {
+						subjectCell.innerHTML += "<br/>"
+					}
 					var lessonText = document.createElement("span");
 					lessonText.className = "xsmall dimmed";
 					lessonText.innerHTML = lesson.text;
 					subjectCell.appendChild(lessonText);
 				}
-				*/				
 
 				subjectCell.className = "leftSpace align-left alignTop";
 				if (lesson.code == "cancelled") {
@@ -189,7 +189,7 @@ Module.register("MMM-Webuntis", {
 
 	capitalize: function(str) {
 		return str;
-		//Changed, because the strings does not look nice for me after capitalize function, is this necessary? 
+		//Changed, because the strings does not look nice for me after capitalize function, is this necessary?
 		str = str.toLowerCase().split(" ");
 
 		for (let i = 0, x = str.length; i < x; i++) {
