@@ -1,5 +1,8 @@
 const NodeHelper = require("node_helper");
 const WebUntis = require("webuntis");
+const WebUntisQR = require('webuntis').WebUntisQR;
+const URL = require('url').URL;
+const Authenticator = require('otplib').authenticator;
 
 module.exports = NodeHelper.create({
 	start: function() {
@@ -15,6 +18,9 @@ module.exports = NodeHelper.create({
 			// iterate through students, fetch and send lessons
 			for (let i in this.config.students) {
 				var student = this.config.students[i];
+				if (student.qrcode) {
+					this.fetchLessonsQR(student, this.config.days);
+				}
 				if (student.username) {
 					this.fetchLessonsLogin(student, this.config.days);
 				}
@@ -26,6 +32,67 @@ module.exports = NodeHelper.create({
 				}
 			}
 		}
+	},
+
+	fetchLessonsQR: function(studentData, days) {
+
+		const untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
+
+		if (days<1 || days>10 || isNaN(days)) {days = 1;}
+
+		// create lessons array to be sent to module
+		var lessons = [];
+
+		// array to get lesson number by start time
+		var startTimes = [];
+
+		untis
+			.login()
+			.then(response => {
+				var rangeStart = new Date();
+				var rangeEnd = new Date();
+				rangeEnd.setDate(rangeStart.getDate()+days);
+
+				untis.getTimegrid()
+					.then(grid => {
+						// use grid of first day and assume all days are the same
+						grid[0].timeUnits.forEach(element => {
+							startTimes[element.startTime] = element.name;
+						})
+
+					})
+					.catch(error => {
+						console.log("Error in getTimegrid: " + error);
+					})
+				if (studentData.useClassTimetable) {
+					return untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
+				} else {
+					return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+				}
+			})
+			.then(timetable => {
+				lessons = this.timetableToLessons(startTimes, timetable);
+				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
+			})
+			.catch(error => {
+				console.log("ERROR for " + studentData.title + ": " + error.toString());
+				/*
+				let today = new Date();
+				let errorObject = [ {
+					year: today.getFullYear(),
+					month: today.getMonth()+1,
+					day: today.getDate(),
+					hour: today.getHours(),
+					minutes: today.getMinutes(),
+					subject: "ERROR",
+					teacher: error.toString(),
+					code: "error"
+				} ];
+        		this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: errorObject});
+        		*/
+			});
+
+		untis.logout();
 	},
 
 	fetchLessonsLogin: function(studentData, days) {

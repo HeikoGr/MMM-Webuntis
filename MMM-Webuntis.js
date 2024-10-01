@@ -4,6 +4,7 @@ Module.register("MMM-Webuntis", {
 		students: [
 			{
 				title: "SET CONFIG!",
+				qrcode: "",
 				school: "",
 				username: "",
 				password: "",
