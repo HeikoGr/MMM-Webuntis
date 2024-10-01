@@ -89,6 +89,10 @@ The following properties can be configured:
                         <td>Title of the entry, e.g. kid's name</td>
                     </tr>
                     <tr>
+                        <td><code>qrcode</code></td>
+                        <td>Alternate login with qrcode generated on student account in untis.</td>
+                    </tr>
+                    <tr>
                         <td><code>school</code></td>
                         <td>School name as in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>. A plus sign (+) in the URL can be replaced by space.</td>
                     </tr>
