@@ -54,7 +54,6 @@ Module.register("MMM-Webuntis", {
 
 		// iterate through students
 		// TODO: for..in does not guarantee specific order
-		this.lessonsByStudent.sort((a, b) => a[studentTitle].localeCompare(b[studentTitle]));
 		
 		for (let studentTitle in this.lessonsByStudent) {
 			//for (const [studentTitle, lessons] of this.lessonsByStudent.entries()) {
