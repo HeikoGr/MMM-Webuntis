@@ -18,33 +18,34 @@ module.exports = NodeHelper.create({
 			// iterate through students, fetch and send lessons
 			for (let i in this.config.students) {
 				var student = this.config.students[i];
-				if (student.qrcode) {
-					this.fetchLessonsQR(student, this.config.days);
-				}
-				if (student.username) {
-					this.fetchLessonsLogin(student, this.config.days);
-				}
-				else if (student.class) {
-					this.fetchLessonsAnonymous(student, this.config.days);
-				}
-				else {
-					console.log("Error: Student '" + student.title + "' has an configuration error!");
-				}
+				this.fetchLessons(student, this.config.days);
 			}
 		}
 	},
 
-	fetchLessonsQR: function(studentData, days) {
-
-		const untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
-
-		if (days<1 || days>10 || isNaN(days)) {days = 1;}
+	fetchLessons: function(studentData, days) {
 
 		// create lessons array to be sent to module
 		var lessons = [];
 
 		// array to get lesson number by start time
 		var startTimes = [];
+
+		if (studentData.qrcode) {
+			const untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
+		}
+		if (studentData.username) {
+			const untis = new WebUntis(studentData.school, studentData.username, studentData.password, studentData.server);
+		}
+		else if (studentData.class) {
+			const untis = new WebUntis.WebUntisAnonymousAuth(studentData.school, studentData.server);
+		}
+		else {
+			console.log("Error: Student '" + student.title + "' has an configuration error!");
+			return;
+		}
+
+		if (days<1 || days>10 || isNaN(days)) {days = 1;}
 
 		untis
 			.login()
@@ -69,149 +70,6 @@ module.exports = NodeHelper.create({
 				} else {
 					return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
 				}
-			})
-			.then(timetable => {
-				lessons = this.timetableToLessons(startTimes, timetable);
-				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
-			})
-			.catch(error => {
-				console.log("ERROR for " + studentData.title + ": " + error.toString());
-				/*
-				let today = new Date();
-				let errorObject = [ {
-					year: today.getFullYear(),
-					month: today.getMonth()+1,
-					day: today.getDate(),
-					hour: today.getHours(),
-					minutes: today.getMinutes(),
-					subject: "ERROR",
-					teacher: error.toString(),
-					code: "error"
-				} ];
-        		this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: errorObject});
-        		*/
-			});
-
-		untis.logout();
-	},
-
-	fetchLessonsLogin: function(studentData, days) {
-
-		const untis = new WebUntis(
-			studentData.school,
-			studentData.username,
-			studentData.password,
-			studentData.server
-		);
-
-		if (days<1 || days>10 || isNaN(days)) {days = 1;}
-
-		// create lessons array to be sent to module
-		var lessons = [];
-
-		// array to get lesson number by start time
-		var startTimes = [];
-
-		untis
-			.login()
-			.then(response => {
-				var rangeStart = new Date();
-				var rangeEnd = new Date();
-				rangeEnd.setDate(rangeStart.getDate()+days);
-
-				untis.getTimegrid()
-					.then(grid => {
-						// use grid of first day and assume all days are the same
-						grid[0].timeUnits.forEach(element => {
-							startTimes[element.startTime] = element.name;
-						})
-
-					})
-					.catch(error => {
-						console.log("Error in getTimegrid: " + error);
-					})
-				if (studentData.useClassTimetable) {
-					return untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-				} else {
-					return untis.getOwnTimetableForRange(rangeStart, rangeEnd);
-				}
-			})
-			.then(timetable => {
-				lessons = this.timetableToLessons(startTimes, timetable);
-				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
-			})
-			.catch(error => {
-				console.log("ERROR for " + studentData.title + ": " + error.toString());
-				/*
-				let today = new Date();
-				let errorObject = [ {
-					year: today.getFullYear(),
-					month: today.getMonth()+1,
-					day: today.getDate(),
-					hour: today.getHours(),
-					minutes: today.getMinutes(),
-					subject: "ERROR",
-					teacher: error.toString(),
-					code: "error"
-				} ];
-        		this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: errorObject});
-        		*/
-			});
-
-		untis.logout();
-	},
-	fetchLessonsAnonymous: function(studentData, days) {
-
-		const untis = new WebUntis.WebUntisAnonymousAuth(
-			studentData.school,
-			studentData.server
-		);
-
-		if (days<1 || days>10 || isNaN(days)) {days = 1;}
-
-		// create lessons array to be sent to module
-		var lessons = [];
-
-		// array to get lesson number by start time
-		var startTimes = [];
-
-		var classid = -1;
-
-		untis
-			.login()
-			.then(() => {
-				return untis.getClasses();
-			})
-			.then((classes) => {
-				// Get timetable for the first class
-				for (let i in classes) {
-					if (classes[i].name === studentData.class){
-						classid = classes[i].id;
-						break;
-					}
-				}
-				if (classid === -1) {
-					console.error("ERROR for" + studentData.title + ": Class not found!");
-				}
-			})
-			.then(response => {
-				var rangeStart = new Date();
-				var rangeEnd = new Date();
-				rangeEnd.setDate(rangeStart.getDate()+days);
-
-				untis.getTimegrid()
-					.then(grid => {
-						// use grid of first day and assume all days are the same
-						grid[0].timeUnits.forEach(element => {
-							startTimes[element.startTime] = element.name;
-						})
-
-					})
-					.catch(error => {
-						console.log("Error in getTimegrid: " + error);
-					})
-				//return untis.getTimetableForToday(classid, WebUntis.TYPES.CLASS);
-				return untis.getTimetableForRange(rangeStart, rangeEnd, classid, WebUntis.TYPES.CLASS);
 			})
 			.then(timetable => {
 				lessons = this.timetableToLessons(startTimes, timetable);
