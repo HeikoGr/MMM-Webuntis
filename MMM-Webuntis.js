@@ -24,31 +24,31 @@ Module.register("MMM-Webuntis", {
 	},
 
 	getStyles: function () {
-  		return ["MMM-Webuntis.css"];
-  	},
+		return ["MMM-Webuntis.css"];
+	},
 
 	getTranslations: function () {
-  		return {
-  			en: "translations/en.json",
-  			de: "translations/de.json"
-  		};
-  	},
+		return {
+			en: "translations/en.json",
+			de: "translations/de.json"
+		};
+	},
 
-	start: function (){
+	start: function () {
 		this.lessonsByStudent = [];
 		this.sendSocketNotification("FETCH_DATA", this.config);
 	},
 
-	getDom: function() {
+	getDom: function () {
 		var wrapper = document.createElement("div");
 
 		var table = document.createElement("table");
-    		table.className = "bright small light";
+		table.className = "bright small light";
 
 		// no student
 		if (this.lessonsByStudent === undefined) {
-    			return table;
-    		}
+			return table;
+		}
 
 		var addedRows = 0;
 
@@ -59,34 +59,33 @@ Module.register("MMM-Webuntis", {
 
 			// student name
 			//Only display title cell if there are more than one student
-				if (this.config.students.length > 1) {
-					var studentRow = document.createElement("tr");
-					table.appendChild(studentRow);
-					var studentCell = document.createElement("td");
-					studentCell.colSpan = 2;
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "student align-left bold";
-					studentRow.appendChild(studentCell);
-				}
-
+			if (this.config.students.length > 1) {
+				var studentRow = document.createElement("tr");
+				table.appendChild(studentRow);
+				var studentCell = document.createElement("td");
+				studentCell.colSpan = 2;
+				studentCell.innerHTML = studentTitle;
+				studentCell.className = "student align-left bold";
+				studentRow.appendChild(studentCell);
+			}
 
 			var lessons = this.lessonsByStudent[studentTitle];
 
 			// sort lessons by start time
-			lessons.sort((a,b) => a.sortString - b.sortString);
+			lessons.sort((a, b) => a.sortString - b.sortString);
 
 			// iterate through lessons of current student
 			for (let i = 0; i < lessons.length; i++) {
 				var lesson = lessons[i];
-				var time = new Date(lesson.year,lesson.month-1,lesson.day,lesson.hour,lesson.minutes);
+				var time = new Date(lesson.year, lesson.month - 1, lesson.day, lesson.hour, lesson.minutes);
 
 				if (!this.config.showRegularLessons) {
 					// skip if nothing special
-					if (lesson.code == "") {continue;}
+					if (lesson.code == "") { continue; }
 				}
 
 				// skip past lessons
-				if (time < new Date() && lesson.code != "error") {continue;}
+				if (time < new Date() && lesson.code != "error") { continue; }
 
 				addedRows++;
 
@@ -95,9 +94,9 @@ Module.register("MMM-Webuntis", {
 
 				// date and time
 				var dateTimeCell = document.createElement("td");
-				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE",{weekday:"short"}).toUpperCase() + "&nbsp;";
+				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE", { weekday: "short" }).toUpperCase() + "&nbsp;";
 				if (this.config.showStartTime || lesson.lessonNumber === undefined) {
-					dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", {hour:"2-digit",minute:"2-digit"});
+					dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 				}
 				else {
 					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
@@ -141,7 +140,7 @@ Module.register("MMM-Webuntis", {
 
 				// lesson substitute text
 
-				if (this.config.showSubstText && lesson.substText !== "")  {
+				if (this.config.showSubstText && lesson.substText !== "") {
 					subjectCell.innerHTML += "<br/>"
 					var subText = document.createElement("span");
 					subText.className = "xsmall dimmed";
@@ -149,7 +148,7 @@ Module.register("MMM-Webuntis", {
 					subjectCell.appendChild(subText);
 				}
 
-				if (lesson.text !== "")  {
+				if (lesson.text !== "") {
 					if (subjectCell.innerHTML.trim() !== "") {
 						subjectCell.innerHTML += "<br/>"
 					}
@@ -172,48 +171,49 @@ Module.register("MMM-Webuntis", {
 
 				row.appendChild(subjectCell);
 			} // end for lessons
-		} // end for students
 
-		// add message row if table is empty
-		if (addedRows == 0) {
-			var nothingRow = document.createElement("tr");
-			table.appendChild(nothingRow);
-			var nothingCell = document.createElement("td");
-			nothingCell.innerHTML = this.translate("nothing");
-			nothingRow.appendChild(nothingCell);
-		}
+			// add message row if table is empty
+			if (addedRows == 0) {
+				var nothingRow = document.createElement("tr");
+				table.appendChild(nothingRow);
+				var nothingCell = document.createElement("td");
+				nothingCell.innerHTML = this.translate("nothing");
+				nothingRow.appendChild(nothingCell);
+			}
+
+		} // end for students
 
 		wrapper.appendChild(table);
 
 		return wrapper;
 	},
 
-	capitalize: function(str) {
+	capitalize: function (str) {
 		return str;
 		//Changed, because the strings does not look nice for me after capitalize function, is this necessary?
 		str = str.toLowerCase().split(" ");
 
 		for (let i = 0, x = str.length; i < x; i++) {
 			if (str[i]) {
-				if (str[i] === "ii" || str[i] === "iii") {str[i] = str[i].toUpperCase();}
-				else {str[i] = str[i][0].toUpperCase() + str[i].substr(1);}
+				if (str[i] === "ii" || str[i] === "iii") { str[i] = str[i].toUpperCase(); }
+				else { str[i] = str[i][0].toUpperCase() + str[i].substr(1); }
 			}
 		}
 
 		return str.join(" ");
 	},
 
-	notificationReceived: function(notification, payload) {
-		switch(notification) {
-		case "DOM_OBJECTS_CREATED":
-			var timer = setInterval(() => {
-				this.sendSocketNotification("FETCH_DATA", this.config);
-			}, this.config.fetchInterval);
-			break;
+	notificationReceived: function (notification, payload) {
+		switch (notification) {
+			case "DOM_OBJECTS_CREATED":
+				var timer = setInterval(() => {
+					this.sendSocketNotification("FETCH_DATA", this.config);
+				}, this.config.fetchInterval);
+				break;
 		}
 	},
 
-	socketNotificationReceived: function(notification, payload) {
+	socketNotificationReceived: function (notification, payload) {
 		if (notification === "GOT_DATA") {
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
