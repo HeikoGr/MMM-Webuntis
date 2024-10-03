@@ -31,14 +31,16 @@ module.exports = NodeHelper.create({
 		// array to get lesson number by start time
 		var startTimes = [];
 
+		let untis;
+
 		if (studentData.qrcode) {
-			const untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
+			untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
 		}
 		else if (studentData.username) {
-			const untis = new WebUntis(studentData.school, studentData.username, studentData.password, studentData.server);
+			untis = new WebUntis(studentData.school, studentData.username, studentData.password, studentData.server);
 		}
 		else if (studentData.class) {
-			const untis = new WebUntis.WebUntisAnonymousAuth(studentData.school, studentData.server);
+			untis = new WebUntis.WebUntisAnonymousAuth(studentData.school, studentData.server);
 		}
 		else {
 			console.log("Error: Student '" + student.title + "' has an configuration error!");
