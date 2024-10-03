@@ -34,7 +34,7 @@ module.exports = NodeHelper.create({
 		if (studentData.qrcode) {
 			const untis = new WebUntisQR(studentData.qrcode, 'custom-identity', Authenticator, URL);
 		}
-		if (studentData.username) {
+		else if (studentData.username) {
 			const untis = new WebUntis(studentData.school, studentData.username, studentData.password, studentData.server);
 		}
 		else if (studentData.class) {
