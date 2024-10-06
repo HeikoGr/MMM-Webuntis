@@ -99,7 +99,7 @@ Module.register("MMM-Webuntis", {
 					var studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
 					studentCell.className = "student align-left bold";
-					studentRow.appendChild(studentCell);
+					row.appendChild(studentCell);
 				}
 
 				// date and time
