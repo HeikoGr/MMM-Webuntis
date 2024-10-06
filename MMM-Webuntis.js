@@ -98,7 +98,7 @@ Module.register("MMM-Webuntis", {
 				if (this.config.mode == "compact" && this.config.students.length > 1) {
 					var studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "student align-left bold";
+					studentCell.className = "align-left alignTop";
 					row.appendChild(studentCell);
 				}
 
@@ -190,7 +190,7 @@ Module.register("MMM-Webuntis", {
 				if (this.config.mode == "compact" && this.config.students.length > 1) {
 					var studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "student align-left bold";
+					studentCell.className = "align-left alignTop";
 					nothingRow.appendChild(studentCell);
 				}
 
