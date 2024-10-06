@@ -102,7 +102,7 @@ Module.register("MMM-Webuntis", {
 				else {
 					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
 				}
-				dateTimeCell.className = "align-right alignTop";
+				dateTimeCell.className = "align-left alignTop";
 				row.appendChild(dateTimeCell);
 
 				// subject cell
@@ -178,6 +178,7 @@ Module.register("MMM-Webuntis", {
 				var nothingRow = document.createElement("tr");
 				table.appendChild(nothingRow);
 				var nothingCell = document.createElement("td");
+				nothingCell.setAttribute("colspan", "2");
 				nothingCell.innerHTML = this.translate("nothing");
 				nothingRow.appendChild(nothingCell);
 			}
