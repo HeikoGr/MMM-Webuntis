@@ -190,7 +190,7 @@ Module.register("MMM-Webuntis", {
 				if (this.config.mode == "compact" && this.config.students.length > 1) {
 					var studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop";
+					studentCell.className = "align-left alignTop bold";
 					nothingRow.appendChild(studentCell);
 				}
 
