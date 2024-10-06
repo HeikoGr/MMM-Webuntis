@@ -180,6 +180,7 @@ Module.register("MMM-Webuntis", {
 				table.appendChild(nothingRow);
 				var nothingCell = document.createElement("td");
 				nothingCell.setAttribute("colspan", "2");
+				nothingCell.className = "align-left";
 				nothingCell.innerHTML = this.translate("nothing");
 				nothingRow.appendChild(nothingCell);
 			}
