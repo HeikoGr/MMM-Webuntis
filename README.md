@@ -186,7 +186,13 @@ This module may be useful for students at schools using Untis for the organizati
 
 ## Screenshots
 
-![Screenshot](screenshot.png "Screenshot")
+"mode: compact":
+
+![Screenshot](compact.png "Screenshot") 
+
+"mode: verbose":
+
+![Screenshot](verbose.png "Screenshot")
 
 ## Attribution
 
