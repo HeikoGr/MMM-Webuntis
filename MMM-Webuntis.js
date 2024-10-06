@@ -50,12 +50,13 @@ Module.register("MMM-Webuntis", {
 			return table;
 		}
 
-		var addedRows = 0;
-
 		// iterate through students
 		// TODO: for..in does not guarantee specific order
 		
 		for (let studentTitle in this.lessonsByStudent) {
+
+			var addedRows = 0;
+
 			//for (const [studentTitle, lessons] of this.lessonsByStudent.entries()) {
 
 			// student name
