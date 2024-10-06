@@ -4,7 +4,7 @@ This an extension for the [MagicMirror](https://github.com/MichMich/MagicMirror)
 
 ## Installation
 
-1. Navigate into your MagicMirror's `modules` folder and execute `git clone https://github.com/thyed/MMM-Webuntis.git`.
+1. Navigate into your MagicMirror's `modules` folder and execute `git clone https://github.com/HeikoGr/MMM-Webuntis`.
 2. Navigate into the new folder `MMM-Webuntis` and execute `npm install` to generate the node dependencies.
 
 ## Using the module
