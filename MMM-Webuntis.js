@@ -62,7 +62,7 @@ Module.register("MMM-Webuntis", {
 
 			// student name
 			//Only display title cell if there are more than one student
-			if (this.mode == "verbose" && this.config.students.length > 1) {
+			if (this.config.mode == "verbose" && this.config.students.length > 1) {
 				var studentRow = document.createElement("tr");
 				table.appendChild(studentRow);
 				var studentCell = document.createElement("td");
@@ -95,7 +95,7 @@ Module.register("MMM-Webuntis", {
 				var row = document.createElement("tr");
 				table.appendChild(row);
 
-				if (this.mode == "compact" && this.config.students.length > 1) {
+				if (this.config.mode == "compact" && this.config.students.length > 1) {
 					var studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
 					studentCell.className = "student align-left bold";
