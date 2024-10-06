@@ -59,6 +59,12 @@ The following properties can be configured:
         </tr>
     <thead>
         <tr>
+            <td><code>header</code></td>
+            <td>
+                (optional) Printed by Magic Mirror if set <br>
+            </td>
+        </tr>
+        <tr>
             <td><code>students</code></td>
             <td>
                 Array of untis login credentials objects<br>

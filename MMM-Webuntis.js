@@ -1,6 +1,7 @@
 Module.register("MMM-Webuntis", {
 
 	defaults: {
+		header: "";
 		students: [
 			{
 				title: "SET CONFIG!",
