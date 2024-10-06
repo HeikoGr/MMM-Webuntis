@@ -186,6 +186,14 @@ Module.register("MMM-Webuntis", {
 			if (addedRows == 0) {
 				var nothingRow = document.createElement("tr");
 				table.appendChild(nothingRow);
+
+				if (this.config.mode == "compact" && this.config.students.length > 1) {
+					var studentCell = document.createElement("td");
+					studentCell.innerHTML = studentTitle;
+					studentCell.className = "student align-left bold";
+					nothingRow.appendChild(studentCell);
+				}
+
 				var nothingCell = document.createElement("td");
 				nothingCell.colSpan = "2";
 				nothingCell.className = "align-left";
