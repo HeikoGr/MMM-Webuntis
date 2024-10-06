@@ -167,7 +167,15 @@ The following properties can be configured:
             <td>
                 Whether to show just the subject initials or full subject name<br>
                 <br><b>Possible values:</b> <code>true</code> or <code>false</code>
-                <br><b>Default value:</b> <code>fasle</code>
+                <br><b>Default value:</b> <code>false</code>
+            </td>
+        </tr>
+        <tr>
+            <td><code>mode</code></td>
+            <td>
+                Show each student as own table, or compact in one table.
+                <br><b>Possible values:</b> <code>verbose</code> or <code>compact</code>
+                <br><b>Default value:</b> <code>verbose</code>               
             </td>
         </tr>
         <tr>
@@ -175,7 +183,7 @@ The following properties can be configured:
             <td>
                 Use only for debug purposes!<br>If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
                 <br><b>Possible values:</b> <code>true</code> or <code>false</code>
-                <br><b>Default value:</b> <code>fasle</code>
+                <br><b>Default value:</b> <code>false</code>
             </td>
         </tr>
 </table>

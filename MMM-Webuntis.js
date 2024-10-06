@@ -20,6 +20,7 @@ Module.register("MMM-Webuntis", {
 		showTeacher: true,
 		shortSubject: false,
 		showSubstText: false,
+		mode: "verbose",
 		debug: false
 	},
 
@@ -61,7 +62,7 @@ Module.register("MMM-Webuntis", {
 
 			// student name
 			//Only display title cell if there are more than one student
-			if (this.config.students.length > 1) {
+			if (this.mode == "verbose" && this.config.students.length > 1) {
 				var studentRow = document.createElement("tr");
 				table.appendChild(studentRow);
 				var studentCell = document.createElement("td");
@@ -93,6 +94,13 @@ Module.register("MMM-Webuntis", {
 
 				var row = document.createElement("tr");
 				table.appendChild(row);
+
+				if (this.mode == "compact" && this.config.students.length > 1) {
+					var studentCell = document.createElement("td");
+					studentCell.innerHTML = studentTitle;
+					studentCell.className = "student align-left bold";
+					studentRow.appendChild(studentCell);
+				}
 
 				// date and time
 				var dateTimeCell = document.createElement("td");
@@ -179,7 +187,7 @@ Module.register("MMM-Webuntis", {
 				var nothingRow = document.createElement("tr");
 				table.appendChild(nothingRow);
 				var nothingCell = document.createElement("td");
-				nothingCell.setAttribute("colspan", "2");
+				nothingCell.colSpan = "2";
 				nothingCell.className = "align-left";
 				nothingCell.innerHTML = this.translate("nothing");
 				nothingRow.appendChild(nothingCell);
