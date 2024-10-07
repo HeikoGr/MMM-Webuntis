@@ -11,8 +11,8 @@
     "magicmirror",
     "webuntis"
   ],
-  "author": "Thomas Schneider",
-  "license": "ISC",
+  "author": "Thomas Schneider. HeikoGr",
+  "license": "MIT",
   "dependencies": {
     "webuntis": "latest"
   }
