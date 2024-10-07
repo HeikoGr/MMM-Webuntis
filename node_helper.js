@@ -5,10 +5,10 @@ const URL = require('url').URL;
 const Authenticator = require('otplib').authenticator;
 
 module.exports = NodeHelper.create({
-	start: function() {
+		start: function () {
 	},
 
-	socketNotificationReceived: function(notification, payload) {
+	socketNotificationReceived: function (notification, payload) {
 
 		if (notification === "FETCH_DATA") {
 
@@ -23,7 +23,7 @@ module.exports = NodeHelper.create({
 		}
 	},
 
-	fetchLessons: function(studentData, days) {
+	fetchLessons: function (studentData, days) {
 
 		// create lessons array to be sent to module
 		var lessons = [];
@@ -47,14 +47,14 @@ module.exports = NodeHelper.create({
 			return;
 		}
 
-		if (days<1 || days>10 || isNaN(days)) {days = 1;}
+		if (days < 1 || days > 10 || isNaN(days)) { days = 1; }
 
 		untis
 			.login()
 			.then(response => {
 				var rangeStart = new Date(Date.now());
 				var rangeEnd = new Date(Date.now());
-				rangeEnd.setDate(rangeStart.getDate()+days);
+				rangeEnd.setDate(rangeStart.getDate() + days);
 
 				untis.getTimegrid()
 					.then(grid => {
@@ -75,7 +75,7 @@ module.exports = NodeHelper.create({
 			})
 			.then(timetable => {
 				lessons = this.timetableToLessons(startTimes, timetable);
-				this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: lessons});
+				this.sendSocketNotification("GOT_DATA", { title: studentData.title, lessons: lessons });
 			})
 			.catch(error => {
 				console.log("ERROR for " + studentData.title + ": " + error.toString());
@@ -84,20 +84,20 @@ module.exports = NodeHelper.create({
 		untis.logout();
 	},
 
-	timetableToLessons: function(startTimes, timetable) {
+	timetableToLessons: function (startTimes, timetable) {
 		var lessons = [];
 		timetable.forEach(element => {
 			let lesson = {};
 
 			// Parse date and time information
-			lesson.year = element.date.toString().substring(0,4);
-			lesson.month = element.date.toString().substring(4,6);
+			lesson.year = element.date.toString().substring(0, 4);
+			lesson.month = element.date.toString().substring(4, 6);
 			lesson.day = element.date.toString().substring(6);
 			lesson.hour = element.startTime.toString();
-			lesson.hour = (lesson.hour.length == 3 ? ("0" + lesson.hour.substring(0,1)) : lesson.hour.substring(0,2));
+			lesson.hour = (lesson.hour.length == 3 ? ("0" + lesson.hour.substring(0, 1)) : lesson.hour.substring(0, 2));
 			lesson.minutes = element.startTime.toString();
-			lesson.minutes = lesson.minutes.substring(lesson.minutes.length-2);
-			
+			lesson.minutes = lesson.minutes.substring(lesson.minutes.length - 2);
+
 			// Parse lesson number by start time
 			lesson.lessonNumber = startTimes[element.startTime];
 
@@ -130,7 +130,7 @@ module.exports = NodeHelper.create({
 			if (lesson.substText != "" && lesson.code == "") {
 				lesson.code = "info";
 			}
-			
+
 			// Create sort string
 			lesson.sortString = lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
 			switch (lesson.code) {
@@ -144,7 +144,7 @@ module.exports = NodeHelper.create({
 		});
 
 		if (this.config.debug) {
-			console.log("MMM-Webuntis: Timetable and Lessons: ", JSON.stringify({timetable: timetable, lessons: lessons}));
+			console.log("MMM-Webuntis: Timetable and Lessons: ", JSON.stringify({ timetable: timetable, lessons: lessons }));
 		}
 
 		return lessons;
