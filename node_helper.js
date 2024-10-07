@@ -43,7 +43,7 @@ module.exports = NodeHelper.create({
 			untis = new WebUntis.WebUntisAnonymousAuth(studentData.school, studentData.server);
 		}
 		else {
-			console.log("Error: Student '" + student.title + "' has an configuration error!");
+			console.log("Error: Student '" + studentData.title + "' has an configuration error!");
 			return;
 		}
 
@@ -79,20 +79,6 @@ module.exports = NodeHelper.create({
 			})
 			.catch(error => {
 				console.log("ERROR for " + studentData.title + ": " + error.toString());
-				/*
-				let today = new Date();
-				let errorObject = [ {
-					year: today.getFullYear(),
-					month: today.getMonth()+1,
-					day: today.getDate(),
-					hour: today.getHours(),
-					minutes: today.getMinutes(),
-					subject: "ERROR",
-					teacher: error.toString(),
-					code: "error"
-				} ];
-        		this.sendSocketNotification("GOT_DATA", {title: studentData.title, lessons: errorObject});
-        		*/
 			});
 
 		untis.logout();

@@ -1,8 +1,8 @@
 {
   "name": "mmm-webuntis",
   "repository": {
-      "type": "git",
-      "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
+    "type": "git",
+    "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
   "version": "0.2.1",
   "description": "MagicMirror module to access Webunits school timetables.",
@@ -19,5 +19,10 @@
   "license": "MIT",
   "dependencies": {
     "webuntis": "latest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "eslint": "^9.12.0",
+    "globals": "^15.10.0"
   }
 }

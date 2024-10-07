@@ -97,7 +97,7 @@ Module.register("MMM-Webuntis", {
 				table.appendChild(row);
 
 				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					var studentCell = document.createElement("td");
+					const studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
 					studentCell.className = "align-left alignTop";
 					row.appendChild(studentCell);
@@ -122,10 +122,10 @@ Module.register("MMM-Webuntis", {
 
 				// Subject
 				if (this.config.shortSubject) {
-					subjectCell.innerHTML += this.capitalize(lesson.subjectShort);
+					subjectCell.innerHTML += lesson.subjectShort;
 				}
 				else {
-					subjectCell.innerHTML += this.capitalize(lesson.subject);
+					subjectCell.innerHTML += lesson.subject;
 				}
 
 
@@ -135,14 +135,14 @@ Module.register("MMM-Webuntis", {
 					if (this.config.showTeacher == "initial") {
 						if (lesson.teacherInitial !== "") {
 							subjectCell.innerHTML += "&nbsp;" + "(";
-							subjectCell.innerHTML += this.capitalize(lesson.teacherInitial);
+							subjectCell.innerHTML += lesson.teacherInitial;
 							subjectCell.innerHTML += ")";
 						}
 					}
 					else {
 						if (lesson.teacher !== "") {
 							subjectCell.innerHTML += "&nbsp;" + "(";
-							subjectCell.innerHTML += this.capitalize(lesson.teacher);
+							subjectCell.innerHTML += lesson.teacher;
 							subjectCell.innerHTML += ")";
 						}
 					}
@@ -189,7 +189,7 @@ Module.register("MMM-Webuntis", {
 				table.appendChild(nothingRow);
 
 				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					var studentCell = document.createElement("td");
+					const studentCell = document.createElement("td");
 					studentCell.innerHTML = studentTitle;
 					studentCell.className = "align-left alignTop bold";
 					nothingRow.appendChild(studentCell);
@@ -207,21 +207,6 @@ Module.register("MMM-Webuntis", {
 		wrapper.appendChild(table);
 
 		return wrapper;
-	},
-
-	capitalize: function (str) {
-		return str;
-		//Changed, because the strings does not look nice for me after capitalize function, is this necessary?
-		str = str.toLowerCase().split(" ");
-
-		for (let i = 0, x = str.length; i < x; i++) {
-			if (str[i]) {
-				if (str[i] === "ii" || str[i] === "iii") { str[i] = str[i].toUpperCase(); }
-				else { str[i] = str[i][0].toUpperCase() + str[i].substr(1); }
-			}
-		}
-
-		return str.join(" ");
 	},
 
 	notificationReceived: function (notification, payload) {
