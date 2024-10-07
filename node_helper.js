@@ -89,7 +89,7 @@ module.exports = NodeHelper.create({
 		timetable.forEach(element => {
 			let lesson = {};
 
-			//Parse date and time information
+			// Parse date and time information
 			lesson.year = element.date.toString().substring(0,4);
 			lesson.month = element.date.toString().substring(4,6);
 			lesson.day = element.date.toString().substring(6);
@@ -98,10 +98,10 @@ module.exports = NodeHelper.create({
 			lesson.minutes = element.startTime.toString();
 			lesson.minutes = lesson.minutes.substring(lesson.minutes.length-2);
 			
-			//Parse lesson number by start time
+			// Parse lesson number by start time
 			lesson.lessonNumber = startTimes[element.startTime];
 
-			//Parse data about teacher
+			// Parse data about teacher
 			if (element.te) {
 				lesson.teacher = element.te[0].longname;
 				lesson.teacherInitial = element.te[0].name;
@@ -111,7 +111,7 @@ module.exports = NodeHelper.create({
 				lesson.teacherInitial = "";
 			}
 
-			//Parse data about subject
+			// Parse data about subject
 			if (element.su[0]) {
 				lesson.subject = element.su[0].longname;
 				lesson.subjectShort = element.su[0].name;
@@ -121,17 +121,17 @@ module.exports = NodeHelper.create({
 				lesson.subjectShort = "";
 			}
 
-			//Parse other information
+			// Parse other information
 			lesson.code = element.code ? element.code : "";
 			lesson.text = element.lstext ? element.lstext : "";
 			lesson.substText = element.substText ? element.substText : "";
 
-			//Set code to "info" if there is an "substText" from WebUntis to display it if configuration "showRegularLessons" is set to false
+			// Set code to "info" if there is an "substText" from WebUntis to display it if configuration "showRegularLessons" is set to false
 			if (lesson.substText != "" && lesson.code == "") {
 				lesson.code = "info";
 			}
 			
-			//Create sort string
+			// Create sort string
 			lesson.sortString = lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
 			switch (lesson.code) {
 				case "cancelled": lesson.sortString += "1"; break;
@@ -139,7 +139,6 @@ module.exports = NodeHelper.create({
 				case "info": lesson.sortString += "3"; break;
 				default: lesson.sortString += "9";
 			}
-
 
 			lessons.push(lesson);
 		});

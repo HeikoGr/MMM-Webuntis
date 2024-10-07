@@ -43,7 +43,6 @@ Module.register("MMM-Webuntis", {
 
 	getDom: function () {
 		var wrapper = document.createElement("div");
-
 		var table = document.createElement("table");
 		table.className = "bright small light";
 
@@ -54,7 +53,7 @@ Module.register("MMM-Webuntis", {
 
 		// iterate through students
 		// TODO: for..in does not guarantee specific order
-		
+
 		for (let studentTitle in this.lessonsByStudent) {
 
 			var addedRows = 0;
@@ -128,7 +127,6 @@ Module.register("MMM-Webuntis", {
 					subjectCell.innerHTML += lesson.subject;
 				}
 
-
 				//Teachers name
 				if (this.config.showTeacher) {
 
@@ -146,7 +144,6 @@ Module.register("MMM-Webuntis", {
 							subjectCell.innerHTML += ")";
 						}
 					}
-
 				}
 
 				// lesson substitute text
@@ -201,11 +198,9 @@ Module.register("MMM-Webuntis", {
 				nothingCell.innerHTML = this.translate("nothing");
 				nothingRow.appendChild(nothingCell);
 			}
-
 		} // end for students
 
 		wrapper.appendChild(table);
-
 		return wrapper;
 	},
 
