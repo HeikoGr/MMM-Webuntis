@@ -188,11 +188,11 @@ This module may be useful for students at schools using Untis for the organizati
 
 "mode: compact":
 
-![Screenshot](compact.png "Screenshot") 
+![Screenshot](compact.png "Screenshot compact mode") 
 
 "mode: verbose":
 
-![Screenshot](verbose.png "Screenshot")
+![Screenshot](screenshot.png "Screenshot verbose mode")
 
 ## Attribution
 
