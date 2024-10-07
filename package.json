@@ -1,6 +1,10 @@
 {
   "name": "mmm-webuntis",
-  "version": "0.2.0",
+  "repository": {
+      "type": "git",
+      "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
+  },
+  "version": "0.2.1",
   "description": "MagicMirror module to access Webunits school timetables.",
   "main": "MMM-Webuntis.js",
   "scripts": {

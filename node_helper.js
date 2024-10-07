@@ -52,8 +52,8 @@ module.exports = NodeHelper.create({
 		untis
 			.login()
 			.then(response => {
-				var rangeStart = new Date();
-				var rangeEnd = new Date();
+				var rangeStart = new Date(Date.now());
+				var rangeEnd = new Date(Date.now());
 				rangeEnd.setDate(rangeStart.getDate()+days);
 
 				untis.getTimegrid()

@@ -1,11 +1,16 @@
 # MMM-Webuntis
 
-This an extension for the [MagicMirror](https://github.com/MichMich/MagicMirror). It allows to display your kids' cancelled and irregular lessons for schools using [Untis](https://www.untis.at) software to organize school's timetables. You are able to configure access for each of your kids.
+This an extension for the [MagicMirror²](https://github.com/MagicMirrorOrg/MagicMirror). It allows to display your kids' cancelled and irregular lessons for schools using [Untis](https://www.untis.at) software to organize school's timetables. You are able to configure access for each of your kids.
 
 ## Installation
 
-1. Navigate into your MagicMirror's `modules` folder and execute `git clone https://github.com/HeikoGr/MMM-Webuntis`.
+1. Navigate into your MagicMirror²'s `modules` folder and execute `git clone https://github.com/HeikoGr/MMM-Webuntis`.
 2. Navigate into the new folder `MMM-Webuntis` and execute `npm install` to generate the node dependencies.
+
+## Update
+
+1. Navigate into your MMM-Webuntis folder and execute `git pull`.
+2. execute `npm install` to (re-)generate the node dependencies.
 
 ## Using the module
 
@@ -61,7 +66,7 @@ The following properties can be configured:
         <tr>
             <td><code>header</code></td>
             <td>
-                (optional) Printed by Magic Mirror if set <br>
+                (optional) Printed by MagicMirror² if set <br>
             </td>
         </tr>
         <tr>

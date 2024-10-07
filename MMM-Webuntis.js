@@ -89,7 +89,7 @@ Module.register("MMM-Webuntis", {
 				}
 
 				// skip past lessons
-				if (time < new Date() && lesson.code != "error") { continue; }
+				if (time < new Date(Date.now()) && lesson.code != "error") { continue; }
 
 				addedRows++;
 
