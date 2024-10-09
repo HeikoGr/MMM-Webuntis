@@ -68,7 +68,7 @@ Module.register("MMM-Webuntis", {
 				var studentCell = document.createElement("td");
 				studentCell.colSpan = 2;
 				studentCell.innerHTML = studentTitle;
-				studentCell.className = "student align-left bold";
+				studentCell.className = "align-left align-top bold";
 				studentRow.appendChild(studentCell);
 			}
 
