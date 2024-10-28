@@ -3,11 +3,11 @@ const WebUntis = require("webuntis");
 const WebUntisQR = require('webuntis').WebUntisQR;
 const URL = require('url').URL;
 const Authenticator = require('otplib').authenticator;
+const Log = require("logger");
 
 module.exports = NodeHelper.create({
 		start: function () {
 	},
-
 	socketNotificationReceived: function (notification, payload) {
 
 		if (notification === "FETCH_DATA") {
