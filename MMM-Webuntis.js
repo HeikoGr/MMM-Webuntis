@@ -25,7 +25,7 @@ Module.register("MMM-Webuntis", {
 		shortSubject: false,
 		showSubstText: false,
 		mode: "verbose",
-		debug: true,
+		debug: false,
 		debugLastDays: 0,
 	},
 
