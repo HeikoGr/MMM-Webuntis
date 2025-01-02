@@ -11,7 +11,7 @@ Module.register("MMM-Webuntis", {
 				password: "",
 				server: "",
 				class: "",
-				fetchExams: true,
+				fetchExams: false,
 				examsDays: 30,
 				examsShowTeacher: true,
 				useClassTimetable: false,
@@ -205,6 +205,10 @@ Module.register("MMM-Webuntis", {
 			var exams = this.examsByStudent[studentTitle];
 			console.info("[MMM-Webuntis] " + studentTitle + " exams data loaded");
 
+			if (exams.length == 0) {	
+				continue;
+			}	
+
 			// sort exams
 			exams.sort((a, b) => a.sortString - b.sortString);
 
@@ -218,7 +222,6 @@ Module.register("MMM-Webuntis", {
 					titleCell.className = "align-left alignTop bold";
 					row.appendChild(titleCell);
 				}
-
 
 			// iterate through exams of current student
 			for (let i = 0; i < exams.length; i++) {
