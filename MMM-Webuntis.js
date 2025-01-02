@@ -11,9 +11,6 @@ Module.register("MMM-Webuntis", {
 				password: "",
 				server: "",
 				class: "",
-				fetchExams: true,
-				examsDays: 30,
-				examsShowTeacher: true,
 				useClassTimetable: false,
 			},
 		],
@@ -25,8 +22,7 @@ Module.register("MMM-Webuntis", {
 		shortSubject: false,
 		showSubstText: false,
 		mode: "verbose",
-		debug: true,
-		debugLastDays: 0,
+		debug: false
 	},
 
 	getStyles: function () {
@@ -42,8 +38,6 @@ Module.register("MMM-Webuntis", {
 
 	start: function () {
 		this.lessonsByStudent = [];
-		this.examsByStudent = [];
-		this.config.id = this.identifier;
 		this.sendSocketNotification("FETCH_DATA", this.config);
 	},
 
@@ -58,11 +52,11 @@ Module.register("MMM-Webuntis", {
 			return table;
 		}
 
-
 		// iterate through students
 		// TODO: for..in does not guarantee specific order
 		for (let studentTitle in this.lessonsByStudent) {
 			console.info("[MMM-Webuntis] " + studentTitle + " data loaded");
+
 			var addedRows = 0;
 
 			// student name
@@ -70,7 +64,7 @@ Module.register("MMM-Webuntis", {
 			if (this.config.mode == "verbose" && this.config.students.length > 1) {
 				var studentRow = document.createElement("tr");
 				table.appendChild(studentRow);
-				var studentCell = document.createElement("th");
+				var studentCell = document.createElement("td");
 				studentCell.colSpan = 2;
 				studentCell.innerHTML = studentTitle;
 				studentCell.className = "align-left align-top bold";
@@ -92,8 +86,8 @@ Module.register("MMM-Webuntis", {
 					if (lesson.code == "") { continue; }
 				}
 
-				// skip past lessons (not if debug mode is set)
-				if (time < new Date(Date.now()) && lesson.code != "error" && !this.config.debug) { continue; }
+				// skip past lessons
+				if (time < new Date(Date.now()) && lesson.code != "error") { continue; }
 
 				addedRows++;
 
@@ -179,94 +173,7 @@ Module.register("MMM-Webuntis", {
 				}
 
 				row.appendChild(subjectCell);
-			} // end for lessons			
-			
-			// add message row if table is empty
-			if (addedRows == 0) {
-				var nothingRow = document.createElement("tr");
-				table.appendChild(nothingRow);
-
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					nothingRow.appendChild(studentCell);
-				}
-
-				var nothingCell = document.createElement("td");
-				nothingCell.colSpan = "2";
-				nothingCell.className = "align-left";
-				nothingCell.innerHTML = this.translate("nothing");
-				nothingRow.appendChild(nothingCell);
-			}
-
-			addedRows = 0;
-			
-			var exams = this.examsByStudent[studentTitle];
-			console.info("[MMM-Webuntis] " + studentTitle + " exams data loaded");
-
-			// sort exams
-			exams.sort((a, b) => a.sortString - b.sortString);
-
-				var row = document.createElement("tr");
-				table.appendChild(row);
-
-				if (this.config.mode == "verbose") {
-					const titleCell = document.createElement("td");
-					titleCell.colSpan = "2";
-					titleCell.innerHTML = this.translate("exams");;
-					titleCell.className = "align-left alignTop bold";
-					row.appendChild(titleCell);
-				}
-
-
-			// iterate through exams of current student
-			for (let i = 0; i < exams.length; i++) {
-				var exam = exams[i];
-				var time = new Date(exam.year, exam.month - 1, exam.day);
-
-				addedRows++;
-
-				var row = document.createElement("tr");
-				table.appendChild(row);
-
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					row.appendChild(studentCell);
-				}
-
-				// date and time
-				var dateTimeCell = document.createElement("td");
-				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE", { month: 'numeric', day: 'numeric' }).toUpperCase() + "&nbsp;";
-				dateTimeCell.className = "align-left alignTop";
-				row.appendChild(dateTimeCell);
-
-				// subject
-				var nameCell = document.createElement("td");
-				nameCell.innerHTML += exam.name;
-
-				// teachers name
-				if (this.config.examsShowTeacher) {
-					if (exam.teacher) {
-						nameCell.innerHTML += "&nbsp;" + "(";
-						nameCell.innerHTML += exam.teacher;
-						nameCell.innerHTML += ")";
-					}
-				}
-
-				// lesson substitute text
-				if (exam.text) {
-					nameCell.innerHTML += "<br/>"
-					var subText = document.createElement("span");
-					subText.className = "xsmall dimmed";
-					subText.innerHTML = exam.text;
-					nameCell.appendChild(subText);
-				}
-
-				row.appendChild(nameCell);
-			} // end for exam
+			} // end for lessons
 
 			// add message row if table is empty
 			if (addedRows == 0) {
@@ -303,21 +210,11 @@ Module.register("MMM-Webuntis", {
 	},
 
 	socketNotificationReceived: function (notification, payload) {
-		// filter on identifier
-		if (this.identifier !== payload.id) {
-			return;
-		}
-
 		if (notification === "GOT_DATA") {
-
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
+				this.updateDom();
 			}
-		    if (payload.exams) {
-				this.examsByStudent[payload.title] = payload.exams;
-			}
-			this.updateDom();
 		}
 	},
-
 });
