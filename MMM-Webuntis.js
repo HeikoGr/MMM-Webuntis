@@ -11,19 +11,19 @@ Module.register("MMM-Webuntis", {
 				password: "",
 				server: "",
 				class: "",
-				fetchExams: false,
-				examsDays: 30,
-				examsShowTeacher: true,
-				useClassTimetable: false,
 			},
 		],
 		days: 7,
-		fetchInterval: 5 * 60 * 1000,
+		fetchInterval: 15 * 60 * 1000,
 		showStartTime: false,
+		useClassTimetable: false,
 		showRegularLessons: false,
 		showTeacher: true,
 		shortSubject: false,
 		showSubstText: false,
+		examsDays: 0,
+		examsShowSubject: true,
+		examsShowTeacher: true,
 		mode: "verbose",
 		debug: false,
 		debugLastDays: 0,
@@ -43,6 +43,7 @@ Module.register("MMM-Webuntis", {
 	start: function () {
 		this.lessonsByStudent = [];
 		this.examsByStudent = [];
+		this.configByStudent = [];
 		this.config.id = this.identifier;
 		this.sendSocketNotification("FETCH_DATA", this.config);
 	},
@@ -58,170 +59,175 @@ Module.register("MMM-Webuntis", {
 			return table;
 		}
 
-
 		// iterate through students
 		// TODO: for..in does not guarantee specific order
 		for (let studentTitle in this.lessonsByStudent) {
-			console.info("[MMM-Webuntis] " + studentTitle + " data loaded");
 			var addedRows = 0;
 
-			// student name
-			// only display title cell if there are more than one student
-			if (this.config.mode == "verbose" && this.config.students.length > 1) {
-				var studentRow = document.createElement("tr");
-				table.appendChild(studentRow);
-				var studentCell = document.createElement("th");
-				studentCell.colSpan = 2;
-				studentCell.innerHTML = studentTitle;
-				studentCell.className = "align-left align-top bold";
-				studentRow.appendChild(studentCell);
-			}
-
 			var lessons = this.lessonsByStudent[studentTitle];
+			var studentConfig = this.configByStudent[studentTitle];
+			var exams = this.examsByStudent[studentTitle];
 
-			// sort lessons by start time
-			lessons.sort((a, b) => a.sortString - b.sortString);
+			if (studentConfig.days > 0) {
 
-			// iterate through lessons of current student
-			for (let i = 0; i < lessons.length; i++) {
-				var lesson = lessons[i];
-				var time = new Date(lesson.year, lesson.month - 1, lesson.day, lesson.hour, lesson.minutes);
-
-				if (!this.config.showRegularLessons) {
-					// skip if nothing special
-					if (lesson.code == "") { continue; }
-				}
-
-				// skip past lessons (not if debug mode is set)
-				if (time < new Date(Date.now()) && lesson.code != "error" && !this.config.debug) { continue; }
-
-				addedRows++;
-
-				var row = document.createElement("tr");
-				table.appendChild(row);
-
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
+				// student name
+				// only display title cell if there are more than one student
+				if (this.config.mode == "verbose" && this.config.students.length > 1) {
+					var studentRow = document.createElement("tr");
+					table.appendChild(studentRow);
+					var studentCell = document.createElement("th");
+					studentCell.colSpan = 2;
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					row.appendChild(studentCell);
+					studentCell.className = "align-left align-top bold";
+					studentRow.appendChild(studentCell);
 				}
 
-				// date and time
-				var dateTimeCell = document.createElement("td");
-				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE", { weekday: "short" }).toUpperCase() + "&nbsp;";
-				if (this.config.showStartTime || lesson.lessonNumber === undefined) {
-					dateTimeCell.innerHTML += time.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-				}
-				else {
-					dateTimeCell.innerHTML += lesson.lessonNumber + ".";
-				}
-				dateTimeCell.className = "align-left alignTop";
-				row.appendChild(dateTimeCell);
+				var lessons = this.lessonsByStudent[studentTitle];
 
-				// subject
-				var subjectCell = document.createElement("td");
-				subjectCell.innerHTML = "";
-				if (this.config.shortSubject) {
-					subjectCell.innerHTML += lesson.subjectShort;
-				}
-				else {
-					subjectCell.innerHTML += lesson.subject;
-				}
+				// sort lessons by start time
+				lessons.sort((a, b) => a.sortString - b.sortString);
 
-				// teachers name
-				if (this.config.showTeacher) {
+				// iterate through lessons of current student
+				for (let i = 0; i < lessons.length; i++) {
+					var lesson = lessons[i];
+					var time = new Date(lesson.year, lesson.month - 1, lesson.day, lesson.hour, lesson.minutes);
 
-					if (this.config.showTeacher == "initial") {
-						if (lesson.teacherInitial !== "") {
-							subjectCell.innerHTML += "&nbsp;" + "(";
-							subjectCell.innerHTML += lesson.teacherInitial;
-							subjectCell.innerHTML += ")";
-						}
+					if (!this.config.showRegularLessons) {
+						// skip if nothing special
+						if (lesson.code == "") { continue; }
+					}
+
+					// skip past lessons (not if debug mode is set)
+					if (time < new Date(Date.now()) && lesson.code != "error" && !this.config.debug) { continue; }
+
+					addedRows++;
+
+					var row = document.createElement("tr");
+					table.appendChild(row);
+
+					if (this.config.mode == "compact" && this.config.students.length > 1) {
+						const studentCell = document.createElement("td");
+						studentCell.innerHTML = studentTitle;
+						studentCell.className = "align-left alignTop bold";
+						row.appendChild(studentCell);
+					}
+
+					// date and time
+					var dateTimeCell = document.createElement("td");
+					dateTimeCell.innerHTML = time.toLocaleDateString(config.language, { weekday: "short" }).toUpperCase() + "&nbsp;";
+					if (studentConfig.showStartTime || lesson.lessonNumber === undefined) {
+						dateTimeCell.innerHTML += time.toLocaleTimeString(config.language, { hour: "2-digit", minute: "2-digit" });
 					}
 					else {
-						if (lesson.teacher !== "") {
-							subjectCell.innerHTML += "&nbsp;" + "(";
-							subjectCell.innerHTML += lesson.teacher;
-							subjectCell.innerHTML += ")";
+						dateTimeCell.innerHTML += lesson.lessonNumber + ".";
+					}
+					dateTimeCell.className = "align-left alignTop";
+					row.appendChild(dateTimeCell);
+
+					// subject
+					var subjectCell = document.createElement("td");
+					subjectCell.innerHTML = "";
+					if (studentConfig.shortSubject) {
+						subjectCell.innerHTML += lesson.subjectShort;
+					}
+					else {
+						subjectCell.innerHTML += lesson.subject;
+					}
+
+					// teachers name
+					if (studentConfig.showTeacher) {
+
+						if (studentConfig.showTeacher == "initial") {
+							if (lesson.teacherInitial !== "") {
+								subjectCell.innerHTML += "&nbsp;" + "(";
+								subjectCell.innerHTML += lesson.teacherInitial;
+								subjectCell.innerHTML += ")";
+							}
+						}
+						else {
+							if (lesson.teacher !== "") {
+								subjectCell.innerHTML += "&nbsp;" + "(";
+								subjectCell.innerHTML += lesson.teacher;
+								subjectCell.innerHTML += ")";
+							}
 						}
 					}
-				}
 
-				// lesson substitute text
-				if (this.config.showSubstText && lesson.substText !== "") {
-					subjectCell.innerHTML += "<br/>"
-					var subText = document.createElement("span");
-					subText.className = "xsmall dimmed";
-					subText.innerHTML = lesson.substText;
-					subjectCell.appendChild(subText);
-				}
-
-				if (lesson.text !== "") {
-					if (subjectCell.innerHTML.trim() !== "") {
+					// lesson substitute text
+					if (studentConfig.showSubstText && lesson.substText !== "") {
 						subjectCell.innerHTML += "<br/>"
+						var subText = document.createElement("span");
+						subText.className = "xsmall dimmed";
+						subText.innerHTML = lesson.substText;
+						subjectCell.appendChild(subText);
 					}
-					var lessonText = document.createElement("span");
-					lessonText.className = "xsmall dimmed";
-					lessonText.innerHTML = lesson.text;
-					subjectCell.appendChild(lessonText);
-				}
 
-				subjectCell.className = "leftSpace align-left alignTop";
-				if (lesson.code == "cancelled") {
-					subjectCell.className += " cancelled";
-				}
-				else if (lesson.code == "error") {
-					subjectCell.className += " error";
-				}
-				else if (lesson.code == "info") {
-					subjectCell.className += " info";
-				}
+					if (lesson.text !== "") {
+						if (subjectCell.innerHTML.trim() !== "") {
+							subjectCell.innerHTML += "<br/>"
+						}
+						var lessonText = document.createElement("span");
+						lessonText.className = "xsmall dimmed";
+						lessonText.innerHTML = lesson.text;
+						subjectCell.appendChild(lessonText);
+					}
 
-				row.appendChild(subjectCell);
-			} // end for lessons			
-			
-			// add message row if table is empty
-			if (addedRows == 0) {
-				var nothingRow = document.createElement("tr");
-				table.appendChild(nothingRow);
+					subjectCell.className = "leftSpace align-left alignTop";
+					if (lesson.code == "cancelled") {
+						subjectCell.className += " cancelled";
+					}
+					else if (lesson.code == "error") {
+						subjectCell.className += " error";
+					}
+					else if (lesson.code == "info") {
+						subjectCell.className += " info";
+					}
 
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					nothingRow.appendChild(studentCell);
+					row.appendChild(subjectCell);
+				} // end for lessons	
+
+
+				// add message row if table is empty
+				if (addedRows == 0) {
+					var nothingRow = document.createElement("tr");
+					table.appendChild(nothingRow);
+
+					if (this.config.mode == "compact" && this.config.students.length > 1) {
+						const studentCell = document.createElement("td");
+						studentCell.innerHTML = studentTitle;
+						studentCell.className = "align-left alignTop bold";
+						nothingRow.appendChild(studentCell);
+					}
+
+					var nothingCell = document.createElement("td");
+					nothingCell.colSpan = "2";
+					nothingCell.className = "align-left";
+					nothingCell.innerHTML = this.translate("nothing");
+					nothingRow.appendChild(nothingCell);
 				}
-
-				var nothingCell = document.createElement("td");
-				nothingCell.colSpan = "2";
-				nothingCell.className = "align-left";
-				nothingCell.innerHTML = this.translate("nothing");
-				nothingRow.appendChild(nothingCell);
 			}
 
 			addedRows = 0;
-			
-			var exams = this.examsByStudent[studentTitle];
-			console.info("[MMM-Webuntis] " + studentTitle + " exams data loaded");
 
-			if (exams.length == 0) {	
+			var exams = this.examsByStudent[studentTitle];
+
+			if (exams.length == 0) {
 				continue;
-			}	
+			}
 
 			// sort exams
 			exams.sort((a, b) => a.sortString - b.sortString);
 
-				var row = document.createElement("tr");
-				table.appendChild(row);
+			var row = document.createElement("tr");
+			table.appendChild(row);
 
-				if (this.config.mode == "verbose") {
-					const titleCell = document.createElement("td");
-					titleCell.colSpan = "2";
-					titleCell.innerHTML = this.translate("exams");;
-					titleCell.className = "align-left alignTop bold";
-					row.appendChild(titleCell);
-				}
+			if (this.config.mode == "verbose") {
+				const titleCell = document.createElement("td");
+				titleCell.colSpan = "2";
+				titleCell.innerHTML = this.translate("exams") + " ("	+ studentTitle + ")";
+				titleCell.className = "align-left alignTop bold";
+				row.appendChild(titleCell);
+			}
 
 			// iterate through exams of current student
 			for (let i = 0; i < exams.length; i++) {
@@ -248,10 +254,20 @@ Module.register("MMM-Webuntis", {
 
 				// subject
 				var nameCell = document.createElement("td");
-				nameCell.innerHTML += exam.name;
+				nameCell.className = "align-left alignTop";
+
+				// subject 
+				if (studentConfig.examsShowSubject) {
+					if (exam.teacher) {
+						nameCell.innerHTML += exam.subject;
+						nameCell.innerHTML += ": &nbsp;";
+					}
+				}
+
+				nameCell.innerHTML += exam.name;				
 
 				// teachers name
-				if (this.config.examsShowTeacher) {
+				if (studentConfig.examsShowTeacher) {
 					if (exam.teacher) {
 						nameCell.innerHTML += "&nbsp;" + "(";
 						nameCell.innerHTML += exam.teacher;
@@ -316,8 +332,15 @@ Module.register("MMM-Webuntis", {
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
 			}
-		    if (payload.exams) {
+			if (payload.exams) {
 				this.examsByStudent[payload.title] = payload.exams;
+			}
+			if (payload.config) {
+				this.configByStudent[payload.title] = payload.config;
+			}
+
+			if (this.config.debug){
+				console.log("[MMM-Webuntis] data received for " + payload.title + JSON.stringify(payload, null, 2));	
 			}
 			this.updateDom();
 		}
