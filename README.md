@@ -56,7 +56,7 @@ The following properties can be configured:
             <td>
                 (optional) Printed by MagicMirror² if set <br>
             </td>
-            </td>
+            <td></td>
         </tr>
         <tr>
             <td><code>students</code></td>
