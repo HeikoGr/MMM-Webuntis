@@ -60,7 +60,7 @@ The following properties can be configured:
         </tr>
         <tr>
             <td><code>students</code></td>
-            <td>
+            <td  width="300px">
                 Array of untis login credentials objects<br>
                 <br><b>Possible values:</b> <code>array</code> of objects with the following attributes:
                 <table>
