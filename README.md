@@ -70,34 +70,46 @@ The following properties can be configured:
                     </tr>
                     <tr>
                         <td><code>qrcode</code></td>
-                        <td><b>preferred</b> login-string from qrcode provided by webuntis.
-                        You need to login in the student account and go to -> Profile -> Data Access to generate a QR code. Adjust the QR code string to match your credentials:<br>
-                        'untis://setschool?url=[...]&school=[...]&user=[...]&key=[...]&schoolNumber=[...]';</td>
+                        <td><b>preferred</b> login-string from qrcode provided by webuntis.<br>
+                        You need to login in the student account and go to <br>
+                        <code>-> Profile -> Data Access</code><br>
+                        to generate a QR code. Adjust the QR code string to match your credentials:<br>
+                        <code>'untis://setschool?url=[...]&school=[...]&user=[...]&key=[...]&schoolNumber=[...]';</code></td>
                     </tr>
                     <tr>
                         <td><code>school</code></td>
-                        <td><b>alternative to qr</b> School name as in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>. A plus sign (+) in the URL can be replaced by a space.</td>
+                        <td><b>alternative to qr</b><br>
+                        School name as in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>.<br>
+                        A plus sign (+) in the URL can be replaced by a space.</td>
                     </tr>
                     <tr>
                         <td><code>username</code></td>
-                        <td><b>alternative to qr</b> Username used to login at Untis<br>(Optional, only required if the student has a custom login</td>
+                        <td><b>alternative to qr</b><br>
+                        Username used to login at Untis<br>
+                        (Optional, only required if the student has a custom login</td>
                     </tr>
                     <tr>
                         <td><code>password</code></td>
-                        <td><b>alternative to qr</b> Password used to login at Untis<br>(Optional, only required if the student has a custom login</td>
+                        <td><b>alternative to qr</b><br>
+                        Password used to login at Untis<br>
+                        (Optional, only required if the student has a custom login</td>
                     </tr>
                     <tr>
                         <td><code>server</code></td>
-                        <td><b>alternative to qr</b> Server as shown in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>, e.g. <code>kephiso.webuntis.com</code></td>
+                        <td><b>alternative to qr</b><br>
+                        Server as shown in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>,<br>
+                        e.g. <code>kephiso.webuntis.com</code></td>
                     </tr>
                     <tr>
                         <td><code>class</code></td>
-                        <td>Name of class to show<br>(optional, only required if anonymous mode is used)</td>
+                        <td>Name of class to show<br>
+                        (optional, only required if anonymous mode is used)</td>
                     </tr>
                     <tr>
                         <td><code>useClassTimetable</code></td>
-                        <td>It seems, that some schools do not provide an individual timetable but only the
-                        class timetable. Try to set this to <code>true</code> if you don't receive any elements.
+                        <td>It seems, that some schools do not provide an individual timetable<br>
+                        but only the class timetable. 
+                        <br>Try to set this to <code>true</code> if you don't receive any elements.
                         <br><br><b>Default value:</b> <code>false</code></td>
                     </tr>                    
                 </table>
@@ -108,7 +120,9 @@ The following properties can be configured:
             <td><code>days</code></td>
             <td>
             Number of days to look ahead<br>
-            <br><b>Possible values:</b> <code>int</code> from <code>0</code> to <code>10</code>. Set to <code>0</code> to disable. Can also be specified in the <code>students</code> object to override the module's default value.
+            <br><b>Possible values:</b> <code>int</code> from <code>0</code> to <code>10</code>.<br>
+            Set to <code>0</code> to disable.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.
             </td>
             <td>7</td>
         </tr>
@@ -123,54 +137,66 @@ The following properties can be configured:
                 Whether time or lesson order number shall be shown<br>
                 <br><b>Possible values:</b> <code>true</code> or <code>false</code>
                 <br><br>
-                The module tries to achieve the timetable of the school and currently assumes that Monday's lesson times are valid for the whole week. When set to <code>false</code> the module matches a start time like "07:40" to "1." for example. Can also be specified in the <code>students</code> object to override the module's default value.
+                The module tries to achieve the timetable of the school<br>
+                and currently assumes that Monday's lesson times are valid for the whole week.<br>
+                When set to <code>false</code> the module matches a start time like "07:40" to "1." for example.<br>
+                Can also be specified in the <code>students</code> object to override the module's default value.
             </td>
             <td>false</td>
         </tr>
         <tr>
             <td><code>showRegularLessons</code></td>
-            <td>Boolean to show regular lessons. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show regular lessons.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>false</td>
         </tr>
         <tr>
             <td><code>showTeacher</code></td>
-            <td>Boolean to show the teacher's name. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show the teacher's name.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>true</td>
         </tr>
         <tr>
             <td><code>shortSubject</code></td>
-            <td>Boolean to show the short form of the subject. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show the short form of the subject.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>false</td>
         </tr>
         <tr>
             <td><code>showSubstText</code></td>
-            <td>Boolean to show substitution text. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show substitution text.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>false</td>
         </tr>
         <tr>
             <td><code>examsDays</code></td>
-            <td>Number of days to fetch exams data for. Can also be specified in the <code>students</code> object to override the module's default value. Set to <code>0</code> to disable.</td>
+            <td>Number of days to fetch exams data for.<br>
+            Set to <code>0</code> to disable.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value. </td>
             <td>0</td>
         </tr>
         <tr>
             <td><code>examsShowTeacher</code></td>
-            <td>Boolean to show the teacher's name in exams data. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show the teacher's name in exams data.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>true</td>
         </tr>
         <tr>
             <td><code>examsShowSubject</code></td>
-            <td>Boolean to show the subject in exams data. Can also be specified in the <code>students</code> object to override the module's default value.</td>
+            <td>Boolean to show the subject in exams data.<br>
+            Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>true</td>
         </tr>
         <tr>
             <td><code>mode</code></td>
-            <td>Show each student as own table, or compact in one table.
-            <br><b>Possible values:</b> <code>verbose</code> or <code>compact</code></td>
+            <td>Show each student as own table, or compact in one table.<br>
+            <b>Possible values:</b> <code>verbose</code> or <code>compact</code></td>
             <td>"compact"</td>
         </tr>
         <tr>
             <td><code>debug</code></td>
-            <td>Use only for debug purposes!<br>If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
+            <td>Use only for debug purposes!<br>
+            If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
             <br><b>Possible values:</b> <code>true</code> or <code>false</code>
             </td>
             <td>false</td>
