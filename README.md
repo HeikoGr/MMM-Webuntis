@@ -56,6 +56,7 @@ The following properties can be configured:
             <td>
                 (optional) Printed by MagicMirror² if set <br>
             </td>
+            </td>
         </tr>
         <tr>
             <td><code>students</code></td>
@@ -101,6 +102,7 @@ The following properties can be configured:
                     </tr>                    
                 </table>
             </td>
+            <td></td>
         </tr>
         <tr>
             <td><code>days</code></td>
