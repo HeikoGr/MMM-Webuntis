@@ -1,3 +1,4 @@
+// Import required modules
 const NodeHelper = require("node_helper");
 const WebUntis = require("webuntis");
 const WebUntisQR = require('webuntis').WebUntisQR;
@@ -5,6 +6,7 @@ const URL = require('url').URL;
 const Authenticator = require('otplib').authenticator;
 const Log = require("logger");
 
+// Create a NodeHelper module
 module.exports = NodeHelper.create({
     // Start function is called when the helper is initialized
     start: function () {
@@ -14,17 +16,25 @@ module.exports = NodeHelper.create({
     // Function to handle socket notifications
     socketNotificationReceived: async function (notification, payload) {
         if (notification === "FETCH_DATA") {
+            // Assign the payload to the config property
             this.config = payload;
 
             try {
-                // every student needs its own Untis instance
+                // Iterate over each student in the config
                 for (const student of this.config.students) {
                     let untis;
-
                     let identifier = this.config.id;
-                    let days = this.config.days;
-                    let examsDays = this.config.examsDays;
-                    let debugLastDays = this.config.debugLastDays;
+
+                    // List of properties to check and assign module values if not defined per student
+                    const properties = [
+                        'days', 'debugLastDays', 'showStartTime', 'useClassTimetable', 'showRegularLessons',
+                        'showTeacher', 'shortSubject', 'showSubstText', 'examsDays', 'examsShowSubject', 'examsShowTeacher'
+                    ];
+
+                    // Iterate over each property and assign the value from module config if not defined in student
+                    properties.forEach(prop => {
+                        student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
+                    });
 
                     if (student.qrcode) {
                         // Create a WebUntisQR instance if QR code is provided
@@ -35,7 +45,7 @@ module.exports = NodeHelper.create({
                     }
 
                     untis.login()
-                        .then(() => this.fetchData(untis, student, days, debugLastDays, identifier))
+                        .then(() => this.fetchData(untis, student, identifier))
                         .then(() => untis.logout())
                         .catch(error => {
                             console.error("[MMM-Webuntis] Error:", error);
@@ -48,46 +58,50 @@ module.exports = NodeHelper.create({
         }
     },
 
-    fetchData: async function (untis, student, days, debugLastDays, identifier) {
+    fetchData: async function (untis, student, identifier) {
 
         var lessons = [];
         var exams = [];
         var startTimes = [];
 
         // Validate the number of days
-        if (days < 1 || days > 10 || isNaN(days)) { days = 1; }
+        if (student.days < 0 || student.days > 10 || isNaN(student.days)) { student.days = 1; }
 
         var rangeStart = new Date(Date.now());
         var rangeEnd = new Date(Date.now());
-        rangeStart.setDate(rangeStart.getDate() - debugLastDays);
-        rangeEnd.setDate(rangeStart.getDate() + days);
+        rangeStart.setDate(rangeStart.getDate() - student.debugLastDays);
+        rangeEnd.setDate(rangeStart.getDate() + student.days);
 
-        try {
-            let timetable;
 
-            untis.getTimegrid()
-                .then(grid => {
-                    // use grid of first day and assume all days are the same
-                    // used to get the numbers of the time units
-                    grid[0].timeUnits.forEach(element => { startTimes[element.startTime] = element.name; })
-                })
-                .catch(error => {
-                    console.log("Error in getTimegrid: " + error);
-                })
+        if (student.days > 0) {
+            try {
+                let timetable;
 
-            if (student.useClassTimetable) {
-                timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-            } else {
-                timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+                untis.getTimegrid()
+                    .then(grid => {
+                        // use grid of first day and assume all days are the same
+                        // used to get the numbers of the time units
+                        grid[0].timeUnits.forEach(element => { startTimes[element.startTime] = element.name; })
+                    })
+                    .catch(error => {
+                        console.log("Error in getTimegrid: " + error);
+                    })
+
+                if (student.useClassTimetable) {
+                    timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
+                } else {
+                    timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+                }
+                lessons = this.timetableToLessons(startTimes, timetable);
+
+            } catch (error) {
+                console.log("[MMM-Webuntis] ERROR for " + student.title + ": " + error.toString());
             }
-            lessons = this.timetableToLessons(startTimes, timetable);
 
-        } catch (error) {
-            console.log("[MMM-Webuntis] ERROR for " + student.title + ": " + error.toString());
         }
 
-        
-        if (student.fetchExams) {
+
+        if (student.examsDays > 0) {
 
             // Validate the number of days
             if (student.examsDays < 1 || student.examsDays > 360 || isNaN(student.examsDays)) { student.examsDays = 30; }
@@ -105,10 +119,9 @@ module.exports = NodeHelper.create({
                 console.log("ERROR for " + student.title + ": " + error.toString());
             };
         }
-    
 
-        this.sendSocketNotification("GOT_DATA", { title: student.title, lessons: lessons, exams: exams, id: identifier });
-},
+        this.sendSocketNotification("GOT_DATA", { title: student.title, config: student, lessons: lessons, exams: exams, id: identifier });
+    },
 
     timetableToLessons: function (startTimes, timetable) {
         var lessons = [];
