@@ -43,7 +43,7 @@ I Am only able to use (and test) the qrcode login, as the school of our kids unf
 
 The following properties can be configured:
 
-<table width="100%">
+<table>
     <thead>
         <tr>
             <th>Option</th>
