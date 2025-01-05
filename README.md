@@ -202,11 +202,7 @@ This module may be useful for students at schools using Untis for the organizati
 
 - [node.js Wrapper for WebUntis API](https://github.com/TheNoim/WebUntis) (installed via `npm install`)
 
-## Screenshots
-
-"mode: compact":
-
-![Screenshot](compact.png "Screenshot compact mode") 
+## Screenshot
 
 "mode: verbose":
 
