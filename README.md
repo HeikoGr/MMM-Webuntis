@@ -26,28 +26,13 @@ modules: [
             students: [
                 {
                     title: "1st child's name",
-                    qrcode: "untis:[...] " // preferred, or:
-                    // school: "your school",
-                    // username: "your untis username",
-                    // password: "your untis password",
-                    // server: "untis server"
+                    qrcode: "untis:[...] "
                 },
                 {
                     title: "2nd child's name",
-                    qrcode: "untis:[...] " // preferred, or:
-                    // school: "your school",
-                    // username: "your untis username",
-                    // password: "your untis password",
-                    // server: "untis server"
+                    qrcode: "untis:[...] "
                 },
-            ],
-            days: 1,
-            fetchInterval: 5*60*1000,
-            showStartTime: false,
-            showRegularLessons: false,
-            showTeacher: true,
-            mode: "verbose",
-            shortSubject: false
+            ]
         }
     }
 ```
@@ -91,22 +76,18 @@ The following properties can be configured:
                     <tr>
                         <td><code>school</code></td>
                         <td><b>alternative to qr</b> School name as in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>. A plus sign (+) in the URL can be replaced by a space.</td>
-                        <td></td>
                     </tr>
                     <tr>
                         <td><code>username</code></td>
-                        <td><b>alternative to qr</b> Username used to login at Untis<br>(Optional, only required if the student has a custom login)</td>
-                        <td></td>
+                        <td><b>alternative to qr</b> Username used to login at Untis<br>(Optional, only required if the student has a custom login</td>
                     </tr>
                     <tr>
                         <td><code>password</code></td>
-                        <td><b>alternative to qr</b> Password used to login at Untis<br>(Optional, only required if the student has a custom login)</td>
-                        <td></td>
+                        <td><b>alternative to qr</b> Password used to login at Untis<br>(Optional, only required if the student has a custom login</td>
                     </tr>
                     <tr>
                         <td><code>server</code></td>
                         <td><b>alternative to qr</b> Server as shown in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>, e.g. <code>kephiso.webuntis.com</code></td>
-                        <td></td>
                     </tr>
                     <tr>
                         <td><code>class</code></td>
