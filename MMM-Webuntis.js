@@ -63,7 +63,6 @@ Module.register("MMM-Webuntis", {
 		// TODO: for..in does not guarantee specific order
 		for (let studentTitle in this.lessonsByStudent) {
 			var addedRows = 0;
-
 			var lessons = this.lessonsByStudent[studentTitle];
 			var studentConfig = this.configByStudent[studentTitle];
 			var exams = this.examsByStudent[studentTitle];
@@ -322,15 +321,10 @@ Module.register("MMM-Webuntis", {
 	},
 
 	socketNotificationReceived: function (notification, payload) {
-		// filter on identifier
-		if (this.identifier !== payload.id) {
-			return;
-		}
-
 		if (notification === "GOT_DATA") {
-
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
+				this.updateDom();
 			}
 			if (payload.exams) {
 				this.examsByStudent[payload.title] = payload.exams;
@@ -345,5 +339,4 @@ Module.register("MMM-Webuntis", {
 			this.updateDom();
 		}
 	},
-
 });
