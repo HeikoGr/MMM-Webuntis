@@ -86,13 +86,13 @@ The following properties can be configured:
                         <td><code>username</code></td>
                         <td><b>alternative to qr</b><br>
                         Username used to login at Untis<br>
-                        (Optional, only required if the student has a custom login</td>
+                        (optional, only required if the student has a custom login)</td>
                     </tr>
                     <tr>
                         <td><code>password</code></td>
                         <td><b>alternative to qr</b><br>
                         Password used to login at Untis<br>
-                        (Optional, only required if the student has a custom login</td>
+                        (optional, only required if the student has a custom login)</td>
                     </tr>
                     <tr>
                         <td><code>server</code></td>
