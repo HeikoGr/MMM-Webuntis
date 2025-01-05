@@ -321,6 +321,11 @@ Module.register("MMM-Webuntis", {
 	},
 
 	socketNotificationReceived: function (notification, payload) {
+
+		if (this.identifier !== payload.id) {
+			return;
+		}
+
 		if (notification === "GOT_DATA") {
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
