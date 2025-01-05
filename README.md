@@ -47,7 +47,7 @@ The following properties can be configured:
     <thead>
         <tr>
             <th>Option</th>
-            <th>Description</th>
+            <th width="300px">Description</th>
             <th>default value</th>
         </tr>
     <thead>
@@ -60,7 +60,7 @@ The following properties can be configured:
         </tr>
         <tr>
             <td><code>students</code></td>
-            <td  width="300px">
+            <td>
                 Array of untis login credentials objects<br>
                 <br><b>Possible values:</b> <code>array</code> of objects with the following attributes:
                 <table>
