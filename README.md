@@ -47,7 +47,7 @@ The following properties can be configured:
     <thead>
         <tr>
             <th>Option</th>
-            <th width="100%">Description</th>
+            <th>Description</th>
             <th>default value</th>
         </tr>
     <thead>
