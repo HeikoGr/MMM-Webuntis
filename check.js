@@ -1,5 +1,8 @@
 const path = require('path');
-const webuntis = require("webuntis");
+const WebUntis = require("webuntis");
+const WebUntisQR = require('webuntis').WebUntisQR;
+const URL = require('url').URL;
+const Authenticator = require('otplib').authenticator;
 
 function showConfig(fileName) {
 
@@ -15,7 +18,13 @@ function showConfig(fileName) {
                 .forEach((s) => {
                     console.log("student config found:");
                     console.log(s);
-                    const untis = new webuntis(s.school, s.username, s.password, s.server);
+                    let untis;
+                    if (s.qrcode){
+                        untis = new WebUntisQR(s.qrcode, 'custom-identity', Authenticator, URL);
+                    }
+                    else {
+                        untis = new WebUntis(s.school, s.username, s.password, s.server);
+                    }
                     console.log("fetching timetable:");
                     untis
                         .login()
