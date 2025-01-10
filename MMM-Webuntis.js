@@ -59,9 +59,10 @@ Module.register("MMM-Webuntis", {
 			return table;
 		}
 
-		// iterate through students
-		// TODO: for..in does not guarantee specific order
-		for (let studentTitle in this.lessonsByStudent) {
+		let sortedStudentTitles = Object.keys(this.lessonsByStudent).sort();
+
+		// iterate through students#
+			for (let studentTitle of sortedStudentTitles) {
 			var addedRows = 0;
 			var lessons = this.lessonsByStudent[studentTitle];
 			var studentConfig = this.configByStudent[studentTitle];
