@@ -70,9 +70,6 @@ Module.register("MMM-Webuntis", {
 			var studentConfig = this.configByStudent[studentTitle];
 			var exams = this.examsByStudent[studentTitle];
 
-			//console.log("[MMM-Webuntis] Config Data for " + studentTitle + JSON.stringify(studentConfig, null, 2));
-
-
 			function addTableHeader(table, studentTitle = "") {
 				let thisRow = document.createElement("tr");
 				cellType = "th";
@@ -92,12 +89,12 @@ Module.register("MMM-Webuntis", {
 				if (studentTitle != "") {
 					let studentCell = document.createElement(cellType);
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop";
+					studentCell.className = "align-left alignTop bold";
 					thisRow.appendChild(studentCell);
 				}
 
 				let cell1 = document.createElement(cellType);
-				if (text2 != "") { cell1.colSpan = 2; }
+				if (text2 == "") { cell1.colSpan = 2; }
 				cell1.innerHTML = text1;
 				cell1.className = "align-left alignTop ";
 				thisRow.appendChild(cell1);
