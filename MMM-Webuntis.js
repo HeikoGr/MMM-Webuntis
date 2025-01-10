@@ -61,27 +61,70 @@ Module.register("MMM-Webuntis", {
 
 		let sortedStudentTitles = Object.keys(this.lessonsByStudent).sort();
 
-		// iterate through students#
-			for (let studentTitle of sortedStudentTitles) {
+		// iterate through students
+		for (let studentTitle of sortedStudentTitles) {
+
 			var addedRows = 0;
+
 			var lessons = this.lessonsByStudent[studentTitle];
 			var studentConfig = this.configByStudent[studentTitle];
 			var exams = this.examsByStudent[studentTitle];
 
-			if (studentConfig.days > 0) {
+			//console.log("[MMM-Webuntis] Config Data for " + studentTitle + JSON.stringify(studentConfig, null, 2));
 
-				// student name
-				// only display title cell if there are more than one student
-				if (this.config.mode == "verbose" && this.config.students.length > 1) {
-					var studentRow = document.createElement("tr");
-					table.appendChild(studentRow);
-					var studentCell = document.createElement("th");
-					studentCell.colSpan = 2;
+
+			function addTableHeader(table, studentTitle = "") {
+				let thisRow = document.createElement("tr");
+				cellType = "th";
+				studentCell = document.createElement(cellType);
+				studentCell.innerHTML = studentTitle;
+				studentCell.colSpan = 3;
+				studentCell.className = "align-left alignTop";
+				thisRow.appendChild(studentCell);
+				table.appendChild(thisRow);
+			}
+
+			function addTableRow(table, studentTitle = "", text1 = "", text2 = "", addClass = "") {
+				let thisRow = document.createElement("tr");
+
+				let cellType = "td";
+
+				if (studentTitle != "") {
+					let studentCell = document.createElement(cellType);
 					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left align-top bold";
-					studentRow.appendChild(studentCell);
+					studentCell.className = "align-left alignTop";
+					thisRow.appendChild(studentCell);
 				}
 
+				let cell1 = document.createElement(cellType);
+				if (text2 != "") { cell1.colSpan = 2; }
+				cell1.innerHTML = text1;
+				cell1.className = "align-left alignTop ";
+				thisRow.appendChild(cell1);
+
+				if (text2 != "") {
+					let cell2 = document.createElement(cellType);
+					cell2.innerHTML = text2;
+					cell2.className = "align-left alignTop " + addClass;
+					thisRow.appendChild(cell2);
+				}
+
+				table.appendChild(thisRow);
+			}
+
+			let studentCellTitle = "";
+
+
+			// only display student name as header cell if there are more than one student
+			if (this.config.mode == "verbose" && this.config.students.length > 1) {
+				addTableHeader(table, studentTitle);
+			} else {
+				studentCellTitle = studentTitle;
+			}
+
+			if (studentConfig && studentConfig.days > 0) {
+
+				let studentTitle = studentConfig.title;
 				var lessons = this.lessonsByStudent[studentTitle];
 
 				// sort lessons by start time
@@ -92,142 +135,73 @@ Module.register("MMM-Webuntis", {
 					var lesson = lessons[i];
 					var time = new Date(lesson.year, lesson.month - 1, lesson.day, lesson.hour, lesson.minutes);
 
-					if (!this.config.showRegularLessons) {
-						// skip if nothing special
-						if (lesson.code == "") { continue; }
+					// Skip if nothing special or past lessons (unless in debug mode)
+					if ((!this.config.showRegularLessons && lesson.code === "") ||
+						(time < new Date() && lesson.code !== "error" && !this.config.debug)) {
+						continue;
 					}
-
-					// skip past lessons (not if debug mode is set)
-					if (time < new Date(Date.now()) && lesson.code != "error" && !this.config.debug) { continue; }
 
 					addedRows++;
 
-					var row = document.createElement("tr");
-					table.appendChild(row);
-
-					if (this.config.mode == "compact" && this.config.students.length > 1) {
-						const studentCell = document.createElement("td");
-						studentCell.innerHTML = studentTitle;
-						studentCell.className = "align-left alignTop bold";
-						row.appendChild(studentCell);
-					}
-
-					// date and time
-					var dateTimeCell = document.createElement("td");
-					dateTimeCell.innerHTML = time.toLocaleDateString(config.language, { weekday: "short" }).toUpperCase() + "&nbsp;";
+					let timeStr = time.toLocaleDateString(config.language, { weekday: "short" }).toUpperCase() + "&nbsp;";
 					if (studentConfig.showStartTime || lesson.lessonNumber === undefined) {
-						dateTimeCell.innerHTML += time.toLocaleTimeString(config.language, { hour: "2-digit", minute: "2-digit" });
+						timeStr += time.toLocaleTimeString(config.language, { hour: "2-digit", minute: "2-digit" });
 					}
 					else {
-						dateTimeCell.innerHTML += lesson.lessonNumber + ".";
+						timeStr += lesson.lessonNumber + ".";
 					}
-					dateTimeCell.className = "align-left alignTop";
-					row.appendChild(dateTimeCell);
 
 					// subject
-					var subjectCell = document.createElement("td");
-					subjectCell.innerHTML = "";
+					let subjectStr = lesson.subject;
 					if (studentConfig.shortSubject) {
-						subjectCell.innerHTML += lesson.subjectShort;
-					}
-					else {
-						subjectCell.innerHTML += lesson.subject;
+						subjectStr = lesson.subjectShort;
 					}
 
 					// teachers name
 					if (studentConfig.showTeacher) {
-
-						if (studentConfig.showTeacher == "initial") {
-							if (lesson.teacherInitial !== "") {
-								subjectCell.innerHTML += "&nbsp;" + "(";
-								subjectCell.innerHTML += lesson.teacherInitial;
-								subjectCell.innerHTML += ")";
-							}
+						if (studentConfig.showTeacher == "initial" && lesson.teacherInitial !== "") {
+							subjectStr += "&nbsp;" + "(" + lesson.teacherInitial + ")";
 						}
-						else {
-							if (lesson.teacher !== "") {
-								subjectCell.innerHTML += "&nbsp;" + "(";
-								subjectCell.innerHTML += lesson.teacher;
-								subjectCell.innerHTML += ")";
-							}
+						else if (lesson.teacher !== "") {
+							subjectStr += "&nbsp;" + "(" + lesson.teacher + ")";
 						}
 					}
 
 					// lesson substitute text
 					if (studentConfig.showSubstText && lesson.substText !== "") {
-						subjectCell.innerHTML += "<br/>"
-						var subText = document.createElement("span");
-						subText.className = "xsmall dimmed";
-						subText.innerHTML = lesson.substText;
-						subjectCell.appendChild(subText);
+						subjectStr += "<br/><span class='xsmall dimmed'>" + lesson.substText + "</span>";
 					}
 
 					if (lesson.text !== "") {
-						if (subjectCell.innerHTML.trim() !== "") {
-							subjectCell.innerHTML += "<br/>"
+						if (subjectStr.trim() !== "") {
+							subjectStr += "<br/>"
 						}
-						var lessonText = document.createElement("span");
-						lessonText.className = "xsmall dimmed";
-						lessonText.innerHTML = lesson.text;
-						subjectCell.appendChild(lessonText);
+						subjectStr += "<span class='xsmall dimmed'>" + lesson.text + "</span>";
 					}
 
-					subjectCell.className = "leftSpace align-left alignTop";
-					if (lesson.code == "cancelled") {
-						subjectCell.className += " cancelled";
-					}
-					else if (lesson.code == "error") {
-						subjectCell.className += " error";
-					}
-					else if (lesson.code == "info") {
-						subjectCell.className += " info";
+					let addClass = "";
+					if (lesson.code == "cancelled" || lesson.code == "error" || lesson.code == "info") {
+						addClass = lesson.code;
 					}
 
-					row.appendChild(subjectCell);
+					addTableRow(table, studentCellTitle, timeStr, subjectStr, addClass);
 				} // end for lessons	
-
 
 				// add message row if table is empty
 				if (addedRows == 0) {
-					var nothingRow = document.createElement("tr");
-					table.appendChild(nothingRow);
-
-					if (this.config.mode == "compact" && this.config.students.length > 1) {
-						const studentCell = document.createElement("td");
-						studentCell.innerHTML = studentTitle;
-						studentCell.className = "align-left alignTop bold";
-						nothingRow.appendChild(studentCell);
-					}
-
-					var nothingCell = document.createElement("td");
-					nothingCell.colSpan = "2";
-					nothingCell.className = "align-left";
-					nothingCell.innerHTML = this.translate("nothing");
-					nothingRow.appendChild(nothingCell);
+					addTableRow(table, studentCellTitle, this.translate("nothing"));
 				}
 			}
 
 			addedRows = 0;
-
 			var exams = this.examsByStudent[studentTitle];
 
-			if (exams.length == 0) {
+			if (!exams || studentConfig.examsDays == 0) {
 				continue;
 			}
 
 			// sort exams
 			exams.sort((a, b) => a.sortString - b.sortString);
-
-			var row = document.createElement("tr");
-			table.appendChild(row);
-
-			if (this.config.mode == "verbose") {
-				const titleCell = document.createElement("td");
-				titleCell.colSpan = "2";
-				titleCell.innerHTML = this.translate("exams") + " ("	+ studentTitle + ")";
-				titleCell.className = "align-left alignTop bold";
-				row.appendChild(titleCell);
-			}
 
 			// iterate through exams of current student
 			for (let i = 0; i < exams.length; i++) {
@@ -236,75 +210,38 @@ Module.register("MMM-Webuntis", {
 
 				addedRows++;
 
-				var row = document.createElement("tr");
-				table.appendChild(row);
-
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					row.appendChild(studentCell);
-				}
-
 				// date and time
-				var dateTimeCell = document.createElement("td");
-				dateTimeCell.innerHTML = time.toLocaleDateString("de-DE", { month: 'numeric', day: 'numeric' }).toUpperCase() + "&nbsp;";
-				dateTimeCell.className = "align-left alignTop";
-				row.appendChild(dateTimeCell);
+				let dateTimeCell = time.toLocaleDateString("de-DE", { month: 'numeric', day: 'numeric' }).toUpperCase() + "&nbsp;";
 
 				// subject
-				var nameCell = document.createElement("td");
-				nameCell.className = "align-left alignTop";
+				let nameCell = exam.name;
 
 				// subject 
 				if (studentConfig.examsShowSubject) {
-					if (exam.teacher) {
-						nameCell.innerHTML += exam.subject;
-						nameCell.innerHTML += ": &nbsp;";
-					}
+					nameCell = exam.subject + ": &nbsp;" + exam.name;
 				}
-
-				nameCell.innerHTML += exam.name;				
 
 				// teachers name
 				if (studentConfig.examsShowTeacher) {
 					if (exam.teacher) {
-						nameCell.innerHTML += "&nbsp;" + "(";
-						nameCell.innerHTML += exam.teacher;
-						nameCell.innerHTML += ")";
+						nameCell += "&nbsp;" + "(" + exam.teacher + ")";
 					}
 				}
 
-				// lesson substitute text
+				// exam additional text
 				if (exam.text) {
-					nameCell.innerHTML += "<br/>"
-					var subText = document.createElement("span");
-					subText.className = "xsmall dimmed";
-					subText.innerHTML = exam.text;
-					nameCell.appendChild(subText);
+					nameCell += '<br/><span class="xsmall dimmed">' + exam.text + '</span>';
 				}
 
-				row.appendChild(nameCell);
+				addTableRow(table, studentCellTitle, dateTimeCell, nameCell);
+
 			} // end for exam
 
-			// add message row if table is empty
+		// add message row if table is empty
 			if (addedRows == 0) {
-				var nothingRow = document.createElement("tr");
-				table.appendChild(nothingRow);
-
-				if (this.config.mode == "compact" && this.config.students.length > 1) {
-					const studentCell = document.createElement("td");
-					studentCell.innerHTML = studentTitle;
-					studentCell.className = "align-left alignTop bold";
-					nothingRow.appendChild(studentCell);
-				}
-
-				var nothingCell = document.createElement("td");
-				nothingCell.colSpan = "2";
-				nothingCell.className = "align-left";
-				nothingCell.innerHTML = this.translate("nothing");
-				nothingRow.appendChild(nothingCell);
+				addTableRow(table, studentCellTitle, this.translate("no_exams"));
 			}
+
 		} // end for students
 
 		wrapper.appendChild(table);
@@ -339,8 +276,8 @@ Module.register("MMM-Webuntis", {
 				this.configByStudent[payload.title] = payload.config;
 			}
 
-			if (this.config.debug){
-				console.log("[MMM-Webuntis] data received for " + payload.title + JSON.stringify(payload, null, 2));	
+			if (this.config.debug) {
+				console.log("[MMM-Webuntis] data received for " + payload.title + JSON.stringify(payload, null, 2));
 			}
 			this.updateDom();
 		}
