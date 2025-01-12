@@ -111,7 +111,6 @@ Module.register("MMM-Webuntis", {
 
 			let studentCellTitle = "";
 
-
 			// only display student name as header cell if there are more than one student
 			if (this.config.mode == "verbose" && this.config.students.length > 1) {
 				addTableHeader(table, studentTitle);
@@ -210,10 +209,8 @@ Module.register("MMM-Webuntis", {
 				// date and time
 				let dateTimeCell = time.toLocaleDateString("de-DE", { month: 'numeric', day: 'numeric' }).toUpperCase() + "&nbsp;";
 
-				// subject
+				// subject of exam
 				let nameCell = exam.name;
-
-				// subject 
 				if (studentConfig.examsShowSubject) {
 					nameCell = exam.subject + ": &nbsp;" + exam.name;
 				}
@@ -264,7 +261,6 @@ Module.register("MMM-Webuntis", {
 		if (notification === "GOT_DATA") {
 			if (payload.lessons) {
 				this.lessonsByStudent[payload.title] = payload.lessons;
-				this.updateDom();
 			}
 			if (payload.exams) {
 				this.examsByStudent[payload.title] = payload.exams;
