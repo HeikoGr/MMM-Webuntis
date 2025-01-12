@@ -69,9 +69,9 @@ module.exports = NodeHelper.create({
 
         var rangeStart = new Date(Date.now());
         var rangeEnd = new Date(Date.now());
+
         rangeStart.setDate(rangeStart.getDate() - student.debugLastDays);
         rangeEnd.setDate(rangeStart.getDate() + student.days);
-
 
         if (student.days > 0) {
             try {
@@ -99,7 +99,6 @@ module.exports = NodeHelper.create({
             }
 
         }
-
 
         if (student.examsDays > 0) {
 
