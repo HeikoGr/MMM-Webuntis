@@ -86,7 +86,7 @@ module.exports = NodeHelper.create({
                     .catch(error => {
                         console.log("Error in getTimegrid: " + error);
                     })
-z
+
                 if (student.useClassTimetable) {
                     timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
                 } else {
