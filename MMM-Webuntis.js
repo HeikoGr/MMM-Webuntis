@@ -81,9 +81,9 @@ Module.register("MMM-Webuntis", {
 				table.appendChild(thisRow);
 			}
 
-			function addTableRow(table, studentTitle = "", text1 = "", text2 = "", addClass = "") {
+			function addTableRow(table, type, studentTitle = "", text1 = "", text2 = "", addClass = "") {
 				let thisRow = document.createElement("tr");
-
+				thisRow.className = type;
 				let cellType = "td";
 
 				if (studentTitle != "") {
@@ -180,12 +180,12 @@ Module.register("MMM-Webuntis", {
 						addClass = lesson.code;
 					}
 
-					addTableRow(table, studentCellTitle, timeStr, subjectStr, addClass);
+					addTableRow(table, 'lessonsRow', studentCellTitle, timeStr, subjectStr, addClass);
 				} // end for lessons	
 
 				// add message row if table is empty
 				if (addedRows == 0) {
-					addTableRow(table, studentCellTitle, this.translate("nothing"));
+					addTableRow(table, 'lessonsRowEmpty', studentCellTitle, this.translate("nothing"));
 				}
 			}
 
@@ -227,13 +227,13 @@ Module.register("MMM-Webuntis", {
 					nameCell += '<br/><span class="xsmall dimmed">' + exam.text + '</span>';
 				}
 
-				addTableRow(table, studentCellTitle, dateTimeCell, nameCell);
+				addTableRow(table, 'examsRow', studentCellTitle, dateTimeCell, nameCell);
 
 			} // end for exam
 
 		// add message row if table is empty
 			if (addedRows == 0) {
-				addTableRow(table, studentCellTitle, this.translate("no_exams"));
+				addTableRow(table, 'examsRowEmpty', studentCellTitle, this.translate("no_exams"));
 			}
 
 		} // end for students
