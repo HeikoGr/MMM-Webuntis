@@ -170,6 +170,8 @@ module.exports = NodeHelper.create({
                 year: element.examDate.toString().substring(0, 4),
                 month: element.examDate.toString().substring(4, 6),
                 day: element.examDate.toString().substring(6, 8),
+                hour: element.startTime.toString().padStart(4, "0").substring(0, 2),
+                minutes: element.startTime.toString().padStart(4, "0").substring(2),
                 startTime: element.startTime.toString().padStart(4, "0"),
                 teacher: element.teachers[0] || "N/A",
                 subject: element.subject || "N/A",

@@ -1,11 +1,3 @@
-.leftSpace {
-  padding-left: 20px;
-}
-
-.alignTop {
-  vertical-align: top;
-}
-
 .cancelled {
   text-decoration: line-through;
 }
@@ -17,11 +9,22 @@
 .info {
   font-style: italic;
 }
+
 .student {
   padding-top: 15px;
   border-bottom: 1px solid #333;
 }
 
-.examsRow {
+.examRow,
+.examRowEmpty,
+.lessonRow,
+.lessonRowEmpty
+ {
+  vertical-align: top;
+  padding-left: 20px;
+}
+
+.examRow,
+.examRowEmpty {
   color: rgb(0, 255, 255);
 }
