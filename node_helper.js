@@ -31,7 +31,7 @@ module.exports = NodeHelper.create({
                     // List of properties to check and assign module values if not defined per student
                     const properties = [
                         'days', 'debugLastDays', 'showStartTime', 'useClassTimetable', 'showRegularLessons',
-                        'showTeacher', 'shortSubject', 'showSubstText', 'examsDays', 'examsShowSubject', 'examsShowTeacher'
+                        'showTeacher', 'shortSubject', 'showSubstText', 'examsDays', 'examsShowSubject', 'examsShowTeacher', 'debug'
                     ];
 
                     // Iterate over each property and assign the value from module config if not defined in student
@@ -89,8 +89,14 @@ module.exports = NodeHelper.create({
 
                 if (student.useClassTimetable) {
                     timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
+                    if(student.debug) {
+                        console.log("[MMM-Webuntis] ownClassTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
+                    }
                 } else {
                     timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
+                     if (student.debug) {
+                        console.log("[MMM-Webuntis] ownTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
+                    }
                 }
                 lessons = this.timetableToLessons(startTimes, timetable);
 
