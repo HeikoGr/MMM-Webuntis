@@ -132,7 +132,7 @@ Module.register("MMM-Webuntis", {
 					var time = new Date(lesson.year, lesson.month - 1, lesson.day, lesson.hour, lesson.minutes);
 
 					// Skip if nothing special or past lessons (unless in debug mode)
-					if ((!this.config.showRegularLessons && lesson.code === "") ||
+					if ((!studentConfig.showRegularLessons && lesson.code === "") ||
 						(time < new Date() && lesson.code !== "error" && !this.config.debug)) {
 						continue;
 					}
