@@ -63,6 +63,12 @@ module.exports = NodeHelper.create({
 
     fetchData: async function (untis, student, identifier) {
 
+        function logger (msg){
+            if (student.debug) {
+                console.log("[MMM-Webuntis] " + msg);
+            }
+        }
+
         var lessons = [];
         var exams = [];
         var startTimes = [];
@@ -71,16 +77,16 @@ module.exports = NodeHelper.create({
         var rangeEnd = new Date(Date.now());
 
         rangeStart.setDate(rangeStart.getDate() - student.debugLastDays);
-        rangeEnd.setDate(rangeStart.getDate() + student.days);
+        rangeEnd.setDate(rangeEnd.getDate() + parseInt(student.days));
 
         if (student.days > 0) {
+
             try {
                 let timetable;
 
                 untis.getTimegrid()
                     .then(grid => {
-                        // use grid of first day and assume all days are the same
-                        // used to get the numbers of the time units
+                        // use grid of first day and assume all days are the same used to get the numbers of the time units
                         grid[0].timeUnits.forEach(element => { startTimes[element.startTime] = element.name; })
                     })
                     .catch(error => {
@@ -88,22 +94,19 @@ module.exports = NodeHelper.create({
                     })
 
                 if (student.useClassTimetable) {
+                    logger("[MMM-Webuntis] getOwnClassTimetableForRange from " + rangeStart + " to " + rangeEnd);
                     timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-                    if(student.debug) {
-                        console.log("[MMM-Webuntis] ownClassTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
-                    }
+                    logger("[MMM-Webuntis] ownClassTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
                 } else {
+                    logger("[MMM-Webuntis] getClassTimetableForRange from " + rangeStart + " to " + rangeEnd);
                     timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
-                     if (student.debug) {
-                        console.log("[MMM-Webuntis] ownTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
-                    }
+                    logger("[MMM-Webuntis] ownClassTimetable received for " + student.title + JSON.stringify(timetable, null, 2));
                 }
                 lessons = this.timetableToLessons(startTimes, timetable);
 
             } catch (error) {
                 console.log("[MMM-Webuntis] ERROR for " + student.title + ": " + error.toString());
             }
-
         }
 
         if (student.examsDays > 0) {
