@@ -25,9 +25,6 @@ module.exports = NodeHelper.create({
                     let untis;
                     let identifier = this.config.id;
 
-                    // Validate the number of days
-                    if (this.config.days < 0 || this.config.days > 10 || isNaN(this.config.days)) { this.config.days = 1; }
-
                     // List of properties to check and assign module values if not defined per student
                     const properties = [
                         'days', 'debugLastDays', 'showStartTime', 'useClassTimetable', 'showRegularLessons',
@@ -38,6 +35,9 @@ module.exports = NodeHelper.create({
                     properties.forEach(prop => {
                         student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
                     });
+                    
+                    // Validate the number of days
+                    if (student.days < 0 || student.days > 10 || isNaN(student.days)) { student.days = 1; }
 
                     if (student.qrcode) {
                         // Create a WebUntisQR instance if QR code is provided

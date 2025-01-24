@@ -1,5 +1,5 @@
 const path = require('path');
-const WebUntis = require("webuntis");
+const WebUntis = require("webuntis").WebUntis;
 const WebUntisQR = require('webuntis').WebUntisQR;
 const URL = require('url').URL;
 const Authenticator = require('otplib').authenticator;
