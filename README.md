@@ -17,7 +17,6 @@ This an extension for the [MagicMirror²](https://github.com/MagicMirrorOrg/Magi
 To use this module, add it to the modules array in the `config/config.js` file:
 
 ```javascript
-modules: [
     {
         module: "MMM-Webuntis",
         position: "top_right",
