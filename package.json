@@ -7,22 +7,32 @@
   "version": "0.2.2",
   "description": "MagicMirror module to access Webunits school timetables.",
   "main": "MMM-Webuntis.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "check": "node check.js ../../config/config.js"
-  },
   "keywords": [
     "magicmirror",
     "webuntis"
   ],
   "author": "Thomas Schneider. HeikoGr",
   "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "lint": "eslint && prettier . --check",
+    "lint:fix": "eslint --fix && prettier . --write",
+    "test": "node --run lint && node --run test:spelling",
+    "test:spelling": "cspell .",
+    "check": "node check.js ../../config/config.js"
+  },
+  "lint-staged": {
+    "*": [
+      "eslint --fix",
+      "prettier --write --ignore-unknown"
+    ]
+  },
   "dependencies": {
     "webuntis": "^2.2.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.13.0",
-    "eslint": "^9.13.0",
-    "globals": "^15.11.0"
+    "@eslint/js": "^9.36.0",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0"
   }
 }
