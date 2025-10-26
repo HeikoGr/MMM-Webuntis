@@ -2,6 +2,10 @@
 
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
+## BREAKING CHANGES in 0.3.0
+
+Attention: you need to update your config!
+
 ## Installation
 
 1. Go to your MagicMirror² `modules` folder and run:
