@@ -200,6 +200,17 @@ The following properties can be configured:
             </td>
             <td>false</td>
         </tr>
+        <tr>
+            <td><code>debugMerge</code></td>
+            <td>Enable detailed merge diagnostics for double/multi-lesson detection. When <code>true</code> the module will emit grouped, table-formatted logs in the browser console to help you understand why lessons were (or were not) merged.<br>
+            <br><b>Possible values:</b> <code>true</code> or <code>false</code></td>
+            <td>false</td>
+        </tr>
+        <tr>
+            <td><code>mergeGapMin</code></td>
+            <td>Numeric gap in minutes allowed between consecutive lessons to consider them mergeable. Default is <code>15</code>. Lower this value to require tighter adjacency between lessons when auto-merging.</td>
+            <td>15</td>
+        </tr>
 </table>
 
 ## How it works
