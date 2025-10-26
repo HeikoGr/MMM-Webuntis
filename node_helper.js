@@ -29,17 +29,18 @@ module.exports = NodeHelper.create({
         const groups = new Map();
 
         const properties = [
-          "days",
-          "debugLastDays",
+          "daysToShow",
+          "pastDaysToShow",
           "showStartTime",
           "useClassTimetable",
           "showRegularLessons",
-          "showTeacher",
-          "shortSubject",
-          "showSubstText",
-          "examsDays",
-          "examsShowSubject",
-          "debug"
+          "showTeacherMode",
+          "useShortSubject",
+          "showSubstitutionText",
+          "examsDaysAhead",
+          "showExamSubject",
+          "showExamTeacher",
+          "enableDebug"
         ];
 
         // normalize student configs and group
@@ -47,8 +48,8 @@ module.exports = NodeHelper.create({
           properties.forEach((prop) => {
             student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
           });
-          if (student.days < 0 || student.days > 10 || isNaN(student.days)) {
-            student.days = 1;
+          if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
+            student.daysToShow = 1;
           }
 
           const credKey = this._getCredentialKey(student);
@@ -135,7 +136,7 @@ module.exports = NodeHelper.create({
 
   async fetchData(untis, student, identifier, credKey) {
     function logger(msg) {
-      if (student.debug) {
+      if (student.enableDebug || this.config.enableDebug) {
         console.log(`[MMM-Webuntis] ${msg}`);
       }
     }
@@ -163,11 +164,11 @@ module.exports = NodeHelper.create({
     const timeUnits = [];
     let todayLessons = [];
 
-    var rangeStart = new Date(Date.now());
-    var rangeEnd = new Date(Date.now());
+  var rangeStart = new Date(Date.now());
+  var rangeEnd = new Date(Date.now());
 
-    rangeStart.setDate(rangeStart.getDate() - student.debugLastDays);
-    rangeEnd.setDate(rangeEnd.getDate() - student.debugLastDays + parseInt(student.days));
+  rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
+  rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
 
   // Get Timegrid (for mapping start/end times) - cached per credential
     let grid = [];
@@ -191,7 +192,7 @@ module.exports = NodeHelper.create({
       console.log(`Error in getTimegrid: ${error}`);
     }
 
-    if (student.days > 0) {
+  if (student.daysToShow > 0) {
       try {
         let timetable;
 
@@ -214,7 +215,7 @@ module.exports = NodeHelper.create({
   // frontend can rely on raw data if desired.
         lessons = this.timetableToLessons(startTimes, timetable, weekTimetable);
 
-        // Filter lessons for today
+  // Filter lessons for today
         const today = new Date();
         const todayStr = today.getFullYear().toString() + ("0" + (today.getMonth() + 1)).slice(-2) + ("0" + today.getDate()).slice(-2);
         todayLessons = timetable.filter(l => l.date.toString() === todayStr).map(l => ({
@@ -238,15 +239,15 @@ module.exports = NodeHelper.create({
       }
     }
 
-    if (student.examsDays > 0) {
+    if (student.examsDaysAhead > 0) {
       // Validate the number of days
-      if (student.examsDays < 1 || student.examsDays > 360 || isNaN(student.examsDays)) {
-        student.examsDays = 30;
+      if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
+        student.examsDaysAhead = 30;
       }
 
-      var rangeStart = new Date(Date.now());
-      var rangeEnd = new Date(Date.now());
-      rangeEnd.setDate(rangeStart.getDate() + student.examsDays);
+  var rangeStart = new Date(Date.now());
+  var rangeEnd = new Date(Date.now());
+  rangeEnd.setDate(rangeStart.getDate() + student.examsDaysAhead);
 
       try {
         const rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
@@ -300,7 +301,7 @@ module.exports = NodeHelper.create({
     }
 
     // Before sending data, perform a quick debug validation: ensure lessons/timeUnits have numeric minutes
-    if (student.debug || this.config.debug) {
+    if (student.enableDebug || this.config.enableDebug) {
       const missingLessonMinutes = lessons.filter(l => l.startMin === undefined || l.startMin === null || l.endMin === undefined || l.endMin === null).length;
       const missingTimeUnits = timeUnits.filter(tu => tu.startMin === undefined || tu.startMin === null).length;
       console.log(`[MMM-Webuntis] Debug validation for ${student.title}: lessons without minutes=${missingLessonMinutes}, timeUnits without minutes=${missingTimeUnits}`);
