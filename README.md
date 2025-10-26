@@ -1,214 +1,127 @@
 # MMM-Webuntis
 
-This an extension for the [MagicMirror²](https://github.com/MagicMirrorOrg/MagicMirror). It allows to display your kids' cancelled and irregular lessons for schools using [Untis](https://www.untis.at) software to organize school's timetables. You are able to configure access for each of your kids.
+A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
 ## Installation
 
-1. Navigate into your MagicMirror²'s `modules` folder and execute `git clone https://github.com/HeikoGr/MMM-Webuntis`.
-2. Navigate into the new folder `MMM-Webuntis` and execute `npm install` to generate the node dependencies.
+1. Go to your MagicMirror² `modules` folder and run:
+
+```bash
+git clone https://github.com/HeikoGr/MMM-Webuntis
+cd MMM-Webuntis
+npm install
+```
+
+2. Add the module to your MagicMirror `config/config.js` (see example below).
 
 ## Update
 
-1. Navigate into your MMM-Webuntis folder and execute `git pull`.
-2. execute `npm install` to (re-)generate the node dependencies.
+To update to the latest version:
 
-## Using the module
+```bash
+cd ~/MagicMirror/modules/MMM-Webuntis
+git pull
+npm install
+```
 
-To use this module, add it to the modules array in the `config/config.js` file:
+Restart MagicMirror after updating.
+
+## Quick start
+
+Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The example below shows the most common global options and a minimal per-student credential configuration.
 
 ```javascript
-    {
-        module: "MMM-Webuntis",
-        position: "top_right",
-        header: "Untis",
-        config: { // see 'Configuration options' for more information
-            students: [
-                {
-                    title: "1st child's name",
-                    qrcode: "untis:[...] "
-                },
-                {
-                    title: "2nd child's name",
-                    qrcode: "untis:[...] "
-                },
-            ]
-        }
+{
+    module: "MMM-Webuntis",
+    position: "top_right",
+    header: "Untis",
+    config: {
+        // global options
+        logLevel: "trace",
+        fetchIntervalMs: 15 * 60 * 1000, // 15 minutes
+        daysToShow: 7,
+        pastDaysToShow: 0,
+        mergeGapMinutes: 15,
+
+        // per-student credentials
+        students: [
+            { title: "Alice", qrcode: "untis://setschool?..." },
+            { title: "Bob", qrcode: "untis://setschool?..." }
+        ]
     }
+}
 ```
+
+Legacy keys: the module accepts several legacy key names and will map them to the canonical names automatically. Examples: `debug` → `enableDebug`, `fetchInterval` → `fetchIntervalMs`, `mergeGapMin` → `mergeGapMinutes`, `days` → `daysToShow`. Prefer the canonical names in new configs.
 
 ## Configuration options
 
-I Am only able to use (and test) the qrcode login, as the school of our kids unfortunately use MS365 logins. If you have any problems with the other login methods i am not able to help you!
+The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
 
-The following properties can be configured:
+| Option | Type | Default | Description |
+|---|---:|---:|---|
+| `students` | array | required | Array of student credential objects (see below). |
+| `header` | string | none | Optional title printed by MagicMirror for this module instance. |
+| `daysToShow` | int | `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object. |
+| `pastDaysToShow` | int | `0` | How many past days to include in the grid (useful for debugging). |
+| `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
+| `mergeGapMinutes` | int | `15` | Allowed gap in minutes between consecutive lessons to consider them mergeable. Lower = stricter merging. |
+| `showStartTime` | bool | `false` | When `true` show the lesson start time; when `false` show the lesson number (if available). |
+| `useClassTimetable` | bool | `false` | Some schools only provide a class timetable; set `true` to request class timetable instead of the student timetable. |
+| `showRegularLessons` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
+| `showTeacherMode` | string | `'full'` | How to show teacher: `'initial'` | `'full'` | `'none'`. |
+| `useShortSubject` | bool | `false` | Use short subject names where available. |
+| `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
+| `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
+| `showExamSubject` | bool | `true` | Show subject for exams. |
+| `showExamTeacher` | bool | `true` | Show teacher for exams. |
+| `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
+| `displayMode` | string | `'grid'` | How to display lessons: `'list'` or `'grid'` (multi-day grid with exact positioning). |
+| `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
-<table>
-    <thead>
-        <tr>
-            <th>Option</th>
-            <th width="25%">Description</th>
-            <th>default value</th>
-        </tr>
-    <thead>
-        <tr>
-            <td><code>header</code></td>
-            <td>
-                (optional) Printed by MagicMirror² if set <br>
-            </td>
-            <td></td>
-        </tr>
-        <tr>
-            <td><code>students</code></td>
-            <td>
-                Array of untis login credentials objects<br>
-                <br><b>Possible values:</b> <code>array</code> of objects with the following attributes:
-                <table>
-                    <tr>
-                        <td><code>title</code></td>
-                        <td>Title of the entry, e.g. kid's name</td>
-                    </tr>
-                    <tr>
-                        <td><code>qrcode</code></td>
-                        <td><b>preferred</b> login-string from qrcode provided by webuntis.<br>
-                        You need to login in the student account and go to <br>
-                        <code>-> Profile -> Data Access</code><br>
-                        to generate a QR code. Adjust the QR code string to match your credentials:<br>
-                        <code>'untis://setschool?url=[...]&school=[...]&user=[...]&key=[...]&schoolNumber=[...]';</code></td>
-                    </tr>
-                    <tr>
-                        <td><code>school</code></td>
-                        <td><b>alternative to qr</b><br>
-                        School name as in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>.<br>
-                        A plus sign (+) in the URL can be replaced by a space.</td>
-                    </tr>
-                    <tr>
-                        <td><code>username</code></td>
-                        <td><b>alternative to qr</b><br>
-                        Username used to login at Untis<br>
-                        (optional, only required if the student has a custom login)</td>
-                    </tr>
-                    <tr>
-                        <td><code>password</code></td>
-                        <td><b>alternative to qr</b><br>
-                        Password used to login at Untis<br>
-                        (optional, only required if the student has a custom login)</td>
-                    </tr>
-                    <tr>
-                        <td><code>server</code></td>
-                        <td><b>alternative to qr</b><br>
-                        Server as shown in the URL after having logged in at <a href="https://webuntis.com/">webuntis.com</a>,<br>
-                        e.g. <code>kephiso.webuntis.com</code></td>
-                    </tr>
-                    <tr>
-                        <td><code>class</code></td>
-                        <td>Name of class to show<br>
-                        (optional, only required if anonymous mode is used)</td>
-                    </tr>
-                    <tr>
-                        <td><code>useClassTimetable</code></td>
-                        <td>It seems, that some schools do not provide an individual timetable<br>
-                        but only the class timetable. 
-                        <br>Try to set this to <code>true</code> if you don't receive any elements.
-                        <br><br><b>Default value:</b> <code>false</code></td>
-                    </tr>                    
-                </table>
-            </td>
-            <td></td>
-        </tr>
-        <tr>
-            <td><code>days</code></td>
-            <td>
-            Number of days to look ahead<br>
-            <br><b>Possible values:</b> <code>int</code> from <code>0</code> to <code>10</code>.<br>
-            Set to <code>0</code> to disable.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.
-            </td>
-            <td>7</td>
-        </tr>
-        <tr>
-            <td><code>fetchInterval</code></td>
-            <td>Interval in milliseconds to fetch data.<br>(default is 15 minutes)</td>
-            <td>15 * 60 * 1000</td>
-        </tr>
-        <tr>
-            <td><code>showStartTime</code></td>
-            <td>
-                Whether time or lesson order number shall be shown<br>
-                <br><b>Possible values:</b> <code>true</code> or <code>false</code>
-                <br><br>
-                The module tries to achieve the timetable of the school<br>
-                and currently assumes that Monday's lesson times are valid for the whole week.<br>
-                When set to <code>false</code> the module matches a start time like "07:40" to "1." for example.<br>
-                Can also be specified in the <code>students</code> object to override the module's default value.
-            </td>
-            <td>false</td>
-        </tr>
-        <tr>
-            <td><code>showRegularLessons</code></td>
-            <td>Boolean to show regular lessons.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>false</td>
-        </tr>
-        <tr>
-            <td><code>showTeacher</code></td>
-            <td>Boolean to show the teacher's name.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td><code>shortSubject</code></td>
-            <td>Boolean to show the short form of the subject.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>false</td>
-        </tr>
-        <tr>
-            <td><code>showSubstText</code></td>
-            <td>Boolean to show substitution text.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>false</td>
-        </tr>
-        <tr>
-            <td><code>examsDays</code></td>
-            <td>Number of days to fetch exams data for.<br>
-            Set to <code>0</code> to disable.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value. </td>
-            <td>0</td>
-        </tr>
-        <tr>
-            <td><code>examsShowTeacher</code></td>
-            <td>Boolean to show the teacher's name in exams data.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td><code>examsShowSubject</code></td>
-            <td>Boolean to show the subject in exams data.<br>
-            Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>true</td>
-        </tr>
-        <tr>
-            <td><code>mode</code></td>
-            <td>Show each student as own table, or compact in one table.<br>
-            <b>Possible values:</b> <code>verbose</code> or <code>compact</code></td>
-            <td>"compact"</td>
-        </tr>
-        <tr>
-            <td><code>debug</code></td>
-            <td>Use only for debug purposes!<br>
-            If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
-            <br><b>Possible values:</b> <code>true</code> or <code>false</code>
-            </td>
-            <td>false</td>
-        </tr>
-</table>
 
-## How it works
 
-This module may be useful for students at schools using Untis for the organization of time tables. It uses the node.js wrapper of the WebUnits API by TheNoim and retrieves all lessons in a specified number of days time period. It displays cancelled or irregular subjects so that kids are able to prepare for the next day without pulling the information from the Untis app. The module can be configured for several students.
+### Student credential object
+
+A single `students` entry is an object with credential and per-student overrides. Common fields:
+
+- `title` (string) — displayed name for the student.
+- `qrcode` (string) — preferred: QR-code login string from WebUntis (`untis://...`). If provided this is used for login.
+- `school`, `username`, `password`, `server` — alternative credentials if QR code is not used.
+- `class` — name of the class (used in anonymous/class mode).
+- Per-student overrides: any global option (like `daysToShow`, `examsDaysAhead`, `logLevel`, `enableDebug`, etc.) can be supplied inside the student object to override the global value for that student.
+
+Example student entry:
+
+```javascript
+{
+  title: "Alice",
+  qrcode: "untis://setschool?url=...&school=...&user=...&key=..."
+  // optional override:
+  // daysToShow: 3,
+  // logLevel: 'debug'
+}
+```
+
+## How the timetable grid works (developer notes)
+
+- The backend (`node_helper.js`) normalizes times and adds numeric fields `startMin` and `endMin` (minutes since midnight). The frontend relies on these numeric fields to position lesson blocks precisely in the multi-day grid.
+- The backend tries to preserve stable lesson IDs (when available) and the frontend preserves a `lessonIds` array when it merges consecutive lessons. After merging the `lessonId` is kept for backward compatibility.
+- Caching: the helper uses short in-memory caches for timegrid and weekly timetables to reduce redundant WebUntis API calls.
+
+## Log levels and debugging
+
+- Use `logLevel` to control logging verbosity. For normal usage `info` or `none` is fine. Use `debug` for troubleshooting.
+
+## Troubleshooting
+
+- If you see empty results, check credentials and try `useClassTimetable: true` — some schools expose only class timetables.
+- Enable `logLevel: 'debug'` to get more information in the MagicMirror server log.
+- If a student uses MS365 or SSO logins that cannot be automated, prefer generating a WebUntis data-access QR code inside the student's account and use that value.
 
 ## Dependencies
 
-- [node.js Wrapper for WebUntis API](https://github.com/TheNoim/WebUntis) (installed via `npm install`)
+- [TheNoim/WebUntis](https://github.com/TheNoim/WebUntis) — installed via `npm install` in the module directory.
 
 ## Screenshot
 
