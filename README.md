@@ -116,9 +116,9 @@ The following properties can be configured:
             <td></td>
         </tr>
         <tr>
-            <td><code>days</code></td>
+            <td><code>daysToShow</code></td>
             <td>
-            Number of days to look ahead<br>
+            Number of days to look ahead (from today).<br>
             <br><b>Possible values:</b> <code>int</code> from <code>0</code> to <code>10</code>.<br>
             Set to <code>0</code> to disable.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.
@@ -126,7 +126,7 @@ The following properties can be configured:
             <td>7</td>
         </tr>
         <tr>
-            <td><code>fetchInterval</code></td>
+            <td><code>fetchIntervalMs</code></td>
             <td>Interval in milliseconds to fetch data.<br>(default is 15 minutes)</td>
             <td>15 * 60 * 1000</td>
         </tr>
@@ -150,50 +150,50 @@ The following properties can be configured:
             <td>false</td>
         </tr>
         <tr>
-            <td><code>showTeacher</code></td>
-            <td>Boolean to show the teacher's name.<br>
+            <td><code>showTeacherMode</code></td>
+            <td>How teacher information is shown: <code>'initial'</code> shows initials, <code>'full'</code> shows full name, <code>'none'</code> hides teacher info.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.</td>
-            <td>true</td>
+            <td>'full'</td>
         </tr>
         <tr>
-            <td><code>shortSubject</code></td>
+            <td><code>useShortSubject</code></td>
             <td>Boolean to show the short form of the subject.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>false</td>
         </tr>
         <tr>
-            <td><code>showSubstText</code></td>
+            <td><code>showSubstitutionText</code></td>
             <td>Boolean to show substitution text.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>false</td>
         </tr>
         <tr>
-            <td><code>examsDays</code></td>
-            <td>Number of days to fetch exams data for.<br>
+            <td><code>examsDaysAhead</code></td>
+            <td>Number of days to fetch exams data for (ahead from today).<br>
             Set to <code>0</code> to disable.<br>
             Can also be specified in the <code>students</code> object to override the module's default value. </td>
             <td>0</td>
         </tr>
         <tr>
-            <td><code>examsShowTeacher</code></td>
+            <td><code>showExamTeacher</code></td>
             <td>Boolean to show the teacher's name in exams data.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>true</td>
         </tr>
+
         <tr>
-            <td><code>examsShowSubject</code></td>
+            <td><code>showExamSubject</code></td>
             <td>Boolean to show the subject in exams data.<br>
             Can also be specified in the <code>students</code> object to override the module's default value.</td>
             <td>true</td>
         </tr>
-        <tr>
             <td><code>mode</code></td>
             <td>Show each student as own table, or compact in one table.<br>
             <b>Possible values:</b> <code>verbose</code> or <code>compact</code></td>
             <td>"compact"</td>
         </tr>
         <tr>
-            <td><code>debug</code></td>
+            <td><code>enableDebug</code></td>
             <td>Use only for debug purposes!<br>
             If set to true, the timetable from WebUntis and the parsed lessons will be printed to the MM log<br>
             <br><b>Possible values:</b> <code>true</code> or <code>false</code>
@@ -207,9 +207,15 @@ The following properties can be configured:
             <td>false</td>
         </tr>
         <tr>
-            <td><code>mergeGapMin</code></td>
+            <td><code>mergeGapMinutes</code></td>
             <td>Numeric gap in minutes allowed between consecutive lessons to consider them mergeable. Default is <code>15</code>. Lower this value to require tighter adjacency between lessons when auto-merging.</td>
             <td>15</td>
+        </tr>
+
+        <tr>
+            <td><code>pastDaysToShow</code></td>
+            <td>Number of past days to include in the grid (e.g. to display yesterday/two days ago). Primarily useful for debugging or retrospective views.</td>
+            <td>0</td>
         </tr>
 </table>
 

@@ -13,21 +13,21 @@ Module.register("MMM-Webuntis", {
         class: ""
       }
     ],
-    days: 7,                        // number of days to show per student
-    fetchInterval: 15 * 60 * 1000,  // 15 minutes
+  daysToShow: 7,                  // number of days to show per student
+  fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
     showStartTime: false,           // whether to show start time in lesson listings
     useClassTimetable: false,       // whether to use class timetable instead of student timetable
     showRegularLessons: false,      // whether to show regular lessons (not only substitutions)
-    showTeacher: true,              // whether to show teacher initials/names
-    shortSubject: false,            // whether to use short subject names
-    showSubstText: false,           // whether to show substitution text
-    examsDays: 0,                   // number of days ahead to show exams
-    examsShowSubject: true,         // whether to show subject in exam listings
-    examsShowTeacher: true,         // whether to show teacher in exam listings
+  showTeacherMode: 'full',        // 'initial'|'full'|'none' - how to show teacher info
+  useShortSubject: false,         // whether to use short subject names
+  showSubstitutionText: false,    // whether to show substitution text
+  examsDaysAhead: 0,              // number of days ahead to show exams
+  showExamSubject: true,          // whether to show subject in exam listings
+  showExamTeacher: true,          // whether to show teacher in exam listings
     mode: "verbose",                // 'verbose' or 'compact' mode
-    debug: true,                    // enable debug logging
-    mergeGapMin: 15,                // maximum gap in minutes allowed between consecutive lessons to merge
-    debugLastDays: 0,               // number of past days to include in debug mode
+    enableDebug: true,              // enable debug logging
+    mergeGapMinutes: 15,            // maximum gap in minutes allowed between consecutive lessons to merge
+    pastDaysToShow: 0,              // number of past days to include (show previous days)
     displayMode: "grid"             // 'list' (default) or 'grid'
   },
 
@@ -121,14 +121,14 @@ Module.register("MMM-Webuntis", {
 
   /* Render the multi-day grid for a student: returns a DOM element containing header and grid */
   _renderGridForStudent(studentConfig, lessons, homeworks, timeUnits) {
-    // number of upcoming days to show (per-student config overrides module config)
-    const daysToShow = (studentConfig.days && studentConfig.days > 0) ? parseInt(studentConfig.days) : 1;
-    // debugLastDays: how many past days to include (can be set per-student or globally)
-    const pastDays = Math.max(0, parseInt(studentConfig.debugLastDays ?? this.config.debugLastDays ?? 0));
-    // start offset (negative means we start in the past)
-    const startOffset = -pastDays;
-    // total days displayed = pastDays + future/current window
-    const totalDisplayDays = daysToShow;
+  // number of upcoming days to show (per-student config overrides module config)
+  const daysToShow = (studentConfig.daysToShow && studentConfig.daysToShow > 0) ? parseInt(studentConfig.daysToShow) : 1;
+  // pastDaysToShow: how many past days to include (can be set per-student or globally)
+  const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? this.config.pastDaysToShow ?? 0));
+  // start offset (negative means we start in the past)
+  const startOffset = -pastDays;
+  // total days displayed = pastDays + future/current window
+  const totalDisplayDays = daysToShow;
 
     const header = document.createElement('div');
     header.className = 'webuntis-grid-days-header';
@@ -293,7 +293,7 @@ Module.register("MMM-Webuntis", {
           const candStartMin = (cand.startMin !== undefined && cand.startMin !== null) ? cand.startMin : null;
           const candEndMin = (cand.endMin !== undefined && cand.endMin !== null) ? cand.endMin : null;
           const gapMin = candStartMin - currEndMin;
-          const allowedGap = Number(this.config.mergeGapMin ?? 15);
+          const allowedGap = Number(this.config.mergeGapMinutes ?? 15);
           const sameContent = (cand.subjectShort === curr.subjectShort && cand.teacherInitial === curr.teacherInitial && cand.code === curr.code);
 
           // require candidate to start at or after current end, within allowed gap, and same content
@@ -320,10 +320,10 @@ Module.register("MMM-Webuntis", {
         // ensure lessonId remains available for backward compatibility
         if ((!curr.lessonId || curr.lessonId === null) && curr.lessonIds && curr.lessonIds.length > 0) curr.lessonId = curr.lessonIds[0];
         // ensure numeric bounds on merged lesson exist
-        if (curr.startMin === undefined || curr.startMin === null) {
+          if (curr.startMin === undefined || curr.startMin === null) {
           // try to take from curr.startTime if possible (no conversion allowed here) -> skip if not present
           // In normal operation node_helper provides startMin; log in debug
-          if (this.config.debug) console.warn('[MMM-Webuntis] merged lesson missing startMin', curr);
+          if (this.config.enableDebug) console.warn('[MMM-Webuntis] merged lesson missing startMin', curr);
         }
         if (curr.endMin === undefined || curr.endMin === null) {
           // if still missing, try set endMin = startMin + 45 when startMin available
@@ -393,7 +393,7 @@ Module.register("MMM-Webuntis", {
         }
       } catch (e) {
         // non-fatal if drawing hour lines fails
-        if (this.config.debug) console.warn('[MMM-Webuntis] failed to draw hour lines', e);
+        if (this.config.enableDebug) console.warn('[MMM-Webuntis] failed to draw hour lines', e);
       }
 
       // Create and append 'now' line for this day and register to updater
@@ -545,7 +545,7 @@ Module.register("MMM-Webuntis", {
         const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
         nl.style.top = `${top}px`;
       });
-      if (this.config.debug) console.debug('[MMM-Webuntis] updated now-lines at', new Date().toISOString());
+      if (this.config.enableDebug) console.debug('[MMM-Webuntis] updated now-lines at', new Date().toISOString());
     };
 
     // initial update and periodic refresh (every 30 seconds)
@@ -553,7 +553,7 @@ Module.register("MMM-Webuntis", {
       updateNowLines();
       setInterval(updateNowLines, 30 * 1000);
     } catch (e) {
-      if (this.config.debug) console.warn('[MMM-Webuntis] now-line updater failed', e);
+      if (this.config.enableDebug) console.warn('[MMM-Webuntis] now-line updater failed', e);
     }
 
     return wrapper;
@@ -607,7 +607,7 @@ Module.register("MMM-Webuntis", {
         studentCellTitle = studentTitle;
       }
 
-      if (studentConfig && studentConfig.days > 0) {
+  if (studentConfig && studentConfig.daysToShow > 0) {
         const studentTitle = studentConfig.title;
         var lessons = this.lessonsByStudent[studentTitle];
 
@@ -621,7 +621,7 @@ Module.register("MMM-Webuntis", {
 
           // Skip if nothing special or past lessons (unless in debug mode)
           if (!studentConfig.showRegularLessons && lesson.code === "" ||
-            time < new Date() && lesson.code !== "error" && !this.config.debug) {
+            time < new Date() && lesson.code !== "error" && !this.config.enableDebug) {
             continue;
           }
 
@@ -636,21 +636,20 @@ Module.register("MMM-Webuntis", {
 
           // subject
           let subjectStr = lesson.subject;
-          if (studentConfig.shortSubject) {
+          if (studentConfig.useShortSubject) {
             subjectStr = lesson.subjectShort;
           }
 
           // teachers name
-          if (studentConfig.showTeacher) {
-            if (studentConfig.showTeacher == "initial" && lesson.teacherInitial !== "") {
-              subjectStr += "&nbsp;" + `(${lesson.teacherInitial})`;
-            } else if (lesson.teacher !== "") {
-              subjectStr += "&nbsp;" + `(${lesson.teacher})`;
-            }
+          // showTeacherMode: 'initial' | 'full' | 'none'
+          if (studentConfig.showTeacherMode === 'initial') {
+            if (lesson.teacherInitial !== "") subjectStr += "&nbsp;" + `(${lesson.teacherInitial})`;
+          } else if (studentConfig.showTeacherMode === 'full') {
+            if (lesson.teacher !== "") subjectStr += "&nbsp;" + `(${lesson.teacher})`;
           }
 
           // lesson substitute text
-          if (studentConfig.showSubstText && lesson.substText !== "") {
+          if (studentConfig.showSubstitutionText && lesson.substText !== "") {
             subjectStr += `<br/><span class='xsmall dimmed'>${lesson.substText}</span>`;
           }
 
@@ -678,7 +677,7 @@ Module.register("MMM-Webuntis", {
       addedRows = 0;
       var exams = this.examsByStudent[studentTitle];
 
-      if (!exams || studentConfig.examsDays == 0) {
+      if (!exams || studentConfig.examsDaysAhead == 0) {
         continue;
       }
 
@@ -691,7 +690,7 @@ Module.register("MMM-Webuntis", {
         var time = new Date(exam.year, exam.month - 1, exam.day, exam.hour, exam.minutes);
 
         // Skip if exam has started (unless in debug mode)
-        if (time < new Date() && !this.config.debug) {
+        if (time < new Date() && !this.config.enableDebug) {
           continue;
         }
 
@@ -702,12 +701,12 @@ Module.register("MMM-Webuntis", {
 
         // subject of exam
         let nameCell = exam.name;
-        if (studentConfig.examsShowSubject) {
+        if (studentConfig.showExamSubject) {
           nameCell = `${exam.subject}: &nbsp;${exam.name}`;
         }
 
         // teachers name
-        if (studentConfig.examsShowTeacher) {
+        if (studentConfig.showExamTeacher) {
           if (exam.teacher) {
             nameCell += "&nbsp;" + `(${exam.teacher})`;
           }
@@ -745,7 +744,7 @@ Module.register("MMM-Webuntis", {
       case "DOM_OBJECTS_CREATED":
         var timer = setInterval(() => {
           this.sendSocketNotification("FETCH_DATA", this.config);
-        }, this.config.fetchInterval);
+        }, this.config.fetchIntervalMs);
         break;
     }
   },
@@ -776,7 +775,7 @@ Module.register("MMM-Webuntis", {
         this.homeworksByStudent[payload.title] = payload.homeworks;
       }
 
-      if (this.config.debug) {
+      if (this.config.enableDebug) {
         console.log(`[MMM-Webuntis] data received for ${payload.title}${JSON.stringify(payload, null, 2)}`);
       }
       this.updateDom();
