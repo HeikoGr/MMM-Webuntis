@@ -87,11 +87,11 @@ Module.register("MMM-Webuntis", {
 
   /* Tooltip helpers (single global tooltip element) */
   _ensureTooltip() {
-    let tooltip = document.getElementById('webuntis-tooltip');
+    let tooltip = document.getElementById('tooltip');
     if (!tooltip) {
       tooltip = document.createElement('div');
-      tooltip.id = 'webuntis-tooltip';
-      tooltip.className = 'webuntis-tooltip';
+      tooltip.id = 'tooltip';
+      tooltip.className = 'tooltip';
       document.body.appendChild(tooltip);
     }
     return tooltip;
@@ -115,7 +115,7 @@ Module.register("MMM-Webuntis", {
   },
 
   _hideTooltip() {
-    const tooltip = document.getElementById('webuntis-tooltip');
+    const tooltip = document.getElementById('tooltip');
     if (tooltip) tooltip.style.display = 'none';
   },
 
@@ -153,7 +153,7 @@ Module.register("MMM-Webuntis", {
   const totalDisplayDays = daysToShow;
 
     const header = document.createElement('div');
-    header.className = 'webuntis-grid-days-header';
+    header.className = 'grid-days-header';
     // build columns: first column is time axis, then for each displayed day two columns (left/right)
     const cols = ["minmax(60px,auto)"];
     for (let d = 0; d < totalDisplayDays; d++) {
@@ -163,7 +163,7 @@ Module.register("MMM-Webuntis", {
     header.style.gridTemplateColumns = cols.join(' ');
 
     const emptyHeader = document.createElement('div');
-    emptyHeader.className = 'webuntis-grid-days-header-empty';
+    emptyHeader.className = 'grid-days-header-empty';
     header.appendChild(emptyHeader);
 
     const today = new Date();
@@ -172,7 +172,7 @@ Module.register("MMM-Webuntis", {
       const dayIndex = startOffset + d; // negative for past days
       const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
-      dayLabel.className = 'webuntis-grid-daylabel';
+      dayLabel.className = 'grid-daylabel';
       dayLabel.innerText = `${dayDate.toLocaleDateString(config.language, { weekday: 'short', day: 'numeric', month: 'numeric' })}`;
       // span both columns for this day
       const startCol = 2 + d * 2;
@@ -185,7 +185,7 @@ Module.register("MMM-Webuntis", {
     wrapper.appendChild(header);
 
     const grid = document.createElement('div');
-    grid.className = 'webuntis-grid-combined';
+    grid.className = 'grid-combined';
     // We position lessons absolutely inside per-day columns based on exact start/end times.
     grid.style.gridTemplateColumns = cols.join(' ');
 
@@ -228,7 +228,7 @@ Module.register("MMM-Webuntis", {
 
     // Create time axis column as the left column with absolute-positioned labels
     const timeAxis = document.createElement('div');
-    timeAxis.className = 'webuntis-grid-timecell';
+    timeAxis.className = 'grid-timecell';
     // inner timeline container
     const timeInner = document.createElement('div');
     timeInner.style.position = 'relative';
@@ -253,7 +253,7 @@ Module.register("MMM-Webuntis", {
         if (u.endMin !== undefined && u.endMin !== null && u.endMin >= allStart && u.endMin <= allEnd) {
           const lineTop = Math.round(((u.endMin - allStart) / totalMinutes) * totalHeight);
           const tline = document.createElement('div');
-          tline.className = 'webuntis-grid-hourline';
+          tline.className = 'grid-hourline';
           tline.style.top = `${lineTop + 2}px`;
           timeInner.appendChild(tline);
         }
@@ -275,7 +275,7 @@ Module.register("MMM-Webuntis", {
         timeInner.appendChild(lab);
         // add corresponding hour line
         const tline = document.createElement('div');
-        tline.className = 'webuntis-grid-hourline';
+        tline.className = 'grid-hourline';
         tline.style.top = `${top}px`;
         timeInner.appendChild(tline);
       }
@@ -400,7 +400,7 @@ Module.register("MMM-Webuntis", {
             if (u.endMin < allStart || u.endMin > allEnd) continue;
             const top = Math.round(((u.endMin - allStart) / totalMinutes) * totalHeight);
             const line = document.createElement('div');
-            line.className = 'webuntis-grid-hourline';
+            line.className = 'grid-hourline';
             line.style.top = `${top + 2}px`;
             bothInner.appendChild(line);
           }
@@ -408,7 +408,7 @@ Module.register("MMM-Webuntis", {
           for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
             const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
             const line = document.createElement('div');
-            line.className = 'webuntis-grid-hourline';
+            line.className = 'grid-hourline';
             line.style.top = `${top}px`;
             bothInner.appendChild(line);
           }
@@ -420,7 +420,7 @@ Module.register("MMM-Webuntis", {
 
       // Create and append 'now' line for this day and register to updater
       const nowLine = document.createElement('div');
-      nowLine.className = 'webuntis-grid-nowline';
+      nowLine.className = 'grid-nowline';
       bothInner.appendChild(nowLine);
       // store reference on wrapper for updater
       bothInner._nowLine = nowLine;
@@ -431,7 +431,7 @@ Module.register("MMM-Webuntis", {
       // virtual no-lessons block when none -> create a single block spanning both columns
       if (mergedLessons.length === 0) {
         const noLesson = document.createElement('div');
-        noLesson.className = 'webuntis-grid-lesson lesson lesson-content no-lesson';
+        noLesson.className = 'grid-lesson lesson lesson-content no-lesson';
         noLesson.style.position = 'absolute';
         noLesson.style.top = '0px';
         noLesson.style.left = '0px';
@@ -461,7 +461,7 @@ Module.register("MMM-Webuntis", {
 
         // create lesson elements depending on type
         const leftCell = document.createElement('div');
-        leftCell.className = 'webuntis-grid-lesson lesson';
+        leftCell.className = 'grid-lesson lesson';
         leftCell.style.position = 'absolute';
         leftCell.style.top = `${topPx}px`;
         leftCell.style.left = '0px';
@@ -469,7 +469,7 @@ Module.register("MMM-Webuntis", {
         leftCell.style.height = `${heightPx}px`;
 
         const rightCell = document.createElement('div');
-        rightCell.className = 'webuntis-grid-lesson lesson';
+        rightCell.className = 'grid-lesson lesson';
         rightCell.style.position = 'absolute';
         rightCell.style.top = `${topPx}px`;
         rightCell.style.left = '0px';
@@ -477,7 +477,7 @@ Module.register("MMM-Webuntis", {
         rightCell.style.height = `${heightPx}px`;
 
         const bothCell = document.createElement('div');
-        bothCell.className = 'webuntis-grid-lesson lesson';
+        bothCell.className = 'grid-lesson lesson';
         bothCell.style.position = 'absolute';
         bothCell.style.top = `${topPx}px`;
         bothCell.style.left = '0px';
