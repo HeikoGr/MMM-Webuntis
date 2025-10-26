@@ -129,9 +129,13 @@ Example student entry:
 
 ## Screenshot
 
-"mode: verbose":
+displayMode: "list", mode: "verbose":
 
-![Screenshot](screenshot.png "Screenshot verbose mode")
+![Screenshot](screenshot-list.png "Screenshot verbose mode")
+
+displayMode: "grid":
+
+![Screenshot](screenshot-grid.png "Screenshot verbose mode")
 
 ## Attribution
 
