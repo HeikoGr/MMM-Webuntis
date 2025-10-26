@@ -2,6 +2,22 @@ Module.register("MMM-Webuntis", {
 
   defaults: {
     header: "WebUntis", // no header by default
+    daysToShow: 7,                   // number of days to show per student
+    fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
+    showStartTime: false,            // whether to show start time in lesson listings
+    useClassTimetable: false,        // whether to use class timetable instead of student timetable
+    showRegularLessons: false,       // whether to show regular lessons (not only substitutions)
+    showTeacherMode: 'full',         // 'initial'|'full'|'none' - how to show teacher info
+    useShortSubject: false,          // whether to use short subject names
+    showSubstitutionText: false,     // whether to show substitution text
+    examsDaysAhead: 0,               // number of days ahead to show exams
+    showExamSubject: true,           // whether to show subject in exam listings
+    showExamTeacher: true,           // whether to show teacher in exam listings
+    mode: "verbose",                 // 'verbose' or 'compact' mode
+    mergeGapMinutes: 15,             // maximum gap in minutes allowed between consecutive lessons to merge
+    pastDaysToShow: 0,               // number of past days to include (show previous days)
+    displayMode: "grid",             // 'list' (default) or 'grid'
+    logLevel: "none",                // enable debug logging ('debug' or 'none')
     students: [
       {
         title: "SET CONFIG!",
@@ -13,22 +29,6 @@ Module.register("MMM-Webuntis", {
         class: ""
       }
     ],
-  daysToShow: 7,                  // number of days to show per student
-  fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
-    showStartTime: false,           // whether to show start time in lesson listings
-    useClassTimetable: false,       // whether to use class timetable instead of student timetable
-    showRegularLessons: false,      // whether to show regular lessons (not only substitutions)
-  showTeacherMode: 'full',        // 'initial'|'full'|'none' - how to show teacher info
-  useShortSubject: false,         // whether to use short subject names
-  showSubstitutionText: false,    // whether to show substitution text
-  examsDaysAhead: 0,              // number of days ahead to show exams
-  showExamSubject: true,          // whether to show subject in exam listings
-  showExamTeacher: true,          // whether to show teacher in exam listings
-    mode: "verbose",                // 'verbose' or 'compact' mode
-    enableDebug: true,              // enable debug logging
-    mergeGapMinutes: 15,            // maximum gap in minutes allowed between consecutive lessons to merge
-    pastDaysToShow: 0,              // number of past days to include (show previous days)
-    displayMode: "grid"             // 'list' (default) or 'grid'
   },
 
   getStyles() {
@@ -119,8 +119,30 @@ Module.register("MMM-Webuntis", {
     if (tooltip) tooltip.style.display = 'none';
   },
 
+  /* Lightweight logging helper with levels: info, debug, warn */
+  _log(level, ...args) {
+    try {
+      const prefix = '[MMM-Webuntis]';
+      if (level === 'info') {
+        console.info(prefix, ...args);
+      } else if (level === 'warn') {
+        console.warn(prefix, ...args);
+      } else if (level === 'debug') {
+        console.debug(prefix + ' [DEBUG]', ...args);
+      } else {
+        console.log(prefix, ...args);
+      }
+    } catch (e) {
+      // swallow logging errors
+    }
+  },
+
   /* Render the multi-day grid for a student: returns a DOM element containing header and grid */
   _renderGridForStudent(studentConfig, lessons, homeworks, timeUnits) {
+  // studentConfig: per-student options merged with module defaults
+  // lessons: array of lesson objects (must contain numeric startMin/endMin)
+  // homeworks: optional array of homework objects to link to lessons
+  // timeUnits: array of named time rows used to draw hour lines
   // number of upcoming days to show (per-student config overrides module config)
   const daysToShow = (studentConfig.daysToShow && studentConfig.daysToShow > 0) ? parseInt(studentConfig.daysToShow) : 1;
   // pastDaysToShow: how many past days to include (can be set per-student or globally)
@@ -323,7 +345,7 @@ Module.register("MMM-Webuntis", {
           if (curr.startMin === undefined || curr.startMin === null) {
           // try to take from curr.startTime if possible (no conversion allowed here) -> skip if not present
           // In normal operation node_helper provides startMin; log in debug
-          if (this.config.enableDebug) console.warn('[MMM-Webuntis] merged lesson missing startMin', curr);
+          if (this.config.logLevel === 'debug') this._log('warn', 'Merged lesson missing startMin; backend should provide numeric startMin/endMin', curr.lessonId ? { lessonId: curr.lessonId } : curr);
         }
         if (curr.endMin === undefined || curr.endMin === null) {
           // if still missing, try set endMin = startMin + 45 when startMin available
@@ -391,9 +413,9 @@ Module.register("MMM-Webuntis", {
             bothInner.appendChild(line);
           }
         }
-      } catch (e) {
+        } catch (e) {
         // non-fatal if drawing hour lines fails
-        if (this.config.enableDebug) console.warn('[MMM-Webuntis] failed to draw hour lines', e);
+        if (this.config.logLevel === 'debug') this._log('warn', 'failed to draw hour lines', e);
       }
 
       // Create and append 'now' line for this day and register to updater
@@ -409,7 +431,7 @@ Module.register("MMM-Webuntis", {
       // virtual no-lessons block when none -> create a single block spanning both columns
       if (mergedLessons.length === 0) {
         const noLesson = document.createElement('div');
-        noLesson.className = 'webuntis-grid-lesson lesson no-lesson';
+        noLesson.className = 'webuntis-grid-lesson lesson lesson-content no-lesson';
         noLesson.style.position = 'absolute';
         noLesson.style.top = '0px';
         noLesson.style.left = '0px';
@@ -545,7 +567,7 @@ Module.register("MMM-Webuntis", {
         const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
         nl.style.top = `${top}px`;
       });
-      if (this.config.enableDebug) console.debug('[MMM-Webuntis] updated now-lines at', new Date().toISOString());
+  if (this.config.logLevel === 'debug') this._log('debug', 'updated now-lines at', new Date().toISOString());
     };
 
     // initial update and periodic refresh (every 30 seconds)
@@ -553,7 +575,7 @@ Module.register("MMM-Webuntis", {
       updateNowLines();
       setInterval(updateNowLines, 30 * 1000);
     } catch (e) {
-      if (this.config.enableDebug) console.warn('[MMM-Webuntis] now-line updater failed', e);
+      if (this.config.logLevel === 'debug') this._log('warn', 'now-line updater failed', e);
     }
 
     return wrapper;
@@ -575,8 +597,8 @@ Module.register("MMM-Webuntis", {
     table.className = "bright small light";
 
     // no student
-    if (this.lessonsByStudent === undefined) {
-      console.info("[MMM-Webuntis] no student data available");
+      if (this.lessonsByStudent === undefined) {
+      this._log('info', 'No student data available - check module configuration and that GOT_DATA was received.');
       return table;
     }
 
@@ -594,7 +616,10 @@ Module.register("MMM-Webuntis", {
 
       var homeworks = (this.homeworksByStudent && this.homeworksByStudent[studentTitle]) ? this.homeworksByStudent[studentTitle] : [];
       if (Array.isArray(homeworks) && homeworks.length > 0) {
-        console.log(`[MMM-Webuntis] Homeworks für ${studentTitle}:`, homeworks);
+        if (this.config.logLevel === 'debug') {
+          const hwSample = homeworks.slice(0, 5).map(h => ({ id: h.id ?? h.lid ?? h.lessonId ?? null, su: h.su?.[0]?.name || h.su?.[0]?.longname || null }));
+          this._log('debug', `Homeworks for ${studentTitle}: count=${homeworks.length}, sample=`, hwSample);
+        }
       }
 
       // use module-level helpers: this._addTableHeader / this._addTableRow
@@ -621,7 +646,7 @@ Module.register("MMM-Webuntis", {
 
           // Skip if nothing special or past lessons (unless in debug mode)
           if (!studentConfig.showRegularLessons && lesson.code === "" ||
-            time < new Date() && lesson.code !== "error" && !this.config.enableDebug) {
+            time < new Date() && lesson.code !== "error" && this.config.logLevel !== "debug") {
             continue;
           }
 
@@ -690,7 +715,7 @@ Module.register("MMM-Webuntis", {
         var time = new Date(exam.year, exam.month - 1, exam.day, exam.hour, exam.minutes);
 
         // Skip if exam has started (unless in debug mode)
-        if (time < new Date() && !this.config.enableDebug) {
+        if (time < new Date() && this.config.logLevel !== "debug") {
           continue;
         }
 
@@ -725,7 +750,7 @@ Module.register("MMM-Webuntis", {
         this._addTableRow(table, "examRowEmpty", studentCellTitle, this.translate("no_exams"));
       }
 
-      // --- Mehrtägiges Tagesstundenplan-Grid anzeigen ---
+  // --- Multi-day timetable grid display ---
       if (this.config.displayMode === 'grid') {
         if (timeUnits && timeUnits.length > 0 && lessons && lessons.length > 0) {
           // delegate grid rendering to a helper
@@ -775,8 +800,12 @@ Module.register("MMM-Webuntis", {
         this.homeworksByStudent[payload.title] = payload.homeworks;
       }
 
-      if (this.config.enableDebug) {
-        console.log(`[MMM-Webuntis] data received for ${payload.title}${JSON.stringify(payload, null, 2)}`);
+      if (this.config.logLevel === "debug") {
+        const cLessons = Array.isArray(payload.lessons) ? payload.lessons.length : 0;
+        const cExams = Array.isArray(payload.exams) ? payload.exams.length : 0;
+        const cTimeUnits = Array.isArray(payload.timeUnits) ? payload.timeUnits.length : 0;
+        const cHomeworks = Array.isArray(payload.homeworks) ? payload.homeworks.length : 0;
+        this._log('debug', `data received for ${payload.title}: lessons=${cLessons}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`);
       }
       this.updateDom();
     }

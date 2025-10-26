@@ -96,7 +96,7 @@ element.style{
 }
 
 .webuntis-grid-combined .lesson-content {
-  font-size: 0.8em;
+  font-size: 0.7em;
 }
 
 /* Containers for split lessons (kept but minimal) */
@@ -125,7 +125,7 @@ element.style{
 .webuntis-grid-combined .lesson-regular {  
   background-color: #dfffe0; /* light green */
   border-color: #b7e6b3;
-  padding: 6px;
+  padding: 2px;
 }
 
 /* Regular full lesson */
