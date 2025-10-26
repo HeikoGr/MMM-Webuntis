@@ -1,7 +1,7 @@
 Module.register("MMM-Webuntis", {
 
   defaults: {
-    header: "WebUntis", // no header by default
+    header: "",                      // no header by default
     daysToShow: 7,                   // number of days to show per student
     fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
     showStartTime: false,            // whether to show start time in lesson listings
@@ -138,7 +138,8 @@ Module.register("MMM-Webuntis", {
   },
 
   /* Render the multi-day grid for a student: returns a DOM element containing header and grid */
-  _renderGridForStudent(studentConfig, lessons, homeworks, timeUnits) {
+  _renderGridForStudent(studentTitle, studentConfig, lessons, homeworks, timeUnits) {
+  // studentTitle: title/key for the student used to lookup preprocessed groups
   // studentConfig: per-student options merged with module defaults
   // lessons: array of lesson objects (must contain numeric startMin/endMin)
   // homeworks: optional array of homework objects to link to lessons
@@ -291,10 +292,13 @@ Module.register("MMM-Webuntis", {
       const targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
-      const dayLessons = allLessons.filter(l => {
-        const norm = `${l.year}${('0' + l.month).slice(-2)}${('0' + l.day).slice(-2)}`;
-        return norm === dateStr;
-      }).sort((a, b) => a.startTime - b.startTime);
+      // Prefer preprocessed grouped lessons (created on GOT_DATA) to avoid filtering/sorting here
+      let dayLessons = (this.preprocessedByStudent && this.preprocessedByStudent[studentTitle] && this.preprocessedByStudent[studentTitle].groupedByDate && this.preprocessedByStudent[studentTitle].groupedByDate[dateStr])
+        ? this.preprocessedByStudent[studentTitle].groupedByDate[dateStr].slice()
+        : allLessons.filter(l => {
+          const norm = `${l.year}${('0' + l.month).slice(-2)}${('0' + l.day).slice(-2)}`;
+          return norm === dateStr;
+        }).sort((a, b) => a.startTime - b.startTime);
 
       // merge double lessons
       const mergedLessons = [];
@@ -547,35 +551,13 @@ Module.register("MMM-Webuntis", {
     }
 
     wrapper.appendChild(grid);
-    // Helper to update now-lines across all day columns inside this grid
-    const updateNowLines = () => {
-      const inners = grid.querySelectorAll('.day-column-inner');
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      inners.forEach(inner => {
-        const nl = inner._nowLine;
-        const allS = inner._allStart;
-        const allE = inner._allEnd;
-        const h = inner._totalHeight;
-        if (!nl || allS === undefined || allE === undefined || h === undefined) return;
-        // if current time is outside visible range hide the line
-        if (nowMin < allS || nowMin > allE) {
-          nl.style.display = 'none';
-          return;
-        }
-        nl.style.display = 'block';
-        const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
-        nl.style.top = `${top}px`;
-      });
-  if (this.config.logLevel === 'debug') this._log('debug', 'updated now-lines at', new Date().toISOString());
-    };
-
-    // initial update and periodic refresh (every 30 seconds)
+    // update now-lines once (centralized interval handles periodic updates)
     try {
-      updateNowLines();
-      setInterval(updateNowLines, 30 * 1000);
+      if (typeof this._updateNowLinesAll === 'function') {
+        this._updateNowLinesAll();
+      }
     } catch (e) {
-      if (this.config.logLevel === 'debug') this._log('warn', 'now-line updater failed', e);
+      if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line updater failed', e);
     }
 
     return wrapper;
@@ -587,8 +569,55 @@ Module.register("MMM-Webuntis", {
     this.configByStudent = [];
     this.todayLessonsByStudent = [];
     this.timeUnitsByStudent = [];
+    // start centralized now-line updater (single timer for the module)
+    if (!this._nowLineTimer) {
+      try {
+        this._nowLineTimer = setInterval(() => {
+          try {
+            this._updateNowLinesAll();
+          } catch (e) {
+            if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line centralized update failed', e);
+          }
+        }, 30 * 1000);
+      } catch (e) {
+        // ignore timer setup failures
+      }
+    }
+    // one-off initial update
+    try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
+
     this.config.id = this.identifier;
     this.sendSocketNotification("FETCH_DATA", this.config);
+  },
+
+  /* Centralized updater for all now-lines rendered by the module */
+  _updateNowLinesAll() {
+    try {
+      const inners = document.querySelectorAll('.day-column-inner');
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      inners.forEach(inner => {
+        try {
+          const nl = inner._nowLine;
+          const allS = inner._allStart;
+          const allE = inner._allEnd;
+          const h = inner._totalHeight;
+          if (!nl || allS === undefined || allE === undefined || h === undefined) return;
+          if (nowMin < allS || nowMin > allE) {
+            nl.style.display = 'none';
+            return;
+          }
+          nl.style.display = 'block';
+          const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
+          nl.style.top = `${top}px`;
+        } catch (e) {
+          // per-inner errors are non-fatal
+        }
+      });
+      if (this.config && this.config.logLevel === 'debug') this._log('debug', 'updated now-lines at', new Date().toISOString());
+    } catch (e) {
+      // swallow
+    }
   },
 
   getDom() {
@@ -636,8 +665,8 @@ Module.register("MMM-Webuntis", {
         const studentTitle = studentConfig.title;
         var lessons = this.lessonsByStudent[studentTitle];
 
-        // sort lessons by start time
-        lessons.sort((a, b) => a.sortString - b.sortString);
+  // lessons are pre-sorted on GOT_DATA; no need to sort here
+  // (keeps getDom fast and avoids repeated O(n log n) work)
 
         // iterate through lessons of current student
         for (let i = 0; i < lessons.length; i++) {
@@ -754,7 +783,7 @@ Module.register("MMM-Webuntis", {
       if (this.config.displayMode === 'grid') {
         if (timeUnits && timeUnits.length > 0 && lessons && lessons.length > 0) {
           // delegate grid rendering to a helper
-          const gridElem = this._renderGridForStudent(studentConfig, lessons, homeworks, timeUnits);
+          const gridElem = this._renderGridForStudent(studentTitle, studentConfig, lessons, homeworks, timeUnits);
           if (gridElem) wrapper.appendChild(gridElem);
         }
       }
@@ -781,7 +810,18 @@ Module.register("MMM-Webuntis", {
 
     if (notification === "GOT_DATA") {
       if (payload.lessons) {
-        this.lessonsByStudent[payload.title] = payload.lessons;
+        // Sort once on arrival to avoid repeated sorts in getDom()
+        const sorted = Array.isArray(payload.lessons) ? payload.lessons.slice().sort((a, b) => a.sortString - b.sortString) : [];
+        this.lessonsByStudent[payload.title] = sorted;
+        // lightweight preprocessing for grid rendering: group lessons by date
+        this.preprocessedByStudent = this.preprocessedByStudent || {};
+        const grouped = {};
+        sorted.forEach(l => {
+          const key = `${l.year}${('0' + l.month).slice(-2)}${('0' + l.day).slice(-2)}`;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(l);
+        });
+        this.preprocessedByStudent[payload.title] = { groupedByDate: grouped };
       }
       if (payload.exams) {
         this.examsByStudent[payload.title] = payload.exams;

@@ -18,6 +18,8 @@ module.exports = NodeHelper.create({
    */
   start() {
     Log.info("[MMM-Webuntis] Node helper started");
+    // track inflight fetches per credential key to avoid duplicate parallel work
+    this._inflightRequests = this._inflightRequests || {};
   },
 
   /**
@@ -98,38 +100,66 @@ module.exports = NodeHelper.create({
           groups.get(credKey).push(student);
         }
 
-        // For each credential group, login once, fetch for all students in group, then logout
+        // For each credential group, process with coalescing inflight handling.
+        // If a fetch for the same credKey is already running, we set a pending flag
+        // so that the group is fetched once more when the current run finishes.
         for (const [credKey, students] of groups.entries()) {
-          let untis = null;
-          const sample = students[0];
-          try {
-            if (sample.qrcode) {
-              untis = new WebUntisQR(sample.qrcode, "custom-identity", Authenticator, URL);
-            } else if (sample.username) {
-              untis = new WebUntis(sample.school, sample.username, sample.password, sample.server);
-            } else {
-              this._mmLog('error', null, `No credentials for group ${credKey}`);
-              continue;
-            }
-
-            await untis.login();
-            for (const student of students) {
-              // fetchData will use caches (timegrid/weekTimetable) keyed by credKey
-              try {
-                await this.fetchData(untis, student, identifier, credKey);
-              } catch (err) {
-                this._mmLog('error', student, `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`);
-              }
-            }
-          } catch (error) {
-            this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`);
-          } finally {
-            try {
-              if (untis) await untis.logout();
-            } catch (e) {
-              // ignore logout errors
-            }
+          if (!this._inflightRequests) this._inflightRequests = {};
+          // If already running, mark pending and continue
+          if (this._inflightRequests[credKey] && this._inflightRequests[credKey].running) {
+            this._inflightRequests[credKey].pending = true;
+            this._mmLog('info', null, `Fetch for ${credKey} already in progress - coalescing request`);
+            continue;
           }
+
+          // initialize inflight entry
+          this._inflightRequests[credKey] = { running: true, pending: false };
+
+          // Launch an async worker that will process the group and rerun if pending was set
+          (async () => {
+            while (true) {
+              let untis = null;
+              const sample = students[0];
+              try {
+                if (sample.qrcode) {
+                  untis = new WebUntisQR(sample.qrcode, "custom-identity", Authenticator, URL);
+                } else if (sample.username) {
+                  untis = new WebUntis(sample.school, sample.username, sample.password, sample.server);
+                } else {
+                  this._mmLog('error', null, `No credentials for group ${credKey}`);
+                  break;
+                }
+
+                await untis.login();
+                for (const student of students) {
+                  try {
+                    await this.fetchData(untis, student, identifier, credKey);
+                  } catch (err) {
+                    this._mmLog('error', student, `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`);
+                  }
+                }
+              } catch (error) {
+                this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`);
+              } finally {
+                try {
+                  if (untis) await untis.logout();
+                } catch (e) {
+                  // ignore logout errors
+                }
+              }
+
+              // if another request arrived while we were running, run again once
+              if (this._inflightRequests[credKey] && this._inflightRequests[credKey].pending) {
+                this._inflightRequests[credKey].pending = false;
+                // loop again to process the latest coalesced request
+                continue;
+              }
+
+              // no pending work: clear running flag and exit worker
+              if (this._inflightRequests[credKey]) this._inflightRequests[credKey].running = false;
+              break;
+            }
+          })();
         }
         this._mmLog('info', null, "Successfully fetched data");
       } catch (error) {
