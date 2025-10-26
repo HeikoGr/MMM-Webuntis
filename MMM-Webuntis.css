@@ -1,30 +1,213 @@
-.cancelled {
-  text-decoration: line-through;
+/* MMM-Webuntis CSS stylesheet */
+/* Reset padding/margin for all elements inside module */
+element.style{
+    padding-top: 0px;
+    padding-right: 0px;
+    padding-bottom: 0px;
+    padding-left: 0px;
 }
 
-.error {
-  color: red;
+.MMM-Webuntis {
+ width: 500px;
 }
 
-.info {
-  font-style: italic;
+/* Basic timecell for list/grid */
+.webuntis-grid-timecell {
+  padding: 0.2em 0.5em 0.2em 0;
+  border-bottom: 1px dotted #444;
+  white-space: pre-line;
 }
 
+/* student row */
 .student {
   padding-top: 15px;
   border-bottom: 1px solid #333;
 }
 
-.examRow,
-.examRowEmpty,
-.lessonRow,
-.lessonRowEmpty
- {
-  vertical-align: top;
-  padding-left: 20px;
+/* Days header */
+.webuntis-grid-days-header {
+  margin-bottom: 0.4em;
+  align-items: center;
+  display: grid; /* default, grid-template-columns set dynamically in JS */
 }
 
-.examRow,
-.examRowEmpty {
-  color: rgb(0, 255, 255);
+/* Combined grid (time + content) */
+.webuntis-grid-combined {
+  display: grid;
+  grid-template-columns: minmax(90px,auto) 1fr;
+  gap: 4px;
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Tooltip */
+#webuntis-tooltip, .webuntis-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  max-width: 360px;
+}
+
+.webuntis-grid-combined .webuntis-grid-timecell {
+  border-bottom: 1px dotted #444;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.9em;
+  color: #aaa;
+  padding: 0.2em 0.5em 0.2em 0;
+}
+
+/* Inner wrapper for per-day absolute layout */
+.webuntis-grid-combined .day-column-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Positioned lesson blocks inside day-column-inner */
+.webuntis-grid-combined .webuntis-grid-lesson {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 4px;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.webuntis-grid-combined .webuntis-grid-lesson {
+  padding: 0px;
+  overflow: hidden;
+  align-items: center;
+  position: relative;
+}
+
+.webuntis-grid-combined .no-lesson {
+  background-color: #72277d;
+  padding: 5px;
+}
+
+.webuntis-grid-combined .lesson-content {
+  font-size: 0.8em;
+}
+
+/* Containers for split lessons (kept but minimal) */
+.webuntis-grid-combined .webuntis-grid-lesson.lesson-pair,
+.webuntis-grid-combined .webuntis-grid-lesson.lesson-container {
+  padding: 2px;
+  border: none;
+  background: transparent;
+}
+
+/* Replacement lesson (left half) */
+.webuntis-grid-combined .lesson-replacement {
+  background-color: #d8ecff; /* light blue */
+  border-right: 1px solid rgba(0,0,0,0.06);
+  color: #03396c;
+  overflow: hidden;
+}
+
+/* Cancelled lesson (right half) */
+.webuntis-grid-combined .lesson-cancelled-split {
+  background-color: #d98e8e; /* light red */
+  color: #8a0000;
+}
+
+/* Regular full lesson */
+.webuntis-grid-combined .lesson-regular {  
+  background-color: #dfffe0; /* light green */
+  border-color: #b7e6b3;
+  padding: 6px;
+}
+
+/* Regular full lesson */
+.webuntis-grid-combined .lesson{  
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  text-align: left;
+}
+
+/* Simple homework icon inside lesson cell */
+.webuntis-grid-combined .homework-icon {
+  margin-left: 6px;
+  font-size: 0.9em;
+  vertical-align: middle;
+}
+
+/* Inner containers for half/full layout */
+.webuntis-grid-combined .webuntis-grid-lesson {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+.webuntis-grid-combined .webuntis-grid-lesson .half-left {
+  width: 50%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.webuntis-grid-combined .webuntis-grid-lesson .half-right {
+  background-color: #ffd9d9;
+  width: 50%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.webuntis-grid-combined .webuntis-grid-lesson .half-left.placeholder {
+  background: transparent;
+}
+.webuntis-grid-combined .webuntis-grid-lesson .full {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.webuntis-grid-combined .webuntis-grid-homework {
+  border: 1px dashed #bbb;
+  border-radius: 4px;
+  padding: 5px;
+  background-color: #f3f3f3;
+  min-height: 2.2em;
+  font-size: 0.95em;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre-line;
+}
+
+/* Hour divider line (background guide) */
+.webuntis-grid-hourline {
+  height: 0.5px;
+  background: rgba(239, 239, 239, 0.5);
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0; /* behind lessons */
+}
+
+/* Current time indicator: draws a red line across the day's column */
+.webuntis-grid-nowline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255,0,0,0.95), rgba(255,0,0,0.85));
+  box-shadow: 0 0 6px rgba(255,0,0,0.45);
+  z-index: 3; /* above lessons */
+  pointer-events: none;
+}
+
+/* Ensure lessons sit above hourlines but below the now-line when rendered */
+.webuntis-grid-combined .webuntis-grid-lesson {
+  z-index: 1;
 }
