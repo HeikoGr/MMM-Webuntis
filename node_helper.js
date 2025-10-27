@@ -266,7 +266,7 @@ module.exports = NodeHelper.create({
     // Get Timegrid (for mapping start/end times) - cached per credential
     let grid = [];
     try {
-      grid = await this._getTimegridCached(untis, credKey);
+      grid = await this._getTimegrid(untis, credKey);
       if (grid && grid[0] && grid[0].timeUnits) {
         grid[0].timeUnits.forEach((element) => {
           startTimes[element.startTime] = element.name;
@@ -291,8 +291,7 @@ module.exports = NodeHelper.create({
 
         // Additionally fetch the week's timetable to get full WebAPI timetable entries
         // This helps to obtain stable lesson IDs (WebAPITimetable) to link homeworks
-        // Use cached week timetable per credential+start date to avoid duplicate calls
-        let weekTimetable = await this._getWeekTimetableCached(untis, credKey, rangeStart);
+        let weekTimetable = await this._getWeekTimetable(untis, credKey, rangeStart);
 
         if (student.useClassTimetable) {
           logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);

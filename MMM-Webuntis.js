@@ -85,40 +85,6 @@ Module.register("MMM-Webuntis", {
     table.appendChild(thisRow);
   },
 
-  /* Tooltip helpers (single global tooltip element) */
-  _ensureTooltip() {
-    let tooltip = document.getElementById('tooltip');
-    if (!tooltip) {
-      tooltip = document.createElement('div');
-      tooltip.id = 'tooltip';
-      tooltip.className = 'tooltip';
-      document.body.appendChild(tooltip);
-    }
-    return tooltip;
-  },
-
-  _showTooltip(e, data) {
-    const tooltip = this._ensureTooltip();
-    try {
-      const txt = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      tooltip.innerText = txt;
-      tooltip.style.display = 'block';
-      const pad = 12;
-      const x = Math.min(window.innerWidth - pad - tooltip.offsetWidth, e.clientX + 12);
-      const y = Math.min(window.innerHeight - pad - tooltip.offsetHeight, e.clientY + 12);
-      tooltip.style.left = `${x}px`;
-      tooltip.style.top = `${y}px`;
-    } catch (err) {
-      tooltip.innerText = String(data);
-      tooltip.style.display = 'block';
-    }
-  },
-
-  _hideTooltip() {
-    const tooltip = document.getElementById('tooltip');
-    if (tooltip) tooltip.style.display = 'none';
-  },
-
   /* Lightweight logging helper with levels: info, debug, warn */
   _log(level, ...args) {
     try {
@@ -293,7 +259,7 @@ Module.register("MMM-Webuntis", {
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
       // Prefer preprocessed grouped lessons (created on GOT_DATA) to avoid filtering/sorting here
-      let dayLessons = (this.preprocessedByStudent && this.preprocessedByStudent[studentTitle] && this.preprocessedByStudent[studentTitle].groupedByDate && this.preprocessedByStudent[studentTitle].gro[...]
+      let dayLessons = (this.preprocessedByStudent && this.preprocessedByStudent[studentTitle] && this.preprocessedByStudent[studentTitle].groupedByDate && this.preprocessedByStudent[studentTitle].groupedByDate[dateStr])
         ? this.preprocessedByStudent[studentTitle].groupedByDate[dateStr].slice()
         : allLessons.filter(l => {
           const norm = `${l.year}${('0' + l.month).slice(-2)}${('0' + l.day).slice(-2)}`;
@@ -442,9 +408,7 @@ Module.register("MMM-Webuntis", {
         noLesson.style.right = '0px';
         noLesson.style.height = `${totalHeight}px`;
         noLesson.innerHTML = `<b>kein Unterricht</b>`;
-        noLesson.addEventListener('mouseenter', e => this._showTooltip(e, { note: 'kein Unterricht' }));
-        noLesson.addEventListener('mousemove', e => this._showTooltip(e, { note: 'kein Unterricht' }));
-        noLesson.addEventListener('mouseleave', () => this._hideTooltip());
+  // tooltip removed: no event listeners attached
         bothInner.appendChild(noLesson);
       }
 
@@ -526,48 +490,26 @@ Module.register("MMM-Webuntis", {
 
         // attach events and append to appropriate wrapper
         if (lesson.code === 'irregular') {
-          [leftCell].forEach(c => {
-            c.addEventListener('mouseenter', e => this._showTooltip(e, lesson));
-            c.addEventListener('mousemove', e => this._showTooltip(e, lesson));
-            c.addEventListener('mouseleave', () => this._hideTooltip());
-          });
+          // tooltip removed: append directly
           leftInner.appendChild(leftCell);
         } else if (lesson.code === 'cancelled') {
-          [rightCell].forEach(c => {
-            c.addEventListener('mouseenter', e => this._showTooltip(e, lesson));
-            c.addEventListener('mousemove', e => this._showTooltip(e, lesson));
-            c.addEventListener('mouseleave', () => this._hideTooltip());
-          });
+          // tooltip removed: append directly
           rightInner.appendChild(rightCell);
         } else {
-          [bothCell].forEach(c => {
-            c.addEventListener('mouseenter', e => this._showTooltip(e, lesson));
-            c.addEventListener('mousemove', e => this._showTooltip(e, lesson));
-            c.addEventListener('mouseleave', () => this._hideTooltip());
-          });
+          // tooltip removed: append directly
           bothInner.appendChild(bothCell);
         }
       }
     }
 
     wrapper.appendChild(grid);
-    // schedule a one-off now-line update after the grid was appended and layouted
+    // update now-lines once (centralized interval handles periodic updates)
     try {
       if (typeof this._updateNowLinesAll === 'function') {
-        if (typeof requestAnimationFrame === 'function') {
-          // run in the next paint cycle; double rAF increases reliability across browsers
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
-          }));
-        } else {
-          // fallback: short timeout to give browser time to render
-          setTimeout(() => {
-            try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
-          }, 150);
-        }
+        this._updateNowLinesAll();
       }
     } catch (e) {
-      if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line updater scheduling failed', e);
+      if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line updater failed', e);
     }
 
     return wrapper;
