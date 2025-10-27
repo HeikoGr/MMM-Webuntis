@@ -22,23 +22,23 @@ module.exports = NodeHelper.create({
   },
 
   /**
-  * Centralized backend logger that honors module and per-student debug flags.
-  * Emits messages using the MagicMirror `Log` helper.
-  *
-  * @param {'info'|'debug'|'error'} level
-  * @param {Object|null} student
-  * @param {string} message
-  */
+   * Centralized backend logger that honors module and per-student debug flags.
+   * Emits messages using the MagicMirror `Log` helper.
+   *
+   * @param {'info'|'debug'|'error'} level
+   * @param {Object|null} student
+   * @param {string} message
+   */
   _mmLog(level, student, message) {
     try {
       const prefix = `[MMM-Webuntis]`;
-      if (level === 'info') {
+      if (level === "info") {
         Log.info(`${prefix} ${message}`);
-      } else if (level === 'error') {
+      } else if (level === "error") {
         Log.error(`${prefix} ${message}`);
-      } else if (level === 'debug') {
-        if (this.config && this.config.logLevel === 'debug') {
-          if (typeof Log.debug === 'function') {
+      } else if (level === "debug") {
+        if (this.config && this.config.logLevel === "debug") {
+          if (typeof Log.debug === "function") {
             Log.debug(`${prefix} ${message}`);
           } else {
             Log.info(`${prefix} [DEBUG] ${message}`);
@@ -48,7 +48,9 @@ module.exports = NodeHelper.create({
         Log.info(`${prefix} ${message}`);
       }
     } catch (e) {
-      Log.error(`[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`);
+      Log.error(
+        `[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`,
+      );
       // swallow
     }
   },
@@ -64,7 +66,11 @@ module.exports = NodeHelper.create({
     if (notification === "FETCH_DATA") {
       // Assign incoming payload to config (payload may contain legacy keys)
       this.config = payload;
-      this._mmLog('info', null, `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`);
+      this._mmLog(
+        "info",
+        null,
+        `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`,
+      );
 
       try {
         // Group students by credential so we can reuse the same untis session
@@ -89,9 +95,14 @@ module.exports = NodeHelper.create({
         // normalize student configs and group
         for (const student of this.config.students) {
           properties.forEach((prop) => {
-            student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
+            student[prop] =
+              student[prop] !== undefined ? student[prop] : this.config[prop];
           });
-          if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
+          if (
+            student.daysToShow < 0 ||
+            student.daysToShow > 10 ||
+            isNaN(student.daysToShow)
+          ) {
             student.daysToShow = 1;
           }
 
@@ -106,9 +117,16 @@ module.exports = NodeHelper.create({
         for (const [credKey, students] of groups.entries()) {
           if (!this._inflightRequests) this._inflightRequests = {};
           // If already running, mark pending and continue
-          if (this._inflightRequests[credKey] && this._inflightRequests[credKey].running) {
+          if (
+            this._inflightRequests[credKey] &&
+            this._inflightRequests[credKey].running
+          ) {
             this._inflightRequests[credKey].pending = true;
-            this._mmLog('info', null, `Fetch for ${credKey} already in progress - coalescing request`);
+            this._mmLog(
+              "info",
+              null,
+              `Fetch for ${credKey} already in progress - coalescing request`,
+            );
             continue;
           }
 
@@ -122,11 +140,25 @@ module.exports = NodeHelper.create({
               const sample = students[0];
               try {
                 if (sample.qrcode) {
-                  untis = new WebUntisQR(sample.qrcode, "custom-identity", Authenticator, URL);
+                  untis = new WebUntisQR(
+                    sample.qrcode,
+                    "custom-identity",
+                    Authenticator,
+                    URL,
+                  );
                 } else if (sample.username) {
-                  untis = new WebUntis(sample.school, sample.username, sample.password, sample.server);
+                  untis = new WebUntis(
+                    sample.school,
+                    sample.username,
+                    sample.password,
+                    sample.server,
+                  );
                 } else {
-                  this._mmLog('error', null, `No credentials for group ${credKey}`);
+                  this._mmLog(
+                    "error",
+                    null,
+                    `No credentials for group ${credKey}`,
+                  );
                   break;
                 }
 
@@ -135,35 +167,51 @@ module.exports = NodeHelper.create({
                   try {
                     await this.fetchData(untis, student, identifier, credKey);
                   } catch (err) {
-                    this._mmLog('error', student, `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`);
+                    this._mmLog(
+                      "error",
+                      student,
+                      `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`,
+                    );
                   }
                 }
               } catch (error) {
-                this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`);
+                this._mmLog(
+                  "error",
+                  null,
+                  `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`,
+                );
               } finally {
                 try {
                   if (untis) await untis.logout();
                 } catch (e) {
-                  this._mmLog('error', null, `Error during logout for group ${credKey}: ${e && e.message ? e.message : e}`);
+                  this._mmLog(
+                    "error",
+                    null,
+                    `Error during logout for group ${credKey}: ${e && e.message ? e.message : e}`,
+                  );
                 }
               }
 
               // if another request arrived while we were running, run again once
-              if (this._inflightRequests[credKey] && this._inflightRequests[credKey].pending) {
+              if (
+                this._inflightRequests[credKey] &&
+                this._inflightRequests[credKey].pending
+              ) {
                 this._inflightRequests[credKey].pending = false;
                 // loop again to process the latest coalesced request
                 continue;
               }
 
               // no pending work: clear running flag and exit worker
-              if (this._inflightRequests[credKey]) this._inflightRequests[credKey].running = false;
+              if (this._inflightRequests[credKey])
+                this._inflightRequests[credKey].running = false;
               break;
             }
           })();
         }
-        this._mmLog('info', null, "Successfully fetched data");
+        this._mmLog("info", null, "Successfully fetched data");
       } catch (error) {
-        this._mmLog('error', null, `Error loading Untis data: ${error}`);
+        this._mmLog("error", null, `Error loading Untis data: ${error}`);
       }
     }
   },
@@ -195,7 +243,11 @@ module.exports = NodeHelper.create({
       return grid || [];
     } catch (err) {
       // return empty array on error
-      this._mmLog('error', null, `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`);
+      this._mmLog(
+        "error",
+        null,
+        `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`,
+      );
       return [];
     }
   },
@@ -214,7 +266,11 @@ module.exports = NodeHelper.create({
       const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
       return weekTimetable || [];
     } catch (err) {
-      this._mmLog('error', null, `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`);
+      this._mmLog(
+        "error",
+        null,
+        `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`,
+      );
       return [];
     }
   },
@@ -231,20 +287,20 @@ module.exports = NodeHelper.create({
    */
   async fetchData(untis, student, identifier, credKey) {
     const logger = (msg) => {
-        this._mmLog('debug', student, msg);
+      this._mmLog("debug", student, msg);
     };
 
     // small helper: convert HHMM (number|string) or H:MM to minutes since midnight
     function toMinutes(t) {
       if (t === null || t === undefined) return NaN;
       const s = String(t).trim();
-      if (s.includes(':')) {
-        const parts = s.split(':').map(p => p.replace(/\D/g, ''));
+      if (s.includes(":")) {
+        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
         const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || '0', 10) || 0;
+        const mm = parseInt(parts[1] || "0", 10) || 0;
         return hh * 60 + mm;
       }
-      const digits = s.replace(/\D/g, '').padStart(4, '0');
+      const digits = s.replace(/\D/g, "").padStart(4, "0");
       const hh = parseInt(digits.slice(0, 2), 10) || 0;
       const mm = parseInt(digits.slice(2), 10) || 0;
       return hh * 60 + mm;
@@ -261,7 +317,11 @@ module.exports = NodeHelper.create({
     var rangeEnd = new Date(Date.now());
 
     rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
-    rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
+    rangeEnd.setDate(
+      rangeEnd.getDate() -
+        student.pastDaysToShow +
+        parseInt(student.daysToShow),
+    );
 
     // Get Timegrid (for mapping start/end times) - cached per credential
     let grid = [];
@@ -277,12 +337,16 @@ module.exports = NodeHelper.create({
             endTime: element.endTime,
             startMin,
             endMin,
-            name: element.name
+            name: element.name,
           });
         });
       }
     } catch (error) {
-      this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
+      this._mmLog(
+        "error",
+        null,
+        `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`,
+      );
     }
 
     if (student.daysToShow > 0) {
@@ -291,14 +355,27 @@ module.exports = NodeHelper.create({
 
         // Additionally fetch the week's timetable to get full WebAPI timetable entries
         // This helps to obtain stable lesson IDs (WebAPITimetable) to link homeworks
-        let weekTimetable = await this._getWeekTimetable(untis, credKey, rangeStart);
+        let weekTimetable = await this._getWeekTimetable(
+          untis,
+          credKey,
+          rangeStart,
+        );
 
         if (student.useClassTimetable) {
-          logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
-          timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-          logger(`[MMM-Webuntis] ownClassTimetable received for ${student.title}`);
+          logger(
+            `[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`,
+          );
+          timetable = await untis.getOwnClassTimetableForRange(
+            rangeStart,
+            rangeEnd,
+          );
+          logger(
+            `[MMM-Webuntis] ownClassTimetable received for ${student.title}`,
+          );
         } else {
-          logger(`[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`);
+          logger(
+            `[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`,
+          );
           timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
           logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
         }
@@ -309,31 +386,44 @@ module.exports = NodeHelper.create({
 
         // Filter lessons for today
         const today = new Date();
-        const todayStr = today.getFullYear().toString() + ("0" + (today.getMonth() + 1)).slice(-2) + ("0" + today.getDate()).slice(-2);
-        todayLessons = timetable.filter(l => l.date.toString() === todayStr).map(l => ({
-          subject: l.su?.[0]?.longname || "N/A",
-          subjectShort: l.su?.[0]?.name || "N/A",
-          teacher: l.te?.[0]?.longname || "N/A",
-          teacherInitial: l.te?.[0]?.name || "N/A",
-          startTime: l.startTime,
-          endTime: l.endTime,
-          startMin: toMinutes(l.startTime),
-          endMin: l.endTime ? toMinutes(l.endTime) : null,
-          code: l.code || "",
-          text: l.lstext || "",
-          substText: l.substText || "",
-          lessonNumber: startTimes[l.startTime],
-          // try to capture lesson id from common fields (depends on WebUntis wrapper version)
-          lessonId: l.id ?? l.lid ?? l.lessonId ?? null
-        }));
+        const todayStr =
+          today.getFullYear().toString() +
+          ("0" + (today.getMonth() + 1)).slice(-2) +
+          ("0" + today.getDate()).slice(-2);
+        todayLessons = timetable
+          .filter((l) => l.date.toString() === todayStr)
+          .map((l) => ({
+            subject: l.su?.[0]?.longname || "N/A",
+            subjectShort: l.su?.[0]?.name || "N/A",
+            teacher: l.te?.[0]?.longname || "N/A",
+            teacherInitial: l.te?.[0]?.name || "N/A",
+            startTime: l.startTime,
+            endTime: l.endTime,
+            startMin: toMinutes(l.startTime),
+            endMin: l.endTime ? toMinutes(l.endTime) : null,
+            code: l.code || "",
+            text: l.lstext || "",
+            substText: l.substText || "",
+            lessonNumber: startTimes[l.startTime],
+            // try to capture lesson id from common fields (depends on WebUntis wrapper version)
+            lessonId: l.id ?? l.lid ?? l.lessonId ?? null,
+          }));
       } catch (error) {
-        this._mmLog('error', student, `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog(
+          "error",
+          student,
+          `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
+        );
       }
     }
 
     if (student.examsDaysAhead > 0) {
       // Validate the number of days
-      if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
+      if (
+        student.examsDaysAhead < 1 ||
+        student.examsDaysAhead > 360 ||
+        isNaN(student.examsDaysAhead)
+      ) {
         student.examsDaysAhead = 30;
       }
 
@@ -348,7 +438,11 @@ module.exports = NodeHelper.create({
         exams = exams || [];
         this._lastRawExams = rawExams;
       } catch (error) {
-        this._mmLog('error', student, `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog(
+          "error",
+          student,
+          `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
+        );
       }
     }
 
@@ -370,7 +464,9 @@ module.exports = NodeHelper.create({
           try {
             hwResult = await untis.getHomeWorksFor(new Date(), hwRangeEnd);
           } catch (e3) {
-            logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${e} / ${e2} / ${e3}`);
+            logger(
+              `[MMM-Webuntis] Homework fetch failed for ${student.title}: ${e} / ${e2} / ${e3}`,
+            );
             hwResult = null;
           }
         }
@@ -381,22 +477,43 @@ module.exports = NodeHelper.create({
         homeworks = hwResult;
       } else if (hwResult && Array.isArray(hwResult.homeworks)) {
         homeworks = hwResult.homeworks;
-      } else if (hwResult && Array.isArray(hwResult.homeworks || hwResult.homework)) {
+      } else if (
+        hwResult &&
+        Array.isArray(hwResult.homeworks || hwResult.homework)
+      ) {
         homeworks = hwResult.homeworks || hwResult.homework;
       } else {
         homeworks = [];
-        logger(`[MMM-Webuntis] Unexpected homework result for ${student.title}: ${JSON.stringify(hwResult).slice(0, 200)}`);
+        logger(
+          `[MMM-Webuntis] Unexpected homework result for ${student.title}: ${JSON.stringify(hwResult).slice(0, 200)}`,
+        );
       }
-      logger(`[MMM-Webuntis] Loaded ${homeworks.length} homeworks for ${student.title}`);
+      logger(
+        `[MMM-Webuntis] Loaded ${homeworks.length} homeworks for ${student.title}`,
+      );
     } catch (error) {
-      this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+      this._mmLog(
+        "error",
+        student,
+        `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
+      );
     }
 
     // Before sending data, perform a quick debug validation: ensure lessons/timeUnits have numeric minutes
     if (student.logLevel) {
-      const missingLessonMinutes = lessons.filter(l => l.startMin === undefined || l.startMin === null || l.endMin === undefined || l.endMin === null).length;
-      const missingTimeUnits = timeUnits.filter(tu => tu.startMin === undefined || tu.startMin === null).length;
-      logger(`Debug validation for ${student.title}: lessons without minutes=${missingLessonMinutes}, timeUnits without minutes=${missingTimeUnits}`);
+      const missingLessonMinutes = lessons.filter(
+        (l) =>
+          l.startMin === undefined ||
+          l.startMin === null ||
+          l.endMin === undefined ||
+          l.endMin === null,
+      ).length;
+      const missingTimeUnits = timeUnits.filter(
+        (tu) => tu.startMin === undefined || tu.startMin === null,
+      ).length;
+      logger(
+        `Debug validation for ${student.title}: lessons without minutes=${missingLessonMinutes}, timeUnits without minutes=${missingTimeUnits}`,
+      );
     }
 
     // Send processed data for backward compatibility, and include raw API responses
@@ -432,13 +549,13 @@ module.exports = NodeHelper.create({
     const toMinutes = (t) => {
       if (t === null || t === undefined) return NaN;
       const s = String(t).trim();
-      if (s.includes(':')) {
-        const parts = s.split(':').map(p => p.replace(/\D/g, ''));
+      if (s.includes(":")) {
+        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
         const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || '0', 10) || 0;
+        const mm = parseInt(parts[1] || "0", 10) || 0;
         return hh * 60 + mm;
       }
-      const digits = s.replace(/\D/g, '').padStart(4, '0');
+      const digits = s.replace(/\D/g, "").padStart(4, "0");
       const hh = parseInt(digits.slice(0, 2), 10) || 0;
       const mm = parseInt(digits.slice(2), 10) || 0;
       return hh * 60 + mm;
@@ -453,7 +570,11 @@ module.exports = NodeHelper.create({
           const key = `${we.date}-${we.startTime}`;
           weekMap[key] = we;
         } catch (err) {
-          this.__mmLog('error', null, `timetableToLessons weekMap error: ${err && err.message ? err.message : err}`); 
+          this.__mmLog(
+            "error",
+            null,
+            `timetableToLessons weekMap error: ${err && err.message ? err.message : err}`,
+          );
         }
       });
     }
@@ -466,12 +587,12 @@ module.exports = NodeHelper.create({
         year: element.date.toString().substring(0, 4),
         month: element.date.toString().substring(4, 6),
         day: element.date.toString().substring(6, 8),
-        hour: element.startTime.toString().padStart(4, "0")
-          .substring(0, 2),
-        minutes: element.startTime.toString().padStart(4, "0")
-          .substring(2),
+        hour: element.startTime.toString().padStart(4, "0").substring(0, 2),
+        minutes: element.startTime.toString().padStart(4, "0").substring(2),
         startTime: element.startTime.toString().padStart(4, "0"),
-        endTime: element.endTime ? element.endTime.toString().padStart(4, "0") : null,
+        endTime: element.endTime
+          ? element.endTime.toString().padStart(4, "0")
+          : null,
         startMin: toMinutes(element.startTime),
         endMin: element.endTime ? toMinutes(element.endTime) : null,
         endTimeRaw: element.endTime ?? null,
@@ -484,7 +605,13 @@ module.exports = NodeHelper.create({
         substText: element.substText || "",
         lessonNumber: startTimes[element.startTime],
         // prefer lesson id from weekTimetable when available, otherwise try common fields
-        lessonId: weekEntry?.id ?? weekEntry?.lessonId ?? element.id ?? element.lid ?? element.lessonId ?? null
+        lessonId:
+          weekEntry?.id ??
+          weekEntry?.lessonId ??
+          element.id ??
+          element.lid ??
+          element.lessonId ??
+          null,
       };
 
       // Set code to "info" if there is an "substText" from WebUntis to display it if configuration "showRegularLessons" is set to false
@@ -493,12 +620,20 @@ module.exports = NodeHelper.create({
       }
 
       // Create sort string
-      lesson.sortString = lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
+      lesson.sortString =
+        lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
       switch (lesson.code) {
-        case "cancelled": lesson.sortString += "1"; break;
-        case "irregular": lesson.sortString += "2"; break;
-        case "info": lesson.sortString += "3"; break;
-        default: lesson.sortString += "9";
+        case "cancelled":
+          lesson.sortString += "1";
+          break;
+        case "irregular":
+          lesson.sortString += "2";
+          break;
+        case "info":
+          lesson.sortString += "3";
+          break;
+        default:
+          lesson.sortString += "9";
       }
 
       lessons.push(lesson);
@@ -520,16 +655,14 @@ module.exports = NodeHelper.create({
         year: element.examDate.toString().substring(0, 4),
         month: element.examDate.toString().substring(4, 6),
         day: element.examDate.toString().substring(6, 8),
-        hour: element.startTime.toString().padStart(4, "0")
-          .substring(0, 2),
-        minutes: element.startTime.toString().padStart(4, "0")
-          .substring(2),
+        hour: element.startTime.toString().padStart(4, "0").substring(0, 2),
+        minutes: element.startTime.toString().padStart(4, "0").substring(2),
         startTime: element.startTime.toString().padStart(4, "0"),
         teacher: element.teachers[0] || "N/A",
         subject: element.subject || "N/A",
         name: element.name || "",
         text: element.text || "",
-        sortString: ""
+        sortString: "",
       };
 
       // Create sort string
@@ -538,5 +671,5 @@ module.exports = NodeHelper.create({
       ret_exams.push(exam);
     });
     return ret_exams;
-  }
+  },
 });
