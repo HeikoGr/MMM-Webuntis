@@ -1,9 +1,3 @@
-/* gesamte Dateiinhalt wie zuvor, mit einer kleinen Änderung am Ende von _renderGridForStudent():
-   statt direktem this._updateNowLinesAll() wird jetzt ein double requestAnimationFrame
-   (mit setTimeout-Fallback) verwendet, damit das Update erst nach DOM-Attach + Layout/Paint läuft.
-   --- Hier folgt die komplette Datei mit dieser Änderung ---
-*/
-
 Module.register("MMM-Webuntis", {
 
   defaults: {
