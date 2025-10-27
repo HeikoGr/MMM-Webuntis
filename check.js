@@ -1,4 +1,5 @@
 const path = require("path");
+const process = require("process");
 const {WebUntis} = require("webuntis");
 const {WebUntisQR} = require("webuntis");
 const {URL} = require("url");
