@@ -144,7 +144,7 @@ module.exports = NodeHelper.create({
                 try {
                   if (untis) await untis.logout();
                 } catch (e) {
-                  // ignore logout errors
+                  this._mmLog('error', null, `Error during logout for group ${credKey}: ${e && e.message ? e.message : e}`);
                 }
               }
 
@@ -337,8 +337,8 @@ module.exports = NodeHelper.create({
         student.examsDaysAhead = 30;
       }
 
-      var rangeStart = new Date(Date.now());
-      var rangeEnd = new Date(Date.now());
+      // var rangeStart = new Date(Date.now());
+      // var rangeEnd = new Date(Date.now());
       rangeEnd.setDate(rangeStart.getDate() + student.examsDaysAhead);
 
       try {

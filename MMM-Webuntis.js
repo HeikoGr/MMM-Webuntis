@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-undef
 Module.register("MMM-Webuntis", {
 
   defaults: {
@@ -99,6 +100,7 @@ Module.register("MMM-Webuntis", {
         console.log(prefix, ...args);
       }
     } catch (e) {
+      console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
       // swallow logging errors
     }
   },
@@ -140,7 +142,7 @@ Module.register("MMM-Webuntis", {
       const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
-      dayLabel.innerText = `${dayDate.toLocaleDateString(config.language, { weekday: 'short', day: 'numeric', month: 'numeric' })}`;
+      dayLabel.innerText = `${dayDate.toLocaleDateString(this.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' })}`;
       // span both columns for this day
       const startCol = 2 + d * 2;
       const endCol = startCol + 2;
@@ -473,7 +475,7 @@ Module.register("MMM-Webuntis", {
         if (homeworks && Array.isArray(homeworks)) {
           const hwMatch = homeworks.some(hw => {
             const hwLessonId = hw.lessonId ?? hw.lid ?? hw.id ?? null;
-            const lessonLessonId = lesson.lessonId ?? null;
+            // const lessonLessonId = lesson.lessonId ?? null;
             const lessonIds = lesson.lessonIds && Array.isArray(lesson.lessonIds) ? lesson.lessonIds : (lesson.lessonId ? [String(lesson.lessonId)] : []);
             const lessonIdMatch = hwLessonId && lessonIds.length > 0 ? lessonIds.includes(String(hwLessonId)) : false;
             const subjectMatch = hw.su && (hw.su.name === lesson.subjectShort || hw.su.longname === lesson.subject);
@@ -532,11 +534,11 @@ Module.register("MMM-Webuntis", {
           }
         }, 30 * 1000);
       } catch (e) {
-        // ignore timer setup failures
+        console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
       }
     }
     // one-off initial update
-    try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
+    try { this._updateNowLinesAll(); } catch (e) { console.error('[MMM-Webuntis] [LOGGING ERROR]', e); }
 
     this.config.id = this.identifier;
     this.sendSocketNotification("FETCH_DATA", this.config);
@@ -563,12 +565,12 @@ Module.register("MMM-Webuntis", {
           const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
           nl.style.top = `${top}px`;
         } catch (e) {
-          // per-inner errors are non-fatal
+          console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
         }
       });
       if (this.config && this.config.logLevel === 'debug') this._log('debug', 'updated now-lines at', new Date().toISOString());
     } catch (e) {
-      // swallow
+      console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
     }
   },
 
@@ -592,7 +594,7 @@ Module.register("MMM-Webuntis", {
       var lessons = this.lessonsByStudent[studentTitle];
       const studentConfig = this.configByStudent[studentTitle];
       var exams = this.examsByStudent[studentTitle];
-      var todayLessons = this.todayLessonsByStudent[studentTitle];
+      //var todayLessons = this.todayLessonsByStudent[studentTitle];
       var timeUnits = this.timeUnitsByStudent[studentTitle];
 
       var homeworks = (this.homeworksByStudent && this.homeworksByStudent[studentTitle]) ? this.homeworksByStudent[studentTitle] : [];
@@ -614,11 +616,8 @@ Module.register("MMM-Webuntis", {
       }
 
   if (studentConfig && studentConfig.daysToShow > 0) {
-        const studentTitle = studentConfig.title;
-        var lessons = this.lessonsByStudent[studentTitle];
-
-  // lessons are pre-sorted on GOT_DATA; no need to sort here
-  // (keeps getDom fast and avoids repeated O(n log n) work)
+        // const studentTitle = studentConfig.title;
+        //var lessons = this.lessonsByStudent[studentTitle];
 
         // iterate through lessons of current student
         for (let i = 0; i < lessons.length; i++) {
@@ -633,9 +632,9 @@ Module.register("MMM-Webuntis", {
 
           addedRows++;
 
-          let timeStr = `${time.toLocaleDateString(config.language, { weekday: "short" }).toUpperCase()}&nbsp;`;
+          let timeStr = `${time.toLocaleDateString(this.config.language, { weekday: "short" }).toUpperCase()}&nbsp;`;
           if (studentConfig.showStartTime || lesson.lessonNumber === undefined) {
-            timeStr += time.toLocaleTimeString(config.language, { hour: "2-digit", minute: "2-digit" });
+            timeStr += time.toLocaleTimeString(this.config.language, { hour: "2-digit", minute: "2-digit" });
           } else {
             timeStr += `${lesson.lessonNumber}.`;
           }
@@ -681,7 +680,7 @@ Module.register("MMM-Webuntis", {
       }
 
       addedRows = 0;
-      var exams = this.examsByStudent[studentTitle];
+      //var exams = this.examsByStudent[studentTitle];
 
       if (!exams || studentConfig.examsDaysAhead == 0) {
         continue;
@@ -693,7 +692,7 @@ Module.register("MMM-Webuntis", {
       // iterate through exams of current student
       for (let i = 0; i < exams.length; i++) {
         const exam = exams[i];
-        var time = new Date(exam.year, exam.month - 1, exam.day, exam.hour, exam.minutes);
+        // var time = new Date(exam.year, exam.month - 1, exam.day, exam.hour, exam.minutes);
 
         // Skip if exam has started (unless in debug mode)
         if (time < new Date() && this.config.logLevel !== "debug") {
@@ -745,10 +744,10 @@ Module.register("MMM-Webuntis", {
     return wrapper;
   },
 
-  notificationReceived(notification, payload) {
+  notificationReceived(notification) {
     switch (notification) {
       case "DOM_OBJECTS_CREATED":
-        var timer = setInterval(() => {
+        this._fetchTimer = setInterval(() => {
           this.sendSocketNotification("FETCH_DATA", this.config);
         }, this.config.fetchIntervalMs);
         break;
