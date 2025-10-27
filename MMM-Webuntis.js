@@ -46,10 +46,12 @@ Module.register("MMM-Webuntis", {
   _addTableHeader(table, studentTitle = "") {
     const thisRow = document.createElement("tr");
     const cellType = "th";
-    const studentCell = document.createElement(cellType);
-    studentCell.innerHTML = studentTitle;
+    const studentCell = this._createEl(
+      cellType,
+      "align-left alignTop",
+      studentTitle,
+    );
     studentCell.colSpan = 3;
-    studentCell.className = "align-left alignTop";
     thisRow.appendChild(studentCell);
     table.appendChild(thisRow);
   },
@@ -68,28 +70,38 @@ Module.register("MMM-Webuntis", {
     const cellType = "td";
 
     if (studentTitle != "") {
-      const studentCell = document.createElement(cellType);
-      studentCell.innerHTML = studentTitle;
-      studentCell.className = "align-left alignTop bold";
+      const studentCell = this._createEl(
+        cellType,
+        "align-left alignTop bold",
+        studentTitle,
+      );
       thisRow.appendChild(studentCell);
     }
 
-    const cell1 = document.createElement(cellType);
+    const cell1 = this._createEl(cellType, "align-left alignTop ", text1);
     if (text2 == "") {
       cell1.colSpan = 2;
     }
-    cell1.innerHTML = text1;
-    cell1.className = "align-left alignTop ";
     thisRow.appendChild(cell1);
 
     if (text2 != "") {
-      const cell2 = document.createElement(cellType);
-      cell2.innerHTML = text2;
-      cell2.className = `align-left alignTop ${addClass}`;
+      const cell2 = this._createEl(
+        cellType,
+        `align-left alignTop ${addClass}`,
+        text2,
+      );
       thisRow.appendChild(cell2);
     }
 
     table.appendChild(thisRow);
+  },
+
+  /* Small DOM factory helper to reduce repetition */
+  _createEl(tag, className = "", innerHTML = "") {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (innerHTML !== undefined && innerHTML !== null) el.innerHTML = innerHTML;
+    return el;
   },
 
   /* Lightweight logging helper with levels: info, debug, warn */
@@ -101,7 +113,14 @@ Module.register("MMM-Webuntis", {
       } else if (level === "warn") {
         console.warn(prefix, ...args);
       } else if (level === "debug") {
-        console.debug(prefix + " [DEBUG]", ...args);
+        // Only output debug when module-level config enables it
+        if (this && this.config && this.config.logLevel === "debug") {
+          if (typeof console.debug === "function") {
+            console.debug(prefix + " [DEBUG]", ...args);
+          } else {
+            console.info(prefix + " [DEBUG]", ...args);
+          }
+        }
       } else {
         console.log(prefix, ...args);
       }
@@ -390,12 +409,11 @@ Module.register("MMM-Webuntis", {
         if (curr.startMin === undefined || curr.startMin === null) {
           // try to take from curr.startTime if possible (no conversion allowed here) -> skip if not present
           // In normal operation node_helper provides startMin; log in debug
-          if (this.config.logLevel === "debug")
-            this._log(
-              "warn",
-              "Merged lesson missing startMin; backend should provide numeric startMin/endMin",
-              curr.lessonId ? { lessonId: curr.lessonId } : curr,
-            );
+          this._log(
+            "warn",
+            "Merged lesson missing startMin; backend should provide numeric startMin/endMin",
+            curr.lessonId ? { lessonId: curr.lessonId } : curr,
+          );
         }
         if (curr.endMin === undefined || curr.endMin === null) {
           // if still missing, try set endMin = startMin + 45 when startMin available
@@ -470,8 +488,7 @@ Module.register("MMM-Webuntis", {
         }
       } catch (e) {
         // non-fatal if drawing hour lines fails
-        if (this.config.logLevel === "debug")
-          this._log("warn", "failed to draw hour lines", e);
+        this._log("warn", "failed to draw hour lines", e);
       }
 
       // Create and append 'now' line for this day and register to updater
@@ -493,7 +510,7 @@ Module.register("MMM-Webuntis", {
         noLesson.style.left = "0px";
         noLesson.style.right = "0px";
         noLesson.style.height = `${totalHeight}px`;
-        noLesson.innerHTML = `<b>kein Unterricht</b>`;
+        noLesson.innerHTML = `<b>${this.translate("no-lessons")}</b>`;
         // tooltip removed: no event listeners attached
         bothInner.appendChild(noLesson);
       }
@@ -611,16 +628,6 @@ Module.register("MMM-Webuntis", {
     }
 
     wrapper.appendChild(grid);
-    // update now-lines once (centralized interval handles periodic updates)
-    try {
-      if (typeof this._updateNowLinesAll === "function") {
-        this._updateNowLinesAll();
-      }
-    } catch (e) {
-      if (this.config && this.config.logLevel === "debug")
-        this._log("warn", "now-line updater failed", e);
-    }
-
     return wrapper;
   },
 
@@ -631,25 +638,38 @@ Module.register("MMM-Webuntis", {
     this.todayLessonsByStudent = [];
     this.timeUnitsByStudent = [];
     // start centralized now-line updater (single timer for the module)
+    // Simpler approach: start a short initial interval, then switch to
+    // a steady longer interval via a timeout. Behavior preserved: first
+    // updates every 5s, then after the first tick switch to 30s.
     if (!this._nowLineTimer) {
       try {
-        this._nowLineTimer = setInterval(() => {
+        const initialIntervalMs = 5 * 1000; // first runs every 5s
+        const laterIntervalMs = 30 * 1000; // then switch to every 30s
+
+        const invokeNowLines = () => {
           try {
             this._updateNowLinesAll();
           } catch (e) {
-            if (this.config && this.config.logLevel === "debug")
-              this._log("warn", "now-line centralized update failed", e);
+            this._log("warn", "now-line centralized update failed", e);
           }
-        }, 30 * 1000);
+        };
+
+        // start the initial fast interval
+        this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
+
+        // schedule switching to the steady interval after one initial interval
+        this._nowLineTimerSwitchTimeout = setTimeout(() => {
+          try {
+            if (this._nowLineTimer) clearInterval(this._nowLineTimer);
+          } catch {
+            // non-fatal
+          }
+          // start steady updater
+          this._nowLineTimer = setInterval(invokeNowLines, laterIntervalMs);
+        }, initialIntervalMs + 50);
       } catch (e) {
         console.error("[MMM-Webuntis] [LOGGING ERROR]", e);
       }
-    }
-    // one-off initial update
-    try {
-      this._updateNowLinesAll();
-    } catch (e) {
-      console.error("[MMM-Webuntis] [LOGGING ERROR]", e);
     }
 
     this.config.id = this.identifier;
@@ -686,8 +706,7 @@ Module.register("MMM-Webuntis", {
           console.error("[MMM-Webuntis] [LOGGING ERROR]", e);
         }
       });
-      if (this.config && this.config.logLevel === "debug")
-        this._log("debug", "updated now-lines at", new Date().toISOString());
+      this._log("debug", "updated now-lines at", new Date().toISOString());
     } catch (e) {
       console.error("[MMM-Webuntis] [LOGGING ERROR]", e);
     }
@@ -713,24 +732,23 @@ Module.register("MMM-Webuntis", {
     for (const studentTitle of sortedStudentTitles) {
       let addedRows = 0;
 
-      var lessons = this.lessonsByStudent[studentTitle];
+      const lessons = this.lessonsByStudent[studentTitle];
       const studentConfig = this.configByStudent[studentTitle];
-      var exams = this.examsByStudent[studentTitle];
+      const exams = this.examsByStudent[studentTitle];
       //var todayLessons = this.todayLessonsByStudent[studentTitle];
-      var timeUnits = this.timeUnitsByStudent[studentTitle];
+      const timeUnits = this.timeUnitsByStudent[studentTitle];
 
-      var homeworks =
+      const homeworks =
         this.homeworksByStudent && this.homeworksByStudent[studentTitle]
           ? this.homeworksByStudent[studentTitle]
           : [];
       if (Array.isArray(homeworks) && homeworks.length > 0) {
-        if (this.config.logLevel === "debug") {
-          const hwSample = homeworks
-            .slice(0, 5)
-            .map((h) => ({
-              id: h.id ?? h.lid ?? h.lessonId ?? null,
-              su: h.su?.[0]?.name || h.su?.[0]?.longname || null,
-            }));
+        // only construct sample when debug enabled to avoid extra work
+        if (this.config && this.config.logLevel === "debug") {
+          const hwSample = homeworks.slice(0, 5).map((h) => ({
+            id: h.id ?? h.lid ?? h.lessonId ?? null,
+            su: h.su?.[0]?.name || h.su?.[0]?.longname || null,
+          }));
           this._log(
             "debug",
             `Homeworks for ${studentTitle}: count=${homeworks.length}, sample=`,
@@ -756,7 +774,7 @@ Module.register("MMM-Webuntis", {
         // iterate through lessons of current student
         for (let i = 0; i < lessons.length; i++) {
           const lesson = lessons[i];
-          var time = new Date(
+          const time = new Date(
             lesson.year,
             lesson.month - 1,
             lesson.day,
@@ -860,7 +878,13 @@ Module.register("MMM-Webuntis", {
       // iterate through exams of current student
       for (let i = 0; i < exams.length; i++) {
         const exam = exams[i];
-        // var time = new Date(exam.year, exam.month - 1, exam.day, exam.hour, exam.minutes);
+        const time = new Date(
+          exam.year,
+          exam.month - 1,
+          exam.day,
+          exam.hour,
+          exam.minutes,
+        );
 
         // Skip if exam has started (unless in debug mode)
         if (time < new Date() && this.config.logLevel !== "debug") {
@@ -983,22 +1007,20 @@ Module.register("MMM-Webuntis", {
         this.homeworksByStudent[payload.title] = payload.homeworks;
       }
 
-      if (this.config.logLevel === "debug") {
-        const cLessons = Array.isArray(payload.lessons)
-          ? payload.lessons.length
-          : 0;
-        const cExams = Array.isArray(payload.exams) ? payload.exams.length : 0;
-        const cTimeUnits = Array.isArray(payload.timeUnits)
-          ? payload.timeUnits.length
-          : 0;
-        const cHomeworks = Array.isArray(payload.homeworks)
-          ? payload.homeworks.length
-          : 0;
-        this._log(
-          "debug",
-          `data received for ${payload.title}: lessons=${cLessons}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`,
-        );
-      }
+      const cLessons = Array.isArray(payload.lessons)
+        ? payload.lessons.length
+        : 0;
+      const cExams = Array.isArray(payload.exams) ? payload.exams.length : 0;
+      const cTimeUnits = Array.isArray(payload.timeUnits)
+        ? payload.timeUnits.length
+        : 0;
+      const cHomeworks = Array.isArray(payload.homeworks)
+        ? payload.homeworks.length
+        : 0;
+      this._log(
+        "debug",
+        `data received for ${payload.title}: lessons=${cLessons}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`,
+      );
       this.updateDom();
     }
   },

@@ -9,6 +9,22 @@ const Log = require("logger");
 // Note: caching removed - always fetch current data from WebUntis to
 // ensure the frontend shows up-to-date information.
 
+// small helper: convert HHMM (number|string) or H:MM to minutes since midnight
+const toMinutes = (t) => {
+  if (t === null || t === undefined) return NaN;
+  const s = String(t).trim();
+  if (s.includes(":")) {
+    const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
+    const hh = parseInt(parts[0], 10) || 0;
+    const mm = parseInt(parts[1] || "0", 10) || 0;
+    return hh * 60 + mm;
+  }
+  const digits = s.replace(/\D/g, "").padStart(4, "0");
+  const hh = parseInt(digits.slice(0, 2), 10) || 0;
+  const mm = parseInt(digits.slice(2), 10) || 0;
+  return hh * 60 + mm;
+};
+
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
   /**
@@ -18,7 +34,109 @@ module.exports = NodeHelper.create({
   start() {
     Log.info("[MMM-Webuntis] Node helper started");
     // track inflight fetches per credential key to avoid duplicate parallel work
-    this._inflightRequests = this._inflightRequests || {};
+    this._inflightRequests = this._inflightRequests || new Map();
+  },
+
+  /*
+   * Create an authenticated WebUntis client from a student sample config.
+   * Returns a client instance or throws an Error if credentials missing.
+   */
+  _createUntisClient(sample) {
+    if (sample.qrcode) {
+      return new WebUntisQR(
+        sample.qrcode,
+        "custom-identity",
+        Authenticator,
+        URL,
+      );
+    }
+    if (sample.username) {
+      return new WebUntis(
+        sample.school,
+        sample.username,
+        sample.password,
+        sample.server,
+      );
+    }
+    throw new Error("No credentials provided");
+  },
+
+  // Format errors consistently for logs
+  _formatErr(err) {
+    if (!err) return "(no error)";
+    return err && err.message ? err.message : String(err);
+  },
+
+  // Normalize different homework API results to an array
+  _normalizeHomeworks(hwResult) {
+    if (Array.isArray(hwResult)) return hwResult;
+    if (hwResult && Array.isArray(hwResult.homeworks))
+      return hwResult.homeworks;
+    if (hwResult && Array.isArray(hwResult.homework)) return hwResult.homework;
+    return [];
+  },
+
+  // expose toMinutes for testing and reuse
+  _toMinutes(t) {
+    return toMinutes(t);
+  },
+
+  /**
+   * Process a credential group: login, fetch data for students and logout.
+   * This function respects the inflightRequests Map's pending flag: if pending
+   * becomes true while running, it will loop once more to handle the coalesced request.
+   */
+  async processGroup(credKey, students, identifier) {
+    while (true) {
+      let untis = null;
+      const sample = students[0];
+      try {
+        try {
+          untis = this._createUntisClient(sample);
+        } catch {
+          this._mmLog("error", null, `No credentials for group ${credKey}`);
+          break;
+        }
+
+        await untis.login();
+        for (const student of students) {
+          try {
+            await this.fetchData(untis, student, identifier, credKey);
+          } catch (err) {
+            this._mmLog(
+              "error",
+              student,
+              `Error fetching data for ${student.title}: ${this._formatErr(err)}`,
+            );
+          }
+        }
+      } catch (error) {
+        this._mmLog(
+          "error",
+          null,
+          `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`,
+        );
+      } finally {
+        try {
+          if (untis) await untis.logout();
+        } catch (e) {
+          this._mmLog(
+            "error",
+            null,
+            `Error during logout for group ${credKey}: ${this._formatErr(e)}`,
+          );
+        }
+      }
+
+      const infl = this._inflightRequests.get(credKey);
+      if (infl && infl.pending) {
+        infl.pending = false;
+        continue;
+      }
+
+      if (infl) infl.running = false;
+      break;
+    }
   },
 
   /**
@@ -115,13 +233,11 @@ module.exports = NodeHelper.create({
         // If a fetch for the same credKey is already running, we set a pending flag
         // so that the group is fetched once more when the current run finishes.
         for (const [credKey, students] of groups.entries()) {
-          if (!this._inflightRequests) this._inflightRequests = {};
-          // If already running, mark pending and continue
-          if (
-            this._inflightRequests[credKey] &&
-            this._inflightRequests[credKey].running
-          ) {
-            this._inflightRequests[credKey].pending = true;
+          if (!this._inflightRequests) this._inflightRequests = new Map();
+
+          const inflight = this._inflightRequests.get(credKey);
+          if (inflight && inflight.running) {
+            inflight.pending = true;
             this._mmLog(
               "info",
               null,
@@ -130,84 +246,14 @@ module.exports = NodeHelper.create({
             continue;
           }
 
-          // initialize inflight entry
-          this._inflightRequests[credKey] = { running: true, pending: false };
+          // mark as running
+          this._inflightRequests.set(credKey, {
+            running: true,
+            pending: false,
+          });
 
-          // Launch an async worker that will process the group and rerun if pending was set
-          (async () => {
-            while (true) {
-              let untis = null;
-              const sample = students[0];
-              try {
-                if (sample.qrcode) {
-                  untis = new WebUntisQR(
-                    sample.qrcode,
-                    "custom-identity",
-                    Authenticator,
-                    URL,
-                  );
-                } else if (sample.username) {
-                  untis = new WebUntis(
-                    sample.school,
-                    sample.username,
-                    sample.password,
-                    sample.server,
-                  );
-                } else {
-                  this._mmLog(
-                    "error",
-                    null,
-                    `No credentials for group ${credKey}`,
-                  );
-                  break;
-                }
-
-                await untis.login();
-                for (const student of students) {
-                  try {
-                    await this.fetchData(untis, student, identifier, credKey);
-                  } catch (err) {
-                    this._mmLog(
-                      "error",
-                      student,
-                      `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`,
-                    );
-                  }
-                }
-              } catch (error) {
-                this._mmLog(
-                  "error",
-                  null,
-                  `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`,
-                );
-              } finally {
-                try {
-                  if (untis) await untis.logout();
-                } catch (e) {
-                  this._mmLog(
-                    "error",
-                    null,
-                    `Error during logout for group ${credKey}: ${e && e.message ? e.message : e}`,
-                  );
-                }
-              }
-
-              // if another request arrived while we were running, run again once
-              if (
-                this._inflightRequests[credKey] &&
-                this._inflightRequests[credKey].pending
-              ) {
-                this._inflightRequests[credKey].pending = false;
-                // loop again to process the latest coalesced request
-                continue;
-              }
-
-              // no pending work: clear running flag and exit worker
-              if (this._inflightRequests[credKey])
-                this._inflightRequests[credKey].running = false;
-              break;
-            }
-          })();
+          // Launch the named worker that will process the group and rerun if pending was set
+          this.processGroup(credKey, students, identifier);
         }
         this._mmLog("info", null, "Successfully fetched data");
       } catch (error) {
@@ -290,21 +336,7 @@ module.exports = NodeHelper.create({
       this._mmLog("debug", student, msg);
     };
 
-    // small helper: convert HHMM (number|string) or H:MM to minutes since midnight
-    function toMinutes(t) {
-      if (t === null || t === undefined) return NaN;
-      const s = String(t).trim();
-      if (s.includes(":")) {
-        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
-        const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || "0", 10) || 0;
-        return hh * 60 + mm;
-      }
-      const digits = s.replace(/\D/g, "").padStart(4, "0");
-      const hh = parseInt(digits.slice(0, 2), 10) || 0;
-      const mm = parseInt(digits.slice(2), 10) || 0;
-      return hh * 60 + mm;
-    }
+    // use shared toMinutes helper (defined at module top)
 
     let lessons = [];
     let exams = [];
@@ -450,26 +482,32 @@ module.exports = NodeHelper.create({
     try {
       let hwRangeEnd = new Date(rangeEnd);
       hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
-      // Try a single, sensible call to getHomeWorkAndLessons(range) and fall back to getHomeWorksFor
+      // Try a sequence of candidate homework API calls (first that succeeds wins)
       let hwResult = null;
       try {
-        // try the API that returns homeworks + lessons in one call
-        hwResult = await untis.getHomeWorkAndLessons(new Date(), hwRangeEnd);
-      } catch (e) {
-        // fallback: older wrapper might not support getHomeWorkAndLessons with args
-        try {
-          hwResult = await untis.getHomeWorkAndLessons();
-        } catch (e2) {
-          // final fallback: use getHomeWorksFor
+        const candidates = [
+          () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
+          () => untis.getHomeWorksFor(new Date(), hwRangeEnd),
+        ];
+        let lastErr = null;
+        for (const fn of candidates) {
           try {
-            hwResult = await untis.getHomeWorksFor(new Date(), hwRangeEnd);
-          } catch (e3) {
-            logger(
-              `[MMM-Webuntis] Homework fetch failed for ${student.title}: ${e} / ${e2} / ${e3}`,
-            );
-            hwResult = null;
+            hwResult = await fn();
+            break;
+          } catch (err) {
+            lastErr = err;
           }
         }
+        if (hwResult === null) {
+          logger(
+            `[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`,
+          );
+        }
+      } catch (error) {
+        logger(
+          `[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`,
+        );
+        hwResult = null;
       }
 
       // Normalize homework result to an array
@@ -545,32 +583,18 @@ module.exports = NodeHelper.create({
    * @returns {Array} normalized lesson objects
    */
   timetableToLessons(startTimes, timetable, weekTimetable = []) {
-    // Convert time strings like '0740' or '7:40' to minutes since midnight
-    const toMinutes = (t) => {
-      if (t === null || t === undefined) return NaN;
-      const s = String(t).trim();
-      if (s.includes(":")) {
-        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
-        const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || "0", 10) || 0;
-        return hh * 60 + mm;
-      }
-      const digits = s.replace(/\D/g, "").padStart(4, "0");
-      const hh = parseInt(digits.slice(0, 2), 10) || 0;
-      const mm = parseInt(digits.slice(2), 10) || 0;
-      return hh * 60 + mm;
-    };
+    // use shared toMinutes helper (defined at module top)
     const lessons = [];
 
     // Build a quick map from date+startTime to weekTimetable entry to get stable IDs when possible
-    const weekMap = {};
+    const weekMap = new Map();
     if (Array.isArray(weekTimetable)) {
       weekTimetable.forEach((we) => {
         try {
           const key = `${we.date}-${we.startTime}`;
-          weekMap[key] = we;
+          weekMap.set(key, we);
         } catch (err) {
-          this.__mmLog(
+          this._mmLog(
             "error",
             null,
             `timetableToLessons weekMap error: ${err && err.message ? err.message : err}`,
@@ -581,7 +605,7 @@ module.exports = NodeHelper.create({
 
     timetable.forEach((element) => {
       const key = `${element.date}-${element.startTime}`;
-      const weekEntry = weekMap[key];
+      const weekEntry = weekMap.get(key);
 
       const lesson = {
         year: element.date.toString().substring(0, 4),
