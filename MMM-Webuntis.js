@@ -1,3 +1,9 @@
+/* gesamte Dateiinhalt wie zuvor, mit einer kleinen Änderung am Ende von _renderGridForStudent():
+   statt direktem this._updateNowLinesAll() wird jetzt ein double requestAnimationFrame
+   (mit setTimeout-Fallback) verwendet, damit das Update erst nach DOM-Attach + Layout/Paint läuft.
+   --- Hier folgt die komplette Datei mit dieser Änderung ---
+*/
+
 Module.register("MMM-Webuntis", {
 
   defaults: {
@@ -293,7 +299,7 @@ Module.register("MMM-Webuntis", {
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
       // Prefer preprocessed grouped lessons (created on GOT_DATA) to avoid filtering/sorting here
-      let dayLessons = (this.preprocessedByStudent && this.preprocessedByStudent[studentTitle] && this.preprocessedByStudent[studentTitle].groupedByDate && this.preprocessedByStudent[studentTitle].groupedByDate[dateStr])
+      let dayLessons = (this.preprocessedByStudent && this.preprocessedByStudent[studentTitle] && this.preprocessedByStudent[studentTitle].groupedByDate && this.preprocessedByStudent[studentTitle].gro[...]
         ? this.preprocessedByStudent[studentTitle].groupedByDate[dateStr].slice()
         : allLessons.filter(l => {
           const norm = `${l.year}${('0' + l.month).slice(-2)}${('0' + l.day).slice(-2)}`;
@@ -551,13 +557,23 @@ Module.register("MMM-Webuntis", {
     }
 
     wrapper.appendChild(grid);
-    // update now-lines once (centralized interval handles periodic updates)
+    // schedule a one-off now-line update after the grid was appended and layouted
     try {
       if (typeof this._updateNowLinesAll === 'function') {
-        this._updateNowLinesAll();
+        if (typeof requestAnimationFrame === 'function') {
+          // run in the next paint cycle; double rAF increases reliability across browsers
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
+          }));
+        } else {
+          // fallback: short timeout to give browser time to render
+          setTimeout(() => {
+            try { this._updateNowLinesAll(); } catch (e) { /* ignore */ }
+          }, 150);
+        }
       }
     } catch (e) {
-      if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line updater failed', e);
+      if (this.config && this.config.logLevel === 'debug') this._log('warn', 'now-line updater scheduling failed', e);
     }
 
     return wrapper;
