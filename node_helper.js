@@ -1,45 +1,56 @@
 // Import required modules
 const NodeHelper = require("node_helper");
-const { WebUntis } = require("webuntis");
-const { WebUntisQR } = require("webuntis");
-const { URL } = require("url");
+const {WebUntis} = require("webuntis");
+const {WebUntisQR} = require("webuntis");
+const {URL} = require("url");
 const Authenticator = require("otplib").authenticator;
 const Log = require("logger");
 
-// Simple caches to avoid redundant API calls across students/sessions
+/*
+ * Simple caches to avoid redundant API calls across students/sessions
+ * Limited size caches with TTL to prevent memory leaks
+ */
 const timegridCache = {}; // keyed by credentialKey
 const weekTimetableCache = {}; // keyed by credentialKey + rangeStart
+const MAX_CACHE_ENTRIES = 50; // Limit cache size to prevent unbounded growth
+const WEEK_CACHE_TTL = 1000 * 60 * 30; // 30 minutes for week timetable cache
 
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
+
   /**
    * Called when the helper is initialized by the MagicMirror backend.
    * Use this hook to perform startup initialization.
    */
-  start() {
+  start () {
     Log.info("[MMM-Webuntis] Node helper started");
     // track inflight fetches per credential key to avoid duplicate parallel work
     this._inflightRequests = this._inflightRequests || {};
+
+    // Periodic cache cleanup to prevent unbounded growth
+    this._cacheCleanupTimer = setInterval(() => {
+      this._cleanupCaches();
+    }, 1000 * 60 * 60); // Run every hour
   },
 
   /**
-  * Centralized backend logger that honors module and per-student debug flags.
-  * Emits messages using the MagicMirror `Log` helper.
-  *
-  * @param {'info'|'debug'|'error'} level
-  * @param {Object|null} student
-  * @param {string} message
-  */
-  _mmLog(level, student, message) {
+   * Centralized backend logger that honors module and per-student debug flags.
+   * Emits messages using the MagicMirror `Log` helper.
+   *
+   * @param {'info'|'debug'|'error'} level
+   * @param {Object|null} student
+   * @param {string} message
+   */
+  _mmLog (level, student, message) {
     try {
-      const prefix = `[MMM-Webuntis]`;
-      if (level === 'info') {
+      const prefix = "[MMM-Webuntis]";
+      if (level === "info") {
         Log.info(`${prefix} ${message}`);
-      } else if (level === 'error') {
+      } else if (level === "error") {
         Log.error(`${prefix} ${message}`);
-      } else if (level === 'debug') {
-        if (this.config && this.config.logLevel === 'debug') {
-          if (typeof Log.debug === 'function') {
+      } else if (level === "debug") {
+        if (this.config && this.config.logLevel === "debug") {
+          if (typeof Log.debug === "function") {
             Log.debug(`${prefix} ${message}`);
           } else {
             Log.info(`${prefix} [DEBUG] ${message}`);
@@ -54,17 +65,75 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Clean up caches to prevent memory leaks. Removes old entries based on TTL
+   * and limits total cache size.
+   */
+  _cleanupCaches () {
+    try {
+      const now = Date.now();
+
+      // Clean week timetable cache (TTL-based)
+      const weekKeys = Object.keys(weekTimetableCache);
+      let removed = 0;
+      for (const key of weekKeys) {
+        const entry = weekTimetableCache[key];
+        // If entry has a timestamp and is older than TTL, remove it
+        if (entry && entry._fetchedAt && now - entry._fetchedAt > WEEK_CACHE_TTL) {
+          delete weekTimetableCache[key];
+          removed++;
+        }
+      }
+
+      // If still too many entries, remove oldest
+      const remainingKeys = Object.keys(weekTimetableCache);
+      if (remainingKeys.length > MAX_CACHE_ENTRIES) {
+        const sortedKeys = remainingKeys.sort((a, b) => {
+          const aTime = weekTimetableCache[a]?._fetchedAt || 0;
+          const bTime = weekTimetableCache[b]?._fetchedAt || 0;
+          return aTime - bTime;
+        });
+        const toRemove = sortedKeys.slice(0, remainingKeys.length - MAX_CACHE_ENTRIES);
+        toRemove.forEach((k) => delete weekTimetableCache[k]);
+        removed += toRemove.length;
+      }
+
+      // Limit timegrid cache size (keep most recent entries)
+      const timegridKeys = Object.keys(timegridCache);
+      if (timegridKeys.length > MAX_CACHE_ENTRIES) {
+        const sortedKeys = timegridKeys.sort((a, b) => {
+          const aTime = timegridCache[a]?.fetchedAt || 0;
+          const bTime = timegridCache[b]?.fetchedAt || 0;
+          return aTime - bTime;
+        });
+        const toRemove = sortedKeys.slice(0, timegridKeys.length - MAX_CACHE_ENTRIES);
+        toRemove.forEach((k) => delete timegridCache[k]);
+        removed += toRemove.length;
+      }
+
+      if (removed > 0) {
+        this._mmLog("debug", null, `Cache cleanup: removed ${removed} old entries`);
+      }
+    } catch (e) {
+      this._mmLog("error", null, `Cache cleanup error: ${e && e.message
+        ? e.message
+        : e}`);
+    }
+  },
+
+  /**
    * Handle socket notifications sent by the frontend module.
    * Currently listens for `FETCH_DATA` which contains the module config.
    *
    * @param {string} notification - Notification name
    * @param {any} payload - Notification payload
    */
-  async socketNotificationReceived(notification, payload) {
+  async socketNotificationReceived (notification, payload) {
     if (notification === "FETCH_DATA") {
       // Assign incoming payload to config (payload may contain legacy keys)
       this.config = payload;
-      this._mmLog('info', null, `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`);
+      this._mmLog("info", null, `FETCH_DATA received (students=${Array.isArray(this.config.students)
+        ? this.config.students.length
+        : 0})`);
 
       try {
         // Group students by credential so we can reuse the same untis session
@@ -83,37 +152,45 @@ module.exports = NodeHelper.create({
           "examsDaysAhead",
           "showExamSubject",
           "showExamTeacher",
-          "logLevel",
+          "logLevel"
         ];
 
         // normalize student configs and group
         for (const student of this.config.students) {
           properties.forEach((prop) => {
-            student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
+            student[prop] = student[prop] !== undefined
+              ? student[prop]
+              : this.config[prop];
           });
           if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
             student.daysToShow = 1;
           }
 
           const credKey = this._getCredentialKey(student);
-          if (!groups.has(credKey)) groups.set(credKey, []);
+          if (!groups.has(credKey)) {
+            groups.set(credKey, []);
+          }
           groups.get(credKey).push(student);
         }
 
-        // For each credential group, process with coalescing inflight handling.
-        // If a fetch for the same credKey is already running, we set a pending flag
-        // so that the group is fetched once more when the current run finishes.
+        /*
+         * For each credential group, process with coalescing inflight handling.
+         * If a fetch for the same credKey is already running, we set a pending flag
+         * so that the group is fetched once more when the current run finishes.
+         */
         for (const [credKey, students] of groups.entries()) {
-          if (!this._inflightRequests) this._inflightRequests = {};
+          if (!this._inflightRequests) {
+            this._inflightRequests = {};
+          }
           // If already running, mark pending and continue
           if (this._inflightRequests[credKey] && this._inflightRequests[credKey].running) {
             this._inflightRequests[credKey].pending = true;
-            this._mmLog('info', null, `Fetch for ${credKey} already in progress - coalescing request`);
+            this._mmLog("info", null, `Fetch for ${credKey} already in progress - coalescing request`);
             continue;
           }
 
           // initialize inflight entry
-          this._inflightRequests[credKey] = { running: true, pending: false };
+          this._inflightRequests[credKey] = {running: true, pending: false};
 
           // Launch an async worker that will process the group and rerun if pending was set
           (async () => {
@@ -126,7 +203,7 @@ module.exports = NodeHelper.create({
                 } else if (sample.username) {
                   untis = new WebUntis(sample.school, sample.username, sample.password, sample.server);
                 } else {
-                  this._mmLog('error', null, `No credentials for group ${credKey}`);
+                  this._mmLog("error", null, `No credentials for group ${credKey}`);
                   break;
                 }
 
@@ -135,14 +212,20 @@ module.exports = NodeHelper.create({
                   try {
                     await this.fetchData(untis, student, identifier, credKey);
                   } catch (err) {
-                    this._mmLog('error', student, `Error fetching data for ${student.title}: ${err && err.message ? err.message : err}`);
+                    this._mmLog("error", student, `Error fetching data for ${student.title}: ${err && err.message
+                      ? err.message
+                      : err}`);
                   }
                 }
               } catch (error) {
-                this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${error && error.message ? error.message : error}`);
+                this._mmLog("error", null, `Error during login/fetch for group ${credKey}: ${error && error.message
+                  ? error.message
+                  : error}`);
               } finally {
                 try {
-                  if (untis) await untis.logout();
+                  if (untis) {
+                    await untis.logout();
+                  }
                 } catch (e) {
                   // ignore logout errors
                 }
@@ -156,14 +239,16 @@ module.exports = NodeHelper.create({
               }
 
               // no pending work: clear running flag and exit worker
-              if (this._inflightRequests[credKey]) this._inflightRequests[credKey].running = false;
+              if (this._inflightRequests[credKey]) {
+                this._inflightRequests[credKey].running = false;
+              }
               break;
             }
           })();
         }
-        this._mmLog('info', null, "Successfully fetched data");
+        this._mmLog("info", null, "Successfully fetched data");
       } catch (error) {
-        this._mmLog('error', null, `Error loading Untis data: ${error}`);
+        this._mmLog("error", null, `Error loading Untis data: ${error}`);
       }
     }
   },
@@ -175,8 +260,10 @@ module.exports = NodeHelper.create({
    * @param {Object} student - Student credential object
    * @returns {string} credential key
    */
-  _getCredentialKey(student) {
-    if (student.qrcode) return `qrcode:${student.qrcode}`;
+  _getCredentialKey (student) {
+    if (student.qrcode) {
+      return `qrcode:${student.qrcode}`;
+    }
     const server = student.server || "default";
     return `user:${student.username}@${server}/${student.school}`;
   },
@@ -190,14 +277,16 @@ module.exports = NodeHelper.create({
    * @param {string} credKey - Credential key
    * @returns {Promise<Array>} timegrid array
    */
-  async _getTimegridCached(untis, credKey) {
+  async _getTimegridCached (untis, credKey) {
     const ttl = 1000 * 60 * 60; // 1 hour
     const now = Date.now();
     const cached = timegridCache[credKey];
-    if (cached && (now - cached.fetchedAt) < ttl) return cached.data;
+    if (cached && now - cached.fetchedAt < ttl) {
+      return cached.data;
+    }
     try {
       const grid = await untis.getTimegrid();
-      timegridCache[credKey] = { fetchedAt: now, data: grid };
+      timegridCache[credKey] = {fetchedAt: now, data: grid};
       return grid;
     } catch (err) {
       // return empty array on error
@@ -214,15 +303,28 @@ module.exports = NodeHelper.create({
    * @param {Date} rangeStart - Week start date
    * @returns {Promise<Array>} week timetable
    */
-  async _getWeekTimetableCached(untis, credKey, rangeStart) {
+  async _getWeekTimetableCached (untis, credKey, rangeStart) {
     const key = `${credKey}:${rangeStart.toDateString()}`;
-    if (weekTimetableCache[key]) return weekTimetableCache[key];
+    const cached = weekTimetableCache[key];
+    const now = Date.now();
+
+    // Return cached if exists and not expired
+    if (cached && cached.data && (!cached._fetchedAt || now - cached._fetchedAt < WEEK_CACHE_TTL)) {
+      return cached.data;
+    }
+
     try {
       const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
-      weekTimetableCache[key] = weekTimetable || [];
-      return weekTimetableCache[key];
+      weekTimetableCache[key] = {
+        data: weekTimetable || [],
+        _fetchedAt: now
+      };
+      return weekTimetableCache[key].data;
     } catch (err) {
-      weekTimetableCache[key] = [];
+      weekTimetableCache[key] = {
+        data: [],
+        _fetchedAt: now
+      };
       return [];
     }
   },
@@ -237,22 +339,24 @@ module.exports = NodeHelper.create({
    * @param {string} identifier - Module instance identifier
    * @param {string} credKey - Credential grouping key
    */
-  async fetchData(untis, student, identifier, credKey) {
+  async fetchData (untis, student, identifier, credKey) {
     const logger = (msg) => {
-        this._mmLog('debug', student, msg);
+      this._mmLog("debug", student, msg);
     };
 
     // small helper: convert HHMM (number|string) or H:MM to minutes since midnight
-    function toMinutes(t) {
-      if (t === null || t === undefined) return NaN;
+    function toMinutes (t) {
+      if (t === null || t === undefined) {
+        return NaN;
+      }
       const s = String(t).trim();
-      if (s.includes(':')) {
-        const parts = s.split(':').map(p => p.replace(/\D/g, ''));
+      if (s.includes(":")) {
+        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
         const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || '0', 10) || 0;
+        const mm = parseInt(parts[1] || "0", 10) || 0;
         return hh * 60 + mm;
       }
-      const digits = s.replace(/\D/g, '').padStart(4, '0');
+      const digits = s.replace(/\D/g, "").padStart(4, "0");
       const hh = parseInt(digits.slice(0, 2), 10) || 0;
       const mm = parseInt(digits.slice(2), 10) || 0;
       return hh * 60 + mm;
@@ -279,7 +383,9 @@ module.exports = NodeHelper.create({
         grid[0].timeUnits.forEach((element) => {
           startTimes[element.startTime] = element.name;
           const startMin = toMinutes(element.startTime);
-          const endMin = element.endTime ? toMinutes(element.endTime) : null;
+          const endMin = element.endTime
+            ? toMinutes(element.endTime)
+            : null;
           timeUnits.push({
             startTime: element.startTime,
             endTime: element.endTime,
@@ -290,17 +396,21 @@ module.exports = NodeHelper.create({
         });
       }
     } catch (error) {
-      this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
+      this._mmLog("error", null, `getTimegrid error for ${credKey}: ${error && error.message
+        ? error.message
+        : error}`);
     }
 
     if (student.daysToShow > 0) {
       try {
         let timetable;
 
-        // Additionally fetch the week's timetable to get full WebAPI timetable entries
-        // This helps to obtain stable lesson IDs (WebAPITimetable) to link homeworks
-        // Use cached week timetable per credential+start date to avoid duplicate calls
-        let weekTimetable = await this._getWeekTimetableCached(untis, credKey, rangeStart);
+        /*
+         * Additionally fetch the week's timetable to get full WebAPI timetable entries
+         * This helps to obtain stable lesson IDs (WebAPITimetable) to link homeworks
+         * Use cached week timetable per credential+start date to avoid duplicate calls
+         */
+        const weekTimetable = await this._getWeekTimetableCached(untis, credKey, rangeStart);
 
         if (student.useClassTimetable) {
           logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
@@ -311,15 +421,18 @@ module.exports = NodeHelper.create({
           timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
           logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
         }
-        // Convert timetable entries to lesson objects and try to enrich them with lessonId.
-        // Keep processed lessons for backward compatibility, but also include raw data so the
-        // frontend can rely on raw data if desired.
+
+        /*
+         * Convert timetable entries to lesson objects and try to enrich them with lessonId.
+         * Keep processed lessons for backward compatibility, but also include raw data so the
+         * frontend can rely on raw data if desired.
+         */
         lessons = this.timetableToLessons(startTimes, timetable, weekTimetable);
 
         // Filter lessons for today
         const today = new Date();
-        const todayStr = today.getFullYear().toString() + ("0" + (today.getMonth() + 1)).slice(-2) + ("0" + today.getDate()).slice(-2);
-        todayLessons = timetable.filter(l => l.date.toString() === todayStr).map(l => ({
+        const todayStr = today.getFullYear().toString() + `0${today.getMonth() + 1}`.slice(-2) + `0${today.getDate()}`.slice(-2);
+        todayLessons = timetable.filter((l) => l.date.toString() === todayStr).map((l) => ({
           subject: l.su?.[0]?.longname || "N/A",
           subjectShort: l.su?.[0]?.name || "N/A",
           teacher: l.te?.[0]?.longname || "N/A",
@@ -327,7 +440,9 @@ module.exports = NodeHelper.create({
           startTime: l.startTime,
           endTime: l.endTime,
           startMin: toMinutes(l.startTime),
-          endMin: l.endTime ? toMinutes(l.endTime) : null,
+          endMin: l.endTime
+            ? toMinutes(l.endTime)
+            : null,
           code: l.code || "",
           text: l.lstext || "",
           substText: l.substText || "",
@@ -336,7 +451,9 @@ module.exports = NodeHelper.create({
           lessonId: l.id ?? l.lid ?? l.lessonId ?? null
         }));
       } catch (error) {
-        this._mmLog('error', student, `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog("error", student, `Timetable fetch error for ${student.title}: ${error && error.message
+          ? error.message
+          : error}`);
       }
     }
 
@@ -354,16 +471,21 @@ module.exports = NodeHelper.create({
         const rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
         exams = this.examsToFlat(rawExams);
         // keep rawExams as well for frontend processing if desired
-        exams = exams || [];
+        exams ||= [];
         this._lastRawExams = rawExams;
       } catch (error) {
-        this._mmLog('error', student, `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog("error", student, `Exams fetch error for ${student.title}: ${error && error.message
+          ? error.message
+          : error}`);
       }
     }
 
-    // Load homework for the period (from today until rangeEnd + 7 days)
+    /*
+     * Load homework for the period (from today until rangeEnd + 7 days)
+     * Limit homework lookback to prevent excessive data accumulation
+     */
     try {
-      let hwRangeEnd = new Date(rangeEnd);
+      const hwRangeEnd = new Date(rangeEnd);
       hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
       // Try a single, sensible call to getHomeWorkAndLessons(range) and fall back to getHomeWorksFor
       let hwResult = null;
@@ -396,19 +518,30 @@ module.exports = NodeHelper.create({
         homeworks = [];
         logger(`[MMM-Webuntis] Unexpected homework result for ${student.title}: ${JSON.stringify(hwResult).slice(0, 200)}`);
       }
+
+      // Limit homework array size to prevent memory issues (keep most recent 100)
+      if (homeworks.length > 100) {
+        homeworks = homeworks.slice(0, 100);
+      }
+
       logger(`[MMM-Webuntis] Loaded ${homeworks.length} homeworks for ${student.title}`);
     } catch (error) {
-      this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+      this._mmLog("error", student, `Homework fetch error for ${student.title}: ${error && error.message
+        ? error.message
+        : error}`);
     }
 
     // Before sending data, perform a quick debug validation: ensure lessons/timeUnits have numeric minutes
     if (student.logLevel) {
-      const missingLessonMinutes = lessons.filter(l => l.startMin === undefined || l.startMin === null || l.endMin === undefined || l.endMin === null).length;
-      const missingTimeUnits = timeUnits.filter(tu => tu.startMin === undefined || tu.startMin === null).length;
+      const missingLessonMinutes = lessons.filter((l) => l.startMin === undefined || l.startMin === null || l.endMin === undefined || l.endMin === null).length;
+      const missingTimeUnits = timeUnits.filter((tu) => tu.startMin === undefined || tu.startMin === null).length;
       logger(`Debug validation for ${student.title}: lessons without minutes=${missingLessonMinutes}, timeUnits without minutes=${missingTimeUnits}`);
     }
 
-    // Send processed data for backward compatibility, and include raw API responses
+    /*
+     * Send processed data for backward compatibility, and include minimal raw API responses
+     * to reduce memory usage on low-memory devices
+     */
     this.sendSocketNotification("GOT_DATA", {
       title: student.title,
       config: student,
@@ -417,13 +550,8 @@ module.exports = NodeHelper.create({
       id: identifier,
       todayLessons,
       timeUnits,
-      homeworks,
-      // raw data to allow the frontend to do heavy processing if desired
-      _raw: {
-        timetable: typeof timetable !== 'undefined' ? timetable : null,
-        weekTimetable: typeof weekTimetable !== 'undefined' ? weekTimetable : null,
-        timegrid: grid || null
-      }
+      homeworks
+      // Raw data removed to reduce memory footprint - frontend has all needed processed data
     });
   },
 
@@ -436,18 +564,20 @@ module.exports = NodeHelper.create({
    * @param {Array} weekTimetable - optional week timetable used to enrich IDs
    * @returns {Array} normalized lesson objects
    */
-  timetableToLessons(startTimes, timetable, weekTimetable = []) {
+  timetableToLessons (startTimes, timetable, weekTimetable = []) {
     // Convert time strings like '0740' or '7:40' to minutes since midnight
     const toMinutes = (t) => {
-      if (t === null || t === undefined) return NaN;
+      if (t === null || t === undefined) {
+        return NaN;
+      }
       const s = String(t).trim();
-      if (s.includes(':')) {
-        const parts = s.split(':').map(p => p.replace(/\D/g, ''));
+      if (s.includes(":")) {
+        const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
         const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1] || '0', 10) || 0;
+        const mm = parseInt(parts[1] || "0", 10) || 0;
         return hh * 60 + mm;
       }
-      const digits = s.replace(/\D/g, '').padStart(4, '0');
+      const digits = s.replace(/\D/g, "").padStart(4, "0");
       const hh = parseInt(digits.slice(0, 2), 10) || 0;
       const mm = parseInt(digits.slice(2), 10) || 0;
       return hh * 60 + mm;
@@ -480,9 +610,13 @@ module.exports = NodeHelper.create({
         minutes: element.startTime.toString().padStart(4, "0")
           .substring(2),
         startTime: element.startTime.toString().padStart(4, "0"),
-        endTime: element.endTime ? element.endTime.toString().padStart(4, "0") : null,
+        endTime: element.endTime
+          ? element.endTime.toString().padStart(4, "0")
+          : null,
         startMin: toMinutes(element.startTime),
-        endMin: element.endTime ? toMinutes(element.endTime) : null,
+        endMin: element.endTime
+          ? toMinutes(element.endTime)
+          : null,
         endTimeRaw: element.endTime ?? null,
         teacher: element.te?.[0]?.longname || "N/A",
         teacherInitial: element.te?.[0]?.name || "N/A",
@@ -521,7 +655,7 @@ module.exports = NodeHelper.create({
    * @param {Array} exams - raw exam objects returned by WebUntis
    * @returns {Array} flattened exam objects
    */
-  examsToFlat(exams) {
+  examsToFlat (exams) {
     const ret_exams = [];
 
     exams.forEach((element) => {
