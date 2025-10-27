@@ -471,7 +471,7 @@ module.exports = NodeHelper.create({
         const rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
         exams = this.examsToFlat(rawExams);
         // keep rawExams as well for frontend processing if desired
-        exams ||= [];
+        exams = exams || [];
         this._lastRawExams = rawExams;
       } catch (error) {
         this._mmLog("error", student, `Exams fetch error for ${student.title}: ${error && error.message
