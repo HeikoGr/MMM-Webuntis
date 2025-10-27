@@ -1,5 +1,5 @@
 .MMM-Webuntis {
-  --wu-bg: rgba(0,0,0,0.05);
+  --wu-bg: rgba(0, 0, 0, 0.05);
   --wu-time-color: #aaa;
   --wu-replacement-bg: #d8ecff;
   --wu-cancelled-bg: #ffd9d9;
@@ -10,7 +10,9 @@
   font-size: 0.875rem; /* ~14px base */
 }
 
-.MMM-Webuntis *, .MMM-Webuntis *::before, .MMM-Webuntis *::after {
+.MMM-Webuntis *,
+.MMM-Webuntis *::before,
+.MMM-Webuntis *::after {
   box-sizing: inherit;
 }
 
@@ -102,7 +104,7 @@
 /* Replacement lesson (left half) */
 .MMM-Webuntis .grid-combined .lesson-replacement {
   background-color: #d8ecff; /* light blue */
-  border-right: 1px solid rgba(0,0,0,0.06);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
   color: #03396c;
   overflow: hidden;
 }
@@ -114,14 +116,14 @@
 }
 
 /* Regular full lesson */
-.MMM-Webuntis .grid-combined .lesson-regular {  
+.MMM-Webuntis .grid-combined .lesson-regular {
   background-color: #dfffe0; /* light green */
   border-color: #b7e6b3;
   padding: 0.125rem; /* 2px */
 }
 
 /* Regular full lesson */
-.MMM-Webuntis .grid-combined .lesson{  
+.MMM-Webuntis .grid-combined .lesson {
   border: 1px solid #ccc;
   border-radius: 0.25rem;
   text-align: left;
@@ -180,7 +182,7 @@
 /* Hour divider line (background guide) */
 .MMM-Webuntis .grid-hourline {
   height: 1px;
-  background: rgba(239,239,239,0.5);
+  background: rgba(239, 239, 239, 0.5);
   position: absolute;
   left: 0;
   right: 0;
@@ -192,8 +194,12 @@
   left: 0;
   right: 0;
   height: 0.125rem; /* 2px */
-  background: linear-gradient(90deg, rgba(255,0,0,0.95), rgba(255,0,0,0.85));
-  box-shadow: 0 0 0.375rem rgba(255,0,0,0.45); /* 6px */
+  background: linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.95),
+    rgba(255, 0, 0, 0.85)
+  );
+  box-shadow: 0 0 0.375rem rgba(255, 0, 0, 0.45); /* 6px */
   z-index: 3; /* above lessons */
   pointer-events: none;
 }
