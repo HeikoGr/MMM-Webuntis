@@ -45,18 +45,7 @@
   position: relative;
 }
 
-/* Tooltip */
-.MMM-Webuntis #tooltip, .MMM-Webuntis .tooltip {
-  position: fixed;
-  z-index: 9999;
-  pointer-events: none;
-  background: rgba(0,0,0,0.85);
-  color: #fff;
-  padding: 0.375rem 0.5rem; /* 6px 8px */
-  border-radius: 0.25rem;
-  font-size: 0.75rem; /* 12px */
-  max-width: 22.5rem; /* 360px */
-}
+/* Tooltip removed */
 
 .MMM-Webuntis .grid-combined .grid-timecell {
   border-bottom: 1px dotted #444;
