@@ -6,9 +6,8 @@ const { URL } = require("url");
 const Authenticator = require("otplib").authenticator;
 const Log = require("logger");
 
-// Simple caches to avoid redundant API calls across students/sessions
-const timegridCache = {}; // keyed by credentialKey
-const weekTimetableCache = {}; // keyed by credentialKey + rangeStart
+// Note: caching removed - always fetch current data from WebUntis to
+// ensure the frontend shows up-to-date information.
 
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
@@ -49,6 +48,7 @@ module.exports = NodeHelper.create({
         Log.info(`${prefix} ${message}`);
       }
     } catch (e) {
+      Log.error(`[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`);
       // swallow
     }
   },
@@ -182,47 +182,39 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Return the timegrid for the given credential, using an in-memory cache.
-   * The timegrid contains named time units that are used to position lessons
-   * in the UI. Cache TTL is one hour.
+   * Return the timegrid for the given credential. Caching has been removed
+   * to always provide fresh data from WebUntis.
    *
    * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key
+   * @param {string} credKey - Credential key (unused but kept for API compatibility)
    * @returns {Promise<Array>} timegrid array
    */
-  async _getTimegridCached(untis, credKey) {
-    const ttl = 1000 * 60 * 60; // 1 hour
-    const now = Date.now();
-    const cached = timegridCache[credKey];
-    if (cached && (now - cached.fetchedAt) < ttl) return cached.data;
+  async _getTimegrid(untis, credKey) {
     try {
       const grid = await untis.getTimegrid();
-      timegridCache[credKey] = { fetchedAt: now, data: grid };
-      return grid;
+      return grid || [];
     } catch (err) {
       // return empty array on error
+      this._mmLog('error', null, `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`);
       return [];
     }
   },
 
   /**
    * Return the week's timetable for the given credential and week start.
-   * Cached per credential+week to avoid repeated API calls.
+   * Caching removed: always fetch fresh data from WebUntis.
    *
    * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key
+   * @param {string} credKey - Credential key (unused but kept for compatibility)
    * @param {Date} rangeStart - Week start date
    * @returns {Promise<Array>} week timetable
    */
-  async _getWeekTimetableCached(untis, credKey, rangeStart) {
-    const key = `${credKey}:${rangeStart.toDateString()}`;
-    if (weekTimetableCache[key]) return weekTimetableCache[key];
+  async _getWeekTimetable(untis, credKey, rangeStart) {
     try {
       const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
-      weekTimetableCache[key] = weekTimetable || [];
-      return weekTimetableCache[key];
+      return weekTimetable || [];
     } catch (err) {
-      weekTimetableCache[key] = [];
+      this._mmLog('error', null, `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`);
       return [];
     }
   },
@@ -419,11 +411,11 @@ module.exports = NodeHelper.create({
       timeUnits,
       homeworks,
       // raw data to allow the frontend to do heavy processing if desired
-      _raw: {
-        timetable: typeof timetable !== 'undefined' ? timetable : null,
-        weekTimetable: typeof weekTimetable !== 'undefined' ? weekTimetable : null,
-        timegrid: grid || null
-      }
+      //_raw: {
+      //  timetable: typeof timetable !== 'undefined' ? timetable : null,
+      //  weekTimetable: typeof weekTimetable !== 'undefined' ? weekTimetable : null,
+      //  timegrid: grid || null
+      //}
     });
   },
 
@@ -462,7 +454,7 @@ module.exports = NodeHelper.create({
           const key = `${we.date}-${we.startTime}`;
           weekMap[key] = we;
         } catch (err) {
-          // ignore
+          this.__mmLog('error', null, `timetableToLessons weekMap error: ${err && err.message ? err.message : err}`); 
         }
       });
     }
