@@ -53,7 +53,7 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
             { title: "Bob", qrcode: "untis://setschool?..." }
         ]
     }
-}
+},
 ```
 
 Legacy keys: the module accepts several legacy key names and will map them to the canonical names automatically. Examples: `debug` → `enableDebug`, `fetchInterval` → `fetchIntervalMs`, `mergeGapMin` → `mergeGapMinutes`, `days` → `daysToShow`. Prefer the canonical names in new configs.
@@ -62,8 +62,8 @@ Legacy keys: the module accepts several legacy key names and will map them to th
 
 The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
 
-| Option                 |   Type |          Default | Description                                                                                                          |
-| ---------------------- | -----: | ---------------: | -------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
+| Option                 |   Type |          Default | Description                                                                                                          | 
+| ---------------------- | -----: | ---------------: | -------------------------------------------------------------------------------------------------------------------- | 
 | `students`             |  array |         required | Array of student credential objects (see below).                                                                     |
 | `header`               | string |             none | Optional title printed by MagicMirror for this module instance.                                                      |
 | `daysToShow`           |    int |              `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object.      |
@@ -73,7 +73,7 @@ The following configuration options are supported. Global options can be declare
 | `showStartTime`        |   bool |          `false` | When `true` show the lesson start time; when `false` show the lesson number (if available).                          |
 | `useClassTimetable`    |   bool |          `false` | Some schools only provide a class timetable; set `true` to request class timetable instead of the student timetable. |
 | `showRegularLessons`   |   bool |          `false` | Show regular lessons (not only substitutions/cancellations).                                                         |
-| `showTeacherMode`      | string |         `'full'` | How to show teacher: `'initial'`                                                                                     | `'full'` | `'none'`. |
+| `showTeacherMode`      | string |         `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`.                                                        |
 | `useShortSubject`      |   bool |          `false` | Use short subject names where available.                                                                             |
 | `showSubstitutionText` |   bool |          `false` | Show substitution text from WebUntis (if present).                                                                   |
 | `examsDaysAhead`       |    int |              `0` | How many days ahead to fetch exams. `0` disables exams.                                                              |
