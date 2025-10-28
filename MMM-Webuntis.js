@@ -1005,7 +1005,7 @@ Module.register("MMM-Webuntis", {
       }
 
       // Exams rendering (optional): render only when enabled; do not skip grid when absent
-      if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
+      if (this.config.displayMode === "list" &&Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
         const examCount = this._renderExamsForStudent(
           table,
           studentCellTitle,
