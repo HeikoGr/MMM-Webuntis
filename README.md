@@ -4,7 +4,18 @@ A MagicMirror² module that shows cancelled, irregular or substituted lessons fr
 
 ## BREAKING CHANGES in 0.3.0
 
-Attention: you need to update your config!
+Please update your config. This release changes the architecture and several option names.
+
+- Config keys were consolidated. Use these names going forward (no automatic mapping):
+  - `fetchIntervalMs` (was `fetchInterval`)
+  - `daysToShow` (was `days`)
+  - `mergeGapMinutes` (was `mergeGapMin`)
+  - `logLevel` (replaces any former `enableDebug`/`debug` flags; set to `"debug"` to enable verbose logging)
+
+Upgrade notes:
+
+1. Rename any old keys in your config to the new names above.
+2. Restart MagicMirror after updating.
 
 ## Installation
 
@@ -41,7 +52,7 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
     header: "Untis",
     config: {
         // global options
-        logLevel: "trace",
+    logLevel: "debug",
         fetchIntervalMs: 15 * 60 * 1000, // 15 minutes
         daysToShow: 7,
         pastDaysToShow: 0,
@@ -56,14 +67,14 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
 },
 ```
 
-Legacy keys: the module accepts several legacy key names and will map them to the canonical names automatically. Examples: `debug` → `enableDebug`, `fetchInterval` → `fetchIntervalMs`, `mergeGapMin` → `mergeGapMinutes`, `days` → `daysToShow`. Prefer the canonical names in new configs.
+Note: Only the option names listed here are supported. Older aliases (e.g. `fetchInterval`, `days`, `mergeGapMin`) are no longer recognized.
 
 ## Configuration options
 
 The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
 
-| Option                 |   Type |          Default | Description                                                                                                          | 
-| ---------------------- | -----: | ---------------: | -------------------------------------------------------------------------------------------------------------------- | 
+| Option                 |   Type |          Default | Description                                                                                                          |
+| ---------------------- | -----: | ---------------: | -------------------------------------------------------------------------------------------------------------------- |
 | `students`             |  array |         required | Array of student credential objects (see below).                                                                     |
 | `header`               | string |             none | Optional title printed by MagicMirror for this module instance.                                                      |
 | `daysToShow`           |    int |              `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object.      |
@@ -107,9 +118,9 @@ Example student entry:
 
 ## How the timetable grid works (developer notes)
 
-- The backend (`node_helper.js`) normalizes times and adds numeric fields `startMin` and `endMin` (minutes since midnight). The frontend relies on these numeric fields to position lesson blocks precisely in the multi-day grid.
-- The backend tries to preserve stable lesson IDs (when available) and the frontend preserves a `lessonIds` array when it merges consecutive lessons. After merging the `lessonId` is kept for backward compatibility.
-- Caching: the helper uses short in-memory caches for timegrid and weekly timetables to reduce redundant WebUntis API calls.
+- The backend (`node_helper.js`) fetches raw WebUntis data only. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
+- The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGapMinutes`. A merged block keeps a `lessonIds` array; `lessonId` is set when available.
+- There is no explicit caching layer. Parallel fetches for the same credential are coalesced to avoid duplicate work.
 
 ## Log levels and debugging
 

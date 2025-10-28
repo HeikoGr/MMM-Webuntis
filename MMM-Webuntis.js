@@ -135,11 +135,27 @@ Module.register("MMM-Webuntis", {
     }
   },
 
+  // ===== Frontend data processing helpers =====
+  _toMinutes(t) {
+    if (t === null || t === undefined) return NaN;
+    const s = String(t).trim();
+    if (s.includes(":")) {
+      const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
+      const hh = parseInt(parts[0], 10) || 0;
+      const mm = parseInt(parts[1] || "0", 10) || 0;
+      return hh * 60 + mm;
+    }
+    const digits = s.replace(/\D/g, "").padStart(4, "0");
+    const hh = parseInt(digits.slice(0, 2), 10) || 0;
+    const mm = parseInt(digits.slice(2), 10) || 0;
+    return hh * 60 + mm;
+  },
+
   /* Render the multi-day grid for a student: returns a DOM element containing header and grid */
   _renderGridForStudent(
     studentTitle,
     studentConfig,
-    lessons,
+    timetable,
     homeworks,
     timeUnits,
   ) {
@@ -178,7 +194,7 @@ Module.register("MMM-Webuntis", {
     header.appendChild(emptyHeader);
 
     const today = new Date();
-    // day loop now accounts for past days by applying startOffset
+    // apply startOffset to include past days when configured
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d; // negative for past days
       const dayDate = new Date(
@@ -204,8 +220,7 @@ Module.register("MMM-Webuntis", {
     // We position lessons absolutely inside per-day columns based on exact start/end times.
     grid.style.gridTemplateColumns = cols.join(" ");
 
-    // NOTE: minute conversion is performed in node_helper; this frontend relies on
-    // the numeric fields `startMin` / `endMin` on lessons and timeUnits.
+    // Minute conversion is handled in the frontend; compute numeric startMin/endMin from raw entries on the fly.
 
     let allStart = Infinity;
     let allEnd = -Infinity;
@@ -217,22 +232,17 @@ Module.register("MMM-Webuntis", {
           allEnd = Math.max(allEnd, u.endMin);
       });
     } else {
-      // compute from lessons but filter out full-day-ish events (>= 12h)
-      lessons.forEach((l) => {
-        if (
-          l.startMin !== undefined &&
-          l.startMin !== null &&
-          l.endMin !== undefined &&
-          l.endMin !== null
-        ) {
-          const s = l.startMin;
-          const e = l.endMin;
+      // compute from raw timetable but filter out full-day-ish events (>= 12h)
+      (Array.isArray(timetable) ? timetable : []).forEach((el) => {
+        const s = this._toMinutes(el.startTime);
+        const e = el.endTime ? this._toMinutes(el.endTime) : null;
+        if (s !== null && s !== undefined && e !== null && e !== undefined) {
           if (e - s < 12 * 60) {
             allStart = Math.min(allStart, s);
             allEnd = Math.max(allEnd, e);
           }
-        } else if (l.startMin !== undefined && l.startMin !== null) {
-          allStart = Math.min(allStart, l.startMin);
+        } else if (s !== null && s !== undefined) {
+          allStart = Math.min(allStart, s);
         }
       });
     }
@@ -315,7 +325,7 @@ Module.register("MMM-Webuntis", {
     timeAxis.style.gridColumn = "1";
     grid.appendChild(timeAxis);
 
-    const allLessons = lessons.slice();
+    // Build per-day lessons later using pre-grouped source
     // build one column group per displayed day; account for past days by applying startOffset
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
@@ -326,21 +336,37 @@ Module.register("MMM-Webuntis", {
       );
       const dateStr = `${targetDate.getFullYear()}${("0" + (targetDate.getMonth() + 1)).slice(-2)}${("0" + targetDate.getDate()).slice(-2)}`;
 
-      // Prefer preprocessed grouped lessons (created on GOT_DATA) to avoid filtering/sorting here
-      let dayLessons =
+      // Build day's lessons from raw timetable entries
+      // Prefer grouped raw entries if available to avoid filtering the whole array
+      const groupedRaw =
         this.preprocessedByStudent &&
         this.preprocessedByStudent[studentTitle] &&
-        this.preprocessedByStudent[studentTitle].groupedByDate &&
-        this.preprocessedByStudent[studentTitle].groupedByDate[dateStr]
-          ? this.preprocessedByStudent[studentTitle].groupedByDate[
-              dateStr
-            ].slice()
-          : allLessons
-              .filter((l) => {
-                const norm = `${l.year}${("0" + l.month).slice(-2)}${("0" + l.day).slice(-2)}`;
-                return norm === dateStr;
-              })
-              .sort((a, b) => a.startTime - b.startTime);
+        this.preprocessedByStudent[studentTitle].rawGroupedByDate
+          ? this.preprocessedByStudent[studentTitle].rawGroupedByDate
+          : null;
+
+      const sourceForDay =
+        groupedRaw && groupedRaw[dateStr]
+          ? groupedRaw[dateStr]
+          : (Array.isArray(timetable) ? timetable : [])
+              .filter((el) => String(el.date) === dateStr)
+              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+
+      let dayLessons = sourceForDay.map((el) => ({
+        dateStr: String(el.date),
+        startMin: this._toMinutes(el.startTime),
+        endMin: el.endTime ? this._toMinutes(el.endTime) : null,
+        startTime: el.startTime ? String(el.startTime).padStart(4, "0") : "",
+        endTime: el.endTime ? String(el.endTime).padStart(4, "0") : null,
+        subjectShort: el.su?.[0]?.name || el.su?.[0]?.longname || "N/A",
+        subject: el.su?.[0]?.longname || el.su?.[0]?.name || "N/A",
+        teacherInitial: el.te?.[0]?.name || el.te?.[0]?.longname || "N/A",
+        teacher: el.te?.[0]?.longname || el.te?.[0]?.name || "N/A",
+        code: el.code || "",
+        substText: el.substText || "",
+        text: el.lstext || "",
+        lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+      }));
 
       // merge double lessons
       const mergedLessons = [];
@@ -403,7 +429,7 @@ Module.register("MMM-Webuntis", {
             curr.lessonIds.push(String(addId));
           j++;
         }
-        // ensure lessonId remains available for backward compatibility
+        // ensure lessonId is set when available
         if (
           (!curr.lessonId || curr.lessonId === null) &&
           curr.lessonIds &&
@@ -516,7 +542,7 @@ Module.register("MMM-Webuntis", {
         noLesson.style.right = "0px";
         noLesson.style.height = `${totalHeight}px`;
         noLesson.innerHTML = `<b>${this.translate("no-lessons")}</b>`;
-        // tooltip removed: no event listeners attached
+
         bothInner.appendChild(noLesson);
       }
 
@@ -620,13 +646,10 @@ Module.register("MMM-Webuntis", {
 
         // attach events and append to appropriate wrapper
         if (lesson.code === "irregular") {
-          // tooltip removed: append directly
           leftInner.appendChild(leftCell);
         } else if (lesson.code === "cancelled") {
-          // tooltip removed: append directly
           rightInner.appendChild(rightCell);
         } else {
-          // tooltip removed: append directly
           bothInner.appendChild(bothCell);
         }
       }
@@ -637,11 +660,11 @@ Module.register("MMM-Webuntis", {
   },
 
   start() {
-    this.lessonsByStudent = [];
+    this.timetableByStudent = [];
     this.examsByStudent = [];
     this.configByStudent = [];
-    this.todayLessonsByStudent = [];
     this.timeUnitsByStudent = [];
+    this.periodNamesByStudent = [];
     // first updates every 5s, then after the first tick switch to 30s.
     if (!this._nowLineTimer) {
       try {
@@ -720,7 +743,7 @@ Module.register("MMM-Webuntis", {
     table.className = "bright small light";
 
     // no student
-    if (this.lessonsByStudent === undefined) {
+    if (this.timetableByStudent === undefined) {
       this._log(
         "info",
         "No student data available - check module configuration and that GOT_DATA was received.",
@@ -728,17 +751,21 @@ Module.register("MMM-Webuntis", {
       return table;
     }
 
-    const sortedStudentTitles = Object.keys(this.lessonsByStudent).sort();
+    const sortedStudentTitles = Object.keys(this.timetableByStudent).sort();
 
     // iterate through students
     for (const studentTitle of sortedStudentTitles) {
       let addedRows = 0;
 
-      const lessons = this.lessonsByStudent[studentTitle];
+      const timetable = this.timetableByStudent[studentTitle] || [];
       const studentConfig = this.configByStudent[studentTitle];
       const exams = this.examsByStudent[studentTitle];
-      //var todayLessons = this.todayLessonsByStudent[studentTitle];
       const timeUnits = this.timeUnitsByStudent[studentTitle];
+      // use precomputed startTime->name period map
+      const startTimesMap =
+        (this.periodNamesByStudent &&
+          this.periodNamesByStudent[studentTitle]) ||
+        {};
 
       const homeworks =
         this.homeworksByStudent && this.homeworksByStudent[studentTitle]
@@ -771,24 +798,33 @@ Module.register("MMM-Webuntis", {
 
       if (studentConfig && studentConfig.daysToShow > 0) {
         // const studentTitle = studentConfig.title;
-        //var lessons = this.lessonsByStudent[studentTitle];
+        // sort raw timetable entries by date and startTime
+        const lessonsSorted = (Array.isArray(timetable) ? timetable : [])
+          .slice()
+          .sort((a, b) => {
+            const da = String(a.date);
+            const db = String(b.date);
+            if (da !== db) return da.localeCompare(db);
+            return (a.startTime || 0) - (b.startTime || 0);
+          });
 
         // iterate through lessons of current student
-        for (let i = 0; i < lessons.length; i++) {
-          const lesson = lessons[i];
-          const time = new Date(
-            lesson.year,
-            lesson.month - 1,
-            lesson.day,
-            lesson.hour,
-            lesson.minutes,
-          );
+        for (let i = 0; i < lessonsSorted.length; i++) {
+          const entry = lessonsSorted[i];
+          const dateStr = String(entry.date);
+          const year = parseInt(dateStr.substring(0, 4), 10);
+          const month = parseInt(dateStr.substring(4, 6), 10);
+          const day = parseInt(dateStr.substring(6, 8), 10);
+          const st = String(entry.startTime || "").padStart(4, "0");
+          const hour = parseInt(st.substring(0, 2) || "0", 10);
+          const minutes = parseInt(st.substring(2) || "0", 10);
+          const time = new Date(year, month - 1, day, hour, minutes);
 
           // Skip if nothing special or past lessons (unless in debug mode)
           if (
-            (!studentConfig.showRegularLessons && lesson.code === "") ||
+            (!studentConfig.showRegularLessons && (entry.code || "") === "") ||
             (time < new Date() &&
-              lesson.code !== "error" &&
+              (entry.code || "") !== "error" &&
               this.config.logLevel !== "debug")
           ) {
             continue;
@@ -799,51 +835,61 @@ Module.register("MMM-Webuntis", {
           let timeStr = `${time.toLocaleDateString(this.config.language, { weekday: "short" }).toUpperCase()}&nbsp;`;
           if (
             studentConfig.showStartTime ||
-            lesson.lessonNumber === undefined
+            startTimesMap[entry.startTime] === undefined
           ) {
             timeStr += time.toLocaleTimeString(this.config.language, {
               hour: "2-digit",
               minute: "2-digit",
             });
           } else {
-            timeStr += `${lesson.lessonNumber}.`;
+            timeStr += `${startTimesMap[entry.startTime]}.`;
           }
 
           // subject
-          let subjectStr = lesson.subject;
+          const subjLong =
+            entry.su?.[0]?.longname || entry.su?.[0]?.name || "N/A";
+          const subjShort =
+            entry.su?.[0]?.name || entry.su?.[0]?.longname || "N/A";
+          let subjectStr = subjLong;
           if (studentConfig.useShortSubject) {
-            subjectStr = lesson.subjectShort;
+            subjectStr = subjShort;
           }
 
           // teachers name
           // showTeacherMode: 'initial' | 'full' | 'none'
           if (studentConfig.showTeacherMode === "initial") {
-            if (lesson.teacherInitial !== "")
-              subjectStr += "&nbsp;" + `(${lesson.teacherInitial})`;
+            const teacherInitial =
+              entry.te?.[0]?.name || entry.te?.[0]?.longname || "";
+            if (teacherInitial !== "")
+              subjectStr += "&nbsp;" + `(${teacherInitial})`;
           } else if (studentConfig.showTeacherMode === "full") {
-            if (lesson.teacher !== "")
-              subjectStr += "&nbsp;" + `(${lesson.teacher})`;
+            const teacherFull =
+              entry.te?.[0]?.longname || entry.te?.[0]?.name || "";
+            if (teacherFull !== "") subjectStr += "&nbsp;" + `(${teacherFull})`;
           }
 
           // lesson substitute text
-          if (studentConfig.showSubstitutionText && lesson.substText !== "") {
-            subjectStr += `<br/><span class='xsmall dimmed'>${lesson.substText}</span>`;
+          if (
+            studentConfig.showSubstitutionText &&
+            (entry.substText || "") !== ""
+          ) {
+            subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
           }
 
-          if (lesson.text !== "") {
+          if ((entry.lstext || "") !== "") {
             if (subjectStr.trim() !== "") {
               subjectStr += "<br/>";
             }
-            subjectStr += `<span class='xsmall dimmed'>${lesson.text}</span>`;
+            subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
           }
 
           let addClass = "";
           if (
-            lesson.code == "cancelled" ||
-            lesson.code == "error" ||
-            lesson.code == "info"
+            entry.code == "cancelled" ||
+            entry.code == "error" ||
+            entry.code == "info"
           ) {
-            addClass = lesson.code;
+            addClass = entry.code;
           }
 
           this._addTableRow(
@@ -874,19 +920,25 @@ Module.register("MMM-Webuntis", {
         continue;
       }
 
-      // sort exams
-      exams.sort((a, b) => a.sortString - b.sortString);
+      // sort exams by examDate then startTime (raw Untis format)
+      exams.sort((a, b) => {
+        const da = String(a.examDate);
+        const db = String(b.examDate);
+        if (da !== db) return da.localeCompare(db);
+        return (a.startTime || 0) - (b.startTime || 0);
+      });
 
       // iterate through exams of current student
       for (let i = 0; i < exams.length; i++) {
         const exam = exams[i];
-        const time = new Date(
-          exam.year,
-          exam.month - 1,
-          exam.day,
-          exam.hour,
-          exam.minutes,
-        );
+        const dstr = String(exam.examDate || "");
+        const y = parseInt(dstr.substring(0, 4) || "0", 10);
+        const m = parseInt(dstr.substring(4, 6) || "1", 10);
+        const d = parseInt(dstr.substring(6, 8) || "1", 10);
+        const sstr = String(exam.startTime || "").padStart(4, "0");
+        const hh = parseInt(sstr.substring(0, 2) || "0", 10);
+        const mm = parseInt(sstr.substring(2) || "0", 10);
+        const time = new Date(y, m - 1, d, hh, mm);
 
         // Skip if exam has started (unless in debug mode)
         if (time < new Date() && this.config.logLevel !== "debug") {
@@ -906,8 +958,12 @@ Module.register("MMM-Webuntis", {
 
         // teachers name
         if (studentConfig.showExamTeacher) {
-          if (exam.teacher) {
-            nameCell += "&nbsp;" + `(${exam.teacher})`;
+          const teacher =
+            Array.isArray(exam.teachers) && exam.teachers.length > 0
+              ? exam.teachers[0]
+              : "";
+          if (teacher) {
+            nameCell += "&nbsp;" + `(${teacher})`;
           }
         }
 
@@ -940,14 +996,14 @@ Module.register("MMM-Webuntis", {
         if (
           timeUnits &&
           timeUnits.length > 0 &&
-          lessons &&
-          lessons.length > 0
+          timetable &&
+          timetable.length > 0
         ) {
           // delegate grid rendering to a helper
           const gridElem = this._renderGridForStudent(
             studentTitle,
             studentConfig,
-            lessons,
+            timetable,
             homeworks,
             timeUnits,
           );
@@ -976,47 +1032,88 @@ Module.register("MMM-Webuntis", {
     }
 
     if (notification === "GOT_DATA") {
-      if (payload.lessons) {
-        // Sort once on arrival to avoid repeated sorts in getDom()
-        const sorted = Array.isArray(payload.lessons)
-          ? payload.lessons.slice().sort((a, b) => a.sortString - b.sortString)
-          : [];
-        this.lessonsByStudent[payload.title] = sorted;
-        // lightweight preprocessing for grid rendering: group lessons by date
-        this.preprocessedByStudent = this.preprocessedByStudent || {};
-        const grouped = {};
-        sorted.forEach((l) => {
-          const key = `${l.year}${("0" + l.month).slice(-2)}${("0" + l.day).slice(-2)}`;
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(l);
-        });
-        this.preprocessedByStudent[payload.title] = { groupedByDate: grouped };
-      }
-      if (payload.exams) {
-        this.examsByStudent[payload.title] = payload.exams;
-      }
-      if (payload.config) {
-        this.configByStudent[payload.title] = payload.config;
-      }
-      if (payload.todayLessons) {
-        this.todayLessonsByStudent[payload.title] = payload.todayLessons;
-      }
-      if (payload.timeUnits) {
-        this.timeUnitsByStudent[payload.title] = payload.timeUnits;
-      }
-      if (payload.homeworks) {
-        if (!this.homeworksByStudent) this.homeworksByStudent = {};
-        this.homeworksByStudent[payload.title] = payload.homeworks;
-      }
+      // Transform raw payload into render-ready structures on the frontend
+      const title = payload.title;
+      const cfg = payload.config || {};
+      this.configByStudent[title] = cfg;
 
-      // counts for arrays in payload using helper
-      const cLessons = this._countArray(payload.lessons);
-      const cExams = this._countArray(payload.exams);
-      const cTimeUnits = this._countArray(payload.timeUnits);
-      const cHomeworks = this._countArray(payload.homeworks);
+      // Build timeUnits from raw timegrid
+      const grid = payload.timegrid || [];
+      let timeUnits = [];
+      try {
+        if (
+          Array.isArray(grid) &&
+          grid[0] &&
+          Array.isArray(grid[0].timeUnits)
+        ) {
+          timeUnits = grid[0].timeUnits.map((u) => ({
+            startTime: u.startTime,
+            endTime: u.endTime,
+            startMin: this._toMinutes(u.startTime),
+            endMin: u.endTime ? this._toMinutes(u.endTime) : null,
+            name: u.name,
+          }));
+        }
+      } catch (e) {
+        this._log("warn", "failed to build timeUnits from grid", e);
+      }
+      this.timeUnitsByStudent[title] = timeUnits;
+
+      // Store raw timetable; processing will be done in render functions
+      // also precompute a startTime->period name map to simplify list rendering
+      this.periodNamesByStudent = this.periodNamesByStudent || {};
+      const periodMap = {};
+      timeUnits.forEach((u) => {
+        periodMap[u.startTime] = u.name;
+      });
+      this.periodNamesByStudent[title] = periodMap;
+      this.timetableByStudent[title] = Array.isArray(payload.timetableRange)
+        ? payload.timetableRange
+        : [];
+
+      // Pre-group raw timetable by date string for efficient day filtering in renderers
+      this.preprocessedByStudent = this.preprocessedByStudent || {};
+      const groupedRaw = {};
+      (this.timetableByStudent[title] || []).forEach((el) => {
+        // best-effort: skip malformed entries
+        const key = el && el.date != null ? String(el.date) : null;
+        if (!key) return;
+        if (!groupedRaw[key]) groupedRaw[key] = [];
+        groupedRaw[key].push(el);
+      });
+      // sort each day's entries by startTime ascending
+      Object.keys(groupedRaw).forEach((k) => {
+        groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+      });
+      this.preprocessedByStudent[title] = {
+        ...(this.preprocessedByStudent[title] || {}),
+        rawGroupedByDate: groupedRaw,
+      };
+
+      // Store raw exams; list view will compute date/time inline
+      this.examsByStudent[title] = Array.isArray(payload.exams)
+        ? payload.exams
+        : [];
+
+      if (!this.homeworksByStudent) this.homeworksByStudent = {};
+      const hw = payload.homeworks;
+      const hwNorm = Array.isArray(hw)
+        ? hw
+        : Array.isArray(hw?.homeworks)
+          ? hw.homeworks
+          : Array.isArray(hw?.homework)
+            ? hw.homework
+            : [];
+      this.homeworksByStudent[title] = hwNorm;
+
+      // counts for arrays after processing
+      const cTimetable = this._countArray(this.timetableByStudent[title]);
+      const cExams = this._countArray(this.examsByStudent[title]);
+      const cTimeUnits = this._countArray(timeUnits);
+      const cHomeworks = this._countArray(this.homeworksByStudent[title]);
       this._log(
         "debug",
-        `data received for ${payload.title}: lessons=${cLessons}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`,
+        `data processed for ${title}: timetableEntries=${cTimetable}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`,
       );
       this.updateDom();
     }
