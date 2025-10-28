@@ -659,6 +659,203 @@ Module.register("MMM-Webuntis", {
     return wrapper;
   },
 
+  /* Render the list view for a student's timetable changes into the provided table */
+  _renderListForStudent(
+    table,
+    studentCellTitle,
+    studentTitle,
+    studentConfig,
+    timetable,
+    startTimesMap,
+  ) {
+    let addedRows = 0;
+
+    if (!(studentConfig && studentConfig.daysToShow > 0)) return 0;
+
+    // sort raw timetable entries by date and startTime
+    const lessonsSorted = (Array.isArray(timetable) ? timetable : [])
+      .slice()
+      .sort((a, b) => {
+        const da = String(a.date);
+        const db = String(b.date);
+        if (da !== db) return da.localeCompare(db);
+        return (a.startTime || 0) - (b.startTime || 0);
+      });
+
+    for (let i = 0; i < lessonsSorted.length; i++) {
+      const entry = lessonsSorted[i];
+      const dateStr = String(entry.date);
+      const year = parseInt(dateStr.substring(0, 4), 10);
+      const month = parseInt(dateStr.substring(4, 6), 10);
+      const day = parseInt(dateStr.substring(6, 8), 10);
+      const st = String(entry.startTime || "").padStart(4, "0");
+      const hour = parseInt(st.substring(0, 2) || "0", 10);
+      const minutes = parseInt(st.substring(2) || "0", 10);
+      const time = new Date(year, month - 1, day, hour, minutes);
+
+      // Skip if nothing special or past lessons (unless in debug mode)
+      if (
+        (!studentConfig.showRegularLessons && (entry.code || "") === "") ||
+        (time < new Date() &&
+          (entry.code || "") !== "error" &&
+          this.config.logLevel !== "debug")
+      ) {
+        continue;
+      }
+
+      addedRows++;
+
+      let timeStr = `${time
+        .toLocaleDateString(this.config.language, { weekday: "short" })
+        .toUpperCase()}&nbsp;`;
+      if (
+        studentConfig.showStartTime ||
+        startTimesMap[entry.startTime] === undefined
+      ) {
+        timeStr += time.toLocaleTimeString(this.config.language, {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      } else {
+        timeStr += `${startTimesMap[entry.startTime]}.`;
+      }
+
+      // subject
+      const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || "N/A";
+      const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || "N/A";
+      let subjectStr = studentConfig.useShortSubject ? subjShort : subjLong;
+
+      // teacher name
+      if (studentConfig.showTeacherMode === "initial") {
+        const teacherInitial =
+          entry.te?.[0]?.name || entry.te?.[0]?.longname || "";
+        if (teacherInitial !== "")
+          subjectStr += "&nbsp;" + `(${teacherInitial})`;
+      } else if (studentConfig.showTeacherMode === "full") {
+        const teacherFull =
+          entry.te?.[0]?.longname || entry.te?.[0]?.name || "";
+        if (teacherFull !== "") subjectStr += "&nbsp;" + `(${teacherFull})`;
+      }
+
+      // substitution text
+      if (
+        studentConfig.showSubstitutionText &&
+        (entry.substText || "") !== ""
+      ) {
+        subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
+      }
+
+      if ((entry.lstext || "") !== "") {
+        if (subjectStr.trim() !== "") subjectStr += "<br/>";
+        subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
+      }
+
+      let addClass = "";
+      if (
+        entry.code == "cancelled" ||
+        entry.code == "error" ||
+        entry.code == "info"
+      ) {
+        addClass = entry.code;
+      }
+
+      this._addTableRow(
+        table,
+        "lessonRow",
+        studentCellTitle,
+        timeStr,
+        subjectStr,
+        addClass,
+      );
+    }
+
+    if (addedRows === 0) {
+      this._addTableRow(
+        table,
+        "lessonRowEmpty",
+        studentCellTitle,
+        this.translate("nothing"),
+      );
+    }
+
+    return addedRows;
+  },
+
+  /* Render the exams list for a student into the provided table */
+  _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
+    let addedRows = 0;
+    if (!Array.isArray(exams)) return 0;
+
+    // sort exams by examDate then startTime (raw Untis format)
+    exams.sort((a, b) => {
+      const da = String(a.examDate);
+      const db = String(b.examDate);
+      if (da !== db) return da.localeCompare(db);
+      return (a.startTime || 0) - (b.startTime || 0);
+    });
+
+    for (let i = 0; i < exams.length; i++) {
+      const exam = exams[i];
+      const dstr = String(exam.examDate || "");
+      const y = parseInt(dstr.substring(0, 4) || "0", 10);
+      const m = parseInt(dstr.substring(4, 6) || "1", 10);
+      const d = parseInt(dstr.substring(6, 8) || "1", 10);
+      const sstr = String(exam.startTime || "").padStart(4, "0");
+      const hh = parseInt(sstr.substring(0, 2) || "0", 10);
+      const mm = parseInt(sstr.substring(2) || "0", 10);
+      const time = new Date(y, m - 1, d, hh, mm);
+
+      // Skip if exam has started (unless in debug mode)
+      if (time < new Date() && this.config.logLevel !== "debug") continue;
+
+      addedRows++;
+
+      // date and time
+      const dateTimeCell = `${time
+        .toLocaleDateString("de-DE", { month: "numeric", day: "numeric" })
+        .toUpperCase()}&nbsp;`;
+
+      // subject of exam
+      let nameCell = exam.name;
+      if (studentConfig.showExamSubject) {
+        nameCell = `${exam.subject}: &nbsp;${exam.name}`;
+      }
+
+      // teacher
+      if (studentConfig.showExamTeacher) {
+        const teacher =
+          Array.isArray(exam.teachers) && exam.teachers.length > 0
+            ? exam.teachers[0]
+            : "";
+        if (teacher) nameCell += "&nbsp;" + `(${teacher})`;
+      }
+
+      // additional text
+      if (exam.text) {
+        nameCell += `<br/><span class="xsmall dimmed">${exam.text}</span>`;
+      }
+
+      this._addTableRow(
+        table,
+        "examRow",
+        studentCellTitle,
+        dateTimeCell,
+        nameCell,
+      );
+    }
+
+    if (addedRows === 0) {
+      this._addTableRow(
+        table,
+        "examRowEmpty",
+        studentCellTitle,
+        this.translate("no_exams"),
+      );
+    }
+
+    return addedRows;
+  },
+
   start() {
     this.timetableByStudent = [];
     this.examsByStudent = [];
@@ -741,6 +938,7 @@ Module.register("MMM-Webuntis", {
     const wrapper = document.createElement("div");
     const table = document.createElement("table");
     table.className = "bright small light";
+    let tableHasRows = false;
 
     // no student
     if (this.timetableByStudent === undefined) {
@@ -755,8 +953,6 @@ Module.register("MMM-Webuntis", {
 
     // iterate through students
     for (const studentTitle of sortedStudentTitles) {
-      let addedRows = 0;
-
       const timetable = this.timetableByStudent[studentTitle] || [];
       const studentConfig = this.configByStudent[studentTitle];
       const exams = this.examsByStudent[studentTitle];
@@ -796,199 +992,27 @@ Module.register("MMM-Webuntis", {
         studentCellTitle = studentTitle;
       }
 
-      if (studentConfig && studentConfig.daysToShow > 0) {
-        // const studentTitle = studentConfig.title;
-        // sort raw timetable entries by date and startTime
-        const lessonsSorted = (Array.isArray(timetable) ? timetable : [])
-          .slice()
-          .sort((a, b) => {
-            const da = String(a.date);
-            const db = String(b.date);
-            if (da !== db) return da.localeCompare(db);
-            return (a.startTime || 0) - (b.startTime || 0);
-          });
-
-        // iterate through lessons of current student
-        for (let i = 0; i < lessonsSorted.length; i++) {
-          const entry = lessonsSorted[i];
-          const dateStr = String(entry.date);
-          const year = parseInt(dateStr.substring(0, 4), 10);
-          const month = parseInt(dateStr.substring(4, 6), 10);
-          const day = parseInt(dateStr.substring(6, 8), 10);
-          const st = String(entry.startTime || "").padStart(4, "0");
-          const hour = parseInt(st.substring(0, 2) || "0", 10);
-          const minutes = parseInt(st.substring(2) || "0", 10);
-          const time = new Date(year, month - 1, day, hour, minutes);
-
-          // Skip if nothing special or past lessons (unless in debug mode)
-          if (
-            (!studentConfig.showRegularLessons && (entry.code || "") === "") ||
-            (time < new Date() &&
-              (entry.code || "") !== "error" &&
-              this.config.logLevel !== "debug")
-          ) {
-            continue;
-          }
-
-          addedRows++;
-
-          let timeStr = `${time.toLocaleDateString(this.config.language, { weekday: "short" }).toUpperCase()}&nbsp;`;
-          if (
-            studentConfig.showStartTime ||
-            startTimesMap[entry.startTime] === undefined
-          ) {
-            timeStr += time.toLocaleTimeString(this.config.language, {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-          } else {
-            timeStr += `${startTimesMap[entry.startTime]}.`;
-          }
-
-          // subject
-          const subjLong =
-            entry.su?.[0]?.longname || entry.su?.[0]?.name || "N/A";
-          const subjShort =
-            entry.su?.[0]?.name || entry.su?.[0]?.longname || "N/A";
-          let subjectStr = subjLong;
-          if (studentConfig.useShortSubject) {
-            subjectStr = subjShort;
-          }
-
-          // teachers name
-          // showTeacherMode: 'initial' | 'full' | 'none'
-          if (studentConfig.showTeacherMode === "initial") {
-            const teacherInitial =
-              entry.te?.[0]?.name || entry.te?.[0]?.longname || "";
-            if (teacherInitial !== "")
-              subjectStr += "&nbsp;" + `(${teacherInitial})`;
-          } else if (studentConfig.showTeacherMode === "full") {
-            const teacherFull =
-              entry.te?.[0]?.longname || entry.te?.[0]?.name || "";
-            if (teacherFull !== "") subjectStr += "&nbsp;" + `(${teacherFull})`;
-          }
-
-          // lesson substitute text
-          if (
-            studentConfig.showSubstitutionText &&
-            (entry.substText || "") !== ""
-          ) {
-            subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
-          }
-
-          if ((entry.lstext || "") !== "") {
-            if (subjectStr.trim() !== "") {
-              subjectStr += "<br/>";
-            }
-            subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
-          }
-
-          let addClass = "";
-          if (
-            entry.code == "cancelled" ||
-            entry.code == "error" ||
-            entry.code == "info"
-          ) {
-            addClass = entry.code;
-          }
-
-          this._addTableRow(
-            table,
-            "lessonRow",
-            studentCellTitle,
-            timeStr,
-            subjectStr,
-            addClass,
-          );
-        } // end for lessons
-
-        // add message row if table is empty
-        if (addedRows == 0) {
-          this._addTableRow(
-            table,
-            "lessonRowEmpty",
-            studentCellTitle,
-            this.translate("nothing"),
-          );
-        }
+      if (this.config.displayMode === "list") {
+        const listCount = this._renderListForStudent(
+          table,
+          studentCellTitle,
+          studentTitle,
+          studentConfig,
+          timetable,
+          startTimesMap,
+        );
+        if (listCount > 0) tableHasRows = true;
       }
 
-      addedRows = 0;
-      //var exams = this.examsByStudent[studentTitle];
-
-      if (!exams || studentConfig.examsDaysAhead == 0) {
-        continue;
-      }
-
-      // sort exams by examDate then startTime (raw Untis format)
-      exams.sort((a, b) => {
-        const da = String(a.examDate);
-        const db = String(b.examDate);
-        if (da !== db) return da.localeCompare(db);
-        return (a.startTime || 0) - (b.startTime || 0);
-      });
-
-      // iterate through exams of current student
-      for (let i = 0; i < exams.length; i++) {
-        const exam = exams[i];
-        const dstr = String(exam.examDate || "");
-        const y = parseInt(dstr.substring(0, 4) || "0", 10);
-        const m = parseInt(dstr.substring(4, 6) || "1", 10);
-        const d = parseInt(dstr.substring(6, 8) || "1", 10);
-        const sstr = String(exam.startTime || "").padStart(4, "0");
-        const hh = parseInt(sstr.substring(0, 2) || "0", 10);
-        const mm = parseInt(sstr.substring(2) || "0", 10);
-        const time = new Date(y, m - 1, d, hh, mm);
-
-        // Skip if exam has started (unless in debug mode)
-        if (time < new Date() && this.config.logLevel !== "debug") {
-          continue;
-        }
-
-        addedRows++;
-
-        // date and time
-        const dateTimeCell = `${time.toLocaleDateString("de-DE", { month: "numeric", day: "numeric" }).toUpperCase()}&nbsp;`;
-
-        // subject of exam
-        let nameCell = exam.name;
-        if (studentConfig.showExamSubject) {
-          nameCell = `${exam.subject}: &nbsp;${exam.name}`;
-        }
-
-        // teachers name
-        if (studentConfig.showExamTeacher) {
-          const teacher =
-            Array.isArray(exam.teachers) && exam.teachers.length > 0
-              ? exam.teachers[0]
-              : "";
-          if (teacher) {
-            nameCell += "&nbsp;" + `(${teacher})`;
-          }
-        }
-
-        // exam additional text
-        if (exam.text) {
-          nameCell += `<br/><span class="xsmall dimmed">${exam.text}</span>`;
-        }
-
-        this._addTableRow(
+      // Exams rendering (optional): render only when enabled; do not skip grid when absent
+      if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
+        const examCount = this._renderExamsForStudent(
           table,
-          "examRow",
           studentCellTitle,
-          dateTimeCell,
-          nameCell,
+          studentConfig,
+          exams,
         );
-      } // end for exam
-
-      // add message row if table is empty
-      if (addedRows == 0) {
-        this._addTableRow(
-          table,
-          "examRowEmpty",
-          studentCellTitle,
-          this.translate("no_exams"),
-        );
+        if (examCount > 0) tableHasRows = true;
       }
 
       // --- Multi-day timetable grid display ---
@@ -1012,7 +1036,7 @@ Module.register("MMM-Webuntis", {
       }
     } // end for students
 
-    wrapper.appendChild(table);
+    if (tableHasRows) wrapper.appendChild(table);
     return wrapper;
   },
 
