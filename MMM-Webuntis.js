@@ -104,6 +104,11 @@ Module.register("MMM-Webuntis", {
     return el;
   },
 
+  /* Small helper to safely count arrays (returns 0 for non-arrays) */
+  _countArray(arr) {
+    return Array.isArray(arr) ? arr.length : 0;
+  },
+
   /* Lightweight logging helper with levels: info, debug, warn */
   _log(level, ...args) {
     try {
@@ -637,10 +642,7 @@ Module.register("MMM-Webuntis", {
     this.configByStudent = [];
     this.todayLessonsByStudent = [];
     this.timeUnitsByStudent = [];
-    // start centralized now-line updater (single timer for the module)
-    // Simpler approach: start a short initial interval, then switch to
-    // a steady longer interval via a timeout. Behavior preserved: first
-    // updates every 5s, then after the first tick switch to 30s.
+    // first updates every 5s, then after the first tick switch to 30s.
     if (!this._nowLineTimer) {
       try {
         const initialIntervalMs = 5 * 1000; // first runs every 5s
@@ -1007,16 +1009,11 @@ Module.register("MMM-Webuntis", {
         this.homeworksByStudent[payload.title] = payload.homeworks;
       }
 
-      const cLessons = Array.isArray(payload.lessons)
-        ? payload.lessons.length
-        : 0;
-      const cExams = Array.isArray(payload.exams) ? payload.exams.length : 0;
-      const cTimeUnits = Array.isArray(payload.timeUnits)
-        ? payload.timeUnits.length
-        : 0;
-      const cHomeworks = Array.isArray(payload.homeworks)
-        ? payload.homeworks.length
-        : 0;
+      // counts for arrays in payload using helper
+      const cLessons = this._countArray(payload.lessons);
+      const cExams = this._countArray(payload.exams);
+      const cTimeUnits = this._countArray(payload.timeUnits);
+      const cHomeworks = this._countArray(payload.homeworks);
       this._log(
         "debug",
         `data received for ${payload.title}: lessons=${cLessons}, exams=${cExams}, timeUnits=${cTimeUnits}, homeworks=${cHomeworks}`,
