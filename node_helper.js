@@ -6,24 +6,7 @@ const { URL } = require("url");
 const Authenticator = require("otplib").authenticator;
 const Log = require("logger");
 
-// Note: caching removed - always fetch current data from WebUntis to
-// ensure the frontend shows up-to-date information.
-
-// small helper: convert HHMM (number|string) or H:MM to minutes since midnight
-const toMinutes = (t) => {
-  if (t === null || t === undefined) return NaN;
-  const s = String(t).trim();
-  if (s.includes(":")) {
-    const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
-    const hh = parseInt(parts[0], 10) || 0;
-    const mm = parseInt(parts[1] || "0", 10) || 0;
-    return hh * 60 + mm;
-  }
-  const digits = s.replace(/\D/g, "").padStart(4, "0");
-  const hh = parseInt(digits.slice(0, 2), 10) || 0;
-  const mm = parseInt(digits.slice(2), 10) || 0;
-  return hh * 60 + mm;
-};
+// Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
@@ -67,19 +50,7 @@ module.exports = NodeHelper.create({
     return err && err.message ? err.message : String(err);
   },
 
-  // Normalize different homework API results to an array
-  _normalizeHomeworks(hwResult) {
-    if (Array.isArray(hwResult)) return hwResult;
-    if (hwResult && Array.isArray(hwResult.homeworks))
-      return hwResult.homeworks;
-    if (hwResult && Array.isArray(hwResult.homework)) return hwResult.homework;
-    return [];
-  },
-
-  // expose toMinutes for testing and reuse
-  _toMinutes(t) {
-    return toMinutes(t);
-  },
+  // Backend performs API calls only; no data normalization here.
 
   /**
    * Process a credential group: login, fetch data for students and logout.
@@ -182,7 +153,7 @@ module.exports = NodeHelper.create({
    */
   async socketNotificationReceived(notification, payload) {
     if (notification === "FETCH_DATA") {
-      // Assign incoming payload to config (payload may contain legacy keys)
+      // Assign incoming payload to module config
       this.config = payload;
       this._mmLog(
         "info",
@@ -276,11 +247,10 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Return the timegrid for the given credential. Caching has been removed
-   * to always provide fresh data from WebUntis.
+   * Return the timegrid for the given credential. Always fetch fresh data from WebUntis.
    *
    * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (unused but kept for API compatibility)
+   * @param {string} credKey - Credential key (currently unused)
    * @returns {Promise<Array>} timegrid array
    */
   async _getTimegrid(untis, credKey) {
@@ -300,10 +270,10 @@ module.exports = NodeHelper.create({
 
   /**
    * Return the week's timetable for the given credential and week start.
-   * Caching removed: always fetch fresh data from WebUntis.
+   * Always fetch fresh data from WebUntis.
    *
    * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (unused but kept for compatibility)
+   * @param {string} credKey - Credential key (currently unused)
    * @param {Date} rangeStart - Week start date
    * @returns {Promise<Array>} week timetable
    */
@@ -335,15 +305,7 @@ module.exports = NodeHelper.create({
     const logger = (msg) => {
       this._mmLog("debug", student, msg);
     };
-
-    // use shared toMinutes helper (defined at module top)
-
-    let lessons = [];
-    let exams = [];
-    let homeworks = [];
-    const startTimes = [];
-    const timeUnits = [];
-    let todayLessons = [];
+    // Backend fetches raw data from Untis API. No transformation here.
 
     var rangeStart = new Date(Date.now());
     var rangeEnd = new Date(Date.now());
@@ -355,24 +317,10 @@ module.exports = NodeHelper.create({
         parseInt(student.daysToShow),
     );
 
-    // Get Timegrid (for mapping start/end times) - cached per credential
+    // Get Timegrid (raw) - cached per credential by WebUntis itself
     let grid = [];
     try {
       grid = await this._getTimegrid(untis, credKey);
-      if (grid && grid[0] && grid[0].timeUnits) {
-        grid[0].timeUnits.forEach((element) => {
-          startTimes[element.startTime] = element.name;
-          const startMin = toMinutes(element.startTime);
-          const endMin = element.endTime ? toMinutes(element.endTime) : null;
-          timeUnits.push({
-            startTime: element.startTime,
-            endTime: element.endTime,
-            startMin,
-            endMin,
-            name: element.name,
-          });
-        });
-      }
     } catch (error) {
       this._mmLog(
         "error",
@@ -381,13 +329,14 @@ module.exports = NodeHelper.create({
       );
     }
 
+    // Prepare raw timetable containers
+    let timetable = [];
+    let weekTimetable = [];
+
     if (student.daysToShow > 0) {
       try {
-        let timetable;
-
-        // Additionally fetch the week's timetable to get full WebAPI timetable entries
-        // This helps to obtain stable lesson IDs (WebAPITimetable) to link homeworks
-        let weekTimetable = await this._getWeekTimetable(
+        // Additionally fetch the week's timetable (raw)
+        weekTimetable = await this._getWeekTimetable(
           untis,
           credKey,
           rangeStart,
@@ -411,35 +360,6 @@ module.exports = NodeHelper.create({
           timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
           logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
         }
-        // Convert timetable entries to lesson objects and try to enrich them with lessonId.
-        // Keep processed lessons for backward compatibility, but also include raw data so the
-        // frontend can rely on raw data if desired.
-        lessons = this.timetableToLessons(startTimes, timetable, weekTimetable);
-
-        // Filter lessons for today
-        const today = new Date();
-        const todayStr =
-          today.getFullYear().toString() +
-          ("0" + (today.getMonth() + 1)).slice(-2) +
-          ("0" + today.getDate()).slice(-2);
-        todayLessons = timetable
-          .filter((l) => l.date.toString() === todayStr)
-          .map((l) => ({
-            subject: l.su?.[0]?.longname || "N/A",
-            subjectShort: l.su?.[0]?.name || "N/A",
-            teacher: l.te?.[0]?.longname || "N/A",
-            teacherInitial: l.te?.[0]?.name || "N/A",
-            startTime: l.startTime,
-            endTime: l.endTime,
-            startMin: toMinutes(l.startTime),
-            endMin: l.endTime ? toMinutes(l.endTime) : null,
-            code: l.code || "",
-            text: l.lstext || "",
-            substText: l.substText || "",
-            lessonNumber: startTimes[l.startTime],
-            // try to capture lesson id from common fields (depends on WebUntis wrapper version)
-            lessonId: l.id ?? l.lid ?? l.lessonId ?? null,
-          }));
       } catch (error) {
         this._mmLog(
           "error",
@@ -449,6 +369,8 @@ module.exports = NodeHelper.create({
       }
     }
 
+    // Exams (raw)
+    let rawExams = [];
     if (student.examsDaysAhead > 0) {
       // Validate the number of days
       if (
@@ -464,10 +386,7 @@ module.exports = NodeHelper.create({
       rangeEnd.setDate(rangeStart.getDate() + student.examsDaysAhead);
 
       try {
-        const rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
-        exams = this.examsToFlat(rawExams);
-        // keep rawExams as well for frontend processing if desired
-        exams = exams || [];
+        rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
         this._lastRawExams = rawExams;
       } catch (error) {
         this._mmLog(
@@ -478,12 +397,12 @@ module.exports = NodeHelper.create({
       }
     }
 
-    // Load homework for the period (from today until rangeEnd + 7 days)
+    // Load homework for the period (from today until rangeEnd + 7 days) – keep raw
+    let hwResult = null;
     try {
       let hwRangeEnd = new Date(rangeEnd);
       hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
       // Try a sequence of candidate homework API calls (first that succeeds wins)
-      let hwResult = null;
       try {
         const candidates = [
           () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
@@ -509,25 +428,16 @@ module.exports = NodeHelper.create({
         );
         hwResult = null;
       }
-
-      // Normalize homework result to an array
-      if (Array.isArray(hwResult)) {
-        homeworks = hwResult;
-      } else if (hwResult && Array.isArray(hwResult.homeworks)) {
-        homeworks = hwResult.homeworks;
-      } else if (
-        hwResult &&
-        Array.isArray(hwResult.homeworks || hwResult.homework)
-      ) {
-        homeworks = hwResult.homeworks || hwResult.homework;
-      } else {
-        homeworks = [];
-        logger(
-          `[MMM-Webuntis] Unexpected homework result for ${student.title}: ${JSON.stringify(hwResult).slice(0, 200)}`,
-        );
-      }
+      // Send raw homework payload to the frontend without normalization
+      const hwCount = Array.isArray(hwResult)
+        ? hwResult.length
+        : Array.isArray(hwResult?.homeworks)
+          ? hwResult.homeworks.length
+          : Array.isArray(hwResult?.homework)
+            ? hwResult.homework.length
+            : 0;
       logger(
-        `[MMM-Webuntis] Loaded ${homeworks.length} homeworks for ${student.title}`,
+        `[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`,
       );
     } catch (error) {
       this._mmLog(
@@ -537,163 +447,16 @@ module.exports = NodeHelper.create({
       );
     }
 
-    // Before sending data, perform a quick debug validation: ensure lessons/timeUnits have numeric minutes
-    if (student.logLevel) {
-      const missingLessonMinutes = lessons.filter(
-        (l) =>
-          l.startMin === undefined ||
-          l.startMin === null ||
-          l.endMin === undefined ||
-          l.endMin === null,
-      ).length;
-      const missingTimeUnits = timeUnits.filter(
-        (tu) => tu.startMin === undefined || tu.startMin === null,
-      ).length;
-      logger(
-        `Debug validation for ${student.title}: lessons without minutes=${missingLessonMinutes}, timeUnits without minutes=${missingTimeUnits}`,
-      );
-    }
-
-    // Send processed data for backward compatibility, and include raw API responses
+    // Send raw API responses only; frontend will handle all transformations
     this.sendSocketNotification("GOT_DATA", {
       title: student.title,
       config: student,
-      lessons,
-      exams,
       id: identifier,
-      todayLessons,
-      timeUnits,
-      homeworks,
-      // raw data to allow the frontend to do heavy processing if desired
-      //_raw: {
-      //  timetable: typeof timetable !== 'undefined' ? timetable : null,
-      //  weekTimetable: typeof weekTimetable !== 'undefined' ? weekTimetable : null,
-      //  timegrid: grid || null
-      //}
+      timegrid: grid || [],
+      timetableRange: timetable || [],
+      weekTimetable: weekTimetable || [],
+      exams: rawExams || [],
+      homeworks: hwResult || null,
     });
-  },
-
-  /**
-   * Convert raw timetable entries into a lightweight lesson object used by the
-   * frontend. Also attempt to preserve stable lesson IDs when available.
-   *
-   * @param {Object} startTimes - map of startTime -> lesson number/name
-   * @param {Array} timetable - raw timetable entries from WebUntis
-   * @param {Array} weekTimetable - optional week timetable used to enrich IDs
-   * @returns {Array} normalized lesson objects
-   */
-  timetableToLessons(startTimes, timetable, weekTimetable = []) {
-    // use shared toMinutes helper (defined at module top)
-    const lessons = [];
-
-    // Build a quick map from date+startTime to weekTimetable entry to get stable IDs when possible
-    const weekMap = new Map();
-    if (Array.isArray(weekTimetable)) {
-      weekTimetable.forEach((we) => {
-        try {
-          const key = `${we.date}-${we.startTime}`;
-          weekMap.set(key, we);
-        } catch (err) {
-          this._mmLog(
-            "error",
-            null,
-            `timetableToLessons weekMap error: ${err && err.message ? err.message : err}`,
-          );
-        }
-      });
-    }
-
-    timetable.forEach((element) => {
-      const key = `${element.date}-${element.startTime}`;
-      const weekEntry = weekMap.get(key);
-
-      const lesson = {
-        year: element.date.toString().substring(0, 4),
-        month: element.date.toString().substring(4, 6),
-        day: element.date.toString().substring(6, 8),
-        hour: element.startTime.toString().padStart(4, "0").substring(0, 2),
-        minutes: element.startTime.toString().padStart(4, "0").substring(2),
-        startTime: element.startTime.toString().padStart(4, "0"),
-        endTime: element.endTime
-          ? element.endTime.toString().padStart(4, "0")
-          : null,
-        startMin: toMinutes(element.startTime),
-        endMin: element.endTime ? toMinutes(element.endTime) : null,
-        endTimeRaw: element.endTime ?? null,
-        teacher: element.te?.[0]?.longname || "N/A",
-        teacherInitial: element.te?.[0]?.name || "N/A",
-        subject: element.su?.[0]?.longname || "N/A",
-        subjectShort: element.su?.[0]?.name || "N/A",
-        code: element.code || "",
-        text: element.lstext || "",
-        substText: element.substText || "",
-        lessonNumber: startTimes[element.startTime],
-        // prefer lesson id from weekTimetable when available, otherwise try common fields
-        lessonId:
-          weekEntry?.id ??
-          weekEntry?.lessonId ??
-          element.id ??
-          element.lid ??
-          element.lessonId ??
-          null,
-      };
-
-      // Set code to "info" if there is an "substText" from WebUntis to display it if configuration "showRegularLessons" is set to false
-      if (lesson.substText !== "" && lesson.code === "") {
-        lesson.code = "info";
-      }
-
-      // Create sort string
-      lesson.sortString =
-        lesson.year + lesson.month + lesson.day + lesson.hour + lesson.minutes;
-      switch (lesson.code) {
-        case "cancelled":
-          lesson.sortString += "1";
-          break;
-        case "irregular":
-          lesson.sortString += "2";
-          break;
-        case "info":
-          lesson.sortString += "3";
-          break;
-        default:
-          lesson.sortString += "9";
-      }
-
-      lessons.push(lesson);
-    });
-    return lessons;
-  },
-
-  /**
-   * Flatten raw exam objects into a simple format suitable for rendering.
-   *
-   * @param {Array} exams - raw exam objects returned by WebUntis
-   * @returns {Array} flattened exam objects
-   */
-  examsToFlat(exams) {
-    const ret_exams = [];
-
-    exams.forEach((element) => {
-      const exam = {
-        year: element.examDate.toString().substring(0, 4),
-        month: element.examDate.toString().substring(4, 6),
-        day: element.examDate.toString().substring(6, 8),
-        hour: element.startTime.toString().padStart(4, "0").substring(0, 2),
-        minutes: element.startTime.toString().padStart(4, "0").substring(2),
-        startTime: element.startTime.toString().padStart(4, "0"),
-        teacher: element.teachers[0] || "N/A",
-        subject: element.subject || "N/A",
-        name: element.name || "",
-        text: element.text || "",
-        sortString: "",
-      };
-
-      // Create sort string
-      exam.sortString = exam.year + exam.month + exam.day;
-
-      ret_exams.push(exam);
-    });
-    return ret_exams;
   },
 });
