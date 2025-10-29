@@ -16,7 +16,7 @@ Module.register('MMM-Webuntis', {
     mode: 'verbose', // 'verbose' or 'compact' mode
     mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
     pastDaysToShow: 0, // number of past days to include (show previous days)
-    displayMode: 'grid', // 'list' (default) or 'grid'
+    displayMode: 'list', // 'list' (default) or 'grid'
     logLevel: 'none', // enable debug logging ('debug' or 'none')
     students: [
       {
@@ -114,6 +114,101 @@ Module.register('MMM-Webuntis', {
       console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
       // swallow logging errors
     }
+  },
+
+  /* Map legacy 0.1.0-style config keys to current keys (returns a normalized copy)
+    Important: MagicMirror merges defaults before start(), so new keys already exist.
+    Current strategy: If a legacy key is present in the user's config, the legacy
+    value is applied and will override the corresponding new key (legacy values win).
+    A list of detected legacy keys is collected and a red console warning is emitted
+    so users can update their `config.js`. The mapper operates on both top-level
+    config and per-student objects. */
+  _normalizeLegacyConfig(cfg, defaultsRef) {
+    if (!cfg || typeof cfg !== 'object') return cfg;
+    const out = { ...cfg };
+    const def = defaultsRef && typeof defaultsRef === 'object' ? defaultsRef : this?.defaults || {};
+
+    const legacyUsed = [];
+    const mapLegacy = (obj, defLocal, legacyKey, newKey, transform, context = 'config') => {
+      if (!obj || typeof obj !== 'object') return;
+      const hasLegacy = obj[legacyKey] !== undefined && obj[legacyKey] !== null && obj[legacyKey] !== '';
+      if (!hasLegacy) return;
+      // record usage for a warning later
+      legacyUsed.push(`${context}.${legacyKey}`);
+      const legacyVal = typeof transform === 'function' ? transform(obj[legacyKey]) : obj[legacyKey];
+      // Unconditionally apply legacy value so legacy keys "win"
+      obj[newKey] = legacyVal;
+    };
+
+    // ----- Top-level mappings -----
+    mapLegacy(out, def, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
+    mapLegacy(out, def, 'days', 'daysToShow', (v) => Number(v), 'config');
+    mapLegacy(out, def, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
+    mapLegacy(out, def, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
+
+    // Logging: simple map debug/enableDebug -> logLevel when legacy key present
+    const dbg = out.debug ?? out.enableDebug;
+    if (typeof dbg === 'boolean') {
+      legacyUsed.push('config.debug|enableDebug');
+      out.logLevel = dbg ? 'debug' : 'none';
+    }
+
+    // displayMode casing and legacy alias: map unconditionally when legacy provided
+    if (out.displaymode !== undefined && out.displaymode !== null && out.displaymode !== '') {
+      legacyUsed.push('config.displaymode');
+      out.displayMode = String(out.displaymode).toLowerCase();
+    }
+    if (typeof out.displayMode === 'string') out.displayMode = out.displayMode.toLowerCase();
+
+    // ----- Per-student overrides -----
+    if (Array.isArray(out.students)) {
+      // per-student default baseline inherits from top-level (so student defaults == module-level after normalization)
+      const defForStudent = { ...def, ...out };
+      for (let i = 0; i < out.students.length; i++) {
+        const s = out.students[i];
+        if (!s || typeof s !== 'object') continue;
+        const ns = { ...s };
+        const ctx = `students[${i}]`;
+        mapLegacy(ns, defForStudent, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), ctx);
+        mapLegacy(ns, defForStudent, 'days', 'daysToShow', (v) => Number(v), ctx);
+        mapLegacy(ns, defForStudent, 'examsDays', 'examsDaysAhead', (v) => Number(v), ctx);
+        mapLegacy(ns, defForStudent, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), ctx);
+
+        // logLevel from per-student debug/enableDebug (legacy wins)
+        const sdbg = ns.debug ?? ns.enableDebug;
+        if (typeof sdbg === 'boolean') {
+          ns.logLevel = sdbg ? 'debug' : 'none';
+          legacyUsed.push(`${ctx}.debug|enableDebug`);
+        }
+
+        // displayMode per-student (legacy wins)
+        if (ns.displaymode !== undefined && ns.displaymode !== null && ns.displaymode !== '') {
+          ns.displayMode = String(ns.displaymode).toLowerCase();
+          legacyUsed.push(`${ctx}.displaymode`);
+        }
+        if (typeof ns.displayMode === 'string') ns.displayMode = ns.displayMode.toLowerCase();
+        out.students[i] = ns;
+      }
+    }
+
+    // If any legacy keys were used, warn in the browser console (red) so users notice during startup
+    if (Array.isArray(legacyUsed) && legacyUsed.length > 0) {
+      try {
+        const uniq = Array.from(new Set(legacyUsed));
+        const msg = `Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
+        // styled warning (red, bold) in browser console
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('%c[MMM-Webuntis] ' + msg, 'color: #c00; font-weight: bold');
+        } else if (typeof console !== 'undefined' && typeof console.log === 'function') {
+          console.log('[MMM-Webuntis] ' + msg);
+        }
+      } catch {
+        // ignore console failures
+      }
+    }
+
+    this._log('debug', 'Normalized legacy config keys (post-merge)', out);
+    return out;
   },
 
   // ===== Frontend data processing helpers =====
@@ -567,12 +662,16 @@ Module.register('MMM-Webuntis', {
 
     if (!(studentConfig && studentConfig.daysToShow > 0)) return 0;
 
+    // current local date/time as comparable numbers (YYYYMMDD and HHMM)
+    const now = new Date();
+    const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    const nowHm = now.getHours() * 100 + now.getMinutes();
+
     // sort raw timetable entries by date and startTime
     const lessonsSorted = (Array.isArray(timetable) ? timetable : []).slice().sort((a, b) => {
-      const da = String(a.date);
-      const db = String(b.date);
-      if (da !== db) return da.localeCompare(db);
-      return (a.startTime || 0) - (b.startTime || 0);
+      const da = Number(a.date) || 0;
+      const db = Number(b.date) || 0;
+      return da - db || (Number(a.startTime) || 0) - (Number(b.startTime) || 0);
     });
 
     for (let i = 0; i < lessonsSorted.length; i++) {
@@ -581,27 +680,28 @@ Module.register('MMM-Webuntis', {
       const year = parseInt(dateStr.substring(0, 4), 10);
       const month = parseInt(dateStr.substring(4, 6), 10);
       const day = parseInt(dateStr.substring(6, 8), 10);
-      const st = String(entry.startTime || '').padStart(4, '0');
-      const hour = parseInt(st.substring(0, 2) || '0', 10);
-      const minutes = parseInt(st.substring(2) || '0', 10);
-      const time = new Date(year, month - 1, day, hour, minutes);
+      const stNum = Number(entry.startTime) || 0;
+      const stHour = Math.floor(stNum / 100);
+      const stMin = stNum % 100;
+      // Date object only for weekday label
+      const timeForDay = new Date(year, month - 1, day);
 
       // Skip if nothing special or past lessons (unless in debug mode)
+      const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
       if (
         (!studentConfig.showRegularLessons && (entry.code || '') === '') ||
-        (time < new Date() && (entry.code || '') !== 'error' && this.config.logLevel !== 'debug')
+        (isPast && (entry.code || '') !== 'error' && this.config.logLevel !== 'debug')
       ) {
         continue;
       }
 
       addedRows++;
 
-      let timeStr = `${time.toLocaleDateString(this.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
+      let timeStr = `${timeForDay.toLocaleDateString(this.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
       if (studentConfig.showStartTime || startTimesMap[entry.startTime] === undefined) {
-        timeStr += time.toLocaleTimeString(this.config.language, {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+        const hh = String(stHour).padStart(2, '0');
+        const mm = String(stMin).padStart(2, '0');
+        timeStr += `${hh}:${mm}`;
       } else {
         timeStr += `${startTimesMap[entry.startTime]}.`;
       }
@@ -649,33 +749,28 @@ Module.register('MMM-Webuntis', {
   _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
     let addedRows = 0;
     if (!Array.isArray(exams)) return 0;
+    // current local date/time as comparable numbers (YYYYMMDD and HHMM)
+    const now = new Date();
+    const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    const nowHm = now.getHours() * 100 + now.getMinutes();
 
-    // sort exams by examDate then startTime (raw Untis format)
-    exams.sort((a, b) => {
-      const da = String(a.examDate);
-      const db = String(b.examDate);
-      if (da !== db) return da.localeCompare(db);
-      return (a.startTime || 0) - (b.startTime || 0);
-    });
+    // sort exams by examDate then startTime (numeric)
+    exams.sort((a, b) => (Number(a.examDate) || 0) - (Number(b.examDate) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
 
     for (let i = 0; i < exams.length; i++) {
       const exam = exams[i];
-      const dstr = String(exam.examDate || '');
-      const y = parseInt(dstr.substring(0, 4) || '0', 10);
-      const m = parseInt(dstr.substring(4, 6) || '1', 10);
-      const d = parseInt(dstr.substring(6, 8) || '1', 10);
-      const sstr = String(exam.startTime || '').padStart(4, '0');
-      const hh = parseInt(sstr.substring(0, 2) || '0', 10);
-      const mm = parseInt(sstr.substring(2) || '0', 10);
-      const time = new Date(y, m - 1, d, hh, mm);
-
+      const examYmd = Number(exam.examDate) || 0;
+      const examHm = Number(exam.startTime) || 0;
       // Skip if exam has started (unless in debug mode)
-      if (time < new Date() && this.config.logLevel !== 'debug') continue;
+      const examInPast = examYmd < nowYmd || (examYmd === nowYmd && examHm < nowHm);
+      if (examInPast && this.config.logLevel !== 'debug') continue;
 
       addedRows++;
 
-      // date and time
-      const dateTimeCell = `${time.toLocaleDateString('de-DE', { month: 'numeric', day: 'numeric' }).toUpperCase()}&nbsp;`;
+      // date (day.month.)
+      const day = examYmd % 100;
+      const month = Math.floor(examYmd / 100) % 100;
+      const dateTimeCell = `${day}.${month}.&nbsp;`;
 
       // subject of exam
       let nameCell = exam.name;
@@ -705,13 +800,15 @@ Module.register('MMM-Webuntis', {
   },
 
   start() {
+    // Normalize legacy configuration before using it anywhere
+    this.config = this._normalizeLegacyConfig(this.config, this.defaults);
     this.timetableByStudent = [];
     this.examsByStudent = [];
     this.configByStudent = [];
     this.timeUnitsByStudent = [];
     this.periodNamesByStudent = [];
     // first updates every 5s, then after the first tick switch to 30s.
-    if (!this._nowLineTimer) {
+    if (this.config.displayMode === 'grid' && !this._nowLineTimer) {
       try {
         const initialIntervalMs = 5 * 1000; // first runs every 5s
         const laterIntervalMs = 30 * 1000; // then switch to every 30s
@@ -824,12 +921,12 @@ Module.register('MMM-Webuntis', {
       if (this.config.displayMode === 'list') {
         const listCount = this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
         if (listCount > 0) tableHasRows = true;
-      }
 
-      // Exams rendering (optional): render only when enabled; do not skip grid when absent
-      if (this.config.displayMode === 'list' && Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
-        const examCount = this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
-        if (examCount > 0) tableHasRows = true;
+        // Exams rendering (optional): render only when enabled; do not skip grid when absent
+        if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
+          const examCount = this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
+          if (examCount > 0) tableHasRows = true;
+        }
       }
 
       // --- Multi-day timetable grid display ---
@@ -849,6 +946,8 @@ Module.register('MMM-Webuntis', {
   notificationReceived(notification) {
     switch (notification) {
       case 'DOM_OBJECTS_CREATED':
+        // Ensure config is normalized before scheduling fetches
+        //this.config = this._normalizeLegacyConfig(this.config, this.defaults);
         this._fetchTimer = setInterval(() => {
           this.sendSocketNotification('FETCH_DATA', this.config);
         }, this.config.fetchIntervalMs);

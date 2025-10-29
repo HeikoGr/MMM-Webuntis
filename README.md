@@ -4,18 +4,37 @@ A MagicMirror² module that shows cancelled, irregular or substituted lessons fr
 
 ## BREAKING CHANGES in 0.3.0
 
-Please update your config. This release changes the architecture and several option names.
+This release consolidates several configuration keys and changes how the module handles config compatibility.
 
-- Config keys were consolidated. Use these names going forward (no automatic mapping):
-  - `fetchIntervalMs` (was `fetchInterval`)
-  - `daysToShow` (was `days`)
-  - `mergeGapMinutes` (was `mergeGapMin`)
-  - `logLevel` (replaces any former `enableDebug`/`debug` flags; set to `"debug"` to enable verbose logging)
+Important notes:
+
+- The module contains a compatibility mapper that automatically translates several deprecated keys from older configs to the new key names during startup. By design, when a deprecated key is present its value will now take precedence — legacy values "win" and overwrite the new key. This makes upgrades safer for users who still have old keys in place, but you should still update your `config.js` to the canonical names.
+
+Mapper behavior and warnings:
+
+- When deprecated keys are detected the frontend emits a conspicuous browser console warning (styled in red) that lists the detected legacy keys and their location (e.g. `students[0].days`). This helps you find and update old keys during MagicMirror startup.
+- Additionally, the backend will log an informational message for fetch operations; however, the compatibility mapping and the red console warning are produced in the frontend module so you can see them in the browser devtools when MagicMirror starts.
+
+Common legacy → new mappings (applied automatically if present):
+
+- `fetchInterval` → `fetchIntervalMs`
+- `days` → `daysToShow`
+- `examsDays` → `examsDaysAhead`
+- `mergeGapMin` → `mergeGapMinutes`
+- legacy `debug` / `enableDebug` (boolean) → `logLevel: 'debug'` or `'none'`
+- `displaymode` → `displayMode` (normalized to lowercase)
+
+Quick tip: find deprecated keys in your `config.js` with this command (run from your MagicMirror folder):
+
+```bash
+grep -n "fetchInterval\|days\|mergeGapMin\|displaymode\|enableDebug\|debug" config/config.js || true
+```
 
 Upgrade notes:
 
-1. Rename any old keys in your config to the new names above.
-2. Restart MagicMirror after updating.
+1. The mapper will translate legacy keys automatically at startup, but it's recommended to update your `config.js` to the new key names listed above.
+2. Use the red console warning and the quick grep above to find legacy keys and replace them.
+3. Restart MagicMirror after editing `config.js` to ensure the new keys are used consistently.
 
 ## Installation
 
@@ -67,7 +86,7 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
 },
 ```
 
-Note: Only the option names listed here are supported. Older aliases (e.g. `fetchInterval`, `days`, `mergeGapMin`) are no longer recognized.
+Note: The option names listed here are the canonical names. A small compatibility mapper exists (see "BREAKING CHANGES" above) that will translate commonly-used legacy aliases during startup and print a console warning; however, you should still rename keys in your `config.js` to the canonical names for clarity and future compatibility.
 
 ## Configuration options
 
