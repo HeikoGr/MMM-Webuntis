@@ -1,10 +1,10 @@
 // Import required modules
-const NodeHelper = require("node_helper");
-const { WebUntis } = require("webuntis");
-const { WebUntisQR } = require("webuntis");
-const { URL } = require("url");
-const Authenticator = require("otplib").authenticator;
-const Log = require("logger");
+const NodeHelper = require('node_helper');
+const { WebUntis } = require('webuntis');
+const { WebUntisQR } = require('webuntis');
+const { URL } = require('url');
+const Authenticator = require('otplib').authenticator;
+const Log = require('logger');
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 
@@ -15,7 +15,7 @@ module.exports = NodeHelper.create({
    * Use this hook to perform startup initialization.
    */
   start() {
-    Log.info("[MMM-Webuntis] Node helper started");
+    Log.info('[MMM-Webuntis] Node helper started');
     // track inflight fetches per credential key to avoid duplicate parallel work
     this._inflightRequests = this._inflightRequests || new Map();
   },
@@ -26,27 +26,17 @@ module.exports = NodeHelper.create({
    */
   _createUntisClient(sample) {
     if (sample.qrcode) {
-      return new WebUntisQR(
-        sample.qrcode,
-        "custom-identity",
-        Authenticator,
-        URL,
-      );
+      return new WebUntisQR(sample.qrcode, 'custom-identity', Authenticator, URL);
     }
     if (sample.username) {
-      return new WebUntis(
-        sample.school,
-        sample.username,
-        sample.password,
-        sample.server,
-      );
+      return new WebUntis(sample.school, sample.username, sample.password, sample.server);
     }
-    throw new Error("No credentials provided");
+    throw new Error('No credentials provided');
   },
 
   // Format errors consistently for logs
   _formatErr(err) {
-    if (!err) return "(no error)";
+    if (!err) return '(no error)';
     return err && err.message ? err.message : String(err);
   },
 
@@ -65,7 +55,7 @@ module.exports = NodeHelper.create({
         try {
           untis = this._createUntisClient(sample);
         } catch {
-          this._mmLog("error", null, `No credentials for group ${credKey}`);
+          this._mmLog('error', null, `No credentials for group ${credKey}`);
           break;
         }
 
@@ -74,28 +64,16 @@ module.exports = NodeHelper.create({
           try {
             await this.fetchData(untis, student, identifier, credKey);
           } catch (err) {
-            this._mmLog(
-              "error",
-              student,
-              `Error fetching data for ${student.title}: ${this._formatErr(err)}`,
-            );
+            this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
           }
         }
       } catch (error) {
-        this._mmLog(
-          "error",
-          null,
-          `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`,
-        );
+        this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
       } finally {
         try {
           if (untis) await untis.logout();
         } catch (e) {
-          this._mmLog(
-            "error",
-            null,
-            `Error during logout for group ${credKey}: ${this._formatErr(e)}`,
-          );
+          this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(e)}`);
         }
       }
 
@@ -121,13 +99,13 @@ module.exports = NodeHelper.create({
   _mmLog(level, student, message) {
     try {
       const prefix = `[MMM-Webuntis]`;
-      if (level === "info") {
+      if (level === 'info') {
         Log.info(`${prefix} ${message}`);
-      } else if (level === "error") {
+      } else if (level === 'error') {
         Log.error(`${prefix} ${message}`);
-      } else if (level === "debug") {
-        if (this.config && this.config.logLevel === "debug") {
-          if (typeof Log.debug === "function") {
+      } else if (level === 'debug') {
+        if (this.config && this.config.logLevel === 'debug') {
+          if (typeof Log.debug === 'function') {
             Log.debug(`${prefix} ${message}`);
           } else {
             Log.info(`${prefix} [DEBUG] ${message}`);
@@ -137,9 +115,7 @@ module.exports = NodeHelper.create({
         Log.info(`${prefix} ${message}`);
       }
     } catch (e) {
-      Log.error(
-        `[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`,
-      );
+      Log.error(`[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`);
       // swallow
     }
   },
@@ -152,14 +128,10 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
-    if (notification === "FETCH_DATA") {
+    if (notification === 'FETCH_DATA') {
       // Assign incoming payload to module config
       this.config = payload;
-      this._mmLog(
-        "info",
-        null,
-        `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`,
-      );
+      this._mmLog('info', null, `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`);
 
       try {
         // Group students by credential so we can reuse the same untis session
@@ -167,31 +139,26 @@ module.exports = NodeHelper.create({
         const groups = new Map();
 
         const properties = [
-          "daysToShow",
-          "pastDaysToShow",
-          "showStartTime",
-          "useClassTimetable",
-          "showRegularLessons",
-          "showTeacherMode",
-          "useShortSubject",
-          "showSubstitutionText",
-          "examsDaysAhead",
-          "showExamSubject",
-          "showExamTeacher",
-          "logLevel",
+          'daysToShow',
+          'pastDaysToShow',
+          'showStartTime',
+          'useClassTimetable',
+          'showRegularLessons',
+          'showTeacherMode',
+          'useShortSubject',
+          'showSubstitutionText',
+          'examsDaysAhead',
+          'showExamSubject',
+          'showExamTeacher',
+          'logLevel',
         ];
 
         // normalize student configs and group
         for (const student of this.config.students) {
           properties.forEach((prop) => {
-            student[prop] =
-              student[prop] !== undefined ? student[prop] : this.config[prop];
+            student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
           });
-          if (
-            student.daysToShow < 0 ||
-            student.daysToShow > 10 ||
-            isNaN(student.daysToShow)
-          ) {
+          if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
             student.daysToShow = 1;
           }
 
@@ -209,11 +176,7 @@ module.exports = NodeHelper.create({
           const inflight = this._inflightRequests.get(credKey);
           if (inflight && inflight.running) {
             inflight.pending = true;
-            this._mmLog(
-              "info",
-              null,
-              `Fetch for ${credKey} already in progress - coalescing request`,
-            );
+            this._mmLog('info', null, `Fetch for ${credKey} already in progress - coalescing request`);
             continue;
           }
 
@@ -226,9 +189,9 @@ module.exports = NodeHelper.create({
           // Launch the named worker that will process the group and rerun if pending was set
           this.processGroup(credKey, students, identifier);
         }
-        this._mmLog("info", null, "Successfully fetched data");
+        this._mmLog('info', null, 'Successfully fetched data');
       } catch (error) {
-        this._mmLog("error", null, `Error loading Untis data: ${error}`);
+        this._mmLog('error', null, `Error loading Untis data: ${error}`);
       }
     }
   },
@@ -242,7 +205,7 @@ module.exports = NodeHelper.create({
    */
   _getCredentialKey(student) {
     if (student.qrcode) return `qrcode:${student.qrcode}`;
-    const server = student.server || "default";
+    const server = student.server || 'default';
     return `user:${student.username}@${server}/${student.school}`;
   },
 
@@ -259,11 +222,7 @@ module.exports = NodeHelper.create({
       return grid || [];
     } catch (err) {
       // return empty array on error
-      this._mmLog(
-        "error",
-        null,
-        `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`,
-      );
+      this._mmLog('error', null, `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`);
       return [];
     }
   },
@@ -282,11 +241,7 @@ module.exports = NodeHelper.create({
       const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
       return weekTimetable || [];
     } catch (err) {
-      this._mmLog(
-        "error",
-        null,
-        `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`,
-      );
+      this._mmLog('error', null, `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`);
       return [];
     }
   },
@@ -303,7 +258,7 @@ module.exports = NodeHelper.create({
    */
   async fetchData(untis, student, identifier, credKey) {
     const logger = (msg) => {
-      this._mmLog("debug", student, msg);
+      this._mmLog('debug', student, msg);
     };
     // Backend fetches raw data from Untis API. No transformation here.
 
@@ -311,22 +266,14 @@ module.exports = NodeHelper.create({
     var rangeEnd = new Date(Date.now());
 
     rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
-    rangeEnd.setDate(
-      rangeEnd.getDate() -
-        student.pastDaysToShow +
-        parseInt(student.daysToShow),
-    );
+    rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
 
     // Get Timegrid (raw) - cached per credential by WebUntis itself
     let grid = [];
     try {
       grid = await this._getTimegrid(untis, credKey);
     } catch (error) {
-      this._mmLog(
-        "error",
-        null,
-        `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`,
-      );
+      this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
     }
 
     // Prepare raw timetable containers
@@ -336,36 +283,19 @@ module.exports = NodeHelper.create({
     if (student.daysToShow > 0) {
       try {
         // Additionally fetch the week's timetable (raw)
-        weekTimetable = await this._getWeekTimetable(
-          untis,
-          credKey,
-          rangeStart,
-        );
+        weekTimetable = await this._getWeekTimetable(untis, credKey, rangeStart);
 
         if (student.useClassTimetable) {
-          logger(
-            `[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`,
-          );
-          timetable = await untis.getOwnClassTimetableForRange(
-            rangeStart,
-            rangeEnd,
-          );
-          logger(
-            `[MMM-Webuntis] ownClassTimetable received for ${student.title}`,
-          );
+          logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
+          timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
+          logger(`[MMM-Webuntis] ownClassTimetable received for ${student.title}`);
         } else {
-          logger(
-            `[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`,
-          );
+          logger(`[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`);
           timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
           logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
         }
       } catch (error) {
-        this._mmLog(
-          "error",
-          student,
-          `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
-        );
+        this._mmLog('error', student, `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
       }
     }
 
@@ -373,11 +303,7 @@ module.exports = NodeHelper.create({
     let rawExams = [];
     if (student.examsDaysAhead > 0) {
       // Validate the number of days
-      if (
-        student.examsDaysAhead < 1 ||
-        student.examsDaysAhead > 360 ||
-        isNaN(student.examsDaysAhead)
-      ) {
+      if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
         student.examsDaysAhead = 30;
       }
 
@@ -389,11 +315,7 @@ module.exports = NodeHelper.create({
         rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
         this._lastRawExams = rawExams;
       } catch (error) {
-        this._mmLog(
-          "error",
-          student,
-          `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
-        );
+        this._mmLog('error', student, `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
       }
     }
 
@@ -404,10 +326,7 @@ module.exports = NodeHelper.create({
       hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
       // Try a sequence of candidate homework API calls (first that succeeds wins)
       try {
-        const candidates = [
-          () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
-          () => untis.getHomeWorksFor(new Date(), hwRangeEnd),
-        ];
+        const candidates = [() => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd), () => untis.getHomeWorksFor(new Date(), hwRangeEnd)];
         let lastErr = null;
         for (const fn of candidates) {
           try {
@@ -418,14 +337,10 @@ module.exports = NodeHelper.create({
           }
         }
         if (hwResult === null) {
-          logger(
-            `[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`,
-          );
+          logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`);
         }
       } catch (error) {
-        logger(
-          `[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`,
-        );
+        logger(`[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`);
         hwResult = null;
       }
       // Send raw homework payload to the frontend without normalization
@@ -436,19 +351,13 @@ module.exports = NodeHelper.create({
           : Array.isArray(hwResult?.homework)
             ? hwResult.homework.length
             : 0;
-      logger(
-        `[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`,
-      );
+      logger(`[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`);
     } catch (error) {
-      this._mmLog(
-        "error",
-        student,
-        `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`,
-      );
+      this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
     }
 
     // Send raw API responses only; frontend will handle all transformations
-    this.sendSocketNotification("GOT_DATA", {
+    this.sendSocketNotification('GOT_DATA', {
       title: student.title,
       config: student,
       id: identifier,
