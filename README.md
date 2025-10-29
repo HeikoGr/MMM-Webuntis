@@ -4,18 +4,37 @@ A MagicMirror² module that shows cancelled, irregular or substituted lessons fr
 
 ## BREAKING CHANGES in 0.3.0
 
-Please update your config. This release changes the architecture and several option names.
+This release consolidates several configuration keys and changes how the module handles config compatibility.
 
-- Config keys were consolidated. Use these names going forward (no automatic mapping):
-  - `fetchIntervalMs` (was `fetchInterval`)
-  - `daysToShow` (was `days`)
-  - `mergeGapMinutes` (was `mergeGapMin`)
-  - `logLevel` (replaces any former `enableDebug`/`debug` flags; set to `"debug"` to enable verbose logging)
+Important notes:
+
+- The module contains a compatibility mapper that automatically translates several deprecated keys from older configs to the new key names during startup. By design, when a deprecated key is present its value will now take precedence — legacy values "win" and overwrite the new key. This makes upgrades safer for users who still have old keys in place, but you should still update your `config.js` to the canonical names.
+
+Mapper behavior and warnings:
+
+- When deprecated keys are detected the frontend emits a conspicuous browser console warning (styled in red) that lists the detected legacy keys and their location (e.g. `students[0].days`). This helps you find and update old keys during MagicMirror startup.
+- Additionally, the backend will log an informational message for fetch operations; however, the compatibility mapping and the red console warning are produced in the frontend module so you can see them in the browser devtools when MagicMirror starts.
+
+Common legacy → new mappings (applied automatically if present):
+
+- `fetchInterval` → `fetchIntervalMs`
+- `days` → `daysToShow`
+- `examsDays` → `examsDaysAhead`
+- `mergeGapMin` → `mergeGapMinutes`
+- legacy `debug` / `enableDebug` (boolean) → `logLevel: 'debug'` or `'none'`
+- `displaymode` → `displayMode` (normalized to lowercase)
+
+Quick tip: find deprecated keys in your `config.js` with this command (run from your MagicMirror folder):
+
+```bash
+grep -n "fetchInterval\|days\|mergeGapMin\|displaymode\|enableDebug\|debug" config/config.js || true
+```
 
 Upgrade notes:
 
-1. Rename any old keys in your config to the new names above.
-2. Restart MagicMirror after updating.
+1. The mapper will translate legacy keys automatically at startup, but it's recommended to update your `config.js` to the new key names listed above.
+2. Use the red console warning and the quick grep above to find legacy keys and replace them.
+3. Restart MagicMirror after editing `config.js` to ensure the new keys are used consistently.
 
 ## Installation
 
@@ -67,32 +86,32 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
 },
 ```
 
-Note: Only the option names listed here are supported. Older aliases (e.g. `fetchInterval`, `days`, `mergeGapMin`) are no longer recognized.
+Note: The option names listed here are the canonical names. A small compatibility mapper exists (see "BREAKING CHANGES" above) that will translate commonly-used legacy aliases during startup and print a console warning; however, you should still rename keys in your `config.js` to the canonical names for clarity and future compatibility.
 
 ## Configuration options
 
 The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
 
-| Option                 |   Type |          Default | Description                                                                                                          |
-| ---------------------- | -----: | ---------------: | -------------------------------------------------------------------------------------------------------------------- |
-| `students`             |  array |         required | Array of student credential objects (see below).                                                                     |
-| `header`               | string |             none | Optional title printed by MagicMirror for this module instance.                                                      |
-| `daysToShow`           |    int |              `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object.      |
-| `pastDaysToShow`       |    int |              `0` | How many past days to include in the grid (useful for debugging).                                                    |
-| `fetchIntervalMs`      |    int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes).                                                                 |
-| `mergeGapMinutes`      |    int |             `15` | Allowed gap in minutes between consecutive lessons to consider them mergeable. Lower = stricter merging.             |
-| `showStartTime`        |   bool |          `false` | When `true` show the lesson start time; when `false` show the lesson number (if available).                          |
-| `useClassTimetable`    |   bool |          `false` | Some schools only provide a class timetable; set `true` to request class timetable instead of the student timetable. |
-| `showRegularLessons`   |   bool |          `false` | Show regular lessons (not only substitutions/cancellations).                                                         |
-| `showTeacherMode`      | string |         `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`.                                                        |
-| `useShortSubject`      |   bool |          `false` | Use short subject names where available.                                                                             |
-| `showSubstitutionText` |   bool |          `false` | Show substitution text from WebUntis (if present).                                                                   |
-| `examsDaysAhead`       |    int |              `0` | How many days ahead to fetch exams. `0` disables exams.                                                              |
-| `showExamSubject`      |   bool |           `true` | Show subject for exams.                                                                                              |
-| `showExamTeacher`      |   bool |           `true` | Show teacher for exams.                                                                                              |
-| `mode`                 | string |      `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined).                                |
-| `displayMode`          | string |         `'grid'` | How to display lessons: `'list'` or `'grid'` (multi-day grid with exact positioning).                                |
-| `logLevel`             | string |         `'none'` | string to enable debugging: `'debug'`.                                                                               |
+| Option | Type | Default | Description |
+| --- | --: | --: | --- |
+| `students` | array | required | Array of student credential objects (see below). |
+| `header` | string | none | Optional title printed by MagicMirror for this module instance. |
+| `daysToShow` | int | `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object. |
+| `pastDaysToShow` | int | `0` | How many past days to include in the grid (useful for debugging). |
+| `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
+| `mergeGapMinutes` | int | `15` | Allowed gap in minutes between consecutive lessons to consider them mergeable. Lower = stricter merging. |
+| `showStartTime` | bool | `false` | When `true` show the lesson start time; when `false` show the lesson number (if available). |
+| `useClassTimetable` | bool | `false` | Some schools only provide a class timetable; set `true` to request class timetable instead of the student timetable. |
+| `showRegularLessons` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
+| `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`. |
+| `useShortSubject` | bool | `false` | Use short subject names where available. |
+| `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
+| `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
+| `showExamSubject` | bool | `true` | Show subject for exams. |
+| `showExamTeacher` | bool | `true` | Show teacher for exams. |
+| `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
+| `displayMode` | string | `'grid'` | How to display lessons: `'list'` or `'grid'` (multi-day grid with exact positioning). |
+| `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
 ### Student credential object
 
@@ -140,11 +159,11 @@ Example student entry:
 
 displayMode: "list", mode: "verbose":
 
-![Screenshot](screenshot-list.png "Screenshot verbose mode")
+![Screenshot](screenshot-list.png 'Screenshot verbose mode')
 
 displayMode: "grid":
 
-![Screenshot](screenshot-grid.png "Screenshot verbose mode")
+![Screenshot](screenshot-grid.png 'Screenshot verbose mode')
 
 ## Attribution
 
