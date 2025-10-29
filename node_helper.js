@@ -6,6 +6,11 @@ const { URL } = require('url');
 const Authenticator = require('otplib').authenticator;
 const Log = require('logger');
 
+// Default cache TTL for per-request responses (ms). Small to favor freshness.
+const DEFAULT_CACHE_TTL_MS = 30 * 1000;
+// Default interval for periodic cache cleanup (ms)
+const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 30 * 1000;
+
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 
 // Create a NodeHelper module
@@ -16,8 +21,15 @@ module.exports = NodeHelper.create({
    */
   start() {
     Log.info('[MMM-Webuntis] Node helper started');
-    // track inflight fetches per credential key to avoid duplicate parallel work
-    this._inflightRequests = this._inflightRequests || new Map();
+    // node helper ready
+    // initialize a tiny in-memory response cache
+    this._responseCache = new Map(); // signature -> { ts, payload }
+    this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
+    // cache cleanup timer id
+    this._cacheCleanupTimer = null;
+    this._cacheCleanupIntervalMs = DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
+    // start periodic cache cleanup
+    this._startCacheCleanup();
   },
 
   /*
@@ -42,49 +54,161 @@ module.exports = NodeHelper.create({
 
   // Backend performs API calls only; no data normalization here.
 
+  /*
+   * Small in-memory cache helpers keyed by a request signature (stringified
+   * object describing credential + request options). Each entry stores a
+   * payload and a timestamp and expires after `_cacheTTLMs` milliseconds.
+   */
+  _makeRequestSignature(student) {
+    try {
+      const credKey = this._getCredentialKey(student);
+      // include the most relevant options that affect the backend fetch
+      const sig = {
+        credKey,
+        daysToShow: Number(student.daysToShow || 0),
+        pastDaysToShow: Number(student.pastDaysToShow || 0),
+        useClassTimetable: Boolean(student.useClassTimetable),
+        examsDaysAhead: Number(student.examsDaysAhead || 0),
+        showStartTime: Boolean(student.showStartTime),
+        showTeacherMode: student.showTeacherMode || null,
+        useShortSubject: Boolean(student.useShortSubject),
+        showSubstitutionText: Boolean(student.showSubstitutionText),
+      };
+      return JSON.stringify(sig);
+    } catch {
+      return String(Date.now());
+    }
+  },
+
+  _getCachedResponse(signature) {
+    if (!this._responseCache) return null;
+    const rec = this._responseCache.get(signature);
+    if (!rec) return null;
+    const age = Date.now() - (rec.ts || 0);
+    const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
+    if (age > ttl) {
+      this._responseCache.delete(signature);
+      return null;
+    }
+    return rec.payload;
+  },
+
+  _storeCachedResponse(signature, payload) {
+    if (!this._responseCache) this._responseCache = new Map();
+    try {
+      this._responseCache.set(signature, { ts: Date.now(), payload });
+    } catch (e) {
+      // if cache insert fails, don't block operation
+      this._mmLog('debug', null, `Cache store failed for ${signature}: ${e && e.message ? e.message : e}`);
+    }
+  },
+
+  /* Periodic cache cleanup ------------------------------------------------
+   * Removes expired cache entries. Runs on an interval configured by
+   * `_cacheCleanupIntervalMs` and respects `_cacheTTLMs` for entry expiration.
+   */
+  _cacheCleanup() {
+    try {
+      if (!this._responseCache || this._responseCache.size === 0) return;
+      const now = Date.now();
+      const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
+      for (const [sig, rec] of this._responseCache.entries()) {
+        if (!rec || !rec.ts) {
+          this._responseCache.delete(sig);
+          continue;
+        }
+        if (now - rec.ts > ttl) {
+          this._responseCache.delete(sig);
+        }
+      }
+      this._mmLog('debug', null, `Cache cleanup completed (remaining=${this._responseCache.size})`);
+    } catch (err) {
+      this._mmLog('debug', null, `Cache cleanup error: ${this._formatErr(err)}`);
+    }
+  },
+
+  _startCacheCleanup() {
+    try {
+      if (this._cacheCleanupTimer) return;
+      const interval = Number(this._cacheCleanupIntervalMs || DEFAULT_CACHE_CLEANUP_INTERVAL_MS) || DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
+      this._cacheCleanupTimer = setInterval(() => this._cacheCleanup(), interval);
+      this._mmLog('debug', null, `Started cache cleanup interval ${interval}ms`);
+    } catch {
+      // non-fatal
+    }
+  },
+
+  _stopCacheCleanup() {
+    try {
+      if (this._cacheCleanupTimer) {
+        clearInterval(this._cacheCleanupTimer);
+        this._cacheCleanupTimer = null;
+      }
+    } catch {
+      // ignore
+    }
+  },
+
   /**
    * Process a credential group: login, fetch data for students and logout.
    * This function respects the inflightRequests Map's pending flag: if pending
    * becomes true while running, it will loop once more to handle the coalesced request.
    */
   async processGroup(credKey, students, identifier) {
-    while (true) {
-      let untis = null;
-      const sample = students[0];
+    // Single-run processing: authenticate, fetch data for each student, and logout.
+    let untis = null;
+    const sample = students[0];
+    try {
       try {
-        try {
-          untis = this._createUntisClient(sample);
-        } catch {
-          this._mmLog('error', null, `No credentials for group ${credKey}`);
-          break;
-        }
+        untis = this._createUntisClient(sample);
+      } catch {
+        this._mmLog('error', null, `No credentials for group ${credKey}`);
+        return;
+      }
 
-        await untis.login();
-        for (const student of students) {
-          try {
-            await this.fetchData(untis, student, identifier, credKey);
-          } catch (err) {
-            this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
+      await untis.login();
+      for (const student of students) {
+        try {
+          // Build a signature for this student's request and consult cache
+          const sig = this._makeRequestSignature(student);
+          const cached = this._getCachedResponse(sig);
+          if (cached) {
+            // deliver cached payload to the requesting module id (preserve id)
+            try {
+              const cachedForSend = { ...cached, id: identifier };
+              this.sendSocketNotification('GOT_DATA', cachedForSend);
+              this._mmLog('debug', student, `Cache hit for ${student.title} (sig=${sig})`);
+              continue;
+            } catch (err) {
+              this._mmLog('error', student, `Failed to send cached GOT_DATA for ${student.title}: ${this._formatErr(err)}`);
+              // fall through to perform a fresh fetch
+            }
           }
-        }
-      } catch (error) {
-        this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
-      } finally {
-        try {
-          if (untis) await untis.logout();
-        } catch (e) {
-          this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(e)}`);
+
+          // Not cached or send failed: fetch fresh and store in cache
+          const payload = await this.fetchData(untis, student, identifier, credKey);
+          if (payload) {
+            try {
+              // store a copy without the id (id varies per requester)
+              const storeable = { ...payload, id: undefined };
+              this._storeCachedResponse(sig, storeable);
+              this._mmLog('debug', student, `Stored payload in cache for ${student.title} (sig=${sig})`);
+            } catch (err) {
+              this._mmLog('debug', student, `Cache store skipped for ${student.title}: ${this._formatErr(err)}`);
+            }
+          }
+        } catch (err) {
+          this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
         }
       }
-
-      const infl = this._inflightRequests.get(credKey);
-      if (infl && infl.pending) {
-        infl.pending = false;
-        continue;
+    } catch (error) {
+      this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
+    } finally {
+      try {
+        if (untis) await untis.logout();
+      } catch (err) {
+        this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(err)}`);
       }
-
-      if (infl) infl.running = false;
-      break;
     }
   },
 
@@ -143,7 +267,6 @@ module.exports = NodeHelper.create({
           'pastDaysToShow',
           'showStartTime',
           'useClassTimetable',
-          'showRegularLessons',
           'showTeacherMode',
           'useShortSubject',
           'showSubstitutionText',
@@ -167,26 +290,10 @@ module.exports = NodeHelper.create({
           groups.get(credKey).push(student);
         }
 
-        // For each credential group, process with coalescing inflight handling.
-        // If a fetch for the same credKey is already running, we set a pending flag
-        // so that the group is fetched once more when the current run finishes.
+        // For each credential group process independently. Do not coalesce requests
+        // across module instances so that per-instance options are always respected.
         for (const [credKey, students] of groups.entries()) {
-          if (!this._inflightRequests) this._inflightRequests = new Map();
-
-          const inflight = this._inflightRequests.get(credKey);
-          if (inflight && inflight.running) {
-            inflight.pending = true;
-            this._mmLog('info', null, `Fetch for ${credKey} already in progress - coalescing request`);
-            continue;
-          }
-
-          // mark as running
-          this._inflightRequests.set(credKey, {
-            running: true,
-            pending: false,
-          });
-
-          // Launch the named worker that will process the group and rerun if pending was set
+          // Launch a worker that will process the group for this requester
           this.processGroup(credKey, students, identifier);
         }
         this._mmLog('info', null, 'Successfully fetched data');
@@ -356,16 +463,23 @@ module.exports = NodeHelper.create({
       this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
     }
 
-    // Send raw API responses only; frontend will handle all transformations
-    this.sendSocketNotification('GOT_DATA', {
+    // Build payload and send it. Also return the payload for caching callers.
+    const payload = {
       title: student.title,
       config: student,
-      id: identifier,
+      // id will be assigned by the caller to preserve per-request id
       timegrid: grid || [],
       timetableRange: timetable || [],
       weekTimetable: weekTimetable || [],
       exams: rawExams || [],
       homeworks: hwResult || null,
-    });
+    };
+    try {
+      const forSend = { ...payload, id: identifier };
+      this.sendSocketNotification('GOT_DATA', forSend);
+    } catch (err) {
+      this._mmLog('error', student, `Failed to send GOT_DATA to ${identifier}: ${this._formatErr(err)}`);
+    }
+    return payload;
   },
 });

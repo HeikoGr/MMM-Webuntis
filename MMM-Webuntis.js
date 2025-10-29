@@ -807,40 +807,174 @@ Module.register('MMM-Webuntis', {
     this.configByStudent = [];
     this.timeUnitsByStudent = [];
     this.periodNamesByStudent = [];
-    // first updates every 5s, then after the first tick switch to 30s.
-    if (this.config.displayMode === 'grid' && !this._nowLineTimer) {
-      try {
-        const initialIntervalMs = 5 * 1000; // first runs every 5s
-        const laterIntervalMs = 30 * 1000; // then switch to every 30s
-
-        const invokeNowLines = () => {
-          try {
-            this._updateNowLinesAll();
-          } catch (e) {
-            this._log('warn', 'now-line centralized update failed', e);
-          }
-        };
-
-        // start the initial fast interval
-        this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
-
-        // schedule switching to the steady interval after one initial interval
-        this._nowLineTimerSwitchTimeout = setTimeout(() => {
-          try {
-            if (this._nowLineTimer) clearInterval(this._nowLineTimer);
-          } catch {
-            // non-fatal
-          }
-          // start steady updater
-          this._nowLineTimer = setInterval(invokeNowLines, laterIntervalMs);
-        }, initialIntervalMs + 50);
-      } catch (e) {
-        console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
-      }
-    }
+    // initialize paused flag and delegate now-line updater startup to centralized helper
+    this._paused = false;
+    this._log('debug', 'module start: paused=false');
+    // start now-line updater if appropriate
+    this._startNowLineUpdater();
 
     this.config.id = this.identifier;
     this.sendSocketNotification('FETCH_DATA', this.config);
+  },
+
+  /* Ensure the now-line updater is running (used by start() and resume()) */
+  _ensureNowLineUpdater() {
+    // compatibility wrapper: delegate to centralized start method
+    this._startNowLineUpdater();
+  },
+
+  /* Timer manager helpers ------------------------------------------------- */
+  _startNowLineUpdater() {
+    // start or noop if not grid mode or already running
+    if (this._paused) {
+      this._log('debug', 'now-line updater not started because module is paused');
+      return;
+    }
+    if (this.config.displayMode !== 'grid') return;
+    if (this._nowLineTimer) return;
+
+    try {
+      const initialIntervalMs = 5 * 1000; // first runs every 5s
+      const laterIntervalMs = 30 * 1000; // then switch to every 30s
+
+      const invokeNowLines = () => {
+        try {
+          this._updateNowLinesAll();
+        } catch (err) {
+          this._log('warn', 'now-line centralized update failed', err);
+        }
+      };
+
+  this._log('debug', 'starting now-line updater (initial interval ' + initialIntervalMs + 'ms)');
+  // start the initial fast interval
+  this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
+
+      // schedule switching to the steady interval after one initial interval
+      this._nowLineTimerSwitchTimeout = setTimeout(() => {
+        try {
+          if (this._nowLineTimer) clearInterval(this._nowLineTimer);
+        } catch {
+          // non-fatal
+        }
+        // start steady updater
+        this._log('debug', 'switching now-line updater to steady interval ' + laterIntervalMs + 'ms');
+        this._nowLineTimer = setInterval(invokeNowLines, laterIntervalMs);
+        this._nowLineTimerSwitchTimeout = null;
+      }, initialIntervalMs + 50);
+    } catch (err) {
+      this._log('warn', 'failed to start now-line updater', err);
+    }
+  },
+
+  _stopNowLineUpdater() {
+    try {
+      this._log('debug', 'stopping now-line updater');
+      if (this._nowLineTimer) {
+        clearInterval(this._nowLineTimer);
+        this._nowLineTimer = null;
+      }
+      if (this._nowLineTimerSwitchTimeout) {
+        clearTimeout(this._nowLineTimerSwitchTimeout);
+        this._nowLineTimerSwitchTimeout = null;
+      }
+    } catch (err) {
+      this._log('warn', 'failed to stop now-line updater', err);
+    }
+  },
+
+  _startFetchTimer() {
+    if (this._paused) {
+      this._log('debug', 'fetch timer not started because module is paused');
+      return;
+    }
+    if (this._fetchTimer) return; // already running
+    if (typeof this.config?.fetchIntervalMs !== 'number') return;
+    try {
+      this._log('debug', 'starting fetch timer with interval ' + this.config.fetchIntervalMs + 'ms');
+      this._fetchTimer = setInterval(() => {
+        this.sendSocketNotification('FETCH_DATA', this.config);
+      }, this.config.fetchIntervalMs);
+      // notify others that timers started
+      try {
+        this.sendNotification('MMM-WEBUNTIS_TIMERS_STARTED', { id: this.identifier });
+      } catch {
+        // ignore if notifications are not handled
+      }
+    } catch (err) {
+      this._log('warn', 'failed to start fetch timer', err);
+    }
+  },
+
+  _stopFetchTimer() {
+    try {
+      this._log('debug', 'stopping fetch timer');
+      if (this._fetchTimer) {
+        clearInterval(this._fetchTimer);
+        this._fetchTimer = null;
+      }
+      try {
+        this.sendNotification('MMM-WEBUNTIS_TIMERS_STOPPED', { id: this.identifier });
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      this._log('warn', 'failed to stop fetch timer', err);
+    }
+  },
+
+  _stopAllTimers() {
+    this._stopNowLineUpdater();
+    this._stopFetchTimer();
+  },
+
+  /* Called by MagicMirror when the module is hidden (suspend background work) */
+  suspend() {
+    this._log('info', 'suspend called: stopping timers and background work');
+    try {
+      // mark paused so start helpers don't (re)start timers while suspended
+      this._paused = true;
+      this._log('debug', 'module suspended: paused=true');
+      this._stopAllTimers();
+      try {
+        this.sendNotification('MMM-WEBUNTIS_SUSPENDED', { id: this.identifier });
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      this._log('warn', 'error while suspending', err);
+    }
+  },
+
+  /* Called by MagicMirror when the module is shown again (resume background work) */
+  resume() {
+    this._log('info', 'resume called: restarting timers and fetching data');
+    try {
+      // clear paused flag first so helpers may start timers
+      this._paused = false;
+      this._log('debug', 'module resumed: paused=false');
+      try {
+        this.sendNotification('MMM-WEBUNTIS_RESUMED', { id: this.identifier });
+      } catch {
+        // ignore
+      }
+      // fetch immediately to refresh content on resume
+      this.sendSocketNotification('FETCH_DATA', this.config);
+
+      // restart fetch timer and now-line updater when needed
+      this._startFetchTimer();
+      this._startNowLineUpdater();
+
+      // run one immediate update for now-lines so UI refreshes without waiting
+      if (this.config.displayMode === 'grid') {
+        try {
+          this._updateNowLinesAll();
+        } catch {
+          // silent
+        }
+      }
+    } catch (e) {
+      this._log('warn', 'error while resuming', e);
+    }
   },
 
   /* Centralized updater for all now-lines rendered by the module */
@@ -948,9 +1082,7 @@ Module.register('MMM-Webuntis', {
       case 'DOM_OBJECTS_CREATED':
         // Ensure config is normalized before scheduling fetches
         //this.config = this._normalizeLegacyConfig(this.config, this.defaults);
-        this._fetchTimer = setInterval(() => {
-          this.sendSocketNotification('FETCH_DATA', this.config);
-        }, this.config.fetchIntervalMs);
+        this._startFetchTimer();
         break;
     }
   },
