@@ -43,7 +43,7 @@ Upgrade notes:
 ```bash
 git clone https://github.com/HeikoGr/MMM-Webuntis
 cd MMM-Webuntis
-npm install
+npm ci  --omit=dev
 ```
 
 2. Add the module to your MagicMirror `config/config.js` (see example below).
@@ -55,7 +55,7 @@ To update to the latest version:
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
 git pull
-npm install
+npm ci --omit=dev
 ```
 
 Restart MagicMirror after updating.
