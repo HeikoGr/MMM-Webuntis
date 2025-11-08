@@ -17,6 +17,9 @@ Module.register('MMM-Webuntis', {
     mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
     pastDaysToShow: 0, // number of past days to include (show previous days)
     displayMode: 'list', // 'list' (default) or 'grid'
+    // Maximum number of lessons to display per day in grid view.
+    // 0 (default) means show all lessons. Can be overridden per-student in the students[] entries.
+    maxGridLessons: 0,
     logLevel: 'none', // enable debug logging ('debug' or 'none')
     students: [
       {
@@ -394,8 +397,8 @@ Module.register('MMM-Webuntis', {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+            .filter((el) => String(el.date) === dateStr)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),
@@ -477,6 +480,18 @@ Module.register('MMM-Webuntis', {
         i = j - 1;
       }
 
+      // Respect optional limit for number of lessons to render in grid view.
+      // Interpretation: maxGridLessons limits lessons per day; 0 means unlimited (default).
+      const maxGridLessons = Number(studentConfig.maxGridLessons ?? this.config.maxGridLessons ?? 0) || 0;
+      let lessonsToRender = mergedLessons;
+      if (maxGridLessons > 0 && Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
+        lessonsToRender = mergedLessons.slice(0, maxGridLessons);
+        this._log(
+          'debug',
+          `Grid: limiting lessons for ${studentTitle} on ${dateStr} to ${maxGridLessons} of ${mergedLessons.length}`
+        );
+      }
+
       const colLeft = 2 + d * 2;
       const colRight = colLeft + 1;
 
@@ -551,7 +566,7 @@ Module.register('MMM-Webuntis', {
       bothInner._totalHeight = totalHeight;
 
       // virtual no-lessons block when none -> create a single block spanning both columns
-      if (mergedLessons.length === 0) {
+      if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
         const noLesson = document.createElement('div');
         noLesson.className = 'grid-lesson lesson lesson-content no-lesson';
         noLesson.style.position = 'absolute';
@@ -564,8 +579,8 @@ Module.register('MMM-Webuntis', {
         bothInner.appendChild(noLesson);
       }
 
-      for (let idx = 0; idx < mergedLessons.length; idx++) {
-        const lesson = mergedLessons[idx];
+      for (let idx = 0; idx < lessonsToRender.length; idx++) {
+        const lesson = lessonsToRender[idx];
 
         // compute absolute positioning within the day's column using minutes
         // compute start/end minutes and clamp them to the visible range
@@ -845,9 +860,9 @@ Module.register('MMM-Webuntis', {
         }
       };
 
-  this._log('debug', 'starting now-line updater (initial interval ' + initialIntervalMs + 'ms)');
-  // start the initial fast interval
-  this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
+      this._log('debug', 'starting now-line updater (initial interval ' + initialIntervalMs + 'ms)');
+      // start the initial fast interval
+      this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
 
       // schedule switching to the steady interval after one initial interval
       this._nowLineTimerSwitchTimeout = setTimeout(() => {
