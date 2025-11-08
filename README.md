@@ -111,6 +111,7 @@ The following configuration options are supported. Global options can be declare
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
 | `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
 | `displayMode` | string | `'grid'` | How to display lessons: `'list'` or `'grid'` (multi-day grid with exact positioning). |
+| `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
 | `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
 ### Student credential object
@@ -140,6 +141,10 @@ Example student entry:
 - The backend (`node_helper.js`) fetches raw WebUntis data only. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
 - The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGapMinutes`. A merged block keeps a `lessonIds` array; `lessonId` is set when available.
 - There is no explicit caching layer. Parallel fetches for the same credential are coalesced to avoid duplicate work.
+
+Additional grid rendering notes:
+
+- When `maxGridLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
 
 ## Log levels and debugging
 

@@ -249,7 +249,7 @@ Module.register('MMM-Webuntis', {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
     // build columns: first column is time axis, then for each displayed day two columns (left/right)
-    const cols = ['minmax(60px,auto)'];
+    const cols = ['minmax(80px,auto)'];
     for (let d = 0; d < totalDisplayDays; d++) {
       cols.push('1fr'); // left half
       cols.push('1fr'); // right half
@@ -314,6 +314,50 @@ Module.register('MMM-Webuntis', {
       allEnd = 17 * 60; // 17:00
     }
 
+    // If configured, limit visible vertical range to the first N timeUnits
+    // when maxGridLessons >= 1 and timeUnits are available. This hides
+    // timeUnit markers and the grid area below the Nth period.
+    const maxGridLessonsCfg_before = Number(studentConfig.maxGridLessons ?? this.config.maxGridLessons ?? 0);
+    const maxGridLessons_before = Number.isFinite(maxGridLessonsCfg_before) ? Math.max(0, Math.floor(maxGridLessonsCfg_before)) : 0;
+    if (maxGridLessons_before >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
+      const tu = timeUnits;
+      const targetIndex = Math.min(tu.length - 1, maxGridLessons_before - 1);
+      // determine the end of the target timeUnit
+      let cutoff = tu[targetIndex].endMin;
+      if (cutoff === undefined || cutoff === null) {
+        // try next unit start as end, or assume +60 minutes
+        if (targetIndex + 1 < tu.length && tu[targetIndex + 1] && tu[targetIndex + 1].startMin !== undefined && tu[targetIndex + 1].startMin !== null) {
+          cutoff = tu[targetIndex + 1].startMin;
+        } else if (tu[targetIndex].startMin !== undefined && tu[targetIndex].startMin !== null) {
+          cutoff = tu[targetIndex].startMin + 60;
+        }
+      }
+      if (cutoff !== undefined && cutoff !== null && cutoff > allStart) {
+        // do not expand the existing range; only shrink to the cutoff
+        if (cutoff < allEnd) {
+          this._log('debug', `Grid: vertical range limited to first ${maxGridLessons_before} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`);
+          allEnd = cutoff;
+        }
+      }
+    }
+
+    // Helper: compute startMin and preferred lineMin for a given timeUnit index.
+    // lineMin prefers the start of the next timeUnit, falls back to endMin or start+60.
+    const getUnitBounds = (ui) => {
+      if (!Array.isArray(timeUnits) || ui < 0 || ui >= timeUnits.length) return { startMin: null, lineMin: null };
+      const u = timeUnits[ui];
+      const startMin = u && u.startMin !== undefined && u.startMin !== null ? u.startMin : null;
+      let lineMin = null;
+      if (Array.isArray(timeUnits) && ui + 1 < timeUnits.length && timeUnits[ui + 1] && timeUnits[ui + 1].startMin !== undefined && timeUnits[ui + 1].startMin !== null) {
+        lineMin = timeUnits[ui + 1].startMin;
+      } else if (u && u.endMin !== undefined && u.endMin !== null) {
+        lineMin = u.endMin;
+      } else if (startMin !== null) {
+        lineMin = startMin + 60;
+      }
+      return { startMin, lineMin };
+    };
+
     const totalMinutes = allEnd - allStart;
     // visual scale: pixels per minute (2px/min gives ~120px for 2 hours)
     const pxPerMinute = 1;
@@ -329,10 +373,11 @@ Module.register('MMM-Webuntis', {
     timeInner.style.width = '100%';
     // add markers from timeUnits or hourly markers
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-      for (let u of timeUnits) {
-        if (u.startMin === undefined || u.startMin === null) continue;
-        const m = u.startMin;
-        const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
+      for (let ui = 0; ui < timeUnits.length; ui++) {
+        const u = timeUnits[ui];
+        const { startMin, lineMin } = getUnitBounds(ui);
+        if (startMin === null) continue;
+        const top = Math.round(((startMin - allStart) / totalMinutes) * totalHeight);
         const lab = document.createElement('div');
         lab.style.position = 'absolute';
         lab.style.top = `${top}px`;
@@ -344,12 +389,12 @@ Module.register('MMM-Webuntis', {
           .padStart(4, '0')
           .replace(/(\d{2})(\d{2})/, '$1:$2')}`;
         timeInner.appendChild(lab);
-        // mirror hour line in the time axis to match day columns
-        if (u.endMin !== undefined && u.endMin !== null && u.endMin >= allStart && u.endMin <= allEnd) {
-          const lineTop = Math.round(((u.endMin - allStart) / totalMinutes) * totalHeight);
+        // mirror hour line in the time axis to match day columns - prefer lineMin from getUnitBounds
+        if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
+          const lineTop = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
           const tline = document.createElement('div');
           tline.className = 'grid-hourline';
-          tline.style.top = `${lineTop + 2}px`;
+          tline.style.top = `${lineTop - 2}px`;
           timeInner.appendChild(tline);
         }
       }
@@ -481,15 +526,69 @@ Module.register('MMM-Webuntis', {
       }
 
       // Respect optional limit for number of lessons to render in grid view.
-      // Interpretation: maxGridLessons limits lessons per day; 0 means unlimited (default).
-      const maxGridLessons = Number(studentConfig.maxGridLessons ?? this.config.maxGridLessons ?? 0) || 0;
+      // New behavior: when maxGridLessons >= 1, interpret it as number of timeUnits
+      // (periods) to show starting from the first period. Example: 1 = only lessons
+      // in the first timeUnit, 2 = lessons in first two timeUnits, etc. Value 0
+      // (default) means unlimited.
+      const maxGridLessonsCfg = Number(studentConfig.maxGridLessons ?? this.config.maxGridLessons ?? 0);
+      const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
       let lessonsToRender = mergedLessons;
-      if (maxGridLessons > 0 && Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
-        lessonsToRender = mergedLessons.slice(0, maxGridLessons);
-        this._log(
-          'debug',
-          `Grid: limiting lessons for ${studentTitle} on ${dateStr} to ${maxGridLessons} of ${mergedLessons.length}`
-        );
+
+      if (maxGridLessons >= 1) {
+        // Prefer timeUnits-based filtering when timeUnits are available
+        if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+          const tu = timeUnits;
+          const filtered = mergedLessons.filter((lesson) => {
+            const s = lesson.startMin;
+            // if lesson has no numeric start, keep it (do not hide unknown-timed lessons)
+            if (s === undefined || s === null || Number.isNaN(s)) return true;
+
+            // find matching timeUnit index for this lesson start
+            let matchedIndex = -1;
+            for (let ui = 0; ui < tu.length; ui++) {
+              const u = tu[ui];
+              const uStart = u.startMin;
+              // determine reasonable end (use unit.endMin when present, otherwise next unit start or +60)
+              let uEnd = u.endMin;
+              if (uEnd === undefined || uEnd === null) {
+                if (ui + 1 < tu.length && tu[ui + 1] && tu[ui + 1].startMin !== undefined && tu[ui + 1].startMin !== null) {
+                  uEnd = tu[ui + 1].startMin;
+                } else {
+                  uEnd = uStart + 60;
+                }
+              }
+              if (s >= uStart && s < uEnd) {
+                matchedIndex = ui;
+                break;
+              }
+            }
+            // if not matched but starts after last unit start, consider it part of last unit
+            if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) matchedIndex = tu.length - 1;
+
+            // include lesson only when its matched unit index is within requested number of timeUnits
+            return matchedIndex === -1 ? true : matchedIndex < maxGridLessons; // maxGridLessons starts at 1 -> compare with index
+          });
+
+          if (Array.isArray(filtered) && filtered.length < mergedLessons.length) {
+            const hidden = mergedLessons.length - filtered.length;
+            this._log(
+              'debug',
+              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (timeUnits-based). Showing first ${maxGridLessons} period(s).`
+            );
+          }
+          lessonsToRender = filtered;
+        } else {
+          // Fallback: if no timeUnits are available, fall back to count-based slicing
+          if (Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
+            const sliced = mergedLessons.slice(0, maxGridLessons);
+            const hidden = mergedLessons.length - sliced.length;
+            this._log(
+              'debug',
+              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (count-based fallback).`
+            );
+            lessonsToRender = sliced;
+          }
+        }
       }
 
       const colLeft = 2 + d * 2;
@@ -531,14 +630,15 @@ Module.register('MMM-Webuntis', {
       // add thin hour divider lines to the day's background (use timeUnits if available)
       try {
         if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-          for (let u of timeUnits) {
-            if (u.endMin === undefined || u.endMin === null) continue;
+          for (let ui = 0; ui < timeUnits.length; ui++) {
+            const { startMin, lineMin } = getUnitBounds(ui);
+            if (lineMin === undefined || lineMin === null) continue;
             // only draw if within visible range
-            if (u.endMin < allStart || u.endMin > allEnd) continue;
-            const top = Math.round(((u.endMin - allStart) / totalMinutes) * totalHeight);
+            if (lineMin < allStart || lineMin > allEnd) continue;
+            const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
             const line = document.createElement('div');
             line.className = 'grid-hourline';
-            line.style.top = `${top + 2}px`;
+            line.style.top = `${top - 2}px`;
             bothInner.appendChild(line);
           }
         } else {
@@ -564,6 +664,28 @@ Module.register('MMM-Webuntis', {
       bothInner._allStart = allStart;
       bothInner._allEnd = allEnd;
       bothInner._totalHeight = totalHeight;
+
+      // If some lessons were filtered out due to the maxGridLessons limit,
+      // show a small "... more" indicator in the day's column.
+      const hiddenCount = Array.isArray(mergedLessons) ? Math.max(0, mergedLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0)) : 0;
+      if (hiddenCount > 0) {
+        const moreBadge = document.createElement('div');
+        moreBadge.className = 'grid-more-badge';
+        moreBadge.innerText = this.translate('more');
+        moreBadge.title = `${hiddenCount} weitere Stunde${hiddenCount > 1 ? 'n' : ''} ausgeblendet`;
+        // inline positioning/styles to avoid requiring CSS edits
+        moreBadge.style.position = 'absolute';
+        moreBadge.style.right = '6px';
+        moreBadge.style.bottom = '6px';
+        moreBadge.style.zIndex = 30;
+        moreBadge.style.padding = '2px 6px';
+        moreBadge.style.background = 'rgba(0,0,0,0.45)';
+        moreBadge.style.color = '#fff';
+        moreBadge.style.borderRadius = '4px';
+        moreBadge.style.fontSize = '0.85em';
+        moreBadge.style.cursor = 'default';
+        bothInner.appendChild(moreBadge);
+      }
 
       // virtual no-lessons block when none -> create a single block spanning both columns
       if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
