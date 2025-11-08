@@ -4,10 +4,12 @@
   --wu-replacement-bg: #d8ecff;
   --wu-cancelled-bg: #ffd9d9;
   --wu-regular-bg: #dfffe0;
-  max-width: 31.25rem; /* 500px */
+  max-width: 31.25rem;
+  /* 500px */
   width: 100%;
   box-sizing: border-box;
-  font-size: 0.875rem; /* ~14px base */
+  font-size: 0.875rem;
+  /* ~14px base */
 }
 
 .MMM-Webuntis *,
@@ -21,11 +23,13 @@
   padding: 0.2rem 0.5rem 0.2rem 0;
   border-bottom: 1px dotted #444;
   white-space: pre-line;
+  vertical-align: top;
 }
 
 /* student row */
 .MMM-Webuntis .student {
-  padding-top: 0.94rem; /* ~15px */
+  padding-top: 0.94rem;
+  /* ~15px */
   border-bottom: 1px solid #333;
 }
 
@@ -33,16 +37,20 @@
 .MMM-Webuntis .grid-days-header {
   margin-bottom: 0.4rem;
   align-items: center;
-  display: grid; /* default, grid-template-columns set dynamically in JS */
+  display: grid;
+  /* default, grid-template-columns set dynamically in JS */
 }
 
 /* Combined grid (time + content) */
 .MMM-Webuntis .grid-combined {
   display: grid;
-  grid-template-columns: minmax(5.625rem, auto) 1fr; /* 90px -> 5.625rem */
-  gap: 0.25rem; /* 4px */
+  grid-template-columns: minmax(5.625rem, auto) 1fr;
+  /* 90px -> 5.625rem */
+  gap: 0.25rem;
+  /* 4px */
   background: var(--wu-bg);
-  border-radius: 0.375rem; /* ~6px */
+  border-radius: 0.375rem;
+  /* ~6px */
   overflow: hidden;
   position: relative;
 }
@@ -67,10 +75,13 @@
 /* Positioned lesson blocks inside day-column-inner */
 .MMM-Webuntis .grid-combined .grid-lesson {
   position: absolute;
-  left: 0.25rem; /* 4px */
-  right: 0.25rem; /* 4px */
+  left: 0.25rem;
+  /* 4px */
+  right: 0.25rem;
+  /* 4px */
   border-radius: 0.25rem;
-  padding: 0.25rem; /* 4px */
+  padding: 0.25rem;
+  /* 4px */
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
@@ -84,7 +95,8 @@
 
 .MMM-Webuntis .grid-combined .no-lesson {
   background-color: #72277d;
-  padding: 0.313rem; /* ~5px */
+  padding: 0.313rem;
+  /* ~5px */
 }
 
 .MMM-Webuntis .grid-combined .lesson-content {
@@ -94,14 +106,16 @@
 /* Containers for split lessons (kept but minimal) */
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-pair,
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-container {
-  padding: 0.125rem; /* 2px */
+  padding: 0.125rem;
+  /* 2px */
   border: none;
   background: transparent;
 }
 
 /* Replacement lesson (left half) */
 .MMM-Webuntis .grid-combined .lesson-replacement {
-  background-color: #d8ecff; /* light blue */
+  background-color: #d8ecff;
+  /* light blue */
   border-right: 1px solid rgba(0, 0, 0, 0.06);
   color: #03396c;
   overflow: hidden;
@@ -109,15 +123,18 @@
 
 /* Cancelled lesson (right half) */
 .MMM-Webuntis .grid-combined .lesson-cancelled-split {
-  background-color: #d98e8e; /* light red */
+  background-color: #d98e8e;
+  /* light red */
   color: #8a0000;
 }
 
 /* Regular full lesson */
 .MMM-Webuntis .grid-combined .lesson-regular {
-  background-color: #dfffe0; /* light green */
+  background-color: #dfffe0;
+  /* light green */
   border-color: #b7e6b3;
-  padding: 0.125rem; /* 2px */
+  padding: 0.125rem;
+  /* 2px */
 }
 
 /* Regular full lesson */
@@ -129,7 +146,8 @@
 
 /* Simple homework icon inside lesson cell */
 .MMM-Webuntis .grid-combined .homework-icon {
-  margin-left: 0.375rem; /* 6px */
+  margin-left: 0.375rem;
+  /* 6px */
   font-size: 0.9rem;
   vertical-align: middle;
 }
@@ -140,31 +158,37 @@
   flex-direction: row;
   align-items: stretch;
 }
+
 .MMM-Webuntis .grid-combined .grid-lesson .half-left {
   width: 50%;
   box-sizing: border-box;
   overflow: hidden;
 }
+
 .MMM-Webuntis .grid-combined .grid-lesson .half-right {
   background-color: #ffd9d9;
   width: 50%;
   box-sizing: border-box;
   overflow: hidden;
 }
+
 .MMM-Webuntis .grid-combined .grid-lesson .half-left.placeholder {
   background: transparent;
 }
+
 .MMM-Webuntis .grid-combined .grid-lesson .full {
   width: 100%;
   box-sizing: border-box;
-  padding: 0.375rem; /* 6px */
+  padding: 0.375rem;
+  /* 6px */
   overflow: hidden;
 }
 
 .MMM-Webuntis .grid-combined .grid-homework {
   border: 1px dashed #bbb;
   border-radius: 0.25rem;
-  padding: 0.313rem; /* ~5px */
+  padding: 0.313rem;
+  /* ~5px */
   background-color: #f3f3f3;
   min-height: 2.2em;
   font-size: 0.95rem;
@@ -191,10 +215,13 @@
   position: absolute;
   left: 0;
   right: 0;
-  height: 0.125rem; /* 2px */
+  height: 0.125rem;
+  /* 2px */
   background: linear-gradient(90deg, rgba(255, 0, 0, 0.95), rgba(255, 0, 0, 0.85));
-  box-shadow: 0 0 0.375rem rgba(255, 0, 0, 0.45); /* 6px */
-  z-index: 3; /* above lessons */
+  box-shadow: 0 0 0.375rem rgba(255, 0, 0, 0.45);
+  /* 6px */
+  z-index: 3;
+  /* above lessons */
   pointer-events: none;
 }
 
