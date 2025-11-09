@@ -19,7 +19,7 @@ Module.register('MMM-Webuntis', {
     displayMode: 'list', // 'list' (default) or 'grid'
     // Maximum number of lessons to display per day in grid view.
     // 0 (default) means show all lessons. Can be overridden per-student in the students[] entries.
-    maxGridLessons: 0,
+    maxGridLessons: 0, // 0 = all, >=1 limits by timeUnit or falls back to count
     logLevel: 'none', // enable debug logging ('debug' or 'none')
     students: [
       {

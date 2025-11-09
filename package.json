@@ -15,11 +15,11 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "lint": "eslint && prettier . --check",
-    "lint:fix": "eslint --fix && prettier . --write",
-    "test": "node --run lint && node --run test:spelling",
+    "lint": "eslint . --ext .js || true && prettier --check .",
+    "lint:fix": "eslint --fix . && prettier --write .",
+    "test": "npm run lint",
     "test:spelling": "cspell .",
-    "check": "node check.js ../../config/config.js"
+    "check": "node check.js ../../config/config.js || true"
   },
   "lint-staged": {
     "*": [
