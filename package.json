@@ -8,10 +8,12 @@
   "description": "MagicMirror module to access Webunits school timetables.",
   "main": "MMM-Webuntis.js",
   "keywords": [
-    "magicmirror",
-    "webuntis"
+    "MagicMirror",
+    "webuntis",
+    "school",
+    "timetable"
   ],
-  "author": "Thomas Schneider. HeikoGr",
+  "author": "HeikoGr",
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
