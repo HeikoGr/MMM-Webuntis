@@ -17,9 +17,9 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "lint": "eslint . --ext .js || true && prettier --check .",
+    "lint": "eslint --ext .js || true && prettier --check .",
     "lint:fix": "eslint --fix . && prettier --write .",
-    "test": "npm run lint",
+    "test": "node --run lint",
     "test:spelling": "cspell .",
     "check": "node check.js ../../config/config.js || true"
   },
