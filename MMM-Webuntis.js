@@ -261,6 +261,7 @@ Module.register('MMM-Webuntis', {
     header.appendChild(emptyHeader);
 
     const today = new Date();
+    const todayDateStr = `${today.getFullYear()}${('0' + (today.getMonth() + 1)).slice(-2)}${('0' + today.getDate()).slice(-2)}`;
     // apply startOffset to include past days when configured
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d; // negative for past days
@@ -622,6 +623,16 @@ Module.register('MMM-Webuntis', {
       bothInner.style.position = 'relative';
       bothWrap.appendChild(bothInner);
 
+      // Mark the wrappers for the actual current day so CSS can target only
+      // today's lesson blocks. Compare the computed date string to today's
+      // date string so this works correctly when pastDaysToShow shifts the
+      // startOffset.
+      if (dateStr === todayDateStr) {
+        leftInner.classList.add('is-today');
+        rightInner.classList.add('is-today');
+        bothInner.classList.add('is-today');
+      }
+
       // append wrappers to grid (bothWrap first so it sits behind left/right if overlapping)
       grid.appendChild(bothWrap);
       grid.appendChild(leftWrap);
@@ -658,6 +669,8 @@ Module.register('MMM-Webuntis', {
       // Create and append 'now' line for this day and register to updater
       const nowLine = document.createElement('div');
       nowLine.className = 'grid-nowline';
+      // hide initially to avoid a visible flash at the top before the updater runs
+      nowLine.style.display = 'none';
       bothInner.appendChild(nowLine);
       // store reference on wrapper for updater
       bothInner._nowLine = nowLine;
@@ -716,6 +729,21 @@ Module.register('MMM-Webuntis', {
         const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
         const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
 
+        // detect fully past lessons (date-aware): use lesson date (YYYYMMDD)
+        // so lessons on future dates (e.g., tomorrow) are not marked as past.
+        const now = new Date();
+        const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const lessonYmd = Number(dateStr) || 0;
+        let isPast = false;
+        if (lessonYmd < nowYmd) {
+          isPast = true;
+        } else if (lessonYmd === nowYmd) {
+          if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
+        } else {
+          isPast = false;
+        }
+
         // create lesson elements depending on type
         const leftCell = document.createElement('div');
         leftCell.className = 'grid-lesson lesson';
@@ -724,6 +752,9 @@ Module.register('MMM-Webuntis', {
         leftCell.style.left = '0px';
         leftCell.style.right = '0px';
         leftCell.style.height = `${heightPx}px`;
+        // attach date and end-minute so lightweight mask refresher can operate
+        leftCell.setAttribute('data-date', dateStr);
+        leftCell.setAttribute('data-end-min', String(eMin));
 
         const rightCell = document.createElement('div');
         rightCell.className = 'grid-lesson lesson';
@@ -732,6 +763,9 @@ Module.register('MMM-Webuntis', {
         rightCell.style.left = '0px';
         rightCell.style.right = '0px';
         rightCell.style.height = `${heightPx}px`;
+        // attach date and end-minute so lightweight mask refresher can operate
+        rightCell.setAttribute('data-date', dateStr);
+        rightCell.setAttribute('data-end-min', String(eMin));
 
         const bothCell = document.createElement('div');
         bothCell.className = 'grid-lesson lesson';
@@ -740,6 +774,9 @@ Module.register('MMM-Webuntis', {
         bothCell.style.left = '0px';
         bothCell.style.right = '0px';
         bothCell.style.height = `${heightPx}px`;
+        // attach date and end-minute so lightweight mask refresher can operate
+        bothCell.setAttribute('data-date', dateStr);
+        bothCell.setAttribute('data-end-min', String(eMin));
 
         const makeInner = (lsn) => {
           const base = `<b>${lsn.subjectShort || lsn.subject}</b><br>${lsn.teacherInitial || lsn.teacher}`;
@@ -750,12 +787,15 @@ Module.register('MMM-Webuntis', {
 
         if (lesson.code === 'irregular') {
           leftCell.classList.add('lesson-replacement');
+          if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeInner(lesson);
         } else if (lesson.code === 'cancelled') {
           rightCell.classList.add('lesson-cancelled-split');
+          if (isPast) rightCell.classList.add('past');
           rightCell.innerHTML = makeInner(lesson);
         } else {
           bothCell.classList.add('lesson-regular');
+          if (isPast) bothCell.classList.add('past');
           bothCell.innerHTML = makeInner(lesson);
         }
 
@@ -950,14 +990,13 @@ Module.register('MMM-Webuntis', {
     // start now-line updater if appropriate
     this._startNowLineUpdater();
 
+    // Record today's date as YYYYMMDD so the minute-aligned updater can detect
+    // when the day rolls over and run the (non-critical) midnight actions.
+    const now = new Date();
+    this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+
     this.config.id = this.identifier;
     this.sendSocketNotification('FETCH_DATA', this.config);
-  },
-
-  /* Ensure the now-line updater is running (used by start() and resume()) */
-  _ensureNowLineUpdater() {
-    // compatibility wrapper: delegate to centralized start method
-    this._startNowLineUpdater();
   },
 
   /* Timer manager helpers ------------------------------------------------- */
@@ -968,36 +1007,65 @@ Module.register('MMM-Webuntis', {
       return;
     }
     if (this.config.displayMode !== 'grid') return;
-    if (this._nowLineTimer) return;
+    if (this._nowLineTimer || this._nowLineTimerInitialTimeout) return;
 
     try {
-      const initialIntervalMs = 5 * 1000; // first runs every 5s
-      const laterIntervalMs = 30 * 1000; // then switch to every 30s
-
-      const invokeNowLines = () => {
+      // Align updates to the start of each full minute. This keeps the now-line
+      // and the lightweight "past" masks synchronized to the minute without
+      // doing a full DOM re-render.
+      const tick = () => {
         try {
+          // If the local date changed since last tick, run the (not time-critical)
+          // midnight actions: fetch fresh data and force a quick DOM update so
+          // `.is-today` and other date-scoped styling move to the correct column.
+          const nowLocal = new Date();
+          const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+          if (this._currentTodayYmd === undefined) this._currentTodayYmd = nowYmd;
+          if (nowYmd !== this._currentTodayYmd) {
+            this._log('info', 'local day changed — triggering daily refresh via minute updater');
+            try {
+              this.sendSocketNotification('FETCH_DATA', this.config);
+            } catch (e) {
+              this._log('warn', 'failed to send FETCH_DATA on day-change', e);
+            }
+            try {
+              this.updateDom();
+            } catch (e) {
+              this._log('warn', 'updateDom failed on day-change', e);
+            }
+            this._currentTodayYmd = nowYmd;
+          }
+
           this._updateNowLinesAll();
+          this._refreshPastMasks();
         } catch (err) {
-          this._log('warn', 'now-line centralized update failed', err);
+          this._log('warn', 'minute tick update failed', err);
         }
       };
 
-      this._log('debug', 'starting now-line updater (initial interval ' + initialIntervalMs + 'ms)');
-      // start the initial fast interval
-      this._nowLineTimer = setInterval(invokeNowLines, initialIntervalMs);
+      const now = new Date();
+      const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      this._log('debug', `scheduling now-line minute-aligned updater in ${msToNextMinute}ms`);
 
-      // schedule switching to the steady interval after one initial interval
-      this._nowLineTimerSwitchTimeout = setTimeout(() => {
+      // First fire exactly at the next full minute, then every 60s.
+      this._nowLineTimerInitialTimeout = setTimeout(() => {
         try {
-          if (this._nowLineTimer) clearInterval(this._nowLineTimer);
-        } catch {
-          // non-fatal
+          tick();
+        } catch (e) {
+          this._log('error', 'error', e);
         }
-        // start steady updater
-        this._log('debug', 'switching now-line updater to steady interval ' + laterIntervalMs + 'ms');
-        this._nowLineTimer = setInterval(invokeNowLines, laterIntervalMs);
-        this._nowLineTimerSwitchTimeout = null;
-      }, initialIntervalMs + 50);
+        // schedule recurring minute interval
+        this._nowLineTimer = setInterval(tick, 60 * 1000);
+        this._nowLineTimerInitialTimeout = null;
+      }, Math.max(0, msToNextMinute));
+
+      // run an immediate, cheap update so UI doesn't wait for next minute
+      try {
+        this._updateNowLinesAll();
+        this._refreshPastMasks();
+      } catch (e) {
+        this._log('error', 'error', e);
+      }
     } catch (err) {
       this._log('warn', 'failed to start now-line updater', err);
     }
@@ -1010,12 +1078,50 @@ Module.register('MMM-Webuntis', {
         clearInterval(this._nowLineTimer);
         this._nowLineTimer = null;
       }
-      if (this._nowLineTimerSwitchTimeout) {
-        clearTimeout(this._nowLineTimerSwitchTimeout);
-        this._nowLineTimerSwitchTimeout = null;
+      if (this._nowLineTimerInitialTimeout) {
+        clearTimeout(this._nowLineTimerInitialTimeout);
+        this._nowLineTimerInitialTimeout = null;
       }
     } catch (err) {
       this._log('warn', 'failed to stop now-line updater', err);
+    }
+  },
+
+  /* Lightweight refresher that toggles the .past class on already-rendered
+     lesson elements based on their data-date and data-end-min attributes.
+     This avoids full re-renders while keeping the past mask accurate each minute. */
+  _refreshPastMasks() {
+    try {
+      const now = new Date();
+      const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const lessons = document.querySelectorAll('.grid-combined .grid-lesson');
+      lessons.forEach((ln) => {
+        try {
+          const ds = ln.getAttribute('data-date');
+          const de = ln.getAttribute('data-end-min');
+          if (!ds) {
+            // if no date provided, skip
+            return;
+          }
+          const lessonYmd = Number(ds) || 0;
+          const endMin = de !== null && de !== undefined ? Number(de) : NaN;
+          let isPast = false;
+          if (lessonYmd < todayYmd) {
+            isPast = true;
+          } else if (lessonYmd === todayYmd) {
+            if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
+          } else {
+            isPast = false;
+          }
+          if (isPast) ln.classList.add('past');
+          else ln.classList.remove('past');
+        } catch (e) {
+          this._log('error', 'error', e);
+        }
+      });
+    } catch (e) {
+      this._log('warn', 'failed to refresh past masks', e);
     }
   },
 
