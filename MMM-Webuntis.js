@@ -631,7 +631,7 @@ Module.register('MMM-Webuntis', {
       try {
         if (Array.isArray(timeUnits) && timeUnits.length > 0) {
           for (let ui = 0; ui < timeUnits.length; ui++) {
-            const { startMin, lineMin } = getUnitBounds(ui);
+            const { lineMin } = getUnitBounds(ui);
             if (lineMin === undefined || lineMin === null) continue;
             // only draw if within visible range
             if (lineMin < allStart || lineMin > allEnd) continue;
