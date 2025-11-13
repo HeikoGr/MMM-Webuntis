@@ -1,10 +1,24 @@
-
 .MMM-Webuntis {
+  /* Base palette variables - easy to tweak or override in custom.css */
   --wu-bg: rgba(0, 0, 0, 0.05);
-  --wu-time-color: #aaa;
-  --wu-replacement-bg: #d8ecff;
-  --wu-cancelled-bg: #ffd9d9;
-  --wu-regular-bg: #dfffe0;
+  --wu-time-color: #666;
+
+  /* Stronger palette as the default (other days) */
+  --wu-replacement-bg: #bfe6ff;
+  /* stronger blue */
+  --wu-replacement-text: #032f56;
+
+  --wu-cancelled-bg: #ffbdbd;
+  /* stronger red */
+  --wu-cancelled-text: #7a0000;
+
+  --wu-regular-bg: #c9ffbf;
+  /* stronger green */
+  --wu-regular-text: #0f6b0f;
+
+  --wu-lesson-border: #9fd39f;
+  --wu-homework-bg: #e9e9e9;
+  --wu-no-lesson-bg: #642463;
   max-width: 31.25rem;
   /* 500px */
   width: 100%;
@@ -39,8 +53,7 @@
 .MMM-Webuntis .examRow,
 .MMM-Webuntis .examRowEmpty,
 .MMM-Webuntis .lessonRow,
-.MMM-Webuntis .lessonRowEmpty
- {
+.MMM-Webuntis .lessonRowEmpty {
   vertical-align: top;
   padding-left: 20px;
 }
@@ -125,10 +138,25 @@
   text-align: left;
 }
 
+/* Vivid palette for today's column */
+.MMM-Webuntis .day-column-inner.is-today {
+  --wu-replacement-bg: #82c6f0;
+  /* vivid blue */
+  --wu-replacement-text: #01242f;
+  --wu-cancelled-bg: #ff8a8a;
+  /* vivid red */
+  --wu-cancelled-text: #590000;
+  --wu-regular-bg: #a8f59f;
+  /* vivid green */
+  --wu-regular-text: #054a05;
+  --wu-lesson-border: #cfcfcf;
+}
+
 .MMM-Webuntis .grid-combined .no-lesson {
-  background-color: #72277d;
+  background-color: var(--wu-no-lesson-bg);
   padding: 0.313rem;
   /* ~5px */
+  color: #fff;
 }
 
 .MMM-Webuntis .grid-combined .lesson-content {
@@ -146,27 +174,56 @@
 
 /* Replacement lesson (left half) */
 .MMM-Webuntis .grid-combined .lesson-replacement {
-  background-color: #d8ecff;
+  background-color: var(--wu-replacement-bg);
   /* light blue */
   border-right: 1px solid rgba(0, 0, 0, 0.06);
-  color: #03396c;
+  color: var(--wu-replacement-text);
   overflow: hidden;
 }
 
 /* Cancelled lesson (right half) */
 .MMM-Webuntis .grid-combined .lesson-cancelled-split {
-  background-color: #d98e8e;
+  background-color: var(--wu-cancelled-bg);
   /* light red */
-  color: #8a0000;
+  color: var(--wu-cancelled-text);
 }
 
 /* Regular full lesson */
 .MMM-Webuntis .grid-combined .lesson-regular {
-  background-color: #dfffe0;
+  background-color: var(--wu-regular-bg);
   /* light green */
-  border-color: #b7e6b3;
+  border-color: var(--wu-lesson-border);
   padding: 0.125rem;
   /* 2px */
+  color: var(--wu-regular-text);
+}
+
+/* Past lessons: diagonal, semi-transparent pattern overlay for lessons that are completely past */
+.MMM-Webuntis .grid-combined .grid-lesson.past {
+  /* ensure the pseudo-element overlays the content */
+  position: absolute;
+  overflow: hidden;
+}
+
+/* Create the overlay pseudo-element for all lessons but keep it transparent by default
+   so we can animate opacity when toggling the past mask. This avoids layout flashes
+   and provides a smooth fade when the .past class is added/removed. */
+.MMM-Webuntis .grid-combined .grid-lesson::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* diagonal stripes: stronger alternating stripes and higher opacity for better visibility */
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0 8px, rgba(0, 0, 0, 0.12) 8px 18px);
+  opacity: 0;
+  /* hidden by default */
+  pointer-events: none;
+  border-radius: 0.25rem;
+  transition: opacity 360ms ease-in-out;
+}
+
+.MMM-Webuntis .grid-combined .grid-lesson.past::after {
+  /* only change opacity here so the transition animates */
+  opacity: 0.72;
 }
 
 /* Regular full lesson */
@@ -198,7 +255,7 @@
 }
 
 .MMM-Webuntis .grid-combined .grid-lesson .half-right {
-  background-color: #ffd9d9;
+  background-color: var(--wu-cancelled-bg);
   width: 50%;
   box-sizing: border-box;
   overflow: hidden;
@@ -221,10 +278,10 @@
   border-radius: 0.25rem;
   padding: 0.313rem;
   /* ~5px */
-  background-color: #f3f3f3;
+  background-color: var(--wu-homework-bg);
   min-height: 2.2em;
   font-size: 0.95rem;
-  color: #666;
+  color: #444;
   display: flex;
   align-items: center;
   justify-content: flex-start;
