@@ -9,5 +9,12 @@ export default defineConfig([
     extends: ['js/recommended'],
     languageOptions: { globals: globals.browser },
   },
+  {
+    files: ['node_helper.js', 'check.js', 'test-webuntis-standalone.js', 'tests/**/*.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: globals.node,
+    },
+  },
   { files: ['**/*.js'], languageOptions: { sourceType: 'commonjs' } },
 ]);
