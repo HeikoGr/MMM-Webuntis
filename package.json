@@ -17,7 +17,7 @@
   "license": "MIT",
   "type": "commonjs",
   "scripts": {
-    "lint": "eslint --ext .js || true && prettier --check .",
+    "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
     "test": "node --run lint",
     "test:spelling": "cspell .",
@@ -34,14 +34,10 @@
     "webuntis": "^2.2.1"
   },
   "devDependencies": {
-    "@eslint/css": "^0.14.1",
     "@eslint/js": "^9.39.1",
-    "@eslint/json": "^0.14.0",
-    "@eslint/markdown": "^7.5.1",
-    "@stylistic/eslint-plugin": "^5.6.1",
     "cspell": "^9.3.2",
     "eslint": "^9.39.1",
-    "eslint-plugin-import-x": "^4.16.1",
+    "eslint-plugin-n": "^17.23.1",
     "globals": "^16.5.0",
     "lint-staged": "^16.2.7",
     "prettier": "^3.6.2"
