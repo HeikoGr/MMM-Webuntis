@@ -1,4 +1,5 @@
-// eslint-disable-next-line no-undef
+/* eslint-disable no-console, no-redeclare */
+/* global Module */
 Module.register('MMM-Webuntis', {
   defaults: {
     header: '', // no header by default

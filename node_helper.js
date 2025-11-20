@@ -1,10 +1,14 @@
 // Import required modules
+/* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
+/* eslint-enable n/no-missing-require */
 const { WebUntis } = require('webuntis');
 const { WebUntisQR } = require('webuntis');
 const { URL } = require('url');
 const Authenticator = require('otplib').authenticator;
+/* eslint-disable n/no-missing-require */
 const Log = require('logger');
+/* eslint-enable n/no-missing-require */
 
 // Default cache TTL for per-request responses (ms). Small to favor freshness.
 const DEFAULT_CACHE_TTL_MS = 30 * 1000;
