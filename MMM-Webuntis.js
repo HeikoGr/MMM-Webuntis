@@ -327,7 +327,12 @@ Module.register('MMM-Webuntis', {
       let cutoff = tu[targetIndex].endMin;
       if (cutoff === undefined || cutoff === null) {
         // try next unit start as end, or assume +60 minutes
-        if (targetIndex + 1 < tu.length && tu[targetIndex + 1] && tu[targetIndex + 1].startMin !== undefined && tu[targetIndex + 1].startMin !== null) {
+        if (
+          targetIndex + 1 < tu.length &&
+          tu[targetIndex + 1] &&
+          tu[targetIndex + 1].startMin !== undefined &&
+          tu[targetIndex + 1].startMin !== null
+        ) {
           cutoff = tu[targetIndex + 1].startMin;
         } else if (tu[targetIndex].startMin !== undefined && tu[targetIndex].startMin !== null) {
           cutoff = tu[targetIndex].startMin + 60;
@@ -336,7 +341,10 @@ Module.register('MMM-Webuntis', {
       if (cutoff !== undefined && cutoff !== null && cutoff > allStart) {
         // do not expand the existing range; only shrink to the cutoff
         if (cutoff < allEnd) {
-          this._log('debug', `Grid: vertical range limited to first ${maxGridLessons_before} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`);
+          this._log(
+            'debug',
+            `Grid: vertical range limited to first ${maxGridLessons_before} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`
+          );
           allEnd = cutoff;
         }
       }
@@ -349,7 +357,13 @@ Module.register('MMM-Webuntis', {
       const u = timeUnits[ui];
       const startMin = u && u.startMin !== undefined && u.startMin !== null ? u.startMin : null;
       let lineMin = null;
-      if (Array.isArray(timeUnits) && ui + 1 < timeUnits.length && timeUnits[ui + 1] && timeUnits[ui + 1].startMin !== undefined && timeUnits[ui + 1].startMin !== null) {
+      if (
+        Array.isArray(timeUnits) &&
+        ui + 1 < timeUnits.length &&
+        timeUnits[ui + 1] &&
+        timeUnits[ui + 1].startMin !== undefined &&
+        timeUnits[ui + 1].startMin !== null
+      ) {
         lineMin = timeUnits[ui + 1].startMin;
       } else if (u && u.endMin !== undefined && u.endMin !== null) {
         lineMin = u.endMin;
@@ -443,8 +457,8 @@ Module.register('MMM-Webuntis', {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-            .filter((el) => String(el.date) === dateStr)
-            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+              .filter((el) => String(el.date) === dateStr)
+              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),
@@ -564,7 +578,8 @@ Module.register('MMM-Webuntis', {
               }
             }
             // if not matched but starts after last unit start, consider it part of last unit
-            if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) matchedIndex = tu.length - 1;
+            if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY))
+              matchedIndex = tu.length - 1;
 
             // include lesson only when its matched unit index is within requested number of timeUnits
             return matchedIndex === -1 ? true : matchedIndex < maxGridLessons; // maxGridLessons starts at 1 -> compare with index
@@ -680,7 +695,9 @@ Module.register('MMM-Webuntis', {
 
       // If some lessons were filtered out due to the maxGridLessons limit,
       // show a small "... more" indicator in the day's column.
-      const hiddenCount = Array.isArray(mergedLessons) ? Math.max(0, mergedLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0)) : 0;
+      const hiddenCount = Array.isArray(mergedLessons)
+        ? Math.max(0, mergedLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0))
+        : 0;
       if (hiddenCount > 0) {
         const moreBadge = document.createElement('div');
         moreBadge.className = 'grid-more-badge';
@@ -1048,16 +1065,19 @@ Module.register('MMM-Webuntis', {
       this._log('debug', `scheduling now-line minute-aligned updater in ${msToNextMinute}ms`);
 
       // First fire exactly at the next full minute, then every 60s.
-      this._nowLineTimerInitialTimeout = setTimeout(() => {
-        try {
-          tick();
-        } catch (e) {
-          this._log('error', 'error', e);
-        }
-        // schedule recurring minute interval
-        this._nowLineTimer = setInterval(tick, 60 * 1000);
-        this._nowLineTimerInitialTimeout = null;
-      }, Math.max(0, msToNextMinute));
+      this._nowLineTimerInitialTimeout = setTimeout(
+        () => {
+          try {
+            tick();
+          } catch (e) {
+            this._log('error', 'error', e);
+          }
+          // schedule recurring minute interval
+          this._nowLineTimer = setInterval(tick, 60 * 1000);
+          this._nowLineTimerInitialTimeout = null;
+        },
+        Math.max(0, msToNextMinute)
+      );
 
       // run an immediate, cheap update so UI doesn't wait for next minute
       try {
