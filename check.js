@@ -40,8 +40,7 @@ function showConfig(fileName) {
 
 const fileName = process.argv[2];
 if (!fileName) {
-  console.error('specify a config file, usually config/config.js');
-  process.exit(1);
+  throw new Error('specify a config file, usually config/config.js');
 }
 
 showConfig(fileName);
