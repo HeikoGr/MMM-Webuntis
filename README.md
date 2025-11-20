@@ -170,6 +170,31 @@ displayMode: "grid":
 
 ![Screenshot](screenshot-grid.png 'Screenshot verbose mode')
 
+## Testing and Development
+
+### Standalone Test Script
+
+A standalone test script is available for testing WebUntis API connectivity and exploring the data returned by the API. See [TEST-WEBUNTIS-README.md](TEST-WEBUNTIS-README.md) for detailed documentation.
+
+Quick start:
+```bash
+# Interactive mode (recommended)
+node test-webuntis-standalone.js
+
+# Command-line mode
+node test-webuntis-standalone.js --school SCHOOL --username USER --password PASS --server SERVER
+
+# Search for schools
+node test-webuntis-standalone.js --search-school "school name"
+```
+
+The script can:
+- Login to WebUntis with username and password
+- Search for schools by name or location
+- Display all students in the system
+- Show timetables for specific students
+- Demonstrate the WebUntis API methods used by this module
+
 ## Attribution
 
 This project is based on work done by Paul-Vincent Roll in the MMM-Wunderlist module. (<https://github.com/paviro/MMM-Wunderlist>)
