@@ -177,6 +177,7 @@ displayMode: "grid":
 A standalone test script is available for testing WebUntis API connectivity and exploring the data returned by the API. See [TEST-WEBUNTIS-README.md](TEST-WEBUNTIS-README.md) for detailed documentation.
 
 Quick start:
+
 ```bash
 # Interactive mode (recommended)
 node test-webuntis-standalone.js
@@ -189,6 +190,7 @@ node test-webuntis-standalone.js --search-school "school name"
 ```
 
 The script can:
+
 - Login to WebUntis with username and password
 - Search for schools by name or location
 - Display all students in the system
