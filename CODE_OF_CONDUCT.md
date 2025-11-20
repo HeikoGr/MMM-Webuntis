@@ -1,22 +1,21 @@
-# Code of Conduct
-
-Kurz: Wir erwarten respektvolles Verhalten in Issues, PRs und Diskussionen.
 
 
-Bei Verstößen bitte ein Issue mit Details anlegen und Maintainer @HeikoGr kontaktieren.
 # Code of Conduct
 
 Our project welcomes people of all backgrounds and skill levels. We expect contributors to be respectful and professional.
 
 Expected behavior
+
 - Be respectful and inclusive.
 - Do not use harassment, hate speech, or discriminatory language.
 - Be open to feedback and work constructively with others.
 
 Reporting issues
+
 - If you see inappropriate behavior, open an issue with details or contact the maintainers.
 
 This short Code of Conduct is here to keep the community friendly and professional.
+
 # Code of Conduct
 
 ## TL;DR
