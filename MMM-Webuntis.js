@@ -1,5 +1,4 @@
-/* eslint-disable no-console, no-redeclare */
-/* global Module */
+/* eslint-disable no-console */
 Module.register('MMM-Webuntis', {
   defaults: {
     header: '', // no header by default
@@ -458,8 +457,8 @@ Module.register('MMM-Webuntis', {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-            .filter((el) => String(el.date) === dateStr)
-            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+              .filter((el) => String(el.date) === dateStr)
+              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),

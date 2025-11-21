@@ -1,5 +1,3 @@
-
-
 # Code of Conduct
 
 Our project welcomes people of all backgrounds and skill levels. We expect contributors to be respectful and professional.
