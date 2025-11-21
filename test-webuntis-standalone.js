@@ -328,10 +328,15 @@ function formatTime(time) {
  * Format lesson data for display
  */
 function formatLesson(lesson) {
-  const subjects = lesson.su.map((s) => s.name).join(', ') || 'N/A';
-  const teachers = lesson.te.map((t) => t.name).join(', ') || 'N/A';
-  const rooms = lesson.ro.map((r) => r.name).join(', ') || 'N/A';
-  const classes = lesson.kl.map((k) => k.name).join(', ') || 'N/A';
+  const su = Array.isArray(lesson.su) ? lesson.su : [];
+  const te = Array.isArray(lesson.te) ? lesson.te : [];
+  const ro = Array.isArray(lesson.ro) ? lesson.ro : [];
+  const kl = Array.isArray(lesson.kl) ? lesson.kl : [];
+
+  const subjects = su.map((s) => s.name).join(', ') || 'N/A';
+  const teachers = te.map((t) => t.name).join(', ') || 'N/A';
+  const rooms = ro.map((r) => r.name).join(', ') || 'N/A';
+  const classes = kl.map((k) => k.name).join(', ') || 'N/A';
 
   return {
     date: lesson.date,
@@ -455,36 +460,11 @@ async function runTest(CONFIG) {
     await untis.login();
     console.log('✅ Login successful!');
 
-    // Step 2: Get all students
-    console.log('\n📝 Step 2: Fetching all students...');
-    const students = await untis.getStudents();
-    console.log(`✅ Retrieved ${students.length} students`);
+    // Step 2/3: Stundenplan laden
+    if (CONFIG.studentId) {
+      // Wenn eine Student-ID bekannt ist, überspringen wir getStudents komplett
+      console.log(`\n📝 Step 2: Using provided studentId ${CONFIG.studentId} (skipping getStudents)`);
 
-    // Display all students
-    displayStudents(students);
-
-    // Step 3: Get timetable for a specific student
-    if (students.length > 0) {
-      let selectedStudent;
-
-      // If a specific student ID was provided, find that student
-      if (CONFIG.studentId) {
-        selectedStudent = students.find((s) => s.id === CONFIG.studentId);
-        if (!selectedStudent) {
-          console.log(`\n⚠️  Student with ID ${CONFIG.studentId} not found.`);
-          selectedStudent = students[0];
-          console.log(`   Using first student instead: ${selectedStudent.foreName} ${selectedStudent.name}`);
-        }
-      } else {
-        // Select the first student as an example
-        selectedStudent = students[0];
-      }
-
-      console.log(
-        `\n📝 Step 3: Fetching timetable for student: ${selectedStudent.foreName} ${selectedStudent.name} (ID: ${selectedStudent.id})`
-      );
-
-      // Calculate date range
       const rangeStart = new Date();
       rangeStart.setDate(rangeStart.getDate() - CONFIG.daysInPast);
 
@@ -493,28 +473,69 @@ async function runTest(CONFIG) {
 
       console.log(`   Date range: ${formatDate(rangeStart)} to ${formatDate(rangeEnd)}`);
 
-      // Fetch timetable for the student
-      // Using WebUntis.TYPES.STUDENT (value 5) as the element type
-      const timetable = await untis.getTimetableForRange(rangeStart, rangeEnd, selectedStudent.id, WebUntis.TYPES.STUDENT);
+      const timetable = await untis.getTimetableForRange(
+        rangeStart,
+        rangeEnd,
+        CONFIG.studentId,
+        WebUntis.TYPES.STUDENT
+      );
 
       console.log(`✅ Retrieved ${timetable.length} lessons`);
 
-      // Display the timetable
-      displayTimetable(timetable, selectedStudent.id, `${selectedStudent.foreName} ${selectedStudent.name}`);
-
-      // Additional info: Show how to view other students
-      if (students.length > 1 && !CONFIG.studentId) {
-        console.log('\n💡 TIP: To view timetable for other students, use the --student-id option:');
-        console.log('\n   Available students:');
-        students.slice(0, 5).forEach((s) => {
-          console.log(`   node test-webuntis-standalone.js --student-id ${s.id}  # ${s.foreName} ${s.name}`);
-        });
-        if (students.length > 5) {
-          console.log(`   ... and ${students.length - 5} more`);
-        }
-      }
+      // Wir kennen nur die ID, nicht den Namen
+      displayTimetable(timetable, CONFIG.studentId, `Student ${CONFIG.studentId}`);
     } else {
-      console.log('\n⚠️  No students found. Cannot fetch timetable.');
+      // Fallback: Schüler laden und erste Person wählen wie bisher
+      console.log('\n📝 Step 2: Fetching all students...');
+      const students = await untis.getStudents();
+      console.log(`✅ Retrieved ${students.length} students`);
+
+      // Display all students
+      displayStudents(students);
+
+      // Step 3: Get timetable for a specific student
+      if (students.length > 0) {
+        let selectedStudent = students[0];
+
+        console.log(
+          `\n📝 Step 3: Fetching timetable for student: ${selectedStudent.foreName} ${selectedStudent.name} (ID: ${selectedStudent.id})`
+        );
+
+        // Calculate date range
+        const rangeStart = new Date();
+        rangeStart.setDate(rangeStart.getDate() - CONFIG.daysInPast);
+
+        const rangeEnd = new Date();
+        rangeEnd.setDate(rangeEnd.getDate() + CONFIG.daysAhead);
+
+        console.log(`   Date range: ${formatDate(rangeStart)} to ${formatDate(rangeEnd)}`);
+
+        // Fetch timetable for the student
+        const timetable = await untis.getTimetableForRange(
+          rangeStart,
+          rangeEnd,
+          selectedStudent.id,
+          WebUntis.TYPES.STUDENT
+        );
+
+        console.log(`✅ Retrieved ${timetable.length} lessons`);
+
+        // Display the timetable
+        displayTimetable(timetable, selectedStudent.id, `${selectedStudent.foreName} ${selectedStudent.name}`);
+
+        if (students.length > 1) {
+          console.log('\n💡 TIP: To view timetable for other students, use the --student-id option:');
+          console.log('\n   Available students:');
+          students.slice(0, 5).forEach((s) => {
+            console.log(`   node test-webuntis-standalone.js --student-id ${s.id}  # ${s.foreName} ${s.name}`);
+          });
+          if (students.length > 5) {
+            console.log(`   ... and ${students.length - 5} more`);
+          }
+        }
+      } else {
+        console.log('\n⚠️  No students found. Cannot fetch timetable.');
+      }
     }
 
     // Step 4: Logout
