@@ -5,7 +5,7 @@ import pluginN from 'eslint-plugin-n';
 
 export default defineConfig([
   {
-    ignores: ['**/node_modules/**', '**/*.png'],
+    ignores: ['**/node_modules/**', '**/*.png', '**/*.md'],
   },
   js.configs.recommended,
   {
