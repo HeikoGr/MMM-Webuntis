@@ -457,8 +457,8 @@ Module.register('MMM-Webuntis', {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+            .filter((el) => String(el.date) === dateStr)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),
