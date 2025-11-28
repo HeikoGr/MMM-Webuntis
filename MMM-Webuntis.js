@@ -934,6 +934,7 @@ Module.register('MMM-Webuntis', {
 
     if (addedRows === 0) {
       this._addTableRow(table, 'lessonRowEmpty', studentCellTitle, this.translate('nothing'));
+      return 1; // signal that we rendered a placeholder row
     }
 
     return addedRows;
