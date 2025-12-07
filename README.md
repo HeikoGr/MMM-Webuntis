@@ -106,6 +106,7 @@ The following configuration options are supported. Global options can be declare
 | `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`. |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
 | `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
+| `fetchHomeworks` | bool | `true` | When `false` skips homework API calls to save memory/CPU on low-RAM devices. |
 | `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
