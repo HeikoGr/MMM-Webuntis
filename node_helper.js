@@ -56,6 +56,71 @@ module.exports = NodeHelper.create({
     return err && err.message ? err.message : String(err);
   },
 
+  // Reduce memory by keeping only the fields the frontend uses
+  _compactTimegrid(rawGrid) {
+    if (!Array.isArray(rawGrid)) return [];
+    return rawGrid.map((row) => ({
+      timeUnits: Array.isArray(row?.timeUnits)
+        ? row.timeUnits.map((u) => ({
+          startTime: u.startTime,
+          endTime: u.endTime,
+          name: u.name,
+        }))
+        : [],
+    }));
+  },
+
+  _compactLessons(rawLessons) {
+    if (!Array.isArray(rawLessons)) return [];
+    return rawLessons.map((el) => ({
+      date: el.date,
+      startTime: el.startTime,
+      endTime: el.endTime,
+      su: el.su && el.su[0] ? [{ name: el.su[0].name, longname: el.su[0].longname }] : [],
+      te: el.te && el.te[0] ? [{ name: el.te[0].name, longname: el.te[0].longname }] : [],
+      code: el.code || '',
+      substText: el.substText || '',
+      lstext: el.lstext || '',
+      id: el.id ?? null,
+      lid: el.lid ?? null,
+      lessonId: el.lessonId ?? null,
+    }));
+  },
+
+  _compactExams(rawExams) {
+    if (!Array.isArray(rawExams)) return [];
+    return rawExams.map((ex) => ({
+      examDate: ex.examDate,
+      startTime: ex.startTime,
+      name: ex.name,
+      subject: ex.subject,
+      teachers: Array.isArray(ex.teachers) ? ex.teachers.slice(0, 2) : [],
+      text: ex.text || '',
+    }));
+  },
+
+  _compactHomeworks(rawHw) {
+    if (!rawHw) return [];
+    const hwArr = Array.isArray(rawHw)
+      ? rawHw
+      : Array.isArray(rawHw.homeworks)
+        ? rawHw.homeworks
+        : Array.isArray(rawHw.homework)
+          ? rawHw.homework
+          : [];
+    return hwArr.map((hw) => ({
+      id: hw.id ?? null,
+      lid: hw.lid ?? null,
+      lessonId: hw.lessonId ?? null,
+      su:
+        hw.su && typeof hw.su === 'object'
+          ? { name: hw.su.name, longname: hw.su.longname }
+          : hw.su && hw.su[0]
+            ? { name: hw.su[0].name, longname: hw.su[0].longname }
+            : null,
+    }));
+  },
+
   // Backend performs API calls only; no data normalization here.
 
   /*
@@ -77,6 +142,7 @@ module.exports = NodeHelper.create({
         showTeacherMode: student.showTeacherMode || null,
         useShortSubject: Boolean(student.useShortSubject),
         showSubstitutionText: Boolean(student.showSubstitutionText),
+        fetchHomeworks: student.fetchHomeworks !== false,
       };
       return JSON.stringify(sig);
     } catch {
@@ -278,6 +344,7 @@ module.exports = NodeHelper.create({
           'showExamSubject',
           'showExamTeacher',
           'logLevel',
+          'fetchHomeworks',
         ];
 
         // normalize student configs and group
@@ -297,8 +364,9 @@ module.exports = NodeHelper.create({
         // For each credential group process independently. Do not coalesce requests
         // across module instances so that per-instance options are always respected.
         for (const [credKey, students] of groups.entries()) {
-          // Launch a worker that will process the group for this requester
-          this.processGroup(credKey, students, identifier);
+          // Run sequentially to reduce peak memory usage on low-RAM devices
+          // eslint-disable-next-line no-await-in-loop
+          await this.processGroup(credKey, students, identifier);
         }
         this._mmLog('info', null, 'Successfully fetched data');
       } catch (error) {
@@ -373,6 +441,8 @@ module.exports = NodeHelper.create({
     };
     // Backend fetches raw data from Untis API. No transformation here.
 
+    const fetchHomeworks = student.fetchHomeworks !== false;
+
     var rangeStart = new Date(Date.now());
     var rangeEnd = new Date(Date.now());
 
@@ -389,13 +459,9 @@ module.exports = NodeHelper.create({
 
     // Prepare raw timetable containers
     let timetable = [];
-    let weekTimetable = [];
 
     if (student.daysToShow > 0) {
       try {
-        // Additionally fetch the week's timetable (raw)
-        weekTimetable = await this._getWeekTimetable(untis, credKey, rangeStart);
-
         if (student.useClassTimetable) {
           logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
           timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
@@ -432,51 +498,60 @@ module.exports = NodeHelper.create({
 
     // Load homework for the period (from today until rangeEnd + 7 days) – keep raw
     let hwResult = null;
-    try {
-      let hwRangeEnd = new Date(rangeEnd);
-      hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
-      // Try a sequence of candidate homework API calls (first that succeeds wins)
+    if (fetchHomeworks) {
       try {
-        const candidates = [() => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd), () => untis.getHomeWorksFor(new Date(), hwRangeEnd)];
-        let lastErr = null;
-        for (const fn of candidates) {
-          try {
-            hwResult = await fn();
-            break;
-          } catch (err) {
-            lastErr = err;
+        let hwRangeEnd = new Date(rangeEnd);
+        hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
+        // Try a sequence of candidate homework API calls (first that succeeds wins)
+        try {
+          const candidates = [() => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd), () => untis.getHomeWorksFor(new Date(), hwRangeEnd)];
+          let lastErr = null;
+          for (const fn of candidates) {
+            try {
+              hwResult = await fn();
+              break;
+            } catch (err) {
+              lastErr = err;
+            }
           }
+          if (hwResult === null) {
+            logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`);
+          }
+        } catch (error) {
+          logger(`[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`);
+          hwResult = null;
         }
-        if (hwResult === null) {
-          logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`);
-        }
+        // Send raw homework payload to the frontend without normalization
+        const hwCount = Array.isArray(hwResult)
+          ? hwResult.length
+          : Array.isArray(hwResult?.homeworks)
+            ? hwResult.homeworks.length
+            : Array.isArray(hwResult?.homework)
+              ? hwResult.homework.length
+              : 0;
+        logger(`[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`);
       } catch (error) {
-        logger(`[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`);
-        hwResult = null;
+        this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
       }
-      // Send raw homework payload to the frontend without normalization
-      const hwCount = Array.isArray(hwResult)
-        ? hwResult.length
-        : Array.isArray(hwResult?.homeworks)
-          ? hwResult.homeworks.length
-          : Array.isArray(hwResult?.homework)
-            ? hwResult.homework.length
-            : 0;
-      logger(`[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`);
-    } catch (error) {
-      this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+    } else {
+      logger(`[MMM-Webuntis] Homework fetch skipped for ${student.title} (fetchHomeworks=false)`);
     }
+
+    // Compact payload to reduce memory before caching and sending to the frontend.
+    const compactGrid = this._compactTimegrid(grid);
+    const compactTimetable = this._compactLessons(timetable);
+    const compactExams = this._compactExams(rawExams);
+    const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult) : [];
 
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
       title: student.title,
       config: student,
       // id will be assigned by the caller to preserve per-request id
-      timegrid: grid || [],
-      timetableRange: timetable || [],
-      weekTimetable: weekTimetable || [],
-      exams: rawExams || [],
-      homeworks: hwResult || null,
+      timegrid: compactGrid,
+      timetableRange: compactTimetable,
+      exams: compactExams,
+      homeworks: compactHomeworks,
     };
     try {
       const forSend = { ...payload, id: identifier };

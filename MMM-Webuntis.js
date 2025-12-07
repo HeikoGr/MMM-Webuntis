@@ -17,6 +17,7 @@ Module.register('MMM-Webuntis', {
     mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
     pastDaysToShow: 0, // number of past days to include (show previous days)
     displayMode: 'list', // 'list' (default) or 'grid'
+    fetchHomeworks: true, // set to false to skip homework API calls (saves memory on low-end devices)
     // Maximum number of lessons to display per day in grid view.
     // 0 (default) means show all lessons. Can be overridden per-student in the students[] entries.
     maxGridLessons: 0, // 0 = all, >=1 limits by timeUnit or falls back to count
