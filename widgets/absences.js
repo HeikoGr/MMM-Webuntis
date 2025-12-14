@@ -1,12 +1,24 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util;
+  const dom = root.dom || {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 
     if (!Array.isArray(absences) || absences.length === 0) {
-      ctx._addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_absences'));
+      addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_absences'));
       return 1;
     }
 
@@ -15,24 +27,50 @@
       .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
 
     for (const ab of sorted) {
-      const date = ab?.date ? util.formatYmd(ab.date) : '';
+      const dateRaw = ab?.date;
+      const dateFormat = (studentConfig && studentConfig.dateFormat) || ctx.config.dateFormat || 'dd.MM.yyyy';
+      const dateStr = dateRaw ? (util?.formatDate ? util.formatDate(dateRaw, dateFormat) : util.formatYmd(dateRaw)) : '';
       const st = util.formatTime(ab?.startTime);
       const et = util.formatTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
       const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';
       const reason = String(ab?.reason || '').trim();
-      const excused =
-        ab?.excused === true ? ` (${ctx.translate('excused')})` : ab?.excused === false ? ` (${ctx.translate('unexcused')})` : '';
+      const isExcused = ab?.excused === true;
+      const isUnexcused = ab?.excused === false;
 
-      const left = [date, time].filter(Boolean).join(' ');
-      const rightParts = [];
-      if (subj) rightParts.push(`<b>${subj}</b>${excused}`);
-      else if (excused) rightParts.push(excused.trim());
-      if (reason) rightParts.push(`<span class='xsmall dimmed'>${reason.replace(/\n/g, '<br>')}</span>`);
-      const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('absences');
+      // Meta column: date (matches exams/homework layout)
+      const meta = dateStr || '';
 
-      ctx._addTableRow(table, 'lessonRow', studentCellTitle, left || ctx.translate('absences'), right);
+      // Build status label (if any) and its class
+      let statusLabel = '';
+      let statusClass = '';
+      if (isExcused) {
+        statusLabel = ctx.translate('excused');
+        statusClass = 'absence-excused';
+      } else if (isUnexcused) {
+        statusLabel = ctx.translate('unexcused');
+        statusClass = 'absence-unexcused';
+      }
+
+      // Data column: time first, then subject (+status) and reason
+      const dataParts = [];
+      if (time) dataParts.push(`<b>${escapeHtml(time)}</b>`);
+
+      if (subj) {
+        const subjEsc = escapeHtml(subj);
+        const note = statusLabel ? ` <span class='${statusClass} small dimmed'>(${escapeHtml(statusLabel)})</span>` : '';
+        dataParts.push(`${subjEsc}${note}`);
+      } else if (statusLabel) {
+        dataParts.push(`<span class='${statusClass} small dimmed'>${escapeHtml(statusLabel)}</span>`);
+      }
+
+      if (reason) dataParts.push(`<br><span class='xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
+
+
+      const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
+
+      addTableRow(table, 'lessonRow', studentCellTitle, meta || ctx.translate('absences'), data);
       addedRows++;
     }
 

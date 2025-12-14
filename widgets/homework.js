@@ -1,12 +1,14 @@
 (function () {
     const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
     const util = root.util;
+    const dom = root.dom || {};
+    const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
     function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
         let addedRows = 0;
 
         if (!Array.isArray(homeworks) || homeworks.length === 0) {
-            ctx._addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_homework'));
+            addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_homework'));
             return 1;
         }
 
@@ -26,10 +28,10 @@
             const left = due ? `${due}` : ctx.translate('homework');
             const rightParts = [];
             if (subj) rightParts.push(`<b>${subj}</b>`);
-            if (text) rightParts.push(`<span class='xsmall dimmed'>${text.replace(/\n/g, '<br>')}</span>`);
+            if (text) rightParts.push(`<span>${text.replace(/\n/g, '<br>')}</span>`);
             const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('homework');
 
-            ctx._addTableRow(table, 'lessonRow', studentCellTitle, left, right);
+            addTableRow(table, 'lessonRow', studentCellTitle, left, right);
             addedRows++;
         }
 

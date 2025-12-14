@@ -100,6 +100,8 @@ The following configuration options are supported. Global options can be declare
 | `header` | string | none | Optional title printed by MagicMirror for this module instance. |
 | `daysToShow` | int | `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object. |
 | `pastDaysToShow` | int | `0` | How many past days to include in the grid (useful for debugging). |
+| `absencesPastDays` | int | `14` | How many past days to include when fetching absences from WebUntis. Can be set globally or per-student. |
+| `absencesFutureDays` | int | `0` | How many future days to extend the absences fetch beyond the normal `daysToShow` range. Can be set globally or per-student. |
 | `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
 | `mergeGapMinutes` | int | `15` | Allowed gap in minutes between consecutive lessons to consider them mergeable. Lower = stricter merging. |
 | `showStartTime` | bool | `false` | When `true` show the lesson start time; when `false` show the lesson number (if available). |

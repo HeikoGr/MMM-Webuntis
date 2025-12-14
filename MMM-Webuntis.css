@@ -34,6 +34,23 @@
   box-sizing: inherit;
 }
 
+.MMM-Webuntis table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.MMM-Webuntis td.wu-col-student,
+.MMM-Webuntis td.wu-col-meta {
+  white-space: nowrap;
+  width: 1%;
+  padding-right: 0.5rem;
+}
+
+.MMM-Webuntis td.wu-col-data {
+  width: auto;
+  word-break: break-word;
+}
+
 .MMM-Webuntis .cancelled {
   text-decoration: line-through;
 }
@@ -332,4 +349,16 @@
 /* Ensure lessons sit above hourlines but below the now-line when rendered */
 .MMM-Webuntis .grid-combined .grid-lesson {
   z-index: 1;
+}
+
+/* Absence labels: only color the small status label, not the whole row */
+.MMM-Webuntis .absence-excused {
+  color: #2e7d32;
+  /* green */
+}
+
+.MMM-Webuntis .absence-unexcused {
+  color: #b71c1c;
+  /* red */
+  font-weight: 600;
 }

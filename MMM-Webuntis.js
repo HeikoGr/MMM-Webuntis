@@ -15,6 +15,10 @@ Module.register('MMM-Webuntis', {
     mode: 'verbose', // 'verbose' or 'compact' mode
     mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
     pastDaysToShow: 0, // number of past days to include (show previous days)
+    // How many past days to include when fetching absences (default 14)
+    absencesPastDays: 14,
+    // How many future days to include when fetching absences (default 7)
+    absencesFutureDays: 7,
 
     // Comma-separated list of widgets to render, top-to-bottom.
     // Supported widgets: grid, lessons, exams, homework, absences
@@ -49,14 +53,23 @@ Module.register('MMM-Webuntis', {
   },
 
   getScripts() {
-    return [
-      this.file('widgets/util.js'),
-      this.file('widgets/lessons.js'),
-      this.file('widgets/exams.js'),
-      this.file('widgets/homework.js'),
-      this.file('widgets/absences.js'),
-      this.file('widgets/grid.js'),
-    ];
+    const scripts = [this.file('widgets/util.js')];
+    const widgetScriptMap = {
+      lessons: 'widgets/lessons.js',
+      exams: 'widgets/exams.js',
+      homework: 'widgets/homework.js',
+      absences: 'widgets/absences.js',
+      grid: 'widgets/grid.js',
+    };
+
+    const widgets = Array.from(new Set(this._getDisplayWidgets()));
+    for (const widget of widgets) {
+      const scriptPath = widgetScriptMap[widget];
+      if (!scriptPath) continue;
+      scripts.push(this.file(scriptPath));
+    }
+
+    return scripts;
   },
 
   getTranslations() {
@@ -151,20 +164,6 @@ Module.register('MMM-Webuntis', {
     return helper;
   },
 
-  _addTableHeader(table, studentTitle = '') {
-    const helper = this._getDomHelper();
-    if (helper && typeof helper.addTableHeader === 'function') {
-      helper.addTableHeader(table, studentTitle);
-    }
-  },
-
-  _addTableRow(table, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
-    const helper = this._getDomHelper();
-    if (helper && typeof helper.addTableRow === 'function') {
-      helper.addTableRow(table, type, studentTitle, text1, text2, addClass);
-    }
-  },
-
   _createWidgetTable() {
     const helper = this._getDomHelper();
     if (helper && typeof helper.createTable === 'function') {
@@ -181,7 +180,10 @@ Module.register('MMM-Webuntis', {
 
   _prepareStudentCellTitle(table, studentTitle) {
     if (this._shouldRenderStudentHeader()) {
-      this._addTableHeader(table, studentTitle);
+      const helper = this._getDomHelper();
+      if (helper && typeof helper.addTableHeader === 'function') {
+        helper.addTableHeader(table, studentTitle);
+      }
       return '';
     }
     return studentTitle;
@@ -214,6 +216,54 @@ Module.register('MMM-Webuntis', {
     }
 
     return tableHasRows ? table : null;
+  },
+
+  _computeTodayYmdValue() {
+    const now = new Date();
+    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  },
+
+  _shiftYmd(baseYmd, deltaDays = 0) {
+    const num = Number(baseYmd);
+    if (!Number.isFinite(num)) return null;
+    const year = Math.floor(num / 10000);
+    const month = Math.floor((num % 10000) / 100) - 1;
+    const day = num % 100;
+    const date = new Date(year, month, day);
+    date.setDate(date.getDate() + deltaDays);
+    return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+  },
+
+  _filterTimetableRange(entries, studentConfig) {
+    if (!Array.isArray(entries) || entries.length === 0) return [];
+    const cfg = studentConfig || {};
+    const fallback = this.config || {};
+    const defaults = this.defaults || {};
+
+    const daysVal = cfg.daysToShow ?? fallback.daysToShow ?? defaults.daysToShow ?? 0;
+    const pastVal = cfg.pastDaysToShow ?? fallback.pastDaysToShow ?? defaults.pastDaysToShow ?? 0;
+    const daysToShow = Number(daysVal);
+    const pastDaysToShow = Number(pastVal);
+    const limitFuture = Number.isFinite(daysToShow) && daysToShow > 0;
+    const limitPast = Number.isFinite(pastDaysToShow);
+
+    if (!limitFuture && !limitPast) {
+      return entries.slice();
+    }
+
+    const todayYmd = this._currentTodayYmd || this._computeTodayYmdValue();
+    if (!this._currentTodayYmd) this._currentTodayYmd = todayYmd;
+
+    const minYmd = limitPast ? this._shiftYmd(todayYmd, -pastDaysToShow) : null;
+    const maxYmd = limitFuture ? this._shiftYmd(todayYmd, daysToShow - 1) : null;
+
+    return entries.filter((lesson) => {
+      const ymd = Number(lesson?.date);
+      if (!Number.isFinite(ymd)) return false;
+      if (minYmd !== null && ymd < minYmd) return false;
+      if (maxYmd !== null && ymd > maxYmd) return false;
+      return true;
+    });
   },
 
   _normalizeLegacyConfig(cfg, defaultsRef) {
@@ -360,6 +410,7 @@ Module.register('MMM-Webuntis', {
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
     this.preprocessedByStudent = {};
+    this._domUpdateTimer = null;
 
     this._paused = false;
     this._startNowLineUpdater();
@@ -398,10 +449,24 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  _scheduleDomUpdate(delayMs = 100) {
+    if (this._domUpdateTimer) {
+      clearTimeout(this._domUpdateTimer);
+    }
+    this._domUpdateTimer = setTimeout(() => {
+      this._domUpdateTimer = null;
+      this.updateDom();
+    }, delayMs);
+  },
+
   suspend() {
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
+    if (this._domUpdateTimer) {
+      clearTimeout(this._domUpdateTimer);
+      this._domUpdateTimer = null;
+    }
   },
 
   resume() {
@@ -519,7 +584,8 @@ Module.register('MMM-Webuntis', {
     });
     this.periodNamesByStudent[title] = periodMap;
 
-    this.timetableByStudent[title] = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
+    const timetableRange = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
+    this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
 
     const groupedRaw = {};
     (this.timetableByStudent[title] || []).forEach((el) => {
@@ -544,6 +610,6 @@ Module.register('MMM-Webuntis', {
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
 
-    this.updateDom();
+    this._scheduleDomUpdate();
   },
 });

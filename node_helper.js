@@ -62,10 +62,10 @@ module.exports = NodeHelper.create({
     return rawGrid.map((row) => ({
       timeUnits: Array.isArray(row?.timeUnits)
         ? row.timeUnits.map((u) => ({
-            startTime: u.startTime,
-            endTime: u.endTime,
-            name: u.name,
-          }))
+          startTime: u.startTime,
+          endTime: u.endTime,
+          name: u.name,
+        }))
         : [],
     }));
   },
@@ -129,7 +129,9 @@ module.exports = NodeHelper.create({
   _compactAbsences(rawAbsences) {
     if (!Array.isArray(rawAbsences)) return [];
     return rawAbsences.map((a) => ({
-      date: a.date ?? a.absenceDate ?? a.day ?? null,
+      // Accept several common date field names returned by different
+      // webuntis versions/providers (startDate, date, absenceDate, day)
+      date: a.date ?? a.startDate ?? a.absenceDate ?? a.day ?? null,
       startTime: a.startTime ?? a.start ?? null,
       endTime: a.endTime ?? a.end ?? null,
       reason: a.reason ?? a.reasonText ?? a.text ?? '',
@@ -507,6 +509,22 @@ module.exports = NodeHelper.create({
 
     rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
     rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
+    // Compute absences-specific start and end dates (allow per-student override or global config)
+    const absPast = Number.isFinite(Number(student.absencesPastDays))
+      ? Number(student.absencesPastDays)
+      : Number.isFinite(Number(this.config?.absencesPastDays))
+        ? Number(this.config.absencesPastDays)
+        : 0;
+    const absFuture = Number.isFinite(Number(student.absencesFutureDays))
+      ? Number(student.absencesFutureDays)
+      : Number.isFinite(Number(this.config?.absencesFutureDays))
+        ? Number(this.config.absencesFutureDays)
+        : 0;
+
+    const absencesRangeStart = new Date(Date.now());
+    absencesRangeStart.setDate(absencesRangeStart.getDate() - absPast);
+    const absencesRangeEnd = new Date(rangeEnd);
+    absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
     // Get Timegrid (raw) - only needed for grid widget
     let grid = [];
@@ -606,9 +624,9 @@ module.exports = NodeHelper.create({
     if (fetchAbsences) {
       try {
         const candidates = [
-          () => untis.getAbsentLesson(rangeStart, rangeEnd),
-          () => untis.getAbsentLesson(rangeStart, rangeEnd, student.id),
-          () => untis.getAbsentLesson(rangeStart, rangeEnd, student.studentId),
+          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd),
+          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.id),
+          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.studentId),
         ];
         let lastErr = null;
         for (const fn of candidates) {

@@ -1,5 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+  const dom = root.dom || {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap) {
     let addedRows = 0;
@@ -72,11 +74,11 @@
         addClass = entry.code;
       }
 
-      ctx._addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
+      addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
     }
 
     if (addedRows === 0) {
-      ctx._addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('nothing'));
+      addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('nothing'));
       return 1;
     }
 
