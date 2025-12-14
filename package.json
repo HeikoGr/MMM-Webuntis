@@ -24,7 +24,7 @@
     "lint:fix": "eslint --fix && prettier --write .",
     "test": "node --run lint",
     "test:spelling": "cspell .",
-    "check": "node tests/test_helpers.js || true"
+    "check": "node cli/cli.js || true"
   },
   "lint-staged": {
     "*": [
