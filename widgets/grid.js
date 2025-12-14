@@ -216,7 +216,10 @@ function getNowLineState(ctx) {
                 lab.style.zIndex = 2;
                 lab.style.fontSize = '0.85em';
                 lab.style.color = '#666';
-                lab.innerText = `${u.name} Std.\n ${String(u.startTime)
+                lab.style.textAlign = 'left';
+                const periodLabel = ctx.translate('period') || '';
+                const periodSuffix = periodLabel ? `${periodLabel}` : '';
+                lab.innerText = `${u.name}.${periodSuffix}\n${String(u.startTime)
                     .padStart(4, '0')
                     .replace(/(\d{2})(\d{2})/, '$1:$2')}`;
                 timeInner.appendChild(lab);
