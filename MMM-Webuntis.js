@@ -449,7 +449,7 @@ Module.register('MMM-Webuntis', {
     }
   },
 
-  _scheduleDomUpdate(delayMs = 100) {
+  _scheduleDomUpdate(delayMs = 500) {
     if (this._domUpdateTimer) {
       clearTimeout(this._domUpdateTimer);
     }
