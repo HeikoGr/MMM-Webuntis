@@ -10,6 +10,8 @@
             return 1;
         }
 
+        const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
+
         const sorted = homeworks
             .slice()
             .sort(
@@ -17,7 +19,7 @@
             );
 
         for (const hw of sorted) {
-            const due = hw?.dueDate ? util.formatYmd(hw.dueDate) : '';
+            const due = hw?.dueDate ? util.formatDate(hw.dueDate, dateFormat) : '';
             const subj = hw?.su?.longname || hw?.su?.name || '';
             const text = String(hw?.text || hw?.remark || '').trim();
 

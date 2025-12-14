@@ -27,6 +27,10 @@ Module.register('MMM-Webuntis', {
 
     logLevel: 'none', // 'debug' or 'none'
 
+    dateFormat: 'dd.MM.',
+    examDateFormat: 'dd.MM.',
+    homeworkDateFormat: 'dd.MM.',
+
     students: [
       {
         title: 'SET CONFIG!',
@@ -139,40 +143,67 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  _getDomHelper() {
+    const helper = this._getWidgetApi()?.dom || null;
+    if (!helper) {
+      this._log('warn', 'MMMW Webuntis dom helper not available, table helpers will be skipped.');
+    }
+    return helper;
+  },
+
   _addTableHeader(table, studentTitle = '') {
-    const thisRow = document.createElement('tr');
-    const studentCell = this._createEl('th', 'align-left alignTop', studentTitle);
-    studentCell.colSpan = 3;
-    thisRow.appendChild(studentCell);
-    table.appendChild(thisRow);
+    const helper = this._getDomHelper();
+    if (helper && typeof helper.addTableHeader === 'function') {
+      helper.addTableHeader(table, studentTitle);
+    }
   },
 
   _addTableRow(table, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
-    const thisRow = document.createElement('tr');
-    thisRow.className = type;
-
-    if (studentTitle !== '') {
-      const studentCell = this._createEl('td', 'align-left alignTop bold', studentTitle);
-      thisRow.appendChild(studentCell);
+    const helper = this._getDomHelper();
+    if (helper && typeof helper.addTableRow === 'function') {
+      helper.addTableRow(table, type, studentTitle, text1, text2, addClass);
     }
-
-    const cell1 = this._createEl('td', 'align-left alignTop', text1);
-    if (text2 === '') cell1.colSpan = 2;
-    thisRow.appendChild(cell1);
-
-    if (text2 !== '') {
-      const cell2 = this._createEl('td', `align-left alignTop ${addClass}`, text2);
-      thisRow.appendChild(cell2);
-    }
-
-    table.appendChild(thisRow);
   },
 
-  _createEl(tag, className = '', innerHTML = '') {
-    const el = document.createElement(tag);
-    if (className) el.className = className;
-    if (innerHTML !== undefined && innerHTML !== null) el.innerHTML = innerHTML;
-    return el;
+  _createWidgetTable() {
+    const helper = this._getDomHelper();
+    if (helper && typeof helper.createTable === 'function') {
+      return helper.createTable();
+    }
+    const table = document.createElement('table');
+    table.className = 'bright small light';
+    return table;
+  },
+
+  _shouldRenderStudentHeader() {
+    return this.config.mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
+  },
+
+  _prepareStudentCellTitle(table, studentTitle) {
+    if (this._shouldRenderStudentHeader()) {
+      this._addTableHeader(table, studentTitle);
+      return '';
+    }
+    return studentTitle;
+  },
+
+  _getSortedStudentTitles() {
+    if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
+    return Object.keys(this.timetableByStudent).sort();
+  },
+
+  _renderWidgetTableRows(studentTitles, renderRow) {
+    const table = this._createWidgetTable();
+    let tableHasRows = false;
+
+    for (const studentTitle of studentTitles) {
+      const studentConfig = this.configByStudent?.[studentTitle] || this.config;
+      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle);
+      const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
+      if (count > 0) tableHasRows = true;
+    }
+
+    return tableHasRows ? table : null;
   },
 
   _normalizeLegacyConfig(cfg, defaultsRef) {
@@ -351,86 +382,13 @@ Module.register('MMM-Webuntis', {
   },
 
   _startNowLineUpdater() {
-    if (this._paused) return;
-    if (!this._hasWidget('grid')) return;
-    if (this._nowLineTimer || this._nowLineTimerInitialTimeout) return;
-
-    const tick = () => {
-      try {
-        const nowLocal = new Date();
-        const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        if (this._currentTodayYmd === undefined) this._currentTodayYmd = nowYmd;
-        if (nowYmd !== this._currentTodayYmd) {
-          try {
-            this.sendSocketNotification('FETCH_DATA', this.config);
-          } catch {
-            // ignore
-          }
-          try {
-            this.updateDom();
-          } catch {
-            // ignore
-          }
-          this._currentTodayYmd = nowYmd;
-        }
-
-        this._updateNowLinesAll();
-        this._refreshPastMasks();
-      } catch (err) {
-        this._log('warn', 'minute tick update failed', err);
-      }
-    };
-
-    const now = new Date();
-    const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-
-    this._nowLineTimerInitialTimeout = setTimeout(
-      () => {
-        tick();
-        this._nowLineTimer = setInterval(tick, 60 * 1000);
-        this._nowLineTimerInitialTimeout = null;
-      },
-      Math.max(0, msToNextMinute)
-    );
-
-    tick();
+    const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
+    if (typeof fn === 'function') fn(this);
   },
 
   _stopNowLineUpdater() {
-    if (this._nowLineTimer) {
-      clearInterval(this._nowLineTimer);
-      this._nowLineTimer = null;
-    }
-    if (this._nowLineTimerInitialTimeout) {
-      clearTimeout(this._nowLineTimerInitialTimeout);
-      this._nowLineTimerInitialTimeout = null;
-    }
-  },
-
-  _refreshPastMasks() {
-    try {
-      const now = new Date();
-      const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const lessons = document.querySelectorAll('.grid-combined .grid-lesson');
-      lessons.forEach((ln) => {
-        const ds = ln.getAttribute('data-date');
-        const de = ln.getAttribute('data-end-min');
-        if (!ds) return;
-        const lessonYmd = Number(ds) || 0;
-        const endMin = de !== null && de !== undefined ? Number(de) : NaN;
-        let isPast = false;
-        if (lessonYmd < todayYmd) {
-          isPast = true;
-        } else if (lessonYmd === todayYmd) {
-          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
-        }
-        if (isPast) ln.classList.add('past');
-        else ln.classList.remove('past');
-      });
-    } catch (e) {
-      this._log('warn', 'failed to refresh past masks', e);
-    }
+    const fn = this._getWidgetApi()?.grid?.stopNowLineUpdater;
+    if (typeof fn === 'function') fn(this);
   },
 
   _startFetchTimer() {
@@ -463,45 +421,14 @@ Module.register('MMM-Webuntis', {
     this._startNowLineUpdater();
   },
 
-  _updateNowLinesAll() {
-    try {
-      const inners = document.querySelectorAll('.day-column-inner');
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      inners.forEach((inner) => {
-        const nl = inner._nowLine;
-        const allS = inner._allStart;
-        const allE = inner._allEnd;
-        const h = inner._totalHeight;
-        if (!nl || allS === undefined || allE === undefined || h === undefined) return;
-        if (nowMin < allS || nowMin > allE) {
-          nl.style.display = 'none';
-          return;
-        }
-        nl.style.display = 'block';
-        const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
-        nl.style.top = `${top}px`;
-      });
-    } catch (e) {
-      this._log('warn', 'updateNowLinesAll failed', e);
-    }
-  },
-
   getDom() {
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
 
-    const makeTable = () => {
-      const t = document.createElement('table');
-      t.className = 'bright small light';
-      return t;
-    };
-
-    if (!this.timetableByStudent || Object.keys(this.timetableByStudent).length === 0) {
+    const sortedStudentTitles = this._getSortedStudentTitles();
+    if (sortedStudentTitles.length === 0) {
       return wrapper;
     }
-
-    const sortedStudentTitles = Object.keys(this.timetableByStudent).sort();
 
     for (const widget of widgets) {
       if (widget === 'grid') {
@@ -521,97 +448,40 @@ Module.register('MMM-Webuntis', {
       }
 
       if (widget === 'lessons') {
-        const table = makeTable();
-        let tableHasRows = false;
-
-        for (const studentTitle of sortedStudentTitles) {
+        const lessonsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const timetable = this.timetableByStudent[studentTitle] || [];
-          const studentConfig = this.configByStudent[studentTitle] || this.config;
           const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
-
-          let studentCellTitle = '';
-          if (this.config.mode === 'verbose' && this.config.students.length > 1) {
-            this._addTableHeader(table, studentTitle);
-          } else {
-            studentCellTitle = studentTitle;
-          }
-
-          const listCount = this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
-          if (listCount > 0) tableHasRows = true;
-        }
-
-        if (tableHasRows) wrapper.appendChild(table);
+          return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
+        });
+        if (lessonsTable) wrapper.appendChild(lessonsTable);
         continue;
       }
 
       if (widget === 'exams') {
-        const table = makeTable();
-        let tableHasRows = false;
-
-        for (const studentTitle of sortedStudentTitles) {
-          const studentConfig = this.configByStudent[studentTitle] || this.config;
+        const examsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const exams = this.examsByStudent?.[studentTitle] || [];
-
-          let studentCellTitle = '';
-          if (this.config.mode === 'verbose' && this.config.students.length > 1) {
-            this._addTableHeader(table, studentTitle);
-          } else {
-            studentCellTitle = studentTitle;
-          }
-
-          if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
-            const examCount = this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
-            if (examCount > 0) tableHasRows = true;
-          }
-        }
-
-        if (tableHasRows) wrapper.appendChild(table);
+          if (!Array.isArray(exams) || Number(studentConfig?.examsDaysAhead) <= 0) return 0;
+          return this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
+        });
+        if (examsTable) wrapper.appendChild(examsTable);
         continue;
       }
 
       if (widget === 'homework') {
-        const table = makeTable();
-        let tableHasRows = false;
-
-        for (const studentTitle of sortedStudentTitles) {
-          const studentConfig = this.configByStudent[studentTitle] || this.config;
+        const homeworkTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const homeworks = this.homeworksByStudent?.[studentTitle] || [];
-
-          let studentCellTitle = '';
-          if (this.config.mode === 'verbose' && this.config.students.length > 1) {
-            this._addTableHeader(table, studentTitle);
-          } else {
-            studentCellTitle = studentTitle;
-          }
-
-          const hwCount = this._renderHomeworksForStudent(table, studentCellTitle, studentConfig, homeworks);
-          if (hwCount > 0) tableHasRows = true;
-        }
-
-        if (tableHasRows) wrapper.appendChild(table);
+          return this._renderHomeworksForStudent(table, studentCellTitle, studentConfig, homeworks);
+        });
+        if (homeworkTable) wrapper.appendChild(homeworkTable);
         continue;
       }
 
       if (widget === 'absences') {
-        const table = makeTable();
-        let tableHasRows = false;
-
-        for (const studentTitle of sortedStudentTitles) {
-          const studentConfig = this.configByStudent[studentTitle] || this.config;
+        const absencesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const absences = this.absencesByStudent?.[studentTitle] || [];
-
-          let studentCellTitle = '';
-          if (this.config.mode === 'verbose' && this.config.students.length > 1) {
-            this._addTableHeader(table, studentTitle);
-          } else {
-            studentCellTitle = studentTitle;
-          }
-
-          const abCount = this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
-          if (abCount > 0) tableHasRows = true;
-        }
-
-        if (tableHasRows) wrapper.appendChild(table);
+          return this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
+        });
+        if (absencesTable) wrapper.appendChild(absencesTable);
         continue;
       }
     }
