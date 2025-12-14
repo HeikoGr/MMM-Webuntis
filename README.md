@@ -106,12 +106,12 @@ The following configuration options are supported. Global options can be declare
 | `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`. |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
 | `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
-| `fetchHomeworks` | bool | `true` | When `false` skips homework API calls to save memory/CPU on low-RAM devices. |
+| `fetchHomeworks` | bool | `false` | When `false` skips homework API calls to save memory/CPU on low-RAM devices. |
 | `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
 | `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
-| `displayMode` | string | `'grid'` | How to display lessons: `'list'` or `'grid'` (multi-day grid with exact positioning). |
+| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. Note: `homework` and `absences` currently show a placeholder (rendering not implemented yet). |
 | `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
 | `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
@@ -175,7 +175,7 @@ npm run check
 If your config is not in a standard location, pass it explicitly:
 
 ```bash
-node cli/cli.js --config /path/to/config.js
+node tests/test_helpers.js --config /path/to/config.js
 ```
 
 ## Dependencies

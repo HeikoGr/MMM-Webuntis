@@ -16,7 +16,10 @@ Module.register('MMM-Webuntis', {
     mode: 'verbose', // 'verbose' or 'compact' mode
     mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
     pastDaysToShow: 0, // number of past days to include (show previous days)
-    displayMode: 'list', // 'list' (default) or 'grid'
+    // Comma-separated list of widgets to render, top-to-bottom.
+    // Supported widgets: grid, lessons, exams, homework, absences
+    // Backwards compatible aliases: 'list' => lessons, exams  |  'grid' => grid
+    displayMode: 'list',
     fetchHomeworks: false, // set to false to skip homework API calls (saves memory on low-end devices)
     // Maximum number of lessons to display per day in grid view.
     // 0 (default) means show all lessons. Can be overridden per-student in the students[] entries.
@@ -92,6 +95,54 @@ Module.register('MMM-Webuntis', {
   /* Small helper to safely count arrays (returns 0 for non-arrays) */
   _countArray(arr) {
     return Array.isArray(arr) ? arr.length : 0;
+  },
+
+  /* Parse displayMode into an ordered list of widgets */
+  _getDisplayWidgets() {
+    const raw = this?.config?.displayMode;
+    const s = raw === undefined || raw === null ? '' : String(raw);
+    const lower = s.toLowerCase().trim();
+
+    // Backwards-compatible single values
+    if (lower === 'grid') return ['grid'];
+    if (lower === 'list') return ['lessons', 'exams'];
+
+    const parts = lower
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    const map = {
+      grid: 'grid',
+      list: 'list',
+      lessons: 'lessons',
+      lesson: 'lessons',
+      exams: 'exams',
+      exam: 'exams',
+      homework: 'homework',
+      homeworks: 'homework',
+      absences: 'absences',
+      absence: 'absences',
+    };
+
+    const out = [];
+    for (const p of parts) {
+      const w = map[p];
+      if (!w) continue;
+      if (w === 'list') {
+        if (!out.includes('lessons')) out.push('lessons');
+        if (!out.includes('exams')) out.push('exams');
+        continue;
+      }
+      if (!out.includes(w)) out.push(w);
+    }
+
+    // Safe fallback
+    return out.length > 0 ? out : ['lessons', 'exams'];
+  },
+
+  _hasWidget(name) {
+    return this._getDisplayWidgets().includes(String(name).toLowerCase());
   },
 
   /* Lightweight logging helper with levels: info, debug, warn */
@@ -458,8 +509,8 @@ Module.register('MMM-Webuntis', {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+            .filter((el) => String(el.date) === dateStr)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),
@@ -1025,7 +1076,7 @@ Module.register('MMM-Webuntis', {
       this._log('debug', 'now-line updater not started because module is paused');
       return;
     }
-    if (this.config.displayMode !== 'grid') return;
+    if (!this._hasWidget('grid')) return;
     if (this._nowLineTimer || this._nowLineTimerInitialTimeout) return;
 
     try {
@@ -1230,7 +1281,7 @@ Module.register('MMM-Webuntis', {
       this._startNowLineUpdater();
 
       // run one immediate update for now-lines so UI refreshes without waiting
-      if (this.config.displayMode === 'grid') {
+      if (this._hasWidget('grid')) {
         try {
           this._updateNowLinesAll();
         } catch {
@@ -1274,71 +1325,109 @@ Module.register('MMM-Webuntis', {
 
   getDom() {
     const wrapper = document.createElement('div');
-    const table = document.createElement('table');
-    table.className = 'bright small light';
-    let tableHasRows = false;
+    const widgets = this._getDisplayWidgets();
+
+    const makeTable = () => {
+      const t = document.createElement('table');
+      t.className = 'bright small light';
+      return t;
+    };
 
     // no student
     if (this.timetableByStudent === undefined) {
       this._log('info', 'No student data available - check module configuration and that GOT_DATA was received.');
-      return table;
+      return wrapper;
     }
 
     const sortedStudentTitles = Object.keys(this.timetableByStudent).sort();
 
-    // iterate through students
-    for (const studentTitle of sortedStudentTitles) {
-      const timetable = this.timetableByStudent[studentTitle] || [];
-      const studentConfig = this.configByStudent[studentTitle];
-      const exams = this.examsByStudent[studentTitle];
-      const timeUnits = this.timeUnitsByStudent[studentTitle];
-      // use precomputed startTime->name period map
-      const startTimesMap = (this.periodNamesByStudent && this.periodNamesByStudent[studentTitle]) || {};
+    for (const widget of widgets) {
+      if (widget === 'grid') {
+        for (const studentTitle of sortedStudentTitles) {
+          const timetable = this.timetableByStudent[studentTitle] || [];
+          const studentConfig = this.configByStudent[studentTitle];
+          const timeUnits = this.timeUnitsByStudent[studentTitle];
+          const homeworks = this.homeworksByStudent && this.homeworksByStudent[studentTitle] ? this.homeworksByStudent[studentTitle] : [];
 
-      const homeworks = this.homeworksByStudent && this.homeworksByStudent[studentTitle] ? this.homeworksByStudent[studentTitle] : [];
-      if (Array.isArray(homeworks) && homeworks.length > 0) {
-        // only construct sample when debug enabled to avoid extra work
-        if (this.config && this.config.logLevel === 'debug') {
-          const hwSample = homeworks.slice(0, 5).map((h) => ({
-            id: h.id ?? h.lid ?? h.lessonId ?? null,
-            su: h.su?.[0]?.name || h.su?.[0]?.longname || null,
-          }));
-          this._log('debug', `Homeworks for ${studentTitle}: count=${homeworks.length}, sample=`, hwSample);
+          if (timeUnits && timeUnits.length > 0 && timetable && timetable.length > 0) {
+            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits);
+            if (gridElem) wrapper.appendChild(gridElem);
+          }
         }
+        continue;
       }
 
-      // use module-level helpers: this._addTableHeader / this._addTableRow
-      let studentCellTitle = '';
+      if (widget === 'lessons') {
+        const table = makeTable();
+        let tableHasRows = false;
 
-      // only display student name as header cell if there are more than one student
-      if (this.config.mode == 'verbose' && this.config.students.length > 1) {
-        this._addTableHeader(table, studentTitle);
-      } else {
-        studentCellTitle = studentTitle;
-      }
+        for (const studentTitle of sortedStudentTitles) {
+          const timetable = this.timetableByStudent[studentTitle] || [];
+          const studentConfig = this.configByStudent[studentTitle];
+          const startTimesMap = (this.periodNamesByStudent && this.periodNamesByStudent[studentTitle]) || {};
 
-      if (this.config.displayMode === 'list') {
-        const listCount = this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
-        if (listCount > 0) tableHasRows = true;
+          let studentCellTitle = '';
+          if (this.config.mode == 'verbose' && this.config.students.length > 1) {
+            this._addTableHeader(table, studentTitle);
+          } else {
+            studentCellTitle = studentTitle;
+          }
 
-        // Exams rendering (optional): render only when enabled; do not skip grid when absent
-        if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
-          const examCount = this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
-          if (examCount > 0) tableHasRows = true;
+          const listCount = this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
+          if (listCount > 0) tableHasRows = true;
         }
+
+        if (tableHasRows) wrapper.appendChild(table);
+        continue;
       }
 
-      // --- Multi-day timetable grid display ---
-      if (this.config.displayMode === 'grid') {
-        if (timeUnits && timeUnits.length > 0 && timetable && timetable.length > 0) {
-          // delegate grid rendering to a helper
-          const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits);
-          if (gridElem) wrapper.appendChild(gridElem);
+      if (widget === 'exams') {
+        const table = makeTable();
+        let tableHasRows = false;
+
+        for (const studentTitle of sortedStudentTitles) {
+          const studentConfig = this.configByStudent[studentTitle];
+          const exams = this.examsByStudent[studentTitle];
+
+          let studentCellTitle = '';
+          if (this.config.mode == 'verbose' && this.config.students.length > 1) {
+            this._addTableHeader(table, studentTitle);
+          } else {
+            studentCellTitle = studentTitle;
+          }
+
+          // keep current semantics: examsDaysAhead=0 disables exams
+          if (Array.isArray(exams) && Number(studentConfig?.examsDaysAhead) > 0) {
+            const examCount = this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
+            if (examCount > 0) tableHasRows = true;
+          }
         }
-      }
-    } // end for students
 
-    if (tableHasRows) wrapper.appendChild(table);
+        if (tableHasRows) wrapper.appendChild(table);
+        continue;
+      }
+
+      if (widget === 'homework' || widget === 'absences') {
+        const table = makeTable();
+        let tableHasRows = false;
+
+        for (const studentTitle of sortedStudentTitles) {
+          let studentCellTitle = '';
+          if (this.config.mode == 'verbose' && this.config.students.length > 1) {
+            this._addTableHeader(table, studentTitle);
+          } else {
+            studentCellTitle = studentTitle;
+          }
+
+          const label = widget === 'homework' ? this.translate('homework') : this.translate('absences');
+          this._addTableRow(table, 'lessonRowEmpty', studentCellTitle, this.translate('not_implemented'), label);
+          tableHasRows = true;
+        }
+
+        if (tableHasRows) wrapper.appendChild(table);
+        continue;
+      }
+    }
     return wrapper;
   },
 

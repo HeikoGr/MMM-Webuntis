@@ -4,5 +4,8 @@
   "exams": "Klassenarbeiten",
   "perdiod": ". Std.",
   "more": "... mehr",
-  "no_exams": "keine Klassenarbeiten"
+  "no_exams": "keine Klassenarbeiten",
+  "not_implemented": "Noch nicht implementiert",
+  "homework": "Hausaufgaben",
+  "absences": "Fehlzeiten"
 }
