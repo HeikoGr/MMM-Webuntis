@@ -68,7 +68,6 @@ function mergeStudentConfig(moduleCfg, studentCfg) {
     'examsDaysAhead',
     'showExamSubject',
     'showExamTeacher',
-    'fetchHomeworks',
   ];
   const out = { ...studentCfg };
   props.forEach((p) => {

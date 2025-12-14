@@ -1,5 +1,7 @@
 # MMM-Webuntis
 
+> ⚠️ **Important Notice: This project contains substantial AI-generated code.** Review, test, and audit all firmware, web UI, and documentation before using it in production or safety-relevant contexts. Treat defaults and generated logic as untrusted until verified.
+
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
 ## BREAKING CHANGES in 0.4.0
@@ -106,13 +108,14 @@ The following configuration options are supported. Global options can be declare
 | `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`. |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
 | `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
-| `fetchHomeworks` | bool | `false` | When `false` skips homework API calls to save memory/CPU on low-RAM devices. |
+| `fetchHomeworks` | bool | deprecated | Deprecated: homework is fetched automatically when `displayMode` includes the `homework` widget. |
 | `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
 | `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
-| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. Note: `homework` and `absences` currently show a placeholder (rendering not implemented yet). |
+| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. |
 | `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
+| `fetchAbsences` | bool | deprecated | Deprecated: absences are fetched automatically when `displayMode` includes the `absences` widget. |
 | `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
 ### Student credential object
@@ -175,7 +178,7 @@ npm run check
 If your config is not in a standard location, pass it explicitly:
 
 ```bash
-node tests/test_helpers.js --config /path/to/config.js
+node cli/cli.js --config /path/to/config.js
 ```
 
 ## Dependencies

@@ -92,6 +92,7 @@ module.exports = NodeHelper.create({
     return rawExams.map((ex) => ({
       examDate: ex.examDate,
       startTime: ex.startTime,
+      endTime: ex.endTime ?? null,
       name: ex.name,
       subject: ex.subject,
       teachers: Array.isArray(ex.teachers) ? ex.teachers.slice(0, 2) : [],
@@ -112,6 +113,10 @@ module.exports = NodeHelper.create({
       id: hw.id ?? null,
       lid: hw.lid ?? null,
       lessonId: hw.lessonId ?? null,
+      dueDate: hw.dueDate ?? hw.date ?? null,
+      completed: hw.completed ?? null,
+      text: hw.text ?? hw.description ?? hw.remark ?? '',
+      remark: hw.remark ?? '',
       su:
         hw.su && typeof hw.su === 'object'
           ? { name: hw.su.name, longname: hw.su.longname }
@@ -119,6 +124,41 @@ module.exports = NodeHelper.create({
             ? { name: hw.su[0].name, longname: hw.su[0].longname }
             : null,
     }));
+  },
+
+  _compactAbsences(rawAbsences) {
+    if (!Array.isArray(rawAbsences)) return [];
+    return rawAbsences.map((a) => ({
+      date: a.date ?? a.absenceDate ?? a.day ?? null,
+      startTime: a.startTime ?? a.start ?? null,
+      endTime: a.endTime ?? a.end ?? null,
+      reason: a.reason ?? a.reasonText ?? a.text ?? '',
+      excused: a.excused ?? a.isExcused ?? null,
+      student: a.student ?? null,
+      su: a.su && a.su[0] ? [{ name: a.su[0].name, longname: a.su[0].longname }] : [],
+      te: a.te && a.te[0] ? [{ name: a.te[0].name, longname: a.te[0].longname }] : [],
+      lessonId: a.lessonId ?? a.lid ?? a.id ?? null,
+    }));
+  },
+
+  _wantsWidget(widgetName, displayMode) {
+    const w = String(widgetName || '').toLowerCase();
+    const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase();
+    if (!w) return false;
+    if (dm === w) return true;
+    // Backwards compatible values
+    if (w === 'grid' && dm.trim() === 'grid') return true;
+    if ((w === 'lessons' || w === 'exams') && dm.trim() === 'list') return true;
+    return dm
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .some((p) => {
+        if (p === w) return true;
+        if (w === 'homework' && (p === 'homeworks' || p === 'homework')) return true;
+        if (w === 'absences' && (p === 'absence' || p === 'absences')) return true;
+        return false;
+      });
   },
 
   // Backend performs API calls only; no data normalization here.
@@ -131,6 +171,16 @@ module.exports = NodeHelper.create({
   _makeRequestSignature(student) {
     try {
       const credKey = this._getCredentialKey(student);
+      const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
+      const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
+
+      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
+      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
+      const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
+
+      // Data fetching is driven by widgets; legacy per-student flags can only disable.
+      const fetchHomeworksEffective = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
+      const fetchAbsencesEffective = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
       // include the most relevant options that affect the backend fetch
       const sig = {
         credKey,
@@ -138,11 +188,11 @@ module.exports = NodeHelper.create({
         pastDaysToShow: Number(student.pastDaysToShow || 0),
         useClassTimetable: Boolean(student.useClassTimetable),
         examsDaysAhead: Number(student.examsDaysAhead || 0),
-        showStartTime: Boolean(student.showStartTime),
-        showTeacherMode: student.showTeacherMode || null,
-        useShortSubject: Boolean(student.useShortSubject),
-        showSubstitutionText: Boolean(student.showSubstitutionText),
-        fetchHomeworks: student.fetchHomeworks !== false,
+        wantsGrid: wantsGridWidget,
+        wantsLessons: wantsLessonsWidget,
+        wantsExams: wantsExamsWidget,
+        fetchHomeworks: fetchHomeworksEffective,
+        fetchAbsences: fetchAbsencesEffective,
       };
       return JSON.stringify(sig);
     } catch {
@@ -344,7 +394,6 @@ module.exports = NodeHelper.create({
           'showExamSubject',
           'showExamTeacher',
           'logLevel',
-          'fetchHomeworks',
         ];
 
         // normalize student configs and group
@@ -440,7 +489,18 @@ module.exports = NodeHelper.create({
     };
     // Backend fetches raw data from Untis API. No transformation here.
 
-    const fetchHomeworks = student.fetchHomeworks !== false;
+    const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
+    const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
+    const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
+    const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
+    const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
+
+    // Data fetching is driven by widgets; legacy per-student flags can only disable.
+    const fetchTimegrid = Boolean(wantsGridWidget);
+    const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
+    const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
+    const fetchHomeworks = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
+    const fetchAbsences = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
 
     var rangeStart = new Date(Date.now());
     var rangeEnd = new Date(Date.now());
@@ -448,18 +508,20 @@ module.exports = NodeHelper.create({
     rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
     rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
 
-    // Get Timegrid (raw) - cached per credential by WebUntis itself
+    // Get Timegrid (raw) - only needed for grid widget
     let grid = [];
-    try {
-      grid = await this._getTimegrid(untis, credKey);
-    } catch (error) {
-      this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
+    if (fetchTimegrid) {
+      try {
+        grid = await this._getTimegrid(untis, credKey);
+      } catch (error) {
+        this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
+      }
     }
 
     // Prepare raw timetable containers
     let timetable = [];
 
-    if (student.daysToShow > 0) {
+    if (fetchTimetable && student.daysToShow > 0) {
       try {
         if (student.useClassTimetable) {
           logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
@@ -477,7 +539,7 @@ module.exports = NodeHelper.create({
 
     // Exams (raw)
     let rawExams = [];
-    if (student.examsDaysAhead > 0) {
+    if (fetchExams && student.examsDaysAhead > 0) {
       // Validate the number of days
       if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
         student.examsDaysAhead = 30;
@@ -539,11 +601,51 @@ module.exports = NodeHelper.create({
       logger(`[MMM-Webuntis] Homework fetch skipped for ${student.title} (fetchHomeworks=false)`);
     }
 
+    // Absences (raw)
+    let rawAbsences = [];
+    if (fetchAbsences) {
+      try {
+        const candidates = [
+          () => untis.getAbsentLesson(rangeStart, rangeEnd),
+          () => untis.getAbsentLesson(rangeStart, rangeEnd, student.id),
+          () => untis.getAbsentLesson(rangeStart, rangeEnd, student.studentId),
+        ];
+        let lastErr = null;
+        for (const fn of candidates) {
+          try {
+            const res = await fn();
+            rawAbsences = Array.isArray(res)
+              ? res
+              : Array.isArray(res?.absences)
+                ? res.absences
+                : Array.isArray(res?.absentLessons)
+                  ? res.absentLessons
+                  : [];
+            break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (!Array.isArray(rawAbsences) || rawAbsences.length === 0) {
+          logger(
+            `[MMM-Webuntis] Absences fetch returned no data for ${student.title}${lastErr ? ` (lastErr=${this._formatErr(lastErr)})` : ''}`
+          );
+        } else {
+          logger(`[MMM-Webuntis] Loaded absences (raw) for ${student.title}: count=${rawAbsences.length}`);
+        }
+      } catch (error) {
+        this._mmLog('error', student, `Absences fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+      }
+    } else {
+      logger(`[MMM-Webuntis] Absences fetch skipped for ${student.title} (fetchAbsences=false)`);
+    }
+
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
     const compactTimetable = this._compactLessons(timetable);
     const compactExams = this._compactExams(rawExams);
     const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult) : [];
+    const compactAbsences = fetchAbsences ? this._compactAbsences(rawAbsences) : [];
 
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
@@ -554,6 +656,7 @@ module.exports = NodeHelper.create({
       timetableRange: compactTimetable,
       exams: compactExams,
       homeworks: compactHomeworks,
+      absences: compactAbsences,
     };
     try {
       const forSend = { ...payload, id: identifier };
