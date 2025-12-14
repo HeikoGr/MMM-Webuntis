@@ -175,7 +175,7 @@ npm run check
 If your config is not in a standard location, pass it explicitly:
 
 ```bash
-node tests/test_helpers.js --config /path/to/config.js
+node cli/cli.js --config /path/to/config.js
 ```
 
 ## Dependencies
