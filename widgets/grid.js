@@ -193,7 +193,7 @@ function getNowLineState(ctx) {
         };
 
         const totalMinutes = allEnd - allStart;
-        const pxPerMinute = 1;
+        const pxPerMinute = 0.75;
         const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
 
         const timeAxis = document.createElement('div');
