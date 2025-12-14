@@ -1,6 +1,8 @@
 (function () {
     const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
+    const util = root.util;
+
     function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
         let addedRows = 0;
         if (!Array.isArray(exams)) return 0;
@@ -20,9 +22,11 @@
 
                 addedRows++;
 
-                const day = examYmd % 100;
-                const month = Math.floor(examYmd / 100) % 100;
-                const dateTimeCell = `${day}.${month}.&nbsp;`;
+                const examDateFormat = studentConfig.examDateFormat ?? ctx.config.examDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.';
+                const fallbackDay = String(examYmd % 100).padStart(2, '0');
+                const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
+                const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
+                const dateTimeCell = formattedDate ? `${formattedDate}&nbsp;` : '';
 
                 let nameCell = exam.name;
                 if (studentConfig.showExamSubject) {

@@ -1,5 +1,77 @@
+const nowLineStates = new WeakMap();
+
+function getNowLineState(ctx) {
+    if (!nowLineStates.has(ctx)) {
+        nowLineStates.set(ctx, { timer: null, initialTimeout: null });
+    }
+    return nowLineStates.get(ctx);
+}
+
 (function () {
     const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+
+    function startNowLineUpdater(ctx) {
+        if (!ctx || ctx._paused) return;
+        if (!ctx._hasWidget('grid')) return;
+        const state = getNowLineState(ctx);
+        if (state.timer || state.initialTimeout) return;
+
+        const tick = () => {
+            try {
+                const nowLocal = new Date();
+                const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+                if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
+                if (nowYmd !== ctx._currentTodayYmd) {
+                    try {
+                        ctx.sendSocketNotification('FETCH_DATA', ctx.config);
+                    } catch {
+                        // ignore
+                    }
+                    try {
+                        ctx.updateDom();
+                    } catch {
+                        // ignore
+                    }
+                    ctx._currentTodayYmd = nowYmd;
+                }
+
+                const gridWidget = ctx._getWidgetApi()?.grid;
+                if (gridWidget) {
+                    if (typeof gridWidget.updateNowLinesAll === 'function') gridWidget.updateNowLinesAll(ctx);
+                    if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx);
+                }
+            } catch (err) {
+                ctx._log('warn', 'minute tick update failed', err);
+            }
+        };
+
+        const now = new Date();
+        const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
+        state.initialTimeout = setTimeout(
+            () => {
+                tick();
+                state.timer = setInterval(tick, 60 * 1000);
+                state.initialTimeout = null;
+            },
+            Math.max(0, msToNextMinute)
+        );
+
+        tick();
+    }
+
+    function stopNowLineUpdater(ctx) {
+        if (!ctx) return;
+        const state = getNowLineState(ctx);
+        if (state.timer) {
+            clearInterval(state.timer);
+            state.timer = null;
+        }
+        if (state.initialTimeout) {
+            clearTimeout(state.initialTimeout);
+            state.initialTimeout = null;
+        }
+    }
 
     function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams) {
         const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
@@ -584,7 +656,63 @@
         return wrapper;
     }
 
+    function refreshPastMasks(ctx) {
+        try {
+            if (!ctx) return;
+            const now = new Date();
+            const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+            const nowMin = now.getHours() * 60 + now.getMinutes();
+            const lessons = document.querySelectorAll('.grid-combined .grid-lesson');
+            lessons.forEach((ln) => {
+                const ds = ln.getAttribute('data-date');
+                const de = ln.getAttribute('data-end-min');
+                if (!ds) return;
+                const lessonYmd = Number(ds) || 0;
+                const endMin = de !== null && de !== undefined ? Number(de) : NaN;
+                let isPast = false;
+                if (lessonYmd < todayYmd) {
+                    isPast = true;
+                } else if (lessonYmd === todayYmd) {
+                    if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
+                }
+                if (isPast) ln.classList.add('past');
+                else ln.classList.remove('past');
+            });
+        } catch (e) {
+            ctx?._log?.('warn', 'failed to refresh past masks', e);
+        }
+    }
+
+    function updateNowLinesAll(ctx) {
+        try {
+            if (!ctx) return;
+            const inners = document.querySelectorAll('.day-column-inner');
+            const now = new Date();
+            const nowMin = now.getHours() * 60 + now.getMinutes();
+            inners.forEach((inner) => {
+                const nl = inner._nowLine;
+                const allS = inner._allStart;
+                const allE = inner._allEnd;
+                const h = inner._totalHeight;
+                if (!nl || allS === undefined || allE === undefined || h === undefined) return;
+                if (nowMin < allS || nowMin > allE) {
+                    nl.style.display = 'none';
+                    return;
+                }
+                nl.style.display = 'block';
+                const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
+                nl.style.top = `${top}px`;
+            });
+        } catch (e) {
+            ctx?._log?.('warn', 'updateNowLinesAll failed', e);
+        }
+    }
+
     root.grid = {
         renderGridForStudent,
+        refreshPastMasks,
+        updateNowLinesAll,
+        startNowLineUpdater,
+        stopNowLineUpdater,
     };
 })();
