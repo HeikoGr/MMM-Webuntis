@@ -365,7 +365,6 @@ module.exports = NodeHelper.create({
         // across module instances so that per-instance options are always respected.
         for (const [credKey, students] of groups.entries()) {
           // Run sequentially to reduce peak memory usage on low-RAM devices
-          // eslint-disable-next-line no-await-in-loop
           await this.processGroup(credKey, students, identifier);
         }
         this._mmLog('info', null, 'Successfully fetched data');
@@ -504,7 +503,10 @@ module.exports = NodeHelper.create({
         hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
         // Try a sequence of candidate homework API calls (first that succeeds wins)
         try {
-          const candidates = [() => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd), () => untis.getHomeWorksFor(new Date(), hwRangeEnd)];
+          const candidates = [
+            () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
+            () => untis.getHomeWorksFor(new Date(), hwRangeEnd),
+          ];
           let lastErr = null;
           for (const fn of candidates) {
             try {

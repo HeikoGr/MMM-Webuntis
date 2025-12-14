@@ -157,6 +157,27 @@ Additional grid rendering notes:
 - Enable `logLevel: 'debug'` to get more information in the MagicMirror server log.
 - If a student uses MS365 or SSO logins that cannot be automated, prefer generating a WebUntis data-access QR code inside the student's account and use that value.
 
+## CLI tool (config check)
+
+This module includes a small interactive CLI tool that reads your MagicMirror config, lists all configured students (duplicates are allowed), and lets you query a selected student for:
+
+- current timetable (today, with changes)
+- next exams
+- homeworks
+- absences
+
+Run from the module directory:
+
+```bash
+npm run check
+```
+
+If your config is not in a standard location, pass it explicitly:
+
+```bash
+node tests/test_helpers.js --config /path/to/config.js
+```
+
 ## Dependencies
 
 - [TheNoim/WebUntis](https://github.com/TheNoim/WebUntis) — installed via `npm install` in the module directory.
