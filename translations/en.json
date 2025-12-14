@@ -4,5 +4,8 @@
   "exams": "examinations",
   "period": "st period",
   "more": "... more",
-  "no_exams": "no examinations"
+  "no_exams": "no examinations",
+  "not_implemented": "Not implemented yet",
+  "homework": "homework",
+  "absences": "absences"
 }
