@@ -2,6 +2,8 @@
     const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
     const util = root.util;
+    const dom = root.dom || {};
+    const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
     function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
         let addedRows = 0;
@@ -26,7 +28,7 @@
                 const fallbackDay = String(examYmd % 100).padStart(2, '0');
                 const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
                 const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
-                const dateTimeCell = formattedDate ? `${formattedDate}&nbsp;` : '';
+                const dateTimeCell = formattedDate ? `${formattedDate}` : '';
 
                 let nameCell = exam.name;
                 if (studentConfig.showExamSubject) {
@@ -42,11 +44,11 @@
                     nameCell += `<br/><span class="xsmall dimmed">${exam.text}</span>`;
                 }
 
-                ctx._addTableRow(table, 'examRow', studentCellTitle, dateTimeCell, nameCell);
+                addTableRow(table, 'examRow', studentCellTitle, dateTimeCell, nameCell);
             });
 
         if (addedRows === 0) {
-            ctx._addTableRow(table, 'examRowEmpty', studentCellTitle, ctx.translate('no_exams'));
+            addTableRow(table, 'examRowEmpty', studentCellTitle, ctx.translate('no_exams'));
         }
 
         return addedRows;

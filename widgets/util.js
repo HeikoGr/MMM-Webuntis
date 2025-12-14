@@ -6,11 +6,21 @@
     }
 
     function formatDate(ymd, format = 'dd.MM.yyyy') {
+        if (ymd === null || ymd === undefined || ymd === '') return '';
+        // support numeric ymd (20251214) or ISO date strings (2025-12-14 / 2025-12-14T00:00:00Z)
+        let day; let month; let year;
         const n = Number(ymd);
-        if (!Number.isFinite(n) || n <= 0) return '';
-        const day = String(n % 100).padStart(2, '0');
-        const month = String(Math.floor(n / 100) % 100).padStart(2, '0');
-        const year = String(Math.floor(n / 10000));
+        if (Number.isFinite(n) && n > 0) {
+            day = String(n % 100).padStart(2, '0');
+            month = String(Math.floor(n / 100) % 100).padStart(2, '0');
+            year = String(Math.floor(n / 10000));
+        } else {
+            const parsed = new Date(String(ymd));
+            if (Number.isNaN(parsed.getTime())) return '';
+            day = String(parsed.getDate()).padStart(2, '0');
+            month = String(parsed.getMonth() + 1).padStart(2, '0');
+            year = String(parsed.getFullYear());
+        }
         const replacements = {
             dd: day,
             mm: month,
@@ -61,18 +71,22 @@
     function addTableRow(table, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
         const thisRow = createElement('tr');
         thisRow.className = type;
+        if (addClass) {
+            thisRow.className = `${thisRow.className} ${addClass}`.trim();
+        }
 
         if (studentTitle !== '') {
-            const studentCell = createElement('td', 'align-left alignTop bold', studentTitle);
+            const studentCell = createElement('td', 'align-left alignTop bold wu-col-student', studentTitle);
             thisRow.appendChild(studentCell);
         }
 
-        const cell1 = createElement('td', 'align-left alignTop', text1);
+        const primaryClass = text2 === '' ? 'wu-col-data' : 'wu-col-meta';
+        const cell1 = createElement('td', `align-left alignTop ${primaryClass}`, text1);
         if (text2 === '') cell1.colSpan = 2;
         thisRow.appendChild(cell1);
 
         if (text2 !== '') {
-            const cell2 = createElement('td', `align-left alignTop ${addClass}`, text2);
+            const cell2 = createElement('td', `align-left alignTop wu-col-data ${addClass}`, text2);
             thisRow.appendChild(cell2);
         }
 
