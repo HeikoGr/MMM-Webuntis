@@ -37,6 +37,12 @@
 .MMM-Webuntis table {
   width: 100%;
   border-collapse: collapse;
+  margin-bottom: 0.6rem;
+}
+
+/* Reduce extra space after the very last widget table */
+.MMM-Webuntis>table:last-child {
+  margin-bottom: 0;
 }
 
 .MMM-Webuntis td.wu-col-student,
