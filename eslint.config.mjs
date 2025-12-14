@@ -26,6 +26,24 @@ export default defineConfig([
     },
   },
   {
+    files: ['widgets/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+      },
+    },
+    rules: {
+      'no-console': [
+        'warn',
+        {
+          allow: ['warn', 'error'],
+        },
+      ],
+    },
+  },
+  {
     files: ['MMM-Webuntis.js'],
     languageOptions: {
       ecmaVersion: 2021,

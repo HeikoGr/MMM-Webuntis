@@ -5,7 +5,10 @@
   "perdiod": ". Std.",
   "more": "... mehr",
   "no_exams": "keine Klassenarbeiten",
-  "not_implemented": "Noch nicht implementiert",
   "homework": "Hausaufgaben",
-  "absences": "Fehlzeiten"
+  "absences": "Fehlzeiten",
+  "no_homework": "keine Hausaufgaben",
+  "no_absences": "keine Fehlzeiten",
+  "excused": "entschuldigt",
+  "unexcused": "unentschuldigt"
 }
