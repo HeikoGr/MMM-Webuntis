@@ -192,6 +192,16 @@ Module.register('MMM-Webuntis', {
     return Object.keys(this.timetableByStudent).sort();
   },
 
+  _invokeWidgetRenderer(widgetKey, methodName, ...args) {
+    const api = this._getWidgetApi();
+    const fn = api?.[widgetKey]?.[methodName];
+    if (typeof fn !== 'function') {
+      this._log('warn', `${widgetKey} widget script not loaded`);
+      return 0;
+    }
+    return fn(this, ...args);
+  },
+
   _renderWidgetTableRows(studentTitles, renderRow) {
     const table = this._createWidgetTable();
     let tableHasRows = false;
@@ -286,6 +296,10 @@ Module.register('MMM-Webuntis', {
   },
 
   _toMinutes(t) {
+    const util = this._getWidgetApi()?.util;
+    if (util && typeof util.toMinutes === 'function') {
+      return util.toMinutes(t);
+    }
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();
     if (s.includes(':')) {
@@ -311,43 +325,19 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap) {
-    const api = this._getWidgetApi();
-    const fn = api?.lessons?.renderLessonsForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'lessons widget script not loaded');
-      return 0;
-    }
-    return fn(this, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
+    return this._invokeWidgetRenderer('lessons', 'renderLessonsForStudent', table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
   },
 
   _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
-    const api = this._getWidgetApi();
-    const fn = api?.exams?.renderExamsForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'exams widget script not loaded');
-      return 0;
-    }
-    return fn(this, table, studentCellTitle, studentConfig, exams);
+    return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', table, studentCellTitle, studentConfig, exams);
   },
 
   _renderHomeworksForStudent(table, studentCellTitle, studentConfig, homeworks) {
-    const api = this._getWidgetApi();
-    const fn = api?.homework?.renderHomeworksForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'homework widget script not loaded');
-      return 0;
-    }
-    return fn(this, table, studentCellTitle, studentConfig, homeworks);
+    return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', table, studentCellTitle, studentConfig, homeworks);
   },
 
   _renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences) {
-    const api = this._getWidgetApi();
-    const fn = api?.absences?.renderAbsencesForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'absences widget script not loaded');
-      return 0;
-    }
-    return fn(this, table, studentCellTitle, studentConfig, absences);
+    return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', table, studentCellTitle, studentConfig, absences);
   },
 
   start() {

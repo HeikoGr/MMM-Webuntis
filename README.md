@@ -116,6 +116,9 @@ The following configuration options are supported. Global options can be declare
 | `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. |
 | `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
 | `fetchAbsences` | bool | deprecated | Deprecated: absences are fetched automatically when `displayMode` includes the `absences` widget. |
+| `dateFormat` | string | `'dd.MM.'` | Format string used when displaying dates in lists (supports `dd`, `mm`, `yyyy`, `yy`). Use `d`, `m` variants for non-zero padded numbers (e.g., `d.m.yyyy`). |
+| `examDateFormat` | string | `'dd.MM.'` | Same as `dateFormat` but for exam widgets. |
+| `homeworkDateFormat` | string | `'dd.MM.'` | Same as `dateFormat` but for homework widgets. |
 | `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
 ### Student credential object
@@ -149,6 +152,10 @@ Example student entry:
 Additional grid rendering notes:
 
 - When `maxGridLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
+
+### Date format customization
+
+- `dateFormat`, `examDateFormat`, and `homeworkDateFormat` were introduced so you can control how dates are shown in the list/exam/homework widgets. They accept the placeholders `dd`, `mm`, `yyyy`, `yy` and support single-digit variants by dropping the leading zero (e.g., `d.m.yyyy`). Since the values are resolved inside the widgets, you can set formats per student by adding these keys directly to a student object.
 
 ## Log levels and debugging
 

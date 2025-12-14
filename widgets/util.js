@@ -28,6 +28,21 @@
         return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
     }
 
+    function toMinutes(t) {
+        if (t === null || t === undefined) return NaN;
+        const s = String(t).trim();
+        if (s.includes(':')) {
+            const parts = s.split(':').map((p) => p.replace(/\D/g, ''));
+            const hh = parseInt(parts[0], 10) || 0;
+            const mm = parseInt(parts[1] || '0', 10) || 0;
+            return hh * 60 + mm;
+        }
+        const digits = s.replace(/\D/g, '').padStart(4, '0');
+        const hh = parseInt(digits.slice(0, 2), 10) || 0;
+        const mm = parseInt(digits.slice(2), 10) || 0;
+        return hh * 60 + mm;
+    }
+
     function createElement(tag, className = '', innerHTML = '') {
         const el = document.createElement(tag);
         if (className) el.className = className;
@@ -73,6 +88,7 @@
     root.util = {
         formatYmd,
         formatTime,
+        toMinutes,
         formatDate,
     };
 
