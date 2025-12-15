@@ -656,16 +656,32 @@ function getNowLineState(ctx) {
         }
 
         wrapper.appendChild(grid);
+
+        // Draw nowLine immediately on first render (no need to wait for the next minute tick).
+        // Use the local wrapper scope so this works even before MagicMirror inserts the DOM.
+        try {
+            const gridWidget = ctx?._getWidgetApi?.()?.grid;
+            if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
+                gridWidget.updateNowLinesAll(ctx, wrapper);
+            }
+            if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
+                gridWidget.refreshPastMasks(ctx, wrapper);
+            }
+        } catch {
+            // ignore
+        }
+
         return wrapper;
     }
 
-    function refreshPastMasks(ctx) {
+    function refreshPastMasks(ctx, rootEl = null) {
         try {
             if (!ctx) return;
             const now = new Date();
             const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
             const nowMin = now.getHours() * 60 + now.getMinutes();
-            const lessons = document.querySelectorAll('.grid-combined .grid-lesson');
+            const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+            const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
             lessons.forEach((ln) => {
                 const ds = ln.getAttribute('data-date');
                 const de = ln.getAttribute('data-end-min');
@@ -686,12 +702,14 @@ function getNowLineState(ctx) {
         }
     }
 
-    function updateNowLinesAll(ctx) {
+    function updateNowLinesAll(ctx, rootEl = null) {
         try {
             if (!ctx) return;
-            const inners = document.querySelectorAll('.day-column-inner');
+            const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+            const inners = scope.querySelectorAll('.day-column-inner');
             const now = new Date();
             const nowMin = now.getHours() * 60 + now.getMinutes();
+            let updated = 0;
             inners.forEach((inner) => {
                 const nl = inner._nowLine;
                 const allS = inner._allStart;
@@ -705,9 +723,12 @@ function getNowLineState(ctx) {
                 nl.style.display = 'block';
                 const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
                 nl.style.top = `${top}px`;
+                updated++;
             });
+            return updated;
         } catch (e) {
             ctx?._log?.('warn', 'updateNowLinesAll failed', e);
+            return 0;
         }
     }
 
