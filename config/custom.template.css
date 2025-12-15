@@ -1,0 +1,10 @@
+/*
+ * Example CSS overrides for MMM-Webuntis.
+ * Copy this file to `custom.css` in the same folder and customize.
+ * The DevContainer mounts it into /opt/magic_mirror/css/custom.css so
+ * editing inside the container updates this file.
+ */
+
+.MMM-Webuntis .module-content {
+  opacity: 0.95;
+}

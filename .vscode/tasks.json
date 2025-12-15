@@ -1,0 +1,98 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pm2: restart all",
+      "type": "shell",
+      "command": "pm2 restart all",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "options": {
+        "statusbar": {
+          "label": "$(sync) Restart",
+          "color": "#FF9800",
+          "detail": "Restart all PM2 processes"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pm2: stop all",
+      "type": "shell",
+      "command": "pm2 stop all",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "options": {
+        "statusbar": {
+          "label": "$(debug-disconnect) Stop",
+          "color": "#E53935",
+          "detail": "Stop all PM2 processes"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pm2: list",
+      "type": "shell",
+      "command": "pm2 list",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "options": {
+        "statusbar": {
+          "label": "$(list-unordered) List",
+          "color": "#2196F3",
+          "detail": "Show PM2 process list"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "pm2: logs (follow)",
+      "type": "shell",
+      "command": "pm2 logs --lines 200",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "isBackground": false,
+      "options": {
+        "statusbar": {
+          "label": "$(eye) Logs",
+          "color": "#4CAF50",
+          "detail": "Follow PM2 logs"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "npm: install all",
+      "type": "shell",
+      "command": "npm install --omit=dev",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "isBackground": false,
+      "options": {
+        "statusbar": {
+          "label": "$(eye) npm i all",
+          "color": "#ffe600",
+          "detail": "npm install"
+        }
+      },
+      "problemMatcher": []
+    }
+  ]
+}
