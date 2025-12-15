@@ -1,0 +1,34 @@
+{
+  "name": "MMM-Webuntis (MagicMirror Dev)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceFolder": "/opt/magic_mirror/modules/MMM-Webuntis",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/opt/magic_mirror/modules/MMM-Webuntis,type=bind",
+  "overrideCommand": false,
+  "shutdownAction": "stopContainer",
+  "remoteUser": "root",
+  "containerEnv": {
+    "IN_DEVCONTAINER": "1"
+  },
+  "forwardPorts": [8080],
+  "mounts": [
+    "source=${localWorkspaceFolder}/config,target=/opt/magic_mirror/config,type=bind,consistency=cached"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "actboy168.tasks",
+        "eamodio.gitlens",
+        "dbaeumer.vscode-eslint"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "files.trimTrailingWhitespace": true
+      }
+    }
+  },
+  "postCreateCommand": "/bin/sh .devcontainer/postCreate.sh",
+  "postStartCommand": "echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
+}

@@ -90,6 +90,21 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The ex
 
 Note: The option names listed here are the canonical names. A small compatibility mapper exists (see "BREAKING CHANGES" above) that will translate commonly-used legacy aliases during startup and print a console warning; however, you should still rename keys in your `config.js` to the canonical names for clarity and future compatibility.
 
+## Template-based config workflow
+
+- This repository ships with templates in `config/` so you can bootstrap a MagicMirror setup quickly without committing personal credentials or styling tweaks.
+
+- Copy the template files to `config.js` / `custom.css` inside the same folder (both paths are listed in `.gitignore`) and customize them locally. A simple helper command is:
+
+```bash
+cp config/config.template.js config/config.js
+cp config/custom.template.css config/custom.css
+```
+
+- The DevContainer now mounts the whole `config/` folder into `/opt/magic_mirror/config/` (see `mounts` in `.devcontainer/devcontainer.json`). During startup the container copies `config.template.js` → `config.js` and `custom.template.css` → `custom.css` when the user files are missing, and it also syncs `config/custom.css` into `/opt/magic_mirror/css/custom.css`. That means editing the repo files inside the container updates them directly, and your overrides are kept in sync while the templates continue acting as safe defaults.
+
+If you are not using the DevContainer, you can still treat the template files as examples—copy them into your MagicMirror core folder manually and adjust them there.
+
 ## Configuration options
 
 The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.

@@ -1,0 +1,47 @@
+# Module-local Dockerfile copied from repo root (minimal adaptation)
+FROM node:22-bookworm-slim
+
+WORKDIR /opt/magic_mirror
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    python3 \
+    ca-certificates \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone MagicMirror
+RUN git clone --depth=1 https://github.com/MagicMirrorOrg/MagicMirror.git . && \
+    npm install --only=prod && \
+    npm cache clean --force && \
+    rm -rf /opt/magic_mirror/.git
+
+RUN update-ca-certificates
+
+RUN npm install -g pm2
+
+# Install common dev tooling globally (keeps container usable without a separate workspace folder)
+RUN npm install -g \
+    eslint \
+    eslint-plugin-n \
+    prettier \
+    cspell \
+    @eslint/css \
+    @eslint/js \
+    @eslint/json \
+    prettier-plugin-jinja-template \
+    @stylistic/eslint-plugin
+
+WORKDIR /opt/magic_mirror
+
+COPY ./entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh || true
+
+# Provide a default PM2 ecosystem file so `pm2-runtime` can start MagicMirror.
+# This is a minimal file intended for development in the devcontainer.
+COPY ./ecosystem.config.js /opt/magic_mirror/ecosystem.config.js
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]
