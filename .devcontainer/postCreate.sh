@@ -33,46 +33,28 @@ if [ ! -f "${MODULE_DIR}/config/.env" ] && [ -f "${MODULE_DIR}/config/.env.templ
   cp "${MODULE_DIR}/config/.env.template" "${MODULE_DIR}/config/.env"
 fi
 
-# Create symlink from module's config directory to MagicMirror config location
-# This replaces the bind mount approach for better GitHub Codespaces compatibility
-CONFIG_TARGET="${MAGICMIRROR_PATH}/config"
-CONFIG_SOURCE="${MODULE_DIR}/config"
+# Create symlink for config.js to MagicMirror config directory
+CONFIG_JS_SOURCE="${MODULE_DIR}/config/config.js"
+CONFIG_JS_TARGET="${MAGICMIRROR_PATH}/config/config.js"
 
-if [ -d "$CONFIG_SOURCE" ]; then
-  # Validate CONFIG_SOURCE doesn't contain path traversal patterns
-  case "$CONFIG_SOURCE" in
-    */../*|*/..| ../*|..)
-      echo "Error: CONFIG_SOURCE contains path traversal components"
-      exit 1
-      ;;
-  esac
-
-  # Remove existing config directory/symlink if present
-  # Only remove if it's a symlink or within the expected MagicMirror path
-  if [ -L "$CONFIG_TARGET" ]; then
-    rm -f "$CONFIG_TARGET"
-  elif [ -e "$CONFIG_TARGET" ]; then
-    # Validate path is within expected MagicMirror directory
-    case "$CONFIG_TARGET" in
-      "$MAGICMIRROR_PATH"/*)
-        rm -r "$CONFIG_TARGET" || {
-          echo "Error: Failed to remove existing directory at $CONFIG_TARGET"
-          exit 1
-        }
-        ;;
-      *)
-        echo "Error: CONFIG_TARGET is outside expected MagicMirror path"
-        exit 1
-        ;;
-    esac
+if [ -f "$CONFIG_JS_SOURCE" ]; then
+  # Ensure config directory exists
+  if [ ! -d "${MAGICMIRROR_PATH}/config" ]; then
+    mkdir -p "${MAGICMIRROR_PATH}/config"
   fi
+
+  # Remove existing symlink if present
+  if [ -L "$CONFIG_JS_TARGET" ]; then
+    rm -f "$CONFIG_JS_TARGET"
+  fi
+
   # Create symlink with error handling
-  if ! ERROR_MSG=$(ln -s "$CONFIG_SOURCE" "$CONFIG_TARGET" 2>&1); then
-    echo "Failed to create symlink: $CONFIG_TARGET -> $CONFIG_SOURCE"
+  if ! ERROR_MSG=$(ln -s "$CONFIG_JS_SOURCE" "$CONFIG_JS_TARGET" 2>&1); then
+    echo "Failed to create symlink: $CONFIG_JS_TARGET -> $CONFIG_JS_SOURCE"
     echo "Error: $ERROR_MSG"
     exit 1
   fi
-  echo "Created symlink: $CONFIG_TARGET -> $CONFIG_SOURCE"
+  echo "Created symlink: $CONFIG_JS_TARGET -> $CONFIG_JS_SOURCE"
 fi
 # Create symlink for .env file to MagicMirror root
 ENV_SOURCE="${MODULE_DIR}/config/.env"
@@ -91,4 +73,23 @@ if [ -f "$ENV_SOURCE" ]; then
     exit 1
   fi
   echo "Created symlink: $ENV_TARGET -> $ENV_SOURCE"
+fi
+
+# Create symlink for custom.css to MagicMirror css directory
+CSS_SOURCE="${MODULE_DIR}/config/custom.css"
+CSS_TARGET="${MAGICMIRROR_PATH}/css/custom.css"
+
+if [ -f "$CSS_SOURCE" ]; then
+  # Remove existing custom.css symlink if present
+  if [ -L "$CSS_TARGET" ]; then
+    rm -f "$CSS_TARGET"
+  fi
+
+  # Create symlink with error handling
+  if ! ERROR_MSG=$(ln -s "$CSS_SOURCE" "$CSS_TARGET" 2>&1); then
+    echo "Failed to create symlink: $CSS_TARGET -> $CSS_SOURCE"
+    echo "Error: $ERROR_MSG"
+    exit 1
+  fi
+  echo "Created symlink: $CSS_TARGET -> $CSS_SOURCE"
 fi

@@ -9,7 +9,7 @@ Module.register('MMM-Webuntis', {
     showTeacherMode: 'full', // 'initial'|'full'|'none' - how to show teacher info
     useShortSubject: false, // whether to use short subject names
     showSubstitutionText: false, // whether to show substitution text
-    examsDaysAhead: 0, // number of days ahead to show exams
+    examsDaysAhead: 7, // number of days ahead to show exams
     showExamSubject: true, // whether to show subject in exam listings
     showExamTeacher: true, // whether to show teacher in exam listings
     mode: 'verbose', // 'verbose' or 'compact' mode
