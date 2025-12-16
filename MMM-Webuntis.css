@@ -41,7 +41,7 @@
 }
 
 /* Reduce extra space after the very last widget table */
-.MMM-Webuntis>table:last-child {
+.MMM-Webuntis > table:last-child {
   margin-bottom: 0;
 }
 
@@ -143,7 +143,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell>div {
+.MMM-Webuntis .grid-combined .grid-timecell > div {
   margin: 0;
   padding: 0;
   line-height: 1;
@@ -299,6 +299,28 @@
   width: 50%;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+/* Holiday overlays and list notices */
+.MMM-Webuntis .grid-holiday-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 200, 0, 0.12);
+  color: #000;
+  pointer-events: none;
+  z-index: 5;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.MMM-Webuntis .holiday-notice {
+  background: transparent;
+  color: #d35400;
+  font-weight: 600;
+  padding-left: 0.25rem;
 }
 
 .MMM-Webuntis .grid-combined .grid-lesson .half-right {

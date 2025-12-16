@@ -6,31 +6,29 @@
  * writes back to this repo file.
  */
 let config = {
-  address: "0.0.0.0",
+  address: '0.0.0.0',
   port: 8080,
-  basePath: "/",
+  basePath: '/',
   ipWhitelist: [],
   useHttps: false,
-  language: "en",
+  language: 'en',
   timeFormat: 24,
-  units: "metric",
+  units: 'metric',
   modules: [
-    { module: "alert" },
-    { module: "clock", position: "top_left" },
+    { module: 'alert' },
+    { module: 'clock', position: 'top_left' },
     {
-      module: "MMM-Webuntis",
-      position: "top_right",
+      module: 'MMM-Webuntis',
+      position: 'top_right',
       config: {
-        logLevel: "info",
+        logLevel: 'info',
         daysToShow: 7,
-        students: [
-          { title: "Sample", qrcode: "untis://setschool?" }
-        ]
-      }
-    }
-  ]
+        students: [{ title: 'Sample', qrcode: 'untis://setschool?' }],
+      },
+    },
+  ],
 };
 
-if (typeof module !== "undefined") {
+if (typeof module !== 'undefined') {
   module.exports = config;
 }

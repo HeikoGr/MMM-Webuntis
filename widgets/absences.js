@@ -2,16 +2,11 @@
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util;
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
   function escapeHtml(s) {
     if (s === null || s === undefined) return '';
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
@@ -66,7 +61,6 @@
       }
 
       if (reason) dataParts.push(`<br><span class='xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
-
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 

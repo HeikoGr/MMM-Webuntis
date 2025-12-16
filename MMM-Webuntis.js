@@ -378,7 +378,17 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
-    return this._invokeWidgetRenderer('lessons', 'renderLessonsForStudent', table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
+    return this._invokeWidgetRenderer(
+      'lessons',
+      'renderLessonsForStudent',
+      table,
+      studentCellTitle,
+      studentTitle,
+      studentConfig,
+      timetable,
+      startTimesMap,
+      holidays
+    );
   },
 
   _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
@@ -394,7 +404,14 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderMessagesOfDayForStudent(table, studentCellTitle, studentConfig, messagesOfDay) {
-    return this._invokeWidgetRenderer('messagesofday', 'renderMessagesOfDayForStudent', table, studentCellTitle, studentConfig, messagesOfDay);
+    return this._invokeWidgetRenderer(
+      'messagesofday',
+      'renderMessagesOfDayForStudent',
+      table,
+      studentCellTitle,
+      studentConfig,
+      messagesOfDay
+    );
   },
 
   start() {

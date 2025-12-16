@@ -62,10 +62,10 @@ module.exports = NodeHelper.create({
     return rawGrid.map((row) => ({
       timeUnits: Array.isArray(row?.timeUnits)
         ? row.timeUnits.map((u) => ({
-          startTime: u.startTime,
-          endTime: u.endTime,
-          name: u.name,
-        }))
+            startTime: u.startTime,
+            endTime: u.endTime,
+            name: u.name,
+          }))
         : [],
     }));
   },
@@ -197,7 +197,7 @@ module.exports = NodeHelper.create({
       const credKey = this._getCredentialKey(student);
       const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
       const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
-      const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
+      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
       const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
       const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
