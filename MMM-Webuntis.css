@@ -55,6 +55,7 @@
 .MMM-Webuntis td.wu-col-data {
   width: auto;
   word-break: break-word;
+  white-space: pre-line;
 }
 
 .MMM-Webuntis .cancelled {
@@ -74,14 +75,22 @@
   border-bottom: 1px solid #333;
 }
 
+/* Widget rows - base styling */
 .MMM-Webuntis .examRow,
 .MMM-Webuntis .examRowEmpty,
 .MMM-Webuntis .lessonRow,
-.MMM-Webuntis .lessonRowEmpty {
+.MMM-Webuntis .lessonRowEmpty,
+.MMM-Webuntis .homeworkRow,
+.MMM-Webuntis .homeworkRowEmpty,
+.MMM-Webuntis .absenceRow,
+.MMM-Webuntis .absenceRowEmpty,
+.MMM-Webuntis .messageRow,
+.MMM-Webuntis .messageRowEmpty {
   vertical-align: top;
   padding-left: 20px;
 }
 
+/* Exam-specific styling */
 .MMM-Webuntis .examRow,
 .MMM-Webuntis .examRowEmpty {
   color: rgb(0, 255, 255);

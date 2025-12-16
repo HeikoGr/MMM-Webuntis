@@ -10,5 +10,8 @@
   "no_homework": "no homework",
   "no_absences": "no absences",
   "excused": "excused",
-  "unexcused": "unexcused"
+  "unexcused": "unexcused",
+  "messagesofday": "Messages of the Day",
+  "no_messages": "no messages",
+  "no_text": "(no text)"
 }

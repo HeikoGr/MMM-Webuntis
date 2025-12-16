@@ -18,7 +18,7 @@
     let addedRows = 0;
 
     if (!Array.isArray(absences) || absences.length === 0) {
-      addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_absences'));
+      addTableRow(table, 'absenceRowEmpty', studentCellTitle, ctx.translate('no_absences'));
       return 1;
     }
 
@@ -70,7 +70,7 @@
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 
-      addTableRow(table, 'lessonRow', studentCellTitle, meta || ctx.translate('absences'), data);
+      addTableRow(table, 'absenceRow', studentCellTitle, meta || ctx.translate('absences'), data);
       addedRows++;
     }
 
