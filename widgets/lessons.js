@@ -1,7 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
   // Helper: Check if a date falls within a holiday period
   function isDateInHoliday(dateYmd, holidays) {
@@ -26,104 +26,103 @@
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     const nowHm = now.getHours() * 100 + now.getMinutes();
 
-    // Group lessons by date to detect holidays
+    // Group lessons by date
     const lessonsByDate = {};
-    const allDates = new Set();
-
-    const lessonsSorted = (Array.isArray(timetable) ? timetable : []).slice().sort((a, b) => {
-      const da = Number(a.date) || 0;
-      const db = Number(b.date) || 0;
-      return da - db || (Number(a.startTime) || 0) - (Number(b.startTime) || 0);
-    });
-
-    // Collect all dates and group lessons
-    for (const entry of lessonsSorted) {
+    const lessonsList = Array.isArray(timetable) ? timetable.slice() : [];
+    for (const entry of lessonsList) {
       const dateYmd = Number(entry.date);
-      allDates.add(dateYmd);
       if (!lessonsByDate[dateYmd]) lessonsByDate[dateYmd] = [];
       lessonsByDate[dateYmd].push(entry);
     }
 
-    // Check for holidays on days without lessons
-    const sortedDates = Array.from(allDates).sort((a, b) => a - b);
-    let lastProcessedDate = null;
+    // Determine display window (align with grid behavior)
+    const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
+    const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
+    const startOffset = -pastDays;
+    const totalDisplayDays = daysToShow;
 
-    for (let i = 0; i < lessonsSorted.length; i++) {
-      const entry = lessonsSorted[i];
-      const dateStr = String(entry.date);
-      const dateYmd = Number(entry.date);
-      const year = parseInt(dateStr.substring(0, 4), 10);
-      const month = parseInt(dateStr.substring(4, 6), 10);
-      const day = parseInt(dateStr.substring(6, 8), 10);
-      const stNum = Number(entry.startTime) || 0;
-      const stHour = Math.floor(stNum / 100);
-      const stMin = stNum % 100;
-      const timeForDay = new Date(year, month - 1, day);
+    // Iterate display days in order and render either lessons or holiday notices
+    for (let d = 0; d < totalDisplayDays; d++) {
+      const dayIndex = startOffset + d;
+      const dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayIndex);
+      const y = dayDate.getFullYear();
+      const m = ('0' + (dayDate.getMonth() + 1)).slice(-2);
+      const dd = ('0' + dayDate.getDate()).slice(-2);
+      const dateYmd = Number(`${y}${m}${dd}`);
 
-      // Check if we need to show a holiday notice before this lesson
-      if (lastProcessedDate !== dateYmd) {
+      const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
+
+      if (!entries || entries.length === 0) {
+        // No lessons that day — check for holiday
         const holiday = isDateInHoliday(dateYmd, holidays);
-        if (holiday && (lessonsByDate[dateYmd] || []).length === 0) {
-          // No lessons on this day, but it's a holiday - show it
-          const holidayDateStr = timeForDay.toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' }).toUpperCase();
-          addTableRow(
-            table,
-            'lessonRow holiday-notice',
-            studentCellTitle,
-            holidayDateStr,
-            `🏖️ ${holiday.longName || holiday.name}`
-          );
+        if (holiday) {
+          const holidayDateStr = dayDate
+            .toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' })
+            .toUpperCase();
+          addTableRow(table, 'lessonRow holiday-notice', studentCellTitle, holidayDateStr, `🏖️ ${holiday.longName || holiday.name}`);
           addedRows++;
         }
-        lastProcessedDate = dateYmd;
-      }
-
-      const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
-      if (
-        (!studentConfig.showRegularLessons && (entry.code || '') === '') ||
-        (isPast && (entry.code || '') !== 'error' && ctx.config.logLevel !== 'debug')
-      ) {
         continue;
       }
 
-      addedRows++;
+      // Render lessons for this date
+      for (const entry of entries) {
+        const dateStr = String(entry.date);
+        const year = parseInt(dateStr.substring(0, 4), 10);
+        const month = parseInt(dateStr.substring(4, 6), 10);
+        const day = parseInt(dateStr.substring(6, 8), 10);
+        const stNum = Number(entry.startTime) || 0;
+        const stHour = Math.floor(stNum / 100);
+        const stMin = stNum % 100;
+        const timeForDay = new Date(year, month - 1, day);
 
-      let timeStr = `${timeForDay.toLocaleDateString(ctx.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
-      if (studentConfig.showStartTime || startTimesMap[entry.startTime] === undefined) {
-        const hh = String(stHour).padStart(2, '0');
-        const mm = String(stMin).padStart(2, '0');
-        timeStr += `${hh}:${mm}`;
-      } else {
-        timeStr += `${startTimesMap[entry.startTime]}.`;
+        const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
+        if (
+          (!studentConfig.showRegularLessons && (entry.code || '') === '') ||
+          (isPast && (entry.code || '') !== 'error' && ctx.config.logLevel !== 'debug')
+        ) {
+          continue;
+        }
+
+        addedRows++;
+
+        let timeStr = `${timeForDay.toLocaleDateString(ctx.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
+        if (studentConfig.showStartTime || startTimesMap[entry.startTime] === undefined) {
+          const hh = String(stHour).padStart(2, '0');
+          const mm = String(stMin).padStart(2, '0');
+          timeStr += `${hh}:${mm}`;
+        } else {
+          timeStr += `${startTimesMap[entry.startTime]}.`;
+        }
+
+        const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
+        const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
+        let subjectStr = studentConfig.useShortSubject ? subjShort : subjLong;
+
+        if (studentConfig.showTeacherMode === 'initial') {
+          const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
+          if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${teacherInitial})`;
+        } else if (studentConfig.showTeacherMode === 'full') {
+          const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
+          if (teacherFull !== '') subjectStr += '&nbsp;' + `(${teacherFull})`;
+        }
+
+        if (studentConfig.showSubstitutionText && (entry.substText || '') !== '') {
+          subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
+        }
+
+        if ((entry.lstext || '') !== '') {
+          if (subjectStr.trim() !== '') subjectStr += '<br/>';
+          subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
+        }
+
+        let addClass = '';
+        if (entry.code == 'cancelled' || entry.code == 'error' || entry.code == 'info') {
+          addClass = entry.code;
+        }
+
+        addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
       }
-
-      const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
-      const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
-      let subjectStr = studentConfig.useShortSubject ? subjShort : subjLong;
-
-      if (studentConfig.showTeacherMode === 'initial') {
-        const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
-        if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${teacherInitial})`;
-      } else if (studentConfig.showTeacherMode === 'full') {
-        const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
-        if (teacherFull !== '') subjectStr += '&nbsp;' + `(${teacherFull})`;
-      }
-
-      if (studentConfig.showSubstitutionText && (entry.substText || '') !== '') {
-        subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
-      }
-
-      if ((entry.lstext || '') !== '') {
-        if (subjectStr.trim() !== '') subjectStr += '<br/>';
-        subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
-      }
-
-      let addClass = '';
-      if (entry.code == 'cancelled' || entry.code == 'error' || entry.code == 'info') {
-        addClass = entry.code;
-      }
-
-      addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
     }
 
     if (addedRows === 0) {

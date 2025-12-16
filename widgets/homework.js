@@ -1,44 +1,44 @@
 (function () {
-    const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-    const util = root.util;
-    const dom = root.dom || {};
-    const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+  const util = root.util;
+  const dom = root.dom || {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
-    function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
-        let addedRows = 0;
+  function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
+    let addedRows = 0;
 
-        if (!Array.isArray(homeworks) || homeworks.length === 0) {
-            addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
-            return 1;
-        }
-
-        const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
-
-        const sorted = homeworks
-            .slice()
-            .sort(
-                (a, b) => (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) || String(a.su?.name || '').localeCompare(String(b.su?.name || ''))
-            );
-
-        for (const hw of sorted) {
-            const due = hw?.dueDate ? util.formatDate(hw.dueDate, dateFormat) : '';
-            const subj = hw?.su?.longname || hw?.su?.name || '';
-            const text = String(hw?.text || hw?.remark || '').trim();
-
-            const left = due ? `${due}` : ctx.translate('homework');
-            const rightParts = [];
-            if (subj) rightParts.push(`<b>${subj}</b>`);
-            if (text) rightParts.push(`<span>${text.replace(/\n/g, '<br>')}</span>`);
-            const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('homework');
-
-            addTableRow(table, 'lessonRow', studentCellTitle, left, right);
-            addedRows++;
-        }
-
-        return addedRows;
+    if (!Array.isArray(homeworks) || homeworks.length === 0) {
+      addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
+      return 1;
     }
 
-    root.homework = {
-        renderHomeworksForStudent,
-    };
+    const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
+
+    const sorted = homeworks
+      .slice()
+      .sort(
+        (a, b) => (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) || String(a.su?.name || '').localeCompare(String(b.su?.name || ''))
+      );
+
+    for (const hw of sorted) {
+      const due = hw?.dueDate ? util.formatDate(hw.dueDate, dateFormat) : '';
+      const subj = hw?.su?.longname || hw?.su?.name || '';
+      const text = String(hw?.text || hw?.remark || '').trim();
+
+      const left = due ? `${due}` : ctx.translate('homework');
+      const rightParts = [];
+      if (subj) rightParts.push(`<b>${subj}</b>`);
+      if (text) rightParts.push(`<span>${text.replace(/\n/g, '<br>')}</span>`);
+      const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('homework');
+
+      addTableRow(table, 'lessonRow', studentCellTitle, left, right);
+      addedRows++;
+    }
+
+    return addedRows;
+  }
+
+  root.homework = {
+    renderHomeworksForStudent,
+  };
 })();
