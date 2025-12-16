@@ -2,7 +2,7 @@
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function escapeHtml(s) {
     if (s === null || s === undefined) return '';
@@ -62,7 +62,8 @@
         rowClasses += ' message-expanded';
       }
 
-      addTableRow(table, rowClasses, studentCellTitle, meta, escapeHtml(contentText));
+      addTableRow(table, rowClasses, '', meta, '<b>' +
+        ctx.translate('messagesofday') + '</b>' + '<br>' + escapeHtml(contentText));
       addedRows++;
     }
 

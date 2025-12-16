@@ -11,7 +11,7 @@
   "no_absences": "keine Fehlzeiten",
   "excused": "entschuldigt",
   "unexcused": "unentschuldigt",
-  "messagesofday": "Nachrichten des Tages",
-  "no_messages": "keine Nachrichten",
+  "messagesofday": "Tagesnachrichten",
+  "no_messages": "keine Tagesnachrichten",
   "no_text": "(kein Text)"
 }
