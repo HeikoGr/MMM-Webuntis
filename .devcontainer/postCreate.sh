@@ -17,6 +17,22 @@ if [ ! -e "/opt/magicmirror" ]; then
   ln -s "/opt/magic_mirror" "/opt/magicmirror" || true
 fi
 
+# Copy template files if they don't exist yet (before creating symlink)
+if [ ! -f "${MODULE_DIR}/config/config.js" ] && [ -f "${MODULE_DIR}/config/config.template.js" ]; then
+  echo "No config.js found; copying config.template.js to config.js"
+  cp "${MODULE_DIR}/config/config.template.js" "${MODULE_DIR}/config/config.js"
+fi
+
+if [ ! -f "${MODULE_DIR}/config/custom.css" ] && [ -f "${MODULE_DIR}/config/custom.template.css" ]; then
+  echo "No custom.css found; copying custom.template.css to custom.css"
+  cp "${MODULE_DIR}/config/custom.template.css" "${MODULE_DIR}/config/custom.css"
+fi
+
+if [ ! -f "${MODULE_DIR}/config/.env" ] && [ -f "${MODULE_DIR}/config/.env.template" ]; then
+  echo "No .env found; copying .env.template to .env"
+  cp "${MODULE_DIR}/config/.env.template" "${MODULE_DIR}/config/.env"
+fi
+
 # Create symlink from module's config directory to MagicMirror config location
 # This replaces the bind mount approach for better GitHub Codespaces compatibility
 CONFIG_TARGET="${MAGICMIRROR_PATH}/config"
@@ -30,7 +46,7 @@ if [ -d "$CONFIG_SOURCE" ]; then
       exit 1
       ;;
   esac
-  
+
   # Remove existing config directory/symlink if present
   # Only remove if it's a symlink or within the expected MagicMirror path
   if [ -L "$CONFIG_TARGET" ]; then
@@ -57,4 +73,22 @@ if [ -d "$CONFIG_SOURCE" ]; then
     exit 1
   fi
   echo "Created symlink: $CONFIG_TARGET -> $CONFIG_SOURCE"
+fi
+# Create symlink for .env file to MagicMirror root
+ENV_SOURCE="${MODULE_DIR}/config/.env"
+ENV_TARGET="${MAGICMIRROR_PATH}/.env"
+
+if [ -f "$ENV_SOURCE" ]; then
+  # Remove existing .env symlink if present
+  if [ -L "$ENV_TARGET" ]; then
+    rm -f "$ENV_TARGET"
+  fi
+
+  # Create symlink with error handling
+  if ! ERROR_MSG=$(ln -s "$ENV_SOURCE" "$ENV_TARGET" 2>&1); then
+    echo "Failed to create symlink: $ENV_TARGET -> $ENV_SOURCE"
+    echo "Error: $ERROR_MSG"
+    exit 1
+  fi
+  echo "Created symlink: $ENV_TARGET -> $ENV_SOURCE"
 fi
