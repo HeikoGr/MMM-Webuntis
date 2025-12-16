@@ -10,5 +10,8 @@
   "no_homework": "keine Hausaufgaben",
   "no_absences": "keine Fehlzeiten",
   "excused": "entschuldigt",
-  "unexcused": "unentschuldigt"
+  "unexcused": "unentschuldigt",
+  "messagesofday": "Nachrichten des Tages",
+  "no_messages": "keine Nachrichten",
+  "no_text": "(kein Text)"
 }

@@ -1,14 +1,15 @@
 # MMM-Webuntis
 
-> ⚠️ **Disclaimer / Haftungsausschluss:**
+> ⚠️ **Disclaimer / Haftungsausschluss**:
 >
 > **English:** This project is **not** an official Untis product, is **not** affiliated with, endorsed by, or supported by Untis GmbH or any of its subsidiaries. WebUntis is a registered trademark of Untis GmbH. This is an independent, community-developed module for MagicMirror² that interfaces with WebUntis APIs. Use at your own risk.
 >
 > **Deutsch:** Dieses Projekt ist **kein** offizielles Untis-Produkt und steht in **keiner** Verbindung zu Untis GmbH oder deren Tochtergesellschaften. Es wird **nicht** von Untis unterstützt oder empfohlen. WebUntis ist eine eingetragene Marke der Untis GmbH. Dies ist ein unabhängiges, von der Community entwickeltes Modul für MagicMirror², das die WebUntis-APIs nutzt. Nutzung auf eigene Gefahr.
 
-> ⚠️ **Important Notice:
+> ⚠️ **Important Notice**:
 >
-> This project contains substantial AI-generated code.** Review, test, and audit all files, web UI, and documentation before using it in production or safety-relevant contexts. Treat defaults and generated logic as untrusted until verified.
+> This project contains substantial AI-generated code. Review, test, and audit all files, web UI, and documentation before using it in production or safety-relevant contexts. Treat defaults and generated logic as untrusted until verified.
+
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
 ## BREAKING CHANGES in 0.4.0
@@ -137,7 +138,7 @@ The following configuration options are supported. Global options can be declare
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
 | `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
-| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. |
+| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. |
 | `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
 | `fetchAbsences` | bool | deprecated | Deprecated: absences are fetched automatically when `displayMode` includes the `absences` widget. |
 | `dateFormat` | string | `'dd.MM.'` | Format string used when displaying dates in lists (supports `dd`, `mm`, `yyyy`, `yy`). Use `d`, `m` variants for non-zero padded numbers (e.g., `d.m.yyyy`). |
@@ -215,6 +216,15 @@ node cli/cli.js --config /path/to/config.js
 ## Dependencies
 
 - [TheNoim/WebUntis](https://github.com/TheNoim/WebUntis) — installed via `npm install` in the module directory.
+
+## Holiday Display
+
+The `lessons` and `grid` widgets now automatically display holiday information from the WebUntis API:
+
+- **Lessons widget:** Shows a holiday notice between lessons with the 🏖️ emoji and holiday name when a holiday period is detected
+- **Grid widget:** Displays a semi-transparent overlay with the 🏖️ emoji and holiday name on days that fall within a holiday period
+
+Holiday data is automatically fetched from WebUntis alongside timetable data. No additional configuration is required.
 
 ## Screenshot
 

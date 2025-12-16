@@ -143,6 +143,27 @@ module.exports = NodeHelper.create({
     }));
   },
 
+  _compactMessagesOfDay(rawMessages) {
+    if (!Array.isArray(rawMessages)) return [];
+    return rawMessages.map((m) => ({
+      id: m.id ?? null,
+      subject: m.subject ?? '',
+      text: m.text ?? '',
+      isExpanded: m.isExpanded ?? false,
+    }));
+  },
+
+  _compactHolidays(rawHolidays) {
+    if (!Array.isArray(rawHolidays)) return [];
+    return rawHolidays.map((h) => ({
+      id: h.id ?? null,
+      name: h.name ?? h.longName ?? '',
+      longName: h.longName ?? h.name ?? '',
+      startDate: h.startDate ?? null,
+      endDate: h.endDate ?? null,
+    }));
+  },
+
   _wantsWidget(widgetName, displayMode) {
     const w = String(widgetName || '').toLowerCase();
     const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase();
@@ -159,6 +180,7 @@ module.exports = NodeHelper.create({
         if (p === w) return true;
         if (w === 'homework' && (p === 'homeworks' || p === 'homework')) return true;
         if (w === 'absences' && (p === 'absence' || p === 'absences')) return true;
+        if (w === 'messagesofday' && (p === 'messagesofday' || p === 'messages')) return true;
         return false;
       });
   },
@@ -175,8 +197,7 @@ module.exports = NodeHelper.create({
       const credKey = this._getCredentialKey(student);
       const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
       const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
-
-      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
+      const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
       const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
       const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
@@ -496,6 +517,7 @@ module.exports = NodeHelper.create({
     const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
     const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
     const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
+    const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
 
     // Data fetching is driven by widgets; legacy per-student flags can only disable.
     const fetchTimegrid = Boolean(wantsGridWidget);
@@ -503,6 +525,8 @@ module.exports = NodeHelper.create({
     const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
     const fetchHomeworks = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
     const fetchAbsences = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
+    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget && student.fetchMessagesOfDay !== false);
+    const fetchHolidays = Boolean((wantsGridWidget || wantsLessonsWidget) && student.fetchHolidays !== false);
 
     var rangeStart = new Date(Date.now());
     var rangeEnd = new Date(Date.now());
@@ -658,12 +682,50 @@ module.exports = NodeHelper.create({
       logger(`[MMM-Webuntis] Absences fetch skipped for ${student.title} (fetchAbsences=false)`);
     }
 
+    // MessagesOfDay (raw)
+    let rawMessagesOfDay = [];
+    if (fetchMessagesOfDay) {
+      try {
+        const newsWidget = await untis.getNewsWidget(new Date());
+        if (newsWidget && Array.isArray(newsWidget.messagesOfDay)) {
+          rawMessagesOfDay = newsWidget.messagesOfDay;
+          logger(`[MMM-Webuntis] Loaded messagesOfDay (raw) for ${student.title}: count=${rawMessagesOfDay.length}`);
+        } else {
+          logger(`[MMM-Webuntis] MessagesOfDay fetch returned no data for ${student.title}`);
+        }
+      } catch (error) {
+        this._mmLog('error', student, `MessagesOfDay fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+      }
+    } else {
+      logger(`[MMM-Webuntis] MessagesOfDay fetch skipped for ${student.title} (fetchMessagesOfDay=false)`);
+    }
+
+    // Holidays (raw)
+    let rawHolidays = [];
+    if (fetchHolidays) {
+      try {
+        rawHolidays = await untis.getHolidays();
+        if (Array.isArray(rawHolidays)) {
+          logger(`[MMM-Webuntis] Loaded holidays (raw) for ${student.title}: count=${rawHolidays.length}`);
+        } else {
+          logger(`[MMM-Webuntis] Holidays fetch returned no data for ${student.title}`);
+          rawHolidays = [];
+        }
+      } catch (error) {
+        this._mmLog('error', student, `Holidays fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+      }
+    } else {
+      logger(`[MMM-Webuntis] Holidays fetch skipped for ${student.title} (fetchHolidays=false)`);
+    }
+
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
     const compactTimetable = this._compactLessons(timetable);
     const compactExams = this._compactExams(rawExams);
     const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult) : [];
     const compactAbsences = fetchAbsences ? this._compactAbsences(rawAbsences) : [];
+    const compactMessagesOfDay = fetchMessagesOfDay ? this._compactMessagesOfDay(rawMessagesOfDay) : [];
+    const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
 
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
@@ -675,6 +737,8 @@ module.exports = NodeHelper.create({
       exams: compactExams,
       homeworks: compactHomeworks,
       absences: compactAbsences,
+      messagesOfDay: compactMessagesOfDay,
+      holidays: compactHolidays,
     };
     try {
       const forSend = { ...payload, id: identifier };

@@ -8,7 +8,7 @@
         let addedRows = 0;
 
         if (!Array.isArray(homeworks) || homeworks.length === 0) {
-            addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('no_homework'));
+            addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
             return 1;
         }
 

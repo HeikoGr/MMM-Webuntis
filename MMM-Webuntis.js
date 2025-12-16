@@ -60,6 +60,7 @@ Module.register('MMM-Webuntis', {
       homework: 'widgets/homework.js',
       absences: 'widgets/absences.js',
       grid: 'widgets/grid.js',
+      messagesofday: 'widgets/messagesofday.js',
     };
 
     const widgets = Array.from(new Set(this._getDisplayWidgets()));
@@ -115,6 +116,8 @@ Module.register('MMM-Webuntis', {
       homeworks: 'homework',
       absences: 'absences',
       absence: 'absences',
+      messagesofday: 'messagesofday',
+      messages: 'messagesofday',
     };
 
     const out = [];
@@ -364,18 +367,18 @@ Module.register('MMM-Webuntis', {
     return hh * 60 + mm;
   },
 
-  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams) {
+  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
       this._log('warn', 'grid widget script not loaded');
       return null;
     }
-    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
+    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
   },
 
-  _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap) {
-    return this._invokeWidgetRenderer('lessons', 'renderLessonsForStudent', table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
+  _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
+    return this._invokeWidgetRenderer('lessons', 'renderLessonsForStudent', table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
   },
 
   _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
@@ -388,6 +391,10 @@ Module.register('MMM-Webuntis', {
 
   _renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences) {
     return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', table, studentCellTitle, studentConfig, absences);
+  },
+
+  _renderMessagesOfDayForStudent(table, studentCellTitle, studentConfig, messagesOfDay) {
+    return this._invokeWidgetRenderer('messagesofday', 'renderMessagesOfDayForStudent', table, studentCellTitle, studentConfig, messagesOfDay);
   },
 
   start() {
@@ -409,6 +416,8 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent = {};
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
+    this.messagesOfDayByStudent = {};
+    this.holidaysByStudent = {};
     this.preprocessedByStudent = {};
     this._domUpdateTimer = null;
 
@@ -493,9 +502,10 @@ Module.register('MMM-Webuntis', {
           const timeUnits = this.timeUnitsByStudent[studentTitle] || [];
           const homeworks = this.homeworksByStudent?.[studentTitle] || [];
           const exams = this.examsByStudent?.[studentTitle] || [];
+          const holidays = this.holidaysByStudent?.[studentTitle] || [];
 
           if (timeUnits.length > 0 && timetable.length > 0) {
-            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
+            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
             if (gridElem) wrapper.appendChild(gridElem);
           }
         }
@@ -506,7 +516,8 @@ Module.register('MMM-Webuntis', {
         const lessonsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const timetable = this.timetableByStudent[studentTitle] || [];
           const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
-          return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap);
+          const holidays = this.holidaysByStudent?.[studentTitle] || [];
+          return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
         });
         if (lessonsTable) wrapper.appendChild(lessonsTable);
         continue;
@@ -537,6 +548,15 @@ Module.register('MMM-Webuntis', {
           return this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
         });
         if (absencesTable) wrapper.appendChild(absencesTable);
+        continue;
+      }
+
+      if (widget === 'messagesofday') {
+        const messagesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
+          const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
+          return this._renderMessagesOfDayForStudent(table, studentCellTitle, studentConfig, messagesOfDay);
+        });
+        if (messagesTable) wrapper.appendChild(messagesTable);
         continue;
       }
     }
@@ -609,6 +629,10 @@ Module.register('MMM-Webuntis', {
     this.homeworksByStudent[title] = hwNorm;
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
+
+    this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
+
+    this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
 
     this._scheduleDomUpdate();
   },

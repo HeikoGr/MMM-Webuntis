@@ -73,7 +73,21 @@ function getNowLineState(ctx) {
         }
     }
 
-    function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams) {
+    function isDateInHoliday(dateYmd, holidays) {
+        if (!holidays || !Array.isArray(holidays) || holidays.length === 0) return null;
+
+        const dateNum = parseInt(dateYmd, 10);
+        for (const holiday of holidays) {
+            const start = parseInt(holiday.startDate, 10);
+            const end = parseInt(holiday.endDate, 10);
+            if (dateNum >= start && dateNum <= end) {
+                return holiday;
+            }
+        }
+        return null;
+    }
+
+    function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
         const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
         const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
         const startOffset = -pastDays;
@@ -473,6 +487,31 @@ function getNowLineState(ctx) {
                 leftInner.classList.add('is-today');
                 rightInner.classList.add('is-today');
                 bothInner.classList.add('is-today');
+            }
+
+            // Check for holidays
+            const holiday = isDateInHoliday(dateStr, holidays);
+            if (holiday) {
+                const holidayNotice = document.createElement('div');
+                holidayNotice.className = 'grid-holiday-notice';
+                holidayNotice.style.position = 'absolute';
+                holidayNotice.style.top = '0';
+                holidayNotice.style.left = '0';
+                holidayNotice.style.right = '0';
+                holidayNotice.style.height = `${totalHeight}px`;
+                holidayNotice.style.display = 'flex';
+                holidayNotice.style.alignItems = 'center';
+                holidayNotice.style.justifyContent = 'center';
+                holidayNotice.style.background = 'rgba(255, 200, 0, 0.15)';
+                holidayNotice.style.zIndex = '5';
+                holidayNotice.style.pointerEvents = 'none';
+                holidayNotice.innerHTML = `
+                    <div style="text-align: center; padding: 8px;">
+                        <div style="font-size: 2em; margin-bottom: 4px;">🏖️</div>
+                        <div style="font-weight: bold;">${holiday.longName || holiday.name}</div>
+                    </div>
+                `;
+                bothInner.appendChild(holidayNotice);
             }
 
             grid.appendChild(bothWrap);
