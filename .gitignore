@@ -7,6 +7,6 @@ node_modules
 
 
 # Local MagicMirror overrides (generate from *.template files)
-
+config/.env
 config/config.js
 config/custom.css
