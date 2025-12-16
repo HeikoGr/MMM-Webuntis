@@ -13,16 +13,9 @@
     "IN_DEVCONTAINER": "1"
   },
   "forwardPorts": [8080],
-  "mounts": [
-    "source=${localWorkspaceFolder}/config,target=/opt/magic_mirror/config,type=bind,consistency=cached"
-  ],
   "customizations": {
     "vscode": {
-      "extensions": [
-        "actboy168.tasks",
-        "eamodio.gitlens",
-        "dbaeumer.vscode-eslint"
-      ],
+      "extensions": ["actboy168.tasks", "eamodio.gitlens", "dbaeumer.vscode-eslint"],
       "settings": {
         "editor.formatOnSave": true,
         "files.trimTrailingWhitespace": true
