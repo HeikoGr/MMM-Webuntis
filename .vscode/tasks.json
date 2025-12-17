@@ -59,9 +59,9 @@
       "problemMatcher": []
     },
     {
-      "label": "npm: install all",
+      "label": "npm: install",
       "type": "shell",
-      "command": "npm install --omit=dev",
+      "command": "npm install",
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -70,7 +70,7 @@
       "isBackground": false,
       "options": {
         "statusbar": {
-          "label": "$(eye) npm i all",
+          "label": "$(eye) npm i",
           "color": "#ffe600",
           "detail": "npm install"
         }
