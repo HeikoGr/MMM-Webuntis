@@ -232,9 +232,9 @@ displayMode: "list", mode: "verbose":
 
 ![Screenshot](screenshot-list.png 'Screenshot verbose mode')
 
-displayMode: "grid":
+displayMode: "messagesofday,grid,exams,homework,absences":
 
-![Screenshot](screenshot-grid.png 'Screenshot verbose mode')
+![Screenshot](screenshot-all.png 'Screenshot with all widgets (except lessons)')
 
 ## Attribution
 
