@@ -34,8 +34,6 @@ Module.register('MMM-Webuntis', {
     dateFormat: 'dd.MM.',
     examDateFormat: 'dd.MM.',
     homeworkDateFormat: 'dd.MM.',
-    // When true, apply demo-mode transformations after rendering
-    demoMode: false,
 
     students: [
       {
@@ -70,17 +68,6 @@ Module.register('MMM-Webuntis', {
       const scriptPath = widgetScriptMap[widget];
       if (!scriptPath) continue;
       scripts.push(this.file(scriptPath));
-    }
-
-    // demo helper (provides pseudonymize / translate / holiday injection)
-    scripts.push(this.file('demo_mode.js'));
-    // Ensure messagesofday widget is available when demoMode is enabled
-    try {
-      const demoEnabled = (this?.config?.demoMode !== undefined ? this.config.demoMode : this?.defaults?.demoMode) === true;
-      const msgPath = this.file('widgets/messagesofday.js');
-      if (demoEnabled && !scripts.includes(msgPath)) scripts.push(msgPath);
-    } catch (e) {
-      // ignore
     }
 
     return scripts;
@@ -608,15 +595,6 @@ Module.register('MMM-Webuntis', {
     }
 
     if (notification !== 'GOT_DATA') return;
-    // allow frontend demo transforms of the incoming payload
-    try {
-      if (this.config?.demoMode === true && window.MMMWebuntisDemo && typeof window.MMMWebuntisDemo.transformPayload === 'function') {
-        const transformed = window.MMMWebuntisDemo.transformPayload(payload, payload?.title);
-        if (transformed && typeof transformed === 'object') payload = transformed;
-      }
-    } catch (e) {
-      this._log('warn', 'demo transformPayload failed', e);
-    }
 
     const title = payload.title;
     const cfg = payload.config || {};
@@ -665,40 +643,6 @@ Module.register('MMM-Webuntis', {
 
     this.examsByStudent[title] = Array.isArray(payload.exams) ? payload.exams : [];
 
-    // If demoMode is enabled, ensure there's an exam for tomorrow so grid/exams show it
-    try {
-      if (this.config?.demoMode === true) {
-        const now = new Date();
-        const tom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        const tomYmd = tom.getFullYear() * 10000 + (tom.getMonth() + 1) * 100 + tom.getDate();
-        const existing = (this.examsByStudent[title] || []).some((e) => Number(e?.examDate) === tomYmd);
-        if (!existing) {
-          // try to pick a lesson on that day to match subject/startTime
-          const timetable = this.timetableByStudent[title] || [];
-          const lesson = (timetable || []).find((el) => Number(el?.date) === tomYmd && (el.startTime || el.su));
-          let startTime = '0800';
-          let subject = 'Klausur';
-          if (lesson) {
-            startTime = lesson.startTime || startTime;
-            subject = (lesson.su && lesson.su[0] && (lesson.su[0].name || lesson.su[0].longname)) || subject;
-          } else if (Array.isArray(this.timeUnitsByStudent[title]) && this.timeUnitsByStudent[title].length > 0) {
-            startTime = this.timeUnitsByStudent[title][0].startTime || startTime;
-          }
-          const lessonTeacher = lesson && lesson.te && Array.isArray(lesson.te) && (lesson.te[0].name || lesson.te[0].longname) ? (lesson.te[0].name || lesson.te[0].longname) : 'Examiner';
-          const exam = {
-            examDate: tomYmd,
-            startTime: startTime,
-            subject: subject,
-            name: subject ? `${subject} Exam` : 'Exam',
-            teachers: [lessonTeacher],
-          };
-          this.examsByStudent[title] = (this.examsByStudent[title] || []).concat([exam]);
-        }
-      }
-    } catch (e) {
-      this._log('warn', 'failed to inject demo exam', e);
-    }
-
     const hw = payload.homeworks;
     const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
     this.homeworksByStudent[title] = hwNorm;
@@ -708,14 +652,6 @@ Module.register('MMM-Webuntis', {
     this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
 
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
-    // Apply demo transformations for this student (if enabled)
-    try {
-      if (this.config?.demoMode === true && window.MMMWebuntisDemo && typeof window.MMMWebuntisDemo.applyDemo === 'function') {
-        window.MMMWebuntisDemo.applyDemo(this, title);
-      }
-    } catch (e) {
-      this._log('warn', 'demo apply failed for student', e);
-    }
 
     this._scheduleDomUpdate();
   },
