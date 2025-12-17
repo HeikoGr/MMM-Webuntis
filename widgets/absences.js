@@ -3,7 +3,7 @@
   const util = root.util || {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
   function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
