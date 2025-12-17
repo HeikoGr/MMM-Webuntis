@@ -55,6 +55,11 @@
     return hh * 60 + mm;
   }
 
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function createElement(tag, className = '', innerHTML = '') {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -106,6 +111,7 @@
     formatTime,
     toMinutes,
     formatDate,
+    escapeHtml,
   };
 
   root.dom = {

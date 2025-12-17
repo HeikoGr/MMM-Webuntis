@@ -9,6 +9,8 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+  const util = root.util || {};
+  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -508,7 +510,7 @@ function getNowLineState(ctx) {
         holidayNotice.innerHTML = `
                     <div style="text-align: center; padding: 8px;">
                         <div style="font-size: 2em; margin-bottom: 4px;">🏖️</div>
-                        <div style="font-weight: bold;">${holiday.longName || holiday.name}</div>
+                        <div style="font-weight: bold;">${escapeHtml(holiday.longName || holiday.name)}</div>
                     </div>
                 `;
         bothInner.appendChild(holidayNotice);
@@ -643,9 +645,9 @@ function getNowLineState(ctx) {
         bothCell.setAttribute('data-end-min', String(eMin));
 
         const makeInner = (lsn) => {
-          const base = `<b>${lsn.subjectShort || lsn.subject}</b><br>${lsn.teacherInitial || lsn.teacher}`;
-          const subst = lsn.substText ? `<br><span class='xsmall dimmed'>${lsn.substText.replace(/\n/g, '<br>')}</span>` : '';
-          const txt = lsn.text ? `<br><span class='xsmall dimmed'>${lsn.text.replace(/\n/g, '<br>')}</span>` : '';
+          const base = `<b>${escapeHtml(lsn.subjectShort || lsn.subject)}</b><br>${escapeHtml(lsn.teacherInitial || lsn.teacher)}`;
+          const subst = lsn.substText ? `<br><span class='xsmall dimmed'>${escapeHtml(lsn.substText).replace(/\n/g, '<br>')}</span>` : '';
+          const txt = lsn.text ? `<br><span class='xsmall dimmed'>${escapeHtml(lsn.text).replace(/\n/g, '<br>')}</span>` : '';
           return `<div class='lesson-content'>${base + subst + txt}</div>`;
         };
 
