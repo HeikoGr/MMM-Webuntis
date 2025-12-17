@@ -1,13 +1,9 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util;
+  const util = root.util || {};
+  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
-
-  function escapeHtml(s) {
-    if (s === null || s === undefined) return '';
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
 
   function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;

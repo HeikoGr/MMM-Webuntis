@@ -1,7 +1,8 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
-  const util = root.util;
+  const util = root.util || {};
+  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
@@ -30,18 +31,18 @@
         const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
         const dateTimeCell = formattedDate ? `${formattedDate}` : '';
 
-        let nameCell = exam.name;
+        let nameCell = escapeHtml(exam.name);
         if (studentConfig.showExamSubject) {
-          nameCell = `${exam.subject}: &nbsp;${exam.name}`;
+          nameCell = `${escapeHtml(exam.subject)}: &nbsp;${escapeHtml(exam.name)}`;
         }
 
         if (studentConfig.showExamTeacher) {
           const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
-          if (teacher) nameCell += '&nbsp;' + `(${teacher})`;
+          if (teacher) nameCell += '&nbsp;' + `(${escapeHtml(teacher)})`;
         }
 
         if (exam.text) {
-          nameCell += `<br/><span class="xsmall dimmed">${exam.text}</span>`;
+          nameCell += `<br/><span class="xsmall dimmed">${escapeHtml(exam.text)}</span>`;
         }
 
         addTableRow(table, 'examRow', studentCellTitle, dateTimeCell, nameCell);

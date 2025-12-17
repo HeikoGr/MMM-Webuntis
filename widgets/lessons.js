@@ -1,5 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+  const util = root.util || {};
+  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
@@ -59,7 +61,13 @@
           const holidayDateStr = dayDate
             .toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' })
             .toUpperCase();
-          addTableRow(table, 'lessonRow holiday-notice', studentCellTitle, holidayDateStr, `🏖️ ${holiday.longName || holiday.name}`);
+          addTableRow(
+            table,
+            'lessonRow holiday-notice',
+            studentCellTitle,
+            holidayDateStr,
+            `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`
+          );
           addedRows++;
         }
         continue;
@@ -97,23 +105,23 @@
 
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
-        let subjectStr = studentConfig.useShortSubject ? subjShort : subjLong;
+        let subjectStr = escapeHtml(studentConfig.useShortSubject ? subjShort : subjLong);
 
         if (studentConfig.showTeacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
-          if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${teacherInitial})`;
+          if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherInitial)})`;
         } else if (studentConfig.showTeacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
-          if (teacherFull !== '') subjectStr += '&nbsp;' + `(${teacherFull})`;
+          if (teacherFull !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherFull)})`;
         }
 
         if (studentConfig.showSubstitutionText && (entry.substText || '') !== '') {
-          subjectStr += `<br/><span class='xsmall dimmed'>${entry.substText}</span>`;
+          subjectStr += `<br/><span class='xsmall dimmed'>${escapeHtml(entry.substText)}</span>`;
         }
 
         if ((entry.lstext || '') !== '') {
           if (subjectStr.trim() !== '') subjectStr += '<br/>';
-          subjectStr += `<span class='xsmall dimmed'>${entry.lstext}</span>`;
+          subjectStr += `<span class='xsmall dimmed'>${escapeHtml(entry.lstext)}</span>`;
         }
 
         let addClass = '';

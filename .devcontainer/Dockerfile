@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Clone MagicMirror
 RUN git clone --depth=1 https://github.com/MagicMirrorOrg/MagicMirror.git . && \
-    npm install --only=prod && \
+    npm install --omit=dev && \
     npm cache clean --force && \
     rm -rf /opt/magic_mirror/.git
 
@@ -21,17 +21,10 @@ RUN update-ca-certificates
 
 RUN npm install -g pm2
 
-# Install common dev tooling globally (keeps container usable without a separate workspace folder)
+# Install common dev tooling globally (ESLint plugins must be installed locally per project with ESLint 9.x)
 RUN npm install -g \
-    eslint \
-    eslint-plugin-n \
     prettier \
-    cspell \
-    @eslint/css \
-    @eslint/js \
-    @eslint/json \
-    prettier-plugin-jinja-template \
-    @stylistic/eslint-plugin
+    cspell
 
 WORKDIR /opt/magic_mirror
 
