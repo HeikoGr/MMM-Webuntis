@@ -40,7 +40,7 @@ copy_from_template() {
 
 # Setup paths
 ln -s "$MAGICMIRROR_PATH" "/opt/magicmirror" 2>/dev/null || true
-git config --global alias.pr '!f() { git fetch -fu ${2:-origin} refs/pull/$1/head:pr/$1 && git checkout pr/$1; }; f'
+git config --global alias.pr '!f() { git fetch -fu ${2:-origin} refs/pull/$1/head:pr/$1 && git switch pr/$1; }; f'
 
 # Copy templates if missing
 copy_from_template "${MODULE_DIR}/config/config.js" "${MODULE_DIR}/config/config.template.js" "config.js"
