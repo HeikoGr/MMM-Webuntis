@@ -30,15 +30,15 @@ MMM-Webuntis is a MagicMirror² module that displays timetable, exams, homework,
 
 - Follow the repository’s existing ESLint/Prettier configuration.
 - Avoid broad refactors “for cleanliness”; do focused edits.
-- Run `npm run lint`/`npm test` (or at least a smoke test) before finishing larger changes so regressions surface early.
+- Run `node --run lint`/`npm test` (or at least a smoke test) before finishing larger changes so regressions surface early.
 - Align config/CLI changes with the matching templates and translations (`config.template.js`, `translations/*.json`, `custom.template.css` etc.) to avoid drift.
 
 ## How to build and test
 
-- **Lint code**: `npm run lint` (or `npm run lint:fix` to auto-fix)
+- **Lint code**: `node --run lint` (or `node --run lint:fix` to auto-fix)
 - **Test**: `npm test` (runs linting)
-- **Spell check**: `npm run test:spelling`
-- **Test configuration**: `npm run check` (interactive CLI tool)
+- **Spell check**: `node --run  test:spelling`
+- **Test configuration**: `node --run check` (interactive CLI tool)
 
 ## Code Review Guidelines
 

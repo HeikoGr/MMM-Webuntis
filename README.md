@@ -53,7 +53,7 @@ Upgrade notes:
 ```bash
 git clone https://github.com/HeikoGr/MMM-Webuntis
 cd MMM-Webuntis
-npm ci  --omit=dev
+npm ci --omit=dev
 ```
 
 2. Add the module to your MagicMirror `config/config.js` (see example below).
@@ -204,7 +204,7 @@ This module includes a small interactive CLI tool that reads your MagicMirror co
 Run from the module directory:
 
 ```bash
-npm run check
+node --run check
 ```
 
 If your config is not in a standard location, pass it explicitly:
