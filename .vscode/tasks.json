@@ -20,37 +20,20 @@
       "problemMatcher": []
     },
     {
-      "label": "pm2: stop all",
+      "label": "node --run lint",
       "type": "shell",
-      "command": "pm2 stop all",
+      "command": "node --run lint",
       "presentation": {
         "echo": true,
         "reveal": "always",
         "panel": "shared"
       },
+      "isBackground": false,
       "options": {
         "statusbar": {
-          "label": "$(debug-disconnect) Stop",
-          "color": "#E53935",
-          "detail": "Stop all PM2 processes"
-        }
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "pm2: list",
-      "type": "shell",
-      "command": "pm2 list",
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "panel": "shared"
-      },
-      "options": {
-        "statusbar": {
-          "label": "$(list-unordered) List",
+          "label": "$(notebook-template) Lint",
           "color": "#2196F3",
-          "detail": "Show PM2 process list"
+          "detail": "Run linter"
         }
       },
       "problemMatcher": []

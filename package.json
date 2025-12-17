@@ -22,7 +22,6 @@
   "scripts": {
     "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
-    "test": "node --run lint",
     "test:spelling": "cspell .",
     "check": "node cli/cli.js || true"
   },
