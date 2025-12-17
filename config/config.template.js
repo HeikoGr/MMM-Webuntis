@@ -22,6 +22,8 @@ let config = {
       position: 'top_right',
       config: {
         logLevel: 'info',
+        // set to true to enable demo transformations (pseudonymize, translate subjects, holiday)
+        demoMode: false,
         daysToShow: 7,
         students: [{ title: 'Sample', qrcode: 'untis://setschool?' }],
       },
