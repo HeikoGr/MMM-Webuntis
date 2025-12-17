@@ -62,10 +62,10 @@ module.exports = NodeHelper.create({
     return rawGrid.map((row) => ({
       timeUnits: Array.isArray(row?.timeUnits)
         ? row.timeUnits.map((u) => ({
-            startTime: u.startTime,
-            endTime: u.endTime,
-            name: u.name,
-          }))
+          startTime: u.startTime,
+          endTime: u.endTime,
+          name: u.name,
+        }))
         : [],
     }));
   },
