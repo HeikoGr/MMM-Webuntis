@@ -95,12 +95,17 @@
         addedRows++;
 
         let timeStr = `${timeForDay.toLocaleDateString(ctx.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
-        if (studentConfig.showStartTime || startTimesMap[entry.startTime] === undefined) {
-          const hh = String(stHour).padStart(2, '0');
-          const mm = String(stMin).padStart(2, '0');
-          timeStr += `${hh}:${mm}`;
+        const hh = String(stHour).padStart(2, '0');
+        const mm = String(stMin).padStart(2, '0');
+        const formattedStart = `${hh}:${mm}`;
+        const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
+        const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
+        if (studentConfig.showStartTime) {
+          timeStr += formattedStart;
+        } else if (startLabel !== undefined) {
+          timeStr += `${startLabel}.`;
         } else {
-          timeStr += `${startTimesMap[entry.startTime]}.`;
+          timeStr += formattedStart;
         }
 
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
