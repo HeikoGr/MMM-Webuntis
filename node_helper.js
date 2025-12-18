@@ -520,7 +520,7 @@ module.exports = NodeHelper.create({
     const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
 
     // Data fetching is driven by widgets; legacy per-student flags can only disable.
-    const fetchTimegrid = Boolean(wantsGridWidget);
+    const fetchTimegrid = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
     const fetchHomeworks = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
