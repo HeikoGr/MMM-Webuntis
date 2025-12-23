@@ -1,49 +1,75 @@
 Module.register('MMM-Webuntis', {
   defaults: {
-    header: '', // no header by default
-    daysToShow: 7, // number of days to show per student
-    fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
-    showStartTime: false, // whether to show start time in lesson listings
-    useClassTimetable: false, // whether to use class timetable instead of student timetable
-    showRegularLessons: false, // whether to show regular lessons (not only substitutions)
-    showTeacherMode: 'full', // 'initial'|'full'|'none' - how to show teacher info
-    useShortSubject: false, // whether to use short subject names
-    showSubstitutionText: false, // whether to show substitution text
-    examsDaysAhead: 7, // number of days ahead to show exams
-    showExamSubject: true, // whether to show subject in exam listings
-    showExamTeacher: true, // whether to show teacher in exam listings
-    mode: 'verbose', // 'verbose' or 'compact' mode
-    mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
-    pastDaysToShow: 0, // number of past days to include (show previous days)
-    // How many past days to include when fetching absences (default 14)
-    absencesPastDays: 14,
-    // How many future days to include when fetching absences (default 7)
-    absencesFutureDays: 7,
+    // === GLOBAL OPTIONS ===
+    header: 'MMM-Webuntis', // displayed as module title in MagicMirror
+    fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
+    logLevel: 'none', // 'debug' or 'none' - controls verbosity of logging
 
-    // Comma-separated list of widgets to render, top-to-bottom.
-    // Supported widgets: grid, lessons, exams, homework, absences
-    // Backwards compatible aliases: 'list' => lessons, exams  |  'grid' => grid
+    // === DISPLAY OPTIONS ===
+    // Comma-separated list of widgets to render (top-to-bottom).
+    // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
+    // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
     displayMode: 'list',
+    mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
 
-    // Maximum number of lessons to display per day in grid view.
-    // 0 (default) means show all lessons. Can be overridden per-student.
-    maxGridLessons: 0,
+    // === TIMETABLE FETCH RANGE ===
+    daysToShow: 7, // number of upcoming days to fetch/display per student (0 = off)
+    pastDaysToShow: 0, // number of past days to include (useful for debugging)
 
-    logLevel: 'none', // 'debug' or 'none'
+    // === LESSONS WIDGET OPTIONS ===
+    showStartTime: false, // show start time instead of lesson number
+    showRegularLessons: true, // show regular lessons (not only substitutions/cancellations)
+    showTeacherMode: 'full', // 'initial' (first name), 'full' (full name), 'none'
+    useShortSubject: false, // use short subject names where available
+    showSubstitutionText: false, // show substitution text from WebUntis
 
-    dateFormat: 'dd.MM.',
-    examDateFormat: 'dd.MM.',
-    homeworkDateFormat: 'dd.MM.',
+    // === EXAMS WIDGET OPTIONS ===
+    examsDaysAhead: 7, // number of days ahead to fetch exams (0 = off)
+    showExamSubject: true, // show subject for exams
+    showExamTeacher: true, // show teacher name for exams
 
+    // === GRID VIEW OPTIONS ===
+    mergeGapMinutes: 15, // max gap (minutes) between lessons to merge them
+    maxGridLessons: 0, // max lessons per day in grid (0 = show all)
+    showNowLine: true, // show the current time line in grid view
+
+    // === ABSENCES WIDGET OPTIONS ===
+    absencesPastDays: 14, // past days to include when fetching absences
+    absencesFutureDays: 7, // future days to include when fetching absences
+
+    // === DATE FORMAT OPTIONS ===
+    dateFormat: 'dd.MM.', // format for timetable/lessons (supports dd, mm, yyyy, yy, and single d, m variants)
+    examDateFormat: 'dd.MM.', // format for exam widget dates
+    homeworkDateFormat: 'dd.MM.', // format for homework widget dates
+
+    // === TIMETABLE SOURCE OPTIONS ===
+    useClassTimetable: false, // use class timetable instead of student timetable
+
+    // === PARENT ACCOUNT SUPPORT (optional) ===
+    // Uncomment and configure if using parent account to display multiple children
+    // parentUsername: '', // parent account email/username
+    // parentPassword: '', // parent account password
+    // school: '', // school name (can be overridden per student)
+    // server: '', // WebUntis server (default: webuntis.com)
+
+    // === DEBUG / DEVELOPMENT OPTIONS ===
+    dumpBackendPayloads: false, // dump backend API responses to debug_dumps/ folder
+
+    // === STUDENT CREDENTIALS ===
+    // Array of student objects
+    // Optional: any global option can be set per-student to override it
+    // (fancy but mostly useless)
     students: [
       {
-        title: 'SET CONFIG!',
-        qrcode: '',
-        school: '',
+        title: 'SET CONFIG!', // displayed name for the student
+        // - studentId (number): student ID when using parent account [parent account mode]
+        qrcode: '', // WebUntis QR code (untis://setschool?...) [direct student login]
+        // alternative (if no qrcode):
         username: '',
         password: '',
-        server: '',
-        class: '',
+        school: '',
+        server: '', // defaults to 'webuntis.at'
+        class: '', // class name (only needed for class timetable mode)
       },
     ],
   },
@@ -433,6 +459,7 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent = {};
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
+    this.absencesUnavailableByStudent = {};
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.preprocessedByStudent = {};
@@ -449,6 +476,8 @@ Module.register('MMM-Webuntis', {
   },
 
   _startNowLineUpdater() {
+    // Only start the now line updater if showNowLine is enabled (applies to grid view)
+    if (this.config.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
@@ -507,6 +536,11 @@ Module.register('MMM-Webuntis', {
     const widgets = this._getDisplayWidgets();
 
     const sortedStudentTitles = this._getSortedStudentTitles();
+    this._log(
+      'debug',
+      `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
+    );
+
     if (sortedStudentTitles.length === 0) {
       return wrapper;
     }
@@ -562,6 +596,15 @@ Module.register('MMM-Webuntis', {
       }
 
       if (widget === 'absences') {
+        // Check if absences are unavailable due to parent account limitation
+        const hasUnavailableAbsences = sortedStudentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
+        if (hasUnavailableAbsences) {
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'dimmed small absences-unavailable-info';
+          infoDiv.innerHTML = `⚠️ ${this.translate('absences_unavailable_parent_account')}`;
+          wrapper.appendChild(infoDiv);
+        }
+
         const absencesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const absences = this.absencesByStudent?.[studentTitle] || [];
           return this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
@@ -600,11 +643,11 @@ Module.register('MMM-Webuntis', {
     const cfg = payload.config || {};
     this.configByStudent[title] = cfg;
 
-    const grid = payload.timegrid || [];
+    const timeUnitsList = payload.timeUnits || [];
     let timeUnits = [];
     try {
-      if (Array.isArray(grid) && grid[0] && Array.isArray(grid[0].timeUnits)) {
-        timeUnits = grid[0].timeUnits.map((u) => ({
+      if (Array.isArray(timeUnitsList)) {
+        timeUnits = timeUnitsList.map((u) => ({
           startTime: u.startTime,
           endTime: u.endTime,
           startMin: this._toMinutes(u.startTime),
@@ -648,6 +691,8 @@ Module.register('MMM-Webuntis', {
     this.homeworksByStudent[title] = hwNorm;
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
+
+    this.absencesUnavailableByStudent[title] = Boolean(payload.absencesUnavailable);
 
     this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
 

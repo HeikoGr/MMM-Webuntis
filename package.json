@@ -23,7 +23,8 @@
     "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
     "test:spelling": "cspell .",
-    "check": "node cli/cli.js || true"
+    "check": "node cli/cli.js || true",
+    "debug": "node cli/node_helper_wrapper.js"
   },
   "lint-staged": {
     "*": [
@@ -32,7 +33,10 @@
     ]
   },
   "dependencies": {
+    "axios": "^1.13.2",
+    "axios-cookiejar-support": "^6.0.5",
     "otplib": "^12.0.1",
+    "tough-cookie": "^6.0.0",
     "webuntis": "^2.2.1"
   },
   "devDependencies": {

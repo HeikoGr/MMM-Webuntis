@@ -3,7 +3,7 @@
   const util = root.util || {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
@@ -30,9 +30,9 @@
       const rightParts = [];
       if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);
       if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
-      const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('homework');
+      const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
 
-      addTableRow(table, 'lessonRow', studentCellTitle, left, right);
+      addTableRow(table, 'homeworkRow', studentCellTitle, left, right);
       addedRows++;
     }
 

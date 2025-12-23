@@ -651,12 +651,12 @@ function getNowLineState(ctx) {
           return `<div class='lesson-content'>${base + subst + txt}</div>`;
         };
 
-        if (lesson.code === 'irregular') {
+        if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
           leftCell.classList.add('lesson-replacement');
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeInner(lesson);
-        } else if (lesson.code === 'cancelled') {
+        } else if (lesson.code === 'cancelled' || lesson.status === 'CANCELLED') {
           rightCell.classList.add('lesson-cancelled-split');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
@@ -686,9 +686,9 @@ function getNowLineState(ctx) {
           }
         }
 
-        if (lesson.code === 'irregular') {
+        if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
           leftInner.appendChild(leftCell);
-        } else if (lesson.code === 'cancelled') {
+        } else if (lesson.code === 'cancelled' || lesson.status === 'CANCELLED') {
           rightInner.appendChild(rightCell);
         } else {
           bothInner.appendChild(bothCell);
@@ -746,6 +746,17 @@ function getNowLineState(ctx) {
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
+      // Respect the showNowLine config option
+      if (ctx.config?.showNowLine === false) {
+        // Hide all now lines if disabled
+        const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+        const inners = scope.querySelectorAll('.day-column-inner');
+        inners.forEach((inner) => {
+          const nl = inner._nowLine;
+          if (nl) nl.style.display = 'none';
+        });
+        return 0;
+      }
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const inners = scope.querySelectorAll('.day-column-inner');
       const now = new Date();

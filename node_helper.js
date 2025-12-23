@@ -1,22 +1,22 @@
-// Import required modules
 /* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
 /* eslint-enable n/no-missing-require */
-const { WebUntis } = require('webuntis');
-const { WebUntisQR } = require('webuntis');
+const { WebUntis, WebUntisQR } = require('webuntis');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+const { authenticator: OtpAuthenticator } = require('otplib');
 const { URL } = require('url');
-const Authenticator = require('otplib').authenticator;
 /* eslint-disable n/no-missing-require */
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 
 // Default cache TTL for per-request responses (ms). Small to favor freshness.
-const DEFAULT_CACHE_TTL_MS = 30 * 1000;
+const DEFAULT_CACHE_TTL_MS = 30 * 1;
 // Default interval for periodic cache cleanup (ms)
-const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 30 * 1000;
+const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 30 * 1;
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
-
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
   /**
@@ -24,8 +24,7 @@ module.exports = NodeHelper.create({
    * Use this hook to perform startup initialization.
    */
   start() {
-    Log.info('[MMM-Webuntis] Node helper started');
-    // node helper ready
+    this._mmLog('info', null, 'Node helper started');
     // initialize a tiny in-memory response cache
     this._responseCache = new Map(); // signature -> { ts, payload }
     this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
@@ -34,48 +33,960 @@ module.exports = NodeHelper.create({
     this._cacheCleanupIntervalMs = DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
     // start periodic cache cleanup
     this._startCacheCleanup();
+    // Initialize REST API cache (token + cookies) keyed by credential
+    this._restAuthCache = new Map(); // cacheKey -> { token, cookieString, expiresAt }
   },
 
-  /*
-   * Create an authenticated WebUntis client from a student sample config.
-   * Returns a client instance or throws an Error if credentials missing.
+  /**
+   * Build REST targets for a student depending on login mode (QR vs. parent account).
+   * Returns an ordered array of targets; QR login (if present) comes first, then parent.
    */
-  _createUntisClient(sample) {
-    if (sample.qrcode) {
-      return new WebUntisQR(sample.qrcode, 'custom-identity', Authenticator, URL);
+  _buildRestTargets(student, moduleConfig, school, server, ownPersonId) {
+    const targets = [];
+    const useQrLogin = Boolean(student.qrcode);
+    const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
+    const studentId = hasStudentId ? Number(student.studentId) : null;
+    const hasParentCreds = Boolean(moduleConfig?.username && moduleConfig?.password);
+
+    if (useQrLogin && school && server) {
+      targets.push({
+        mode: 'qr',
+        school,
+        server,
+        username: null,
+        password: null,
+        studentId: ownPersonId || studentId || null,
+      });
     }
-    if (sample.username) {
-      return new WebUntis(sample.school, sample.username, sample.password, sample.server);
+
+    if (!useQrLogin && hasParentCreds && studentId !== null) {
+      targets.push({
+        mode: 'parent',
+        school: school || moduleConfig.school,
+        server: server || moduleConfig.server || 'webuntis.com',
+        username: moduleConfig.username,
+        password: moduleConfig.password,
+        studentId,
+      });
     }
-    throw new Error('No credentials provided');
+
+    return targets;
   },
 
-  // Format errors consistently for logs
+  /**
+   * Invoke a REST helper with a target descriptor (school/server + credentials).
+   * Keeps call sites concise and consistent.
+   */
+  async _callRest(fn, target, ...args) {
+    return fn.call(this, target.school, target.username, target.password, target.server, ...args);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Logging and error helpers
+  // ---------------------------------------------------------------------------
+
+  _mmLog(level, student, message) {
+    try {
+      const moduleTag = '[MMM-Webuntis]';
+      const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
+      const formatted = `${moduleTag}${studentTag} ${message}`;
+
+      if (level === 'debug') {
+        if (this.config && this.config.logLevel === 'debug') {
+          if (typeof Log.debug === 'function') {
+            Log.debug(formatted);
+          } else {
+            Log.info(`${moduleTag}${studentTag} [DEBUG] ${message}`);
+          }
+        }
+        return;
+      }
+
+      if (level === 'error') {
+        Log.error(formatted);
+        return;
+      }
+
+      if (level === 'warn') {
+        if (typeof Log.warn === 'function') {
+          Log.warn(formatted);
+        } else {
+          Log.info(formatted);
+        }
+        return;
+      }
+
+      // default/info
+      Log.info(formatted);
+    } catch (e) {
+      Log.error(`Error in logging: ${e && e.message ? e.message : e}`);
+    }
+  },
+
   _formatErr(err) {
     if (!err) return '(no error)';
     return err && err.message ? err.message : String(err);
   },
 
+  /**
+   * Map REST API status to legacy JSON-RPC code format
+   * REST status values: REGULAR, CANCELLED, ADDITIONAL, CHANGED, SUBSTITUTION
+   * Legacy code values: '', 'cancelled', 'error', 'info', 'irregular'
+   * 'irregular' is used for replacement/substitution lessons
+   */
+  _mapRestStatusToLegacyCode(status, substitutionText) {
+    if (!status) return '';
+
+    const statusUpper = String(status).toUpperCase();
+    const hasSubstitutionText = substitutionText && String(substitutionText).trim() !== '';
+
+    switch (statusUpper) {
+      case 'CANCELLED':
+      case 'CANCEL':
+        return 'cancelled'; // Display with cancelled styling
+      case 'ADDITIONAL':
+      case 'CHANGED':
+      case 'SUBSTITUTION':
+      case 'SUBSTITUTE':
+        return 'irregular'; // Use 'irregular' for replacement/substitution lessons (legacy compat)
+      case 'REGULAR':
+      case 'NORMAL':
+      case 'NORMAL_TEACHING_PERIOD':
+        // If there's substitution text, treat it as a replacement lesson
+        return hasSubstitutionText ? 'irregular' : '';
+      default:
+        return hasSubstitutionText ? 'irregular' : '';
+    }
+  },
+
+  /**
+   * REST API Authentication: Get Bearer Token and Session Cookies
+   * Returns: { token, cookieString, tenantId, schoolYearId, expiresAt }
+   */
+  async _getRestAuthTokenAndCookies(school, username, password, server, options = {}) {
+    this._mmLog('info', null, `Obtaining REST auth token and cookies for user=${username || 'session'}`);
+    const restCache = this._restAuthCache instanceof Map ? this._restAuthCache : new Map();
+    this._restAuthCache = restCache;
+
+    const { cacheKey, untisClient } = options || {};
+    const effectiveCacheKey = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
+
+    const cached = restCache.get(effectiveCacheKey);
+    if (cached && cached.expiresAt > Date.now() + 60000) {
+      this._mmLog('debug', null, `[REST] Using cached auth`);
+      return {
+        token: cached.token,
+        cookieString: cached.cookieString,
+        tenantId: cached.tenantId,
+        schoolYearId: cached.schoolYearId,
+        appData: cached.appData,
+      };
+    }
+
+    let appData = null;
+
+    // Prefer an already logged-in Untis client (QR or parent login) to avoid duplicate logins
+    if (untisClient && typeof untisClient._buildCookies === 'function') {
+      const cookieString = untisClient._buildCookies();
+      if (!cookieString) {
+        throw new Error('No session cookies available from existing login');
+      }
+
+      let token = null;
+      if (typeof untisClient._getJWT === 'function') {
+        try {
+          token = await untisClient._getJWT(false);
+        } catch (err) {
+          this._mmLog('debug', null, `[REST] JWT via existing session failed: ${this._formatErr(err)}`);
+        }
+      }
+
+      // Fetch app/data to get tenantId and schoolYearId
+      let tenantId = null;
+      let schoolYearId = null;
+      try {
+        const appDataResp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {
+          headers: {
+            Cookie: cookieString,
+            Accept: 'application/json',
+          },
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (appDataResp.status === 200 && appDataResp.data) {
+          appData = appDataResp.data;
+          tenantId = appDataResp.data?.tenant?.id;
+          schoolYearId = appDataResp.data?.currentSchoolYear?.id;
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] Failed to fetch app/data: ${this._formatErr(err)}`);
+      }
+
+      restCache.set(effectiveCacheKey, {
+        token,
+        cookieString,
+        tenantId,
+        schoolYearId,
+        appData,
+        expiresAt: Date.now() + 14 * 60 * 1000,
+      });
+
+      return { token, cookieString, tenantId, schoolYearId, appData };
+    }
+
+    try {
+      // Step 1: Authenticate via JSON-RPC to get session cookies
+      const authResp = await axios.post(
+        `https://${server}/WebUntis/jsonrpc.do?school=${encodeURIComponent(school)}`,
+        {
+          jsonrpc: '2.0',
+          method: 'authenticate',
+          params: {
+            user: username,
+            password,
+            client: 'App',
+          },
+          id: 1,
+        },
+        { validateStatus: () => true, timeout: 10000 }
+      );
+
+      if (authResp.status !== 200) {
+        throw new Error(`JSON-RPC auth failed: ${authResp.status}`);
+      }
+
+      // Step 2: Extract cookies from Set-Cookie headers
+      const cookies = {};
+      const setCookies = authResp.headers['set-cookie'] || [];
+      setCookies.forEach((setCookie) => {
+        const [cookie] = setCookie.split(';');
+        const [key, value] = cookie.split('=');
+        if (key && value) {
+          cookies[key.trim()] = value;
+        }
+      });
+
+      const cookieString = Object.entries(cookies)
+        .map(([k, v]) => `${k}=${v}`)
+        .join('; ');
+
+      if (!cookieString) {
+        throw new Error('No session cookies received');
+      }
+
+      // Step 3: Get Bearer Token using the session cookies
+      const tokenResp = await axios.get(`https://${server}/WebUntis/api/token/new`, {
+        headers: { Cookie: cookieString },
+        validateStatus: () => true,
+        timeout: 10000,
+      });
+
+      if (tokenResp.status !== 200 || typeof tokenResp.data !== 'string') {
+        throw new Error(`Bearer token request failed: ${tokenResp.status}`);
+      }
+
+      const token = tokenResp.data;
+
+      // Fetch app/data to get tenantId and schoolYearId
+      let tenantId = null;
+      let schoolYearId = null;
+      try {
+        const appDataResp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Cookie: cookieString,
+            Accept: 'application/json',
+          },
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (appDataResp.status === 200 && appDataResp.data) {
+          appData = appDataResp.data;
+          tenantId = appDataResp.data?.tenant?.id;
+          schoolYearId = appDataResp.data?.currentSchoolYear?.id;
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] Failed to fetch app/data: ${this._formatErr(err)}`);
+      }
+
+      // Cache the token (expires in 900 seconds, with buffer we cache for 14 minutes)
+      restCache.set(effectiveCacheKey, {
+        token,
+        cookieString,
+        tenantId,
+        schoolYearId,
+        appData,
+        expiresAt: Date.now() + 14 * 60 * 1000,
+      });
+
+      this._mmLog('info', null, 'REST auth token obtained successfully');
+      return { token, cookieString, tenantId, schoolYearId, appData };
+    } catch (error) {
+      Log.error(`REST auth failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Get timetable via REST API
+   */
+  async _getTimetableViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const startDate = rangeStart.toISOString().split('T')[0];
+    const endDate = rangeEnd.toISOString().split('T')[0];
+    this._mmLog('info', null, `Fetching timetable via REST API (${startDate} to ${endDate})`);
+    try {
+      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+        school,
+        username,
+        password,
+        server,
+        options
+      );
+
+      if (!cookieString) {
+        throw new Error('Missing REST auth cookies');
+      }
+
+      // Format dates as YYYY-MM-DD for API
+      const formatDate = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      const headers = {
+        Cookie: cookieString,
+        Accept: 'application/json',
+      };
+      // Add tenant/schoolyear headers if available (needed for some schools)
+      if (tenantId) headers['Tenant-Id'] = String(tenantId);
+      if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/entries`, {
+        params: {
+          start: formatDate(rangeStart),
+          end: formatDate(rangeEnd),
+          resourceType: 'STUDENT',
+          resources: String(studentId), // IMPORTANT: Must be string, not number!
+        },
+        headers,
+        validateStatus: () => true,
+        timeout: 15000,
+      });
+
+      this._mmLog('debug', null, `REST API response status: ${resp.status}`);
+      if (resp.status !== 200) {
+        this._mmLog('debug', null, `REST API response body: ${JSON.stringify(resp.data).substring(0, 500)}`);
+        throw new Error(`REST API returned status ${resp.status}`);
+      }
+
+      // Transform REST response to JSON-RPC format
+      const lessons = [];
+      this._mmLog(
+        'debug',
+        null,
+        `Response data structure: days=${resp.data?.days ? 'present' : 'missing'}, hasDays=${Array.isArray(resp.data?.days)}`
+      );
+      if (resp.data && resp.data.days && Array.isArray(resp.data.days)) {
+        this._mmLog('debug', null, `Processing ${resp.data.days.length} days from API response`);
+        resp.data.days.forEach((day) => {
+          if (day.gridEntries && Array.isArray(day.gridEntries)) {
+            day.gridEntries.forEach((entry) => {
+              const lesson = {
+                id: entry.ids && entry.ids[0] ? entry.ids[0] : null,
+                date: day.date.split('T')[0], // Extract date part only
+                startTime: entry.duration?.start ? entry.duration.start.split('T')[1] : '', // Extract time
+                endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
+                su: entry.position2
+                  ? [
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
+                  : [],
+                te: entry.position1
+                  ? [
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
+                  : [],
+                ro: entry.position3
+                  ? [
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
+                  : [],
+                code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
+                substText: entry.substitutionText || '',
+                lstext: entry.lessonInfo || '',
+                activityType: entry.type || 'NORMAL_TEACHING_PERIOD',
+                lessonText: entry.lessonText || '',
+                // Status information: cancelled, regular, substitution
+                status: entry.status || 'REGULAR', // REGULAR, CANCELLED, SUBSTITUTION, etc.
+                statusDetail: entry.statusDetail || null, // Additional detail (e.g., reason)
+              };
+              lessons.push(lesson);
+            });
+          }
+        });
+      }
+
+      this._mmLog('info', null, `REST API returned ${lessons.length} lessons`);
+      return lessons;
+    } catch (error) {
+      this._mmLog('error', null, `getTimetableViaRest failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch exams via REST API for a student (parent account or own)
+   * Returns exams in the format: [{ examDate, startTime, endTime, name, subject, teachers, text }, ...]
+   */
+  async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const startDate = rangeStart.toISOString().split('T')[0];
+    const endDate = rangeEnd.toISOString().split('T')[0];
+    this._mmLog('info', null, `Fetching exams via REST API (${startDate} to ${endDate})`);
+    try {
+      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+
+      const formatDateYYYYMMDD = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}${month}${day}`;
+      };
+
+      // Build request for exams
+      // Endpoint: /WebUntis/api/exams (from WebUI, uses startDate/endDate in YYYYMMDD format)
+      const headers = {
+        Cookie: cookieString,
+        Accept: 'application/json',
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const resp = await axios.get(`https://${server}/WebUntis/api/exams`, {
+        params: {
+          startDate: formatDateYYYYMMDD(rangeStart),
+          endDate: formatDateYYYYMMDD(rangeEnd),
+          studentId: studentId ?? -1,
+          klasseId: -1,
+          withGrades: true,
+        },
+        headers,
+        validateStatus: () => true,
+        timeout: 15000,
+      });
+
+      if (resp.status !== 200) {
+        throw new Error(`REST API returned status ${resp.status} for exams`);
+      }
+
+      // Transform REST response to expected format
+      const exams = [];
+      let examArr = [];
+      if (Array.isArray(resp.data?.data?.exams)) {
+        examArr = resp.data.data.exams;
+      } else if (Array.isArray(resp.data?.exams)) {
+        examArr = resp.data.exams;
+      } else if (Array.isArray(resp.data)) {
+        examArr = resp.data;
+      }
+
+      examArr.forEach((exam) => {
+        // Filter to only include exams assigned to the requested studentId
+        const isAssignedToStudent =
+          studentId && Array.isArray(exam.assignedStudents) && exam.assignedStudents.some((s) => s.id === studentId);
+
+        // Include exam if we're not filtering by studentId OR if student is assigned
+        if (!studentId || isAssignedToStudent) {
+          exams.push({
+            examDate: this._normalizeDateToInteger(exam.examDate ?? exam.date),
+            startTime: this._normalizeTimeToMinutes(exam.startTime ?? exam.start),
+            endTime: this._normalizeTimeToMinutes(exam.endTime ?? exam.end),
+            name: this._sanitizeHtmlText(exam.name ?? exam.examType ?? exam.lessonName ?? '', false),
+            subject: this._sanitizeHtmlText(exam.subject ?? exam.lessonName ?? '', false),
+            teachers: Array.isArray(exam.teachers) ? exam.teachers : [],
+            text: this._sanitizeHtmlText(exam.text ?? exam.description ?? '', true),
+          });
+        }
+      });
+
+      this._mmLog('info', null, `REST API returned ${exams.length} exams`);
+      return exams;
+    } catch (error) {
+      this._mmLog('error', null, `getExamsViaRest failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch homework via REST API for a student (parent account or own)
+   * Returns homework in the format: [{ id, lid, lessonId, dueDate, completed, text, remark, su }, ...]
+   * Uses /WebUntis/api/homeworks/lessons which returns homework and lesson data in parallel arrays
+   */
+  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, options = {}) {
+    const startDate = rangeStart.toISOString().split('T')[0];
+    const endDate = rangeEnd.toISOString().split('T')[0];
+    this._mmLog('info', null, `Fetching homework via REST API (${startDate} to ${endDate})`);
+    try {
+      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+
+      const formatDateYYYYMMDD = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}${month}${day}`;
+      };
+
+      // Build request for homework via lessons endpoint
+      // Endpoint: /WebUntis/api/homeworks/lessons
+      // Returns: { data: { homeworks: [...], lessons: [...], records: [...], teachers: [...] } }
+      const headers = {
+        Cookie: cookieString,
+        Accept: 'application/json',
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const resp = await axios.get(`https://${server}/WebUntis/api/homeworks/lessons`, {
+        params: {
+          startDate: formatDateYYYYMMDD(rangeStart),
+          endDate: formatDateYYYYMMDD(rangeEnd),
+        },
+        headers,
+        validateStatus: () => true,
+        timeout: 15000,
+      });
+
+      if (resp.status !== 200) {
+        throw new Error(`REST API returned status ${resp.status} for homework`);
+      }
+
+      // Extract homework from response
+      // Response structure: { data: { homeworks: [...], lessons: [...] } }
+      const homeworks = [];
+      const seenIds = new Set(); // Avoid duplicates
+
+      const data = resp.data.data || resp.data;
+
+      if (Array.isArray(data.homeworks)) {
+        const lessonsMap = {};
+        if (Array.isArray(data.lessons)) {
+          data.lessons.forEach((lesson) => {
+            if (lesson.id) {
+              lessonsMap[lesson.id] = lesson;
+            }
+          });
+        }
+
+        data.homeworks.forEach((hw) => {
+          // Avoid duplicates by checking homework ID
+          const hwId = hw.id ?? `${hw.lessonId}_${hw.dueDate}`;
+          if (!seenIds.has(hwId)) {
+            seenIds.add(hwId);
+            const lesson = lessonsMap[hw.lessonId];
+
+            // Extract subject name from lesson object
+            let suName = null;
+            if (lesson) {
+              if (lesson.su && lesson.su[0]) {
+                suName = { name: lesson.su[0].name, longname: lesson.su[0].longname };
+              } else if (lesson.subject) {
+                suName = { name: lesson.subject };
+              }
+            }
+
+            homeworks.push({
+              id: hw.id ?? null,
+              lid: hw.lid ?? hw.lessonId ?? null,
+              lessonId: hw.lessonId ?? null,
+              dueDate: this._normalizeDateToInteger(hw.dueDate ?? hw.date),
+              completed: hw.completed ?? hw.isCompleted ?? false,
+              text: this._sanitizeHtmlText(hw.text ?? hw.description ?? hw.remark ?? '', true),
+              remark: this._sanitizeHtmlText(hw.remark ?? '', false),
+              su: suName,
+            });
+          }
+        });
+      }
+
+      this._mmLog('info', null, `REST API returned ${homeworks.length} homeworks`);
+      return homeworks;
+    } catch (error) {
+      this._mmLog('error', null, `getHomeworkViaRest failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch absences via REST API for a student (parent account or own)
+   * Returns absences in the format: [{ date, startTime, endTime, reason, excused, student, su, te, lessonId }, ...]
+   * Note: The REST API /WebUntis/api/absences returns all absences for the authenticated user
+   */
+  async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const startDate = rangeStart.toISOString().split('T')[0];
+    const endDate = rangeEnd.toISOString().split('T')[0];
+    this._mmLog('info', null, `Fetching absences via REST API (${startDate} to ${endDate})`);
+    try {
+      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+
+      const formatDateYYYYMMDD = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}${month}${day}`;
+      };
+
+      // Build request for absences
+      // Endpoint: /WebUntis/api/classreg/absences/students (from WebUI)
+      // Parameters: startDate, endDate (YYYYMMDD format), studentId, excuseStatusId
+      const headers = {
+        Cookie: cookieString,
+        Accept: 'application/json',
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const resp = await axios.get(`https://${server}/WebUntis/api/classreg/absences/students`, {
+        params: {
+          startDate: formatDateYYYYMMDD(rangeStart),
+          endDate: formatDateYYYYMMDD(rangeEnd),
+          studentId: studentId ?? -1,
+          excuseStatusId: -1,
+        },
+        headers,
+        validateStatus: () => true,
+        timeout: 15000,
+      });
+
+      if (resp.status !== 200) {
+        throw new Error(`REST API returned status ${resp.status} for absences`);
+      }
+
+      // Transform REST response to expected format
+      const absences = [];
+      let absArr = [];
+      if (Array.isArray(resp.data?.data?.absences)) {
+        absArr = resp.data.data.absences;
+      } else if (Array.isArray(resp.data?.absences)) {
+        absArr = resp.data.absences;
+      } else if (Array.isArray(resp.data?.absentLessons)) {
+        absArr = resp.data.absentLessons;
+      } else if (Array.isArray(resp.data)) {
+        absArr = resp.data;
+      }
+
+      absArr.forEach((abs) => {
+        absences.push({
+          date: abs.date ?? abs.startDate ?? abs.absenceDate ?? abs.day ?? null,
+          startTime: abs.startTime ?? abs.start ?? null,
+          endTime: abs.endTime ?? abs.end ?? null,
+          reason: abs.reason ?? abs.reasonText ?? abs.text ?? '',
+          excused: abs.isExcused ?? abs.excused ?? null,
+          student: abs.student ?? null,
+          su: abs.su && abs.su[0] ? [{ name: abs.su[0].name, longname: abs.su[0].longname }] : [],
+          te: abs.te && abs.te[0] ? [{ name: abs.te[0].name, longname: abs.te[0].longname }] : [],
+          lessonId: abs.lessonId ?? abs.lid ?? abs.id ?? null,
+        });
+      });
+
+      this._mmLog('info', null, `REST API returned ${absences.length} absences`);
+      return absences;
+    } catch (error) {
+      this._mmLog('error', null, `getAbsencesViaRest failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
+    this._mmLog('info', null, `Fetching messages of day via REST API for date=${date.toISOString()}`);
+    try {
+      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+
+      const formatDateYYYYMMDD = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}${month}${day}`;
+      };
+
+      // Build request for messages of the day
+      // Endpoint: /WebUntis/api/public/news/newsWidgetData (from WebUI)
+      const headers = {
+        Cookie: cookieString,
+        Accept: 'application/json',
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const resp = await axios.get(`https://${server}/WebUntis/api/public/news/newsWidgetData`, {
+        params: {
+          date: formatDateYYYYMMDD(date),
+        },
+        headers,
+        validateStatus: () => true,
+        timeout: 15000,
+      });
+
+      if (resp.status !== 200) {
+        throw new Error(`REST API returned status ${resp.status} for messages of day`);
+      }
+
+      // Parse response - handles nested data.messagesOfDay structure
+      let messages = [];
+      if (Array.isArray(resp.data?.data?.messagesOfDay)) {
+        messages = resp.data.data.messagesOfDay;
+      } else if (Array.isArray(resp.data?.messagesOfDay)) {
+        messages = resp.data.messagesOfDay;
+      } else if (Array.isArray(resp.data?.messages)) {
+        messages = resp.data.messages;
+      } else if (Array.isArray(resp.data)) {
+        messages = resp.data;
+      }
+
+      this._mmLog('info', null, `REST API returned ${messages.length} messages of the day`);
+      return messages;
+    } catch (error) {
+      this._mmLog('error', null, `getMessagesOfDayViaRest failed: ${error.message}`);
+      throw error;
+    }
+  },
+
+  _resolveSchoolAndServer(student) {
+    let school = student.school || this.config?.school || null;
+    let server = student.server || this.config?.server || null;
+
+    if ((!school || !server) && student.qrcode) {
+      try {
+        const qrUrl = new URL(student.qrcode);
+        school = school || qrUrl.searchParams.get('school');
+        server = server || qrUrl.searchParams.get('url');
+      } catch (err) {
+        this._mmLog('error', student, `Failed to parse QR code for school/server: ${this._formatErr(err)}`);
+      }
+    }
+
+    // Normalize server host if a full URL was provided
+    if (server && server.startsWith('http')) {
+      try {
+        server = new URL(server).hostname;
+      } catch {
+        // leave as-is
+      }
+    }
+
+    return { school, server };
+  },
+
+  _deriveStudentsFromAppData(appData) {
+    if (!appData || !appData.user || !Array.isArray(appData.user.students)) return [];
+    const derived = [];
+    appData.user.students.forEach((st, idx) => {
+      const sid = Number(st?.id ?? st?.studentId ?? st?.personId);
+      if (!Number.isFinite(sid)) return;
+      const title = st?.displayName || st?.name || `Student ${idx + 1}`;
+      derived.push({ title, studentId: sid, imageUrl: st?.imageUrl || null });
+    });
+    return derived;
+  },
+
+  async _ensureStudentsFromAppData(moduleConfig) {
+    try {
+      if (!moduleConfig || typeof moduleConfig !== 'object') return;
+
+      const configuredStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
+      const missingStudentIds = configuredStudents.length === 0 || configuredStudents.every((s) => !s || !Number.isFinite(Number(s.studentId)));
+
+      if (!missingStudentIds) return;
+
+      const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
+      if (!hasParentCreds) return;
+
+      const server = moduleConfig.server || 'webuntis.com';
+      const { appData } = await this._getRestAuthTokenAndCookies(moduleConfig.school, moduleConfig.username, moduleConfig.password, server);
+      const autoStudents = this._deriveStudentsFromAppData(appData);
+
+      if (!autoStudents || autoStudents.length === 0) {
+        this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
+        return;
+      }
+
+      const merged = autoStudents.map((auto, idx) => {
+        const existing = configuredStudents[idx] || {};
+        return {
+          ...existing,
+          title: existing.title || auto.title,
+          studentId: existing.studentId || auto.studentId,
+          imageUrl: existing.imageUrl || auto.imageUrl,
+        };
+      });
+
+      // Preserve any manual entries beyond discovered students
+      if (configuredStudents.length > autoStudents.length) {
+        merged.push(...configuredStudents.slice(autoStudents.length));
+      }
+
+      moduleConfig.students = merged;
+      this._mmLog('info', null, `Auto-configured ${merged.length} student(s) from app/data response`);
+    } catch (err) {
+      this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
+    }
+  },
+
+  /*
+   * Create an authenticated WebUntis client from a student sample config.
+   * For parent account mode (student has studentId but no own credentials),
+   * use the module-level username and password.
+   * Returns a WebUntis client instance (logged in) or throws an Error if credentials missing.
+   */
+  _createUntisClient(sample, moduleConfig) {
+    const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
+    const useQrLogin = Boolean(sample.qrcode);
+    const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
+    const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin;
+
+    // Mode 0: QR Code Login (student)
+    if (useQrLogin) {
+      this._mmLog('debug', sample, 'Creating WebUntisQR client for QR code login');
+      return new WebUntisQR(sample.qrcode, 'MMM-Webuntis', OtpAuthenticator, URL);
+    }
+
+    // Mode 1: Parent Account (studentId + parent credentials from moduleConfig)
+    if (isParentMode && moduleConfig && moduleConfig.username && moduleConfig.password) {
+      const school = sample.school || moduleConfig.school;
+      const server = sample.server || moduleConfig.server || 'webuntis.com';
+      this._mmLog('debug', sample, `Creating WebUntis client for parent account (school=${school}, server=${server})`);
+      return new WebUntis(school, moduleConfig.username, moduleConfig.password, server);
+    }
+
+    // Mode 2: Direct Student Login (own credentials)
+    if (hasOwnCredentials) {
+      this._mmLog('debug', sample, `Creating WebUntis client for direct login (school=${sample.school}, server=${sample.server})`);
+      return new WebUntis(sample.school, sample.username, sample.password, sample.server);
+    }
+
+    // No valid credentials found
+    let errorMsg = '\nCredentials missing! need either:';
+    errorMsg += '\n  (1) studentId + username/password in module config, or';
+    errorMsg += '\n  (2) username/password/school/server in student config, or';
+    errorMsg += '\n  (3) qrcode in student config for QR code login\n';
+
+    this._mmLog('error', sample, errorMsg);
+    throw new Error(errorMsg);
+  },
+
   // Reduce memory by keeping only the fields the frontend uses
+  // Returns timeUnits array directly instead of wrapping in an object,
+  // since timeUnits (lesson slots) are the same for all days.
   _compactTimegrid(rawGrid) {
-    if (!Array.isArray(rawGrid)) return [];
-    return rawGrid.map((row) => ({
-      timeUnits: Array.isArray(row?.timeUnits)
-        ? row.timeUnits.map((u) => ({
-            startTime: u.startTime,
-            endTime: u.endTime,
-            name: u.name,
-          }))
-        : [],
-    }));
+    if (!Array.isArray(rawGrid) || rawGrid.length === 0) return [];
+    // All rows should have identical timeUnits; use the first row as canonical
+    const firstRow = rawGrid[0];
+    if (firstRow && Array.isArray(firstRow.timeUnits)) {
+      return firstRow.timeUnits.map((u) => ({
+        startTime: u.startTime,
+        endTime: u.endTime,
+        name: u.name,
+      }));
+    }
+    return [];
+  },
+
+  /**
+   * Sanitize HTML text by removing tags but preserving intentional line breaks (<br>)
+   * Converts <br>, <br/>, <br /> to newlines, then strips all remaining HTML tags
+   */
+  _sanitizeHtmlText(text, preserveLineBreaks = true) {
+    if (!text) return '';
+    let result = String(text);
+
+    // Step 1: Preserve intentional line breaks by converting <br> tags to placeholders
+    if (preserveLineBreaks) {
+      result = result.replace(/<br\s*\/?>/gi, '\n');
+    }
+
+    // Step 2: Remove all remaining HTML tags
+    result = result.replace(/<[^>]*>/g, '');
+
+    // Step 3: Decode HTML entities
+    result = result
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&'); // Must be last
+
+    // Step 4: Clean up extra whitespace (but preserve intentional newlines)
+    result = result.replace(/\s+/g, ' ').trim();
+
+    return result;
+  },
+
+  /**
+   * Normalize date format from REST API (ISO string) to internal format (YYYYMMDD integer)
+   * Accepts: "2025-12-17" → 20251217
+   */
+  _normalizeDateToInteger(date) {
+    if (!date) return null;
+    // If already an integer in YYYYMMDD format, return as-is
+    if (typeof date === 'number' && date > 10000000 && date < 99991231) {
+      return date;
+    }
+    // Parse ISO string format "YYYY-MM-DD" → YYYYMMDD
+    const dateStr = String(date);
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const y = parts[0].padStart(4, '0');
+        const m = parts[1].padStart(2, '0');
+        const d = parts[2].padStart(2, '0');
+        return parseInt(`${y}${m}${d}`, 10);
+      }
+    }
+    // Try to parse as plain number
+    const num = parseInt(String(date).replace(/\D/g, ''), 10);
+    return num > 10000000 && num < 99991231 ? num : null;
+  },
+
+  /**
+   * Normalize time format from REST API (HH:MM string) to internal format (HHMM integer)
+   * Accepts: "07:50" → 750 or "08:45" → 845
+   */
+  _normalizeTimeToMinutes(time) {
+    if (!time && time !== 0) return null;
+    // If already an integer in HHMM format, return as-is
+    if (typeof time === 'number' && time >= 0 && time < 2400) {
+      return time;
+    }
+    // Parse HH:MM string format
+    const timeStr = String(time).trim();
+    if (timeStr.includes(':')) {
+      const parts = timeStr.split(':');
+      if (parts.length >= 2) {
+        const hh = parseInt(parts[0], 10) || 0;
+        const mm = parseInt(parts[1], 10) || 0;
+        return hh * 100 + mm;
+      }
+    }
+    // Try to parse as plain number
+    const num = parseInt(String(time).replace(/\D/g, ''), 10);
+    return num >= 0 && num < 2400 ? num : null;
   },
 
   _compactLessons(rawLessons) {
     if (!Array.isArray(rawLessons)) return [];
     return rawLessons.map((el) => ({
-      date: el.date,
-      startTime: el.startTime,
-      endTime: el.endTime,
+      date: this._normalizeDateToInteger(el.date),
+      startTime: this._normalizeTimeToMinutes(el.startTime),
+      endTime: this._normalizeTimeToMinutes(el.endTime),
       su: el.su && el.su[0] ? [{ name: el.su[0].name, longname: el.su[0].longname }] : [],
       te: el.te && el.te[0] ? [{ name: el.te[0].name, longname: el.te[0].longname }] : [],
       code: el.code || '',
@@ -90,17 +1001,17 @@ module.exports = NodeHelper.create({
   _compactExams(rawExams) {
     if (!Array.isArray(rawExams)) return [];
     return rawExams.map((ex) => ({
-      examDate: ex.examDate,
-      startTime: ex.startTime,
-      endTime: ex.endTime ?? null,
-      name: ex.name,
-      subject: ex.subject,
+      examDate: this._normalizeDateToInteger(ex.examDate),
+      startTime: this._normalizeTimeToMinutes(ex.startTime),
+      endTime: this._normalizeTimeToMinutes(ex.endTime),
+      name: this._sanitizeHtmlText(ex.name ?? '', false),
+      subject: this._sanitizeHtmlText(ex.subject ?? '', false),
       teachers: Array.isArray(ex.teachers) ? ex.teachers.slice(0, 2) : [],
-      text: ex.text || '',
+      text: this._sanitizeHtmlText(ex.text ?? '', true),
     }));
   },
 
-  _compactHomeworks(rawHw) {
+  _compactHomeworks(rawHw, studentId = null) {
     if (!rawHw) return [];
     const hwArr = Array.isArray(rawHw)
       ? rawHw
@@ -109,14 +1020,35 @@ module.exports = NodeHelper.create({
         : Array.isArray(rawHw.homework)
           ? rawHw.homework
           : [];
-    return hwArr.map((hw) => ({
+
+    // Build a map from homeworkId to elementIds (studentIds) using the records
+    const homeworkToStudents = {};
+    if (rawHw && Array.isArray(rawHw.records)) {
+      for (const record of rawHw.records) {
+        if (record.homeworkId && Array.isArray(record.elementIds)) {
+          homeworkToStudents[record.homeworkId] = record.elementIds;
+        }
+      }
+    }
+
+    // If we have student filtering info, filter the homework list
+    let filteredHw = hwArr;
+    if (studentId !== null && Object.keys(homeworkToStudents).length > 0) {
+      filteredHw = hwArr.filter((hw) => {
+        const elementIds = homeworkToStudents[hw.id];
+        // Include homework if: no mapping found (all get it) OR studentId is in elementIds
+        return !elementIds || elementIds.includes(studentId);
+      });
+    }
+
+    return filteredHw.map((hw) => ({
       id: hw.id ?? null,
       lid: hw.lid ?? null,
       lessonId: hw.lessonId ?? null,
       dueDate: hw.dueDate ?? hw.date ?? null,
       completed: hw.completed ?? null,
-      text: hw.text ?? hw.description ?? hw.remark ?? '',
-      remark: hw.remark ?? '',
+      text: this._sanitizeHtmlText(hw.text ?? hw.description ?? hw.remark ?? '', true),
+      remark: this._sanitizeHtmlText(hw.remark ?? '', false),
       su:
         hw.su && typeof hw.su === 'object'
           ? { name: hw.su.name, longname: hw.su.longname }
@@ -131,11 +1063,11 @@ module.exports = NodeHelper.create({
     return rawAbsences.map((a) => ({
       // Accept several common date field names returned by different
       // webuntis versions/providers (startDate, date, absenceDate, day)
-      date: a.date ?? a.startDate ?? a.absenceDate ?? a.day ?? null,
-      startTime: a.startTime ?? a.start ?? null,
-      endTime: a.endTime ?? a.end ?? null,
-      reason: a.reason ?? a.reasonText ?? a.text ?? '',
-      excused: a.excused ?? a.isExcused ?? null,
+      date: this._normalizeDateToInteger(a.date ?? a.startDate ?? a.absenceDate ?? a.day),
+      startTime: this._normalizeTimeToMinutes(a.startTime ?? a.start),
+      endTime: this._normalizeTimeToMinutes(a.endTime ?? a.end),
+      reason: this._sanitizeHtmlText(a.reason ?? a.reasonText ?? a.text ?? '', false),
+      excused: a.isExcused ?? a.excused ?? null,
       student: a.student ?? null,
       su: a.su && a.su[0] ? [{ name: a.su[0].name, longname: a.su[0].longname }] : [],
       te: a.te && a.te[0] ? [{ name: a.te[0].name, longname: a.te[0].longname }] : [],
@@ -147,8 +1079,8 @@ module.exports = NodeHelper.create({
     if (!Array.isArray(rawMessages)) return [];
     return rawMessages.map((m) => ({
       id: m.id ?? null,
-      subject: m.subject ?? '',
-      text: m.text ?? '',
+      subject: this._sanitizeHtmlText(m.subject ?? m.title ?? '', true),
+      text: this._sanitizeHtmlText(m.text ?? m.content ?? '', true),
       isExpanded: m.isExpanded ?? false,
     }));
   },
@@ -194,19 +1126,18 @@ module.exports = NodeHelper.create({
    */
   _makeRequestSignature(student) {
     try {
-      const credKey = this._getCredentialKey(student);
+      const credKey = this._getCredentialKey(student, this.config);
       const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
       const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
       const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
       const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
       const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
-      // Data fetching is driven by widgets; legacy per-student flags can only disable.
-      const fetchHomeworksEffective = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
-      const fetchAbsencesEffective = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
       // include the most relevant options that affect the backend fetch
+      // Include studentId to differentiate caches when multiple students use the same credentials
       const sig = {
         credKey,
+        studentId: student.studentId,
         daysToShow: Number(student.daysToShow || 0),
         pastDaysToShow: Number(student.pastDaysToShow || 0),
         useClassTimetable: Boolean(student.useClassTimetable),
@@ -214,8 +1145,8 @@ module.exports = NodeHelper.create({
         wantsGrid: wantsGridWidget,
         wantsLessons: wantsLessonsWidget,
         wantsExams: wantsExamsWidget,
-        fetchHomeworks: fetchHomeworksEffective,
-        fetchAbsences: fetchAbsencesEffective,
+        fetchHomeworks: Boolean(wantsHomeworkWidget),
+        fetchAbsences: Boolean(wantsAbsencesWidget),
       };
       return JSON.stringify(sig);
     } catch {
@@ -303,7 +1234,7 @@ module.exports = NodeHelper.create({
     const sample = students[0];
     try {
       try {
-        untis = this._createUntisClient(sample);
+        untis = this._createUntisClient(sample, this.config);
       } catch {
         this._mmLog('error', null, `No credentials for group ${credKey}`);
         return;
@@ -356,38 +1287,6 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Centralized backend logger that honors module and per-student debug flags.
-   * Emits messages using the MagicMirror `Log` helper.
-   *
-   * @param {'info'|'debug'|'error'} level
-   * @param {Object|null} student
-   * @param {string} message
-   */
-  _mmLog(level, student, message) {
-    try {
-      const prefix = `[MMM-Webuntis]`;
-      if (level === 'info') {
-        Log.info(`${prefix} ${message}`);
-      } else if (level === 'error') {
-        Log.error(`${prefix} ${message}`);
-      } else if (level === 'debug') {
-        if (this.config && this.config.logLevel === 'debug') {
-          if (typeof Log.debug === 'function') {
-            Log.debug(`${prefix} ${message}`);
-          } else {
-            Log.info(`${prefix} [DEBUG] ${message}`);
-          }
-        }
-      } else {
-        Log.info(`${prefix} ${message}`);
-      }
-    } catch (e) {
-      Log.error(`[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`);
-      // swallow
-    }
-  },
-
-  /**
    * Handle socket notifications sent by the frontend module.
    * Currently listens for `FETCH_DATA` which contains the module config.
    *
@@ -398,9 +1297,16 @@ module.exports = NodeHelper.create({
     if (notification === 'FETCH_DATA') {
       // Assign incoming payload to module config
       this.config = payload;
-      this._mmLog('info', null, `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`);
+      this._mmLog(
+        'info',
+        null,
+        `Data request received (FETCH_DATA for students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`
+      );
 
       try {
+        // Auto-discover students from app/data when parent credentials are provided but students[] is missing
+        await this._ensureStudentsFromAppData(this.config);
+
         // Group students by credential so we can reuse the same untis session
         const identifier = this.config.id;
         const groups = new Map();
@@ -428,7 +1334,7 @@ module.exports = NodeHelper.create({
             student.daysToShow = 1;
           }
 
-          const credKey = this._getCredentialKey(student);
+          const credKey = this._getCredentialKey(student, this.config);
           if (!groups.has(credKey)) groups.set(credKey, []);
           groups.get(credKey).push(student);
         }
@@ -448,12 +1354,23 @@ module.exports = NodeHelper.create({
 
   /**
    * Build a stable key that represents a login/session so results can be cached.
-   * The key is based on qrcode when present or username/server/school otherwise.
+   * For parent accounts (studentId + module-level username), group by parent credentials.
+   * For direct logins, group by student credentials.
    *
    * @param {Object} student - Student credential object
    * @returns {string} credential key
    */
-  _getCredentialKey(student) {
+  _getCredentialKey(student, moduleConfig) {
+    const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
+    const hasOwnCredentials = student.qrcode || (student.username && student.password && student.school && student.server);
+    const isParentMode = hasStudentId && !hasOwnCredentials;
+
+    // Parent account mode: group by module-level parent credentials
+    if (isParentMode && moduleConfig) {
+      return `parent:${moduleConfig.username || 'undefined'}@${moduleConfig.server || 'webuntis.com'}/${moduleConfig.school || 'undefined'}`;
+    }
+
+    // Direct student login: group by student credentials
     if (student.qrcode) return `qrcode:${student.qrcode}`;
     const server = student.server || 'default';
     return `user:${student.username}@${server}/${student.school}`;
@@ -467,6 +1384,7 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Array>} timegrid array
    */
   async _getTimegrid(untis, credKey) {
+    this._mmLog('debug', null, `Fetching timegrid`);
     try {
       const grid = await untis.getTimegrid();
       return grid || [];
@@ -487,6 +1405,7 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Array>} week timetable
    */
   async _getWeekTimetable(untis, credKey, rangeStart) {
+    this._mmLog('debug', null, `Fetching week timetable for ${credKey} starting ${rangeStart.toDateString()}`);
     try {
       const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
       return weekTimetable || [];
@@ -512,6 +1431,17 @@ module.exports = NodeHelper.create({
     };
     // Backend fetches raw data from Untis API. No transformation here.
 
+    // Detect login mode
+    const useQrLogin = Boolean(student.qrcode);
+    const isParentAccount = !useQrLogin && Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
+    const studentId = isParentAccount ? Number(student.studentId) : null;
+    const restOptions = { cacheKey: credKey, untisClient: untis };
+    const { school, server } = this._resolveSchoolAndServer(student);
+    const ownPersonId = useQrLogin && untis?.sessionInformation ? untis.sessionInformation.personId : null;
+    const restTargets = this._buildRestTargets(student, this.config, school, server, ownPersonId);
+    const describeTarget = (t) =>
+      t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
+
     const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
     const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
@@ -519,17 +1449,18 @@ module.exports = NodeHelper.create({
     const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
     const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
 
-    // Data fetching is driven by widgets; legacy per-student flags can only disable.
+    // Data fetching is driven by widgets.
     const fetchTimegrid = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
-    const fetchHomeworks = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
-    const fetchAbsences = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
-    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget && student.fetchMessagesOfDay !== false);
-    const fetchHolidays = Boolean((wantsGridWidget || wantsLessonsWidget) && student.fetchHolidays !== false);
+    const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
+    // NOTE: With REST API updates, absences are now available for parent accounts via /WebUntis/api/absences
+    const fetchAbsences = Boolean(wantsAbsencesWidget);
+    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
+    const fetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
 
-    var rangeStart = new Date(Date.now());
-    var rangeEnd = new Date(Date.now());
+    let rangeStart = new Date(Date.now());
+    let rangeEnd = new Date(Date.now());
 
     rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
     rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
@@ -565,18 +1496,21 @@ module.exports = NodeHelper.create({
 
     if (fetchTimetable && student.daysToShow > 0) {
       try {
-        if (student.useClassTimetable) {
-          logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
-          timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-          logger(`[MMM-Webuntis] ownClassTimetable received for ${student.title}`);
-        } else {
-          logger(`[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`);
-          timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
-          logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
+        for (const target of restTargets) {
+          logger(`Timetable: fetching via REST (${describeTarget(target)})...`);
+          try {
+            timetable = await this._callRest(this._getTimetableViaRest, target, rangeStart, rangeEnd, target.studentId, restOptions);
+            logger(`✓ Timetable: ${timetable.length} lessons\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Timetable failed (${describeTarget(target)}): ${restError.message}\n`);
+          }
         }
       } catch (error) {
-        this._mmLog('error', student, `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Timetable failed: ${error && error.message ? error.message : error}`);
       }
+    } else if (fetchTimetable) {
+      logger(`Timetable: skipped (daysToShow=${student.daysToShow})`);
     }
 
     // Exams (raw)
@@ -587,142 +1521,136 @@ module.exports = NodeHelper.create({
         student.examsDaysAhead = 30;
       }
 
-      // var rangeStart = new Date(Date.now());
-      // var rangeEnd = new Date(Date.now());
-      rangeEnd.setDate(rangeStart.getDate() + student.examsDaysAhead);
+      rangeStart = new Date(Date.now());
+      rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow); // important for grid widget
+      rangeEnd = new Date(Date.now());
+      rangeEnd.setDate(rangeEnd.getDate() + student.examsDaysAhead);
+
+      logger(`Exams: querying ${student.examsDaysAhead} days ahead...`);
 
       try {
-        rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
+        for (const target of restTargets) {
+          logger(`Exams: fetching via REST (${describeTarget(target)})...`);
+          try {
+            rawExams = await this._callRest(this._getExamsViaRest, target, rangeStart, rangeEnd, target.studentId, restOptions);
+            logger(`✓ Exams: ${rawExams.length} found\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Exams failed (${describeTarget(target)}): ${restError.message}`);
+          }
+        }
         this._lastRawExams = rawExams;
       } catch (error) {
-        this._mmLog('error', student, `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Exams failed: ${error && error.message ? error.message : error}\n`);
       }
+    } else {
+      logger(`Exams: skipped (examsDaysAhead=${student.examsDaysAhead})`);
     }
 
     // Load homework for the period (from today until rangeEnd + 7 days) – keep raw
     let hwResult = null;
     if (fetchHomeworks) {
+      logger(`Homework: fetching...`);
       try {
         let hwRangeEnd = new Date(rangeEnd);
         hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
-        // Try a sequence of candidate homework API calls (first that succeeds wins)
-        try {
-          const candidates = [
-            () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
-            () => untis.getHomeWorksFor(new Date(), hwRangeEnd),
-          ];
-          let lastErr = null;
-          for (const fn of candidates) {
-            try {
-              hwResult = await fn();
-              break;
-            } catch (err) {
-              lastErr = err;
-            }
+
+        for (const target of restTargets) {
+          logger(`Homework: fetching via REST (${describeTarget(target)})...`);
+          try {
+            const homeworks = await this._callRest(this._getHomeworkViaRest, target, new Date(), hwRangeEnd, restOptions);
+            hwResult = homeworks;
+            logger(`✓ Homework: ${homeworks.length} items\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Homework failed (${describeTarget(target)}): ${restError.message}\n`);
           }
-          if (hwResult === null) {
-            logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`);
-          }
-        } catch (error) {
-          logger(`[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`);
-          hwResult = null;
         }
-        // Send raw homework payload to the frontend without normalization
-        const hwCount = Array.isArray(hwResult)
-          ? hwResult.length
-          : Array.isArray(hwResult?.homeworks)
-            ? hwResult.homeworks.length
-            : Array.isArray(hwResult?.homework)
-              ? hwResult.homework.length
-              : 0;
-        logger(`[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`);
+        // Send  raw homework payload to the frontend without normalization
       } catch (error) {
-        this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Homework failed: ${error && error.message ? error.message : error}`);
       }
     } else {
-      logger(`[MMM-Webuntis] Homework fetch skipped for ${student.title} (fetchHomeworks=false)`);
+      logger(`Homework: skipped`);
     }
 
     // Absences (raw)
     let rawAbsences = [];
     if (fetchAbsences) {
+      logger(`Absences: fetching...`);
       try {
-        const candidates = [
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd),
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.id),
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.studentId),
-        ];
-        let lastErr = null;
-        for (const fn of candidates) {
+        for (const target of restTargets) {
+          logger(`Absences: fetching via REST (${describeTarget(target)})...`);
           try {
-            const res = await fn();
-            rawAbsences = Array.isArray(res)
-              ? res
-              : Array.isArray(res?.absences)
-                ? res.absences
-                : Array.isArray(res?.absentLessons)
-                  ? res.absentLessons
-                  : [];
+            rawAbsences = await this._callRest(
+              this._getAbsencesViaRest,
+              target,
+              absencesRangeStart,
+              absencesRangeEnd,
+              target.studentId,
+              restOptions
+            );
+            logger(`✓ Absences: ${rawAbsences.length} records\n`);
             break;
-          } catch (err) {
-            lastErr = err;
+          } catch (restError) {
+            logger(`✗ Absences failed (${describeTarget(target)}): ${restError.message}\n`);
           }
         }
-        if (!Array.isArray(rawAbsences) || rawAbsences.length === 0) {
-          logger(
-            `[MMM-Webuntis] Absences fetch returned no data for ${student.title}${lastErr ? ` (lastErr=${this._formatErr(lastErr)})` : ''}`
-          );
-        } else {
-          logger(`[MMM-Webuntis] Loaded absences (raw) for ${student.title}: count=${rawAbsences.length}`);
-        }
       } catch (error) {
-        this._mmLog('error', student, `Absences fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Absences failed: ${error && error.message ? error.message : error}`);
       }
     } else {
-      logger(`[MMM-Webuntis] Absences fetch skipped for ${student.title} (fetchAbsences=false)`);
+      logger(`Absences: skipped`);
     }
 
     // MessagesOfDay (raw)
     let rawMessagesOfDay = [];
     if (fetchMessagesOfDay) {
+      logger(`MessagesOfDay: fetching...`);
       try {
-        const newsWidget = await untis.getNewsWidget(new Date());
-        if (newsWidget && Array.isArray(newsWidget.messagesOfDay)) {
-          rawMessagesOfDay = newsWidget.messagesOfDay;
-          logger(`[MMM-Webuntis] Loaded messagesOfDay (raw) for ${student.title}: count=${rawMessagesOfDay.length}`);
-        } else {
-          logger(`[MMM-Webuntis] MessagesOfDay fetch returned no data for ${student.title}`);
+        for (const target of restTargets) {
+          logger(`MessagesOfDay: fetching via REST (${describeTarget(target)})...`);
+          try {
+            rawMessagesOfDay = await this._callRest(this._getMessagesOfDayViaRest, target, new Date(), restOptions);
+            logger(`✓ MessagesOfDay: ${rawMessagesOfDay.length} found\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ MessagesOfDay failed (${describeTarget(target)}): ${restError.message}\n`);
+          }
         }
       } catch (error) {
-        this._mmLog('error', student, `MessagesOfDay fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `MessagesOfDay failed: ${error && error.message ? error.message : error}`);
       }
     } else {
-      logger(`[MMM-Webuntis] MessagesOfDay fetch skipped for ${student.title} (fetchMessagesOfDay=false)`);
+      logger(`MessagesOfDay: skipped`);
     }
 
     // Holidays (raw)
     let rawHolidays = [];
     if (fetchHolidays) {
+      logger(`Holidays: fetching...`);
       try {
         rawHolidays = await untis.getHolidays();
         if (Array.isArray(rawHolidays)) {
-          logger(`[MMM-Webuntis] Loaded holidays (raw) for ${student.title}: count=${rawHolidays.length}`);
+          logger(`✓ Holidays: ${rawHolidays.length} periods\n`);
         } else {
-          logger(`[MMM-Webuntis] Holidays fetch returned no data for ${student.title}`);
+          logger(`Holidays: none\n`);
           rawHolidays = [];
         }
       } catch (error) {
-        this._mmLog('error', student, `Holidays fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Holidays failed: ${error && error.message ? error.message : error}\n`);
       }
     } else {
-      logger(`[MMM-Webuntis] Holidays fetch skipped for ${student.title} (fetchHolidays=false)`);
+      logger(`Holidays: skipped`);
     }
+
+    logger(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
     const compactTimetable = this._compactLessons(timetable);
     const compactExams = this._compactExams(rawExams);
-    const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult) : [];
+    const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult, studentId) : [];
     const compactAbsences = fetchAbsences ? this._compactAbsences(rawAbsences) : [];
     const compactMessagesOfDay = fetchMessagesOfDay ? this._compactMessagesOfDay(rawMessagesOfDay) : [];
     const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
@@ -732,16 +1660,40 @@ module.exports = NodeHelper.create({
       title: student.title,
       config: student,
       // id will be assigned by the caller to preserve per-request id
-      timegrid: compactGrid,
+      timeUnits: compactGrid,
       timetableRange: compactTimetable,
       exams: compactExams,
       homeworks: compactHomeworks,
       absences: compactAbsences,
       messagesOfDay: compactMessagesOfDay,
       holidays: compactHolidays,
+      // Absences are now available via REST API even for parent accounts
+      absencesUnavailable: false,
     };
     try {
       const forSend = { ...payload, id: identifier };
+
+      // Optional: write debug dumps of the payload delivered to the frontend.
+      // Enable by setting `dumpBackendPayloads: true` in the module config.
+      try {
+        if (this.config && this.config.dumpBackendPayloads) {
+          const dumpDir = path.join(__dirname, 'debug_dumps');
+          if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
+          const safeTitle = (student && student.title ? student.title : 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+          const fname = `${Date.now()}_${safeTitle}_${String(forSend.apiUsed || 'api')}.json`;
+          const target = path.join(dumpDir, fname);
+          fs.writeFileSync(target, JSON.stringify(forSend, null, 2), 'utf8');
+          this._mmLog('debug', student, `Wrote debug payload to ${path.join('debug_dumps', fname)}`, 'debug');
+        }
+      } catch (e) {
+        this._mmLog('error', student, `Failed to write debug payload: ${e && e.message ? e.message : e}`, 'debug');
+      }
+
+      this._mmLog(
+        'info',
+        student,
+        `✓ Data ready: timetable=${compactTimetable.length} exams=${compactExams.length} hw=${compactHomeworks.length} abs=${compactAbsences.length}\n`
+      );
       this.sendSocketNotification('GOT_DATA', forSend);
     } catch (err) {
       this._mmLog('error', student, `Failed to send GOT_DATA to ${identifier}: ${this._formatErr(err)}`);

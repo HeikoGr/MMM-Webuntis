@@ -130,8 +130,16 @@
         }
 
         let addClass = '';
-        if (entry.code == 'cancelled' || entry.code == 'error' || entry.code == 'info') {
+        if (entry.code === 'cancelled') {
+          addClass = 'cancelled';
+        } else if (entry.code === 'irregular') {
+          addClass = 'substitution';
+        } else if (entry.code === 'error' || entry.code === 'info') {
           addClass = entry.code;
+        } else if (entry.status === 'CANCELLED') {
+          addClass = 'cancelled';
+        } else if (entry.status === 'SUBSTITUTION' || (entry.substText && entry.substText.trim() !== '')) {
+          addClass = 'substitution';
         }
 
         addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
