@@ -403,27 +403,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position2[0].current.shortName,
+                        longname: entry.position2[0].current.longName,
+                      },
+                    ]
                   : [],
                 te: entry.position1
                   ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position1[0].current.shortName,
+                        longname: entry.position1[0].current.longName,
+                      },
+                    ]
                   : [],
                 ro: entry.position3
                   ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position3[0].current.shortName,
+                        longname: entry.position3[0].current.longName,
+                      },
+                    ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -806,11 +806,41 @@ module.exports = NodeHelper.create({
       const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
       if (!hasParentCreds) return;
 
-      // CRITICAL: Only auto-discover if NO students are configured at all
+      // Only auto-discover if NO students are configured at all
       // If user explicitly configured ANY students, respect that choice
-      // (even if it's just 1 of 2 available students)
       if (configuredStudents.length > 0) {
-        this._mmLog('debug', null, `Students manually configured (${configuredStudents.length} configured); skipping auto-discovery`);
+        // However, if any student is missing a title but has a studentId,
+        // try to fetch auto-discovered data to fill in the missing titles
+        const server = moduleConfig.server || 'webuntis.com';
+        try {
+          const { appData } = await this._getRestAuthTokenAndCookies(
+            moduleConfig.school,
+            moduleConfig.username,
+            moduleConfig.password,
+            server
+          );
+          const autoStudents = this._deriveStudentsFromAppData(appData);
+
+          if (autoStudents && autoStudents.length > 0) {
+            // For each configured student with studentId but no title,
+            // fill in the auto-discovered name as fallback
+            configuredStudents.forEach((configStudent) => {
+              if (configStudent && configStudent.studentId && !configStudent.title) {
+                const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
+                if (autoStudent) {
+                  configStudent.title = autoStudent.title;
+                  this._mmLog(
+                    'debug',
+                    configStudent,
+                    `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
+                  );
+                }
+              }
+            });
+          }
+        } catch (err) {
+          this._mmLog('warn', null, `Could not fetch auto-discovered names for title fallback: ${this._formatErr(err)}`);
+        }
         return;
       }
 
@@ -823,7 +853,6 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      // Use all discovered students as-is (no merging, no skipping)
       moduleConfig.students = autoStudents;
 
       // Log all discovered students with their IDs in a prominent way
