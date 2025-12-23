@@ -35,6 +35,8 @@ module.exports = NodeHelper.create({
     this._startCacheCleanup();
     // Initialize REST API cache (token + cookies) keyed by credential
     this._restAuthCache = new Map(); // cacheKey -> { token, cookieString, expiresAt }
+    // Cache resolved class ids per credential/class name to avoid repeated filter calls
+    this._classIdCache = new Map(); // cacheKey -> classId
   },
 
   /**
@@ -329,13 +331,208 @@ module.exports = NodeHelper.create({
     }
   },
 
+  _collectClassCandidates(data) {
+    const candidates = new Map(); // id -> candidate
+
+    const addCandidate = (item) => {
+      if (!item || typeof item !== 'object') return;
+      const type = (item.resourceType || item.elementType || item.type || item.category || '').toString().toUpperCase();
+      // Accept only class-typed or untyped entries to avoid pulling in rooms/teachers
+      if (type && type !== 'CLASS') return;
+
+      const name =
+        item.name ||
+        item.shortName ||
+        item.longName ||
+        item.displayName ||
+        (item.current && (item.current.shortName || item.current.name || item.current.longName));
+      if (!item.id || !name) return;
+
+      if (!candidates.has(item.id)) {
+        candidates.set(item.id, {
+          id: item.id,
+          name: name,
+          shortName: item.shortName || (item.current && item.current.shortName) || name,
+          longName: item.longName || (item.current && item.current.longName) || name,
+        });
+      }
+    };
+
+    const walk = (node) => {
+      if (!node) return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (typeof node !== 'object') return;
+
+      addCandidate(node);
+      Object.values(node).forEach((v) => walk(v));
+    };
+
+    walk(data);
+    return Array.from(candidates.values());
+  },
+
+  async _resolveClassIdViaRest(school, username, password, server, rangeStart, rangeEnd, className, options = {}) {
+    const desiredName = className && String(className).trim();
+    const cacheKeyBase = options.cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
+    // Include studentId in cache key so each student has their own class cache entry
+    const studentIdPart = options.studentId ? `::student::${options.studentId}` : '';
+    const cacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
+    if (this._classIdCache && this._classIdCache.has(cacheKey)) {
+      return this._classIdCache.get(cacheKey);
+    }
+
+    const formatDateISO = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const formatDateYYYYMMDD = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}${month}${day}`;
+    };
+
+    const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+      school,
+      username,
+      password,
+      server,
+      options
+    );
+
+    if (!cookieString) {
+      throw new Error('Missing REST auth cookies for class resolution');
+    }
+
+    const headers = {
+      Cookie: cookieString,
+      Accept: 'application/json',
+    };
+    if (tenantId) headers['Tenant-Id'] = String(tenantId);
+    if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    let candidates = [];
+
+    let mappedClassId = null;
+
+    // Aggressive path: if we have a studentId, try classservices first (closest to "what this student sees")
+    if (options.studentId) {
+      try {
+        const resp = await axios.get(`https://${server}/WebUntis/api/classreg/classservices`, {
+          params: {
+            startDate: formatDateYYYYMMDD(rangeStart),
+            endDate: formatDateYYYYMMDD(rangeEnd),
+            elementId: options.studentId,
+          },
+          headers,
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (resp.status === 200 && resp.data) {
+          candidates = this._collectClassCandidates(resp.data);
+          // Prefer explicit mapping from personKlasseMap when present
+          const map = resp.data?.data?.personKlasseMap;
+          if (map && Object.prototype.hasOwnProperty.call(map, options.studentId)) {
+            const mapped = map[options.studentId];
+            if (Number.isFinite(Number(mapped))) mappedClassId = Number(mapped);
+          }
+          this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
+        } else {
+          this._mmLog('debug', null, `[REST] classservices failed with status ${resp.status}`);
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
+      }
+    }
+
+    // Secondary path: timetable/filter (broader) if nothing found yet
+    if (!candidates || candidates.length === 0) {
+      try {
+        const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`, {
+          params: {
+            resourceType: 'CLASS',
+            timetableType: 'STANDARD',
+            start: formatDateISO(rangeStart),
+            end: formatDateISO(rangeEnd),
+          },
+          headers,
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (resp.status === 200 && resp.data) {
+          candidates = this._collectClassCandidates(resp.data);
+          this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
+        } else {
+          this._mmLog('debug', null, `[REST] timetable/filter failed with status ${resp.status}`);
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] timetable/filter error: ${this._formatErr(err)}`);
+      }
+    }
+
+    if (!candidates || candidates.length === 0) {
+      throw new Error('No accessible classes returned by REST API');
+    }
+
+    let chosen = null;
+    // If classservices told us the class id for this student, pick it first
+    if (mappedClassId && candidates.some((c) => Number(c.id) === Number(mappedClassId))) {
+      chosen = candidates.find((c) => Number(c.id) === Number(mappedClassId));
+      this._mmLog('debug', null, `[REST] personKlasseMap selected classId=${mappedClassId}`);
+    }
+
+    if (desiredName) {
+      const desiredLower = desiredName.toLowerCase();
+      chosen = candidates.find((c) =>
+        [c.name, c.shortName, c.longName].filter(Boolean).some((n) => String(n).toLowerCase() === desiredLower)
+      );
+    }
+
+    if (!chosen && !desiredName && candidates.length === 1) {
+      chosen = candidates[0];
+      this._mmLog('debug', null, `[REST] No class name configured; using sole available class ${chosen.name} (${chosen.id})`);
+    }
+
+    if (!chosen) {
+      const available = candidates
+        .map((c) => `${c.name || c.shortName || c.longName || c.id}`)
+        .filter(Boolean)
+        .join(', ');
+      const hint = desiredName ? `Class "${desiredName}" not found. Available: ${available}` : `Multiple classes available: ${available}`;
+      throw new Error(hint);
+    }
+
+    this._classIdCache.set(cacheKey, chosen.id);
+    return chosen.id;
+  },
+
   /**
    * Get timetable via REST API
    */
-  async _getTimetableViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+  async _getTimetableViaRest(
+    school,
+    username,
+    password,
+    server,
+    rangeStart,
+    rangeEnd,
+    studentId,
+    options = {},
+    useClassTimetable = false,
+    className = null
+  ) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('debug', null, `Fetching timetable via REST API (${startDate} to ${endDate})`);
+    const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
+    this._mmLog('debug', null, `Fetching ${wantsClass ? 'class' : 'student'} timetable via REST API (${startDate} to ${endDate})`);
     try {
       const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
         school,
@@ -366,12 +563,38 @@ module.exports = NodeHelper.create({
       if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
       if (token) headers.Authorization = `Bearer ${token}`;
 
+      let resourceType = wantsClass ? 'CLASS' : 'STUDENT';
+      let resourceId = wantsClass ? options.classId : studentId;
+
+      if (wantsClass) {
+        if (!resourceId) {
+          resourceId = await this._resolveClassIdViaRest(
+            school,
+            username,
+            password,
+            server,
+            rangeStart,
+            rangeEnd,
+            className || options.className || null,
+            { ...options, studentId }
+          );
+        }
+        if (!resourceId) {
+          throw new Error('Class timetable requested but class id could not be resolved');
+        }
+      }
+
+      if (!resourceId) {
+        throw new Error('Missing resource id for timetable request');
+      }
+
       const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/entries`, {
         params: {
           start: formatDate(rangeStart),
           end: formatDate(rangeEnd),
-          resourceType: 'STUDENT',
-          resources: String(studentId), // IMPORTANT: Must be string, not number!
+          resourceType,
+          resources: String(resourceId), // IMPORTANT: Must be string, not number!
+          timetableType: 'STANDARD',
         },
         headers,
         validateStatus: () => true,
@@ -1161,6 +1384,7 @@ module.exports = NodeHelper.create({
       const sig = {
         credKey,
         studentId: student.studentId,
+        className: student.class || student.className || null,
         daysToShow: Number(student.daysToShow || 0),
         pastDaysToShow: Number(student.pastDaysToShow || 0),
         useClassTimetable: Boolean(student.useClassTimetable),
@@ -1464,6 +1688,7 @@ module.exports = NodeHelper.create({
     const restTargets = this._buildRestTargets(student, this.config, school, server, ownPersonId);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
+    const className = student.class || student.className || this.config?.class || null;
 
     const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
@@ -1522,7 +1747,22 @@ module.exports = NodeHelper.create({
         for (const target of restTargets) {
           logger(`Timetable: fetching via REST (${describeTarget(target)})...`);
           try {
-            timetable = await this._callRest(this._getTimetableViaRest, target, rangeStart, rangeEnd, target.studentId, restOptions);
+            timetable = await this._callRest(
+              this._getTimetableViaRest,
+              target,
+              rangeStart,
+              rangeEnd,
+              target.studentId,
+              {
+                ...restOptions,
+                useClassTimetable: Boolean(student.useClassTimetable),
+                className,
+                classId: student.classId || null,
+                studentId: target.studentId,
+              },
+              Boolean(student.useClassTimetable),
+              className
+            );
             logger(`✓ Timetable: ${timetable.length} lessons\n`);
             break;
           } catch (restError) {
