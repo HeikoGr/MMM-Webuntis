@@ -79,7 +79,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => { };
+    nodeHelper.sendSocketNotification = () => {};
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -205,12 +205,90 @@ function getModuleConfig(config) {
 }
 
 /**
+ * Load defaults dynamically from MMM-Webuntis.js
+ * This ensures defaults are always in sync with the module definition
+ */
+function loadModuleDefaults() {
+  try {
+    const mmmPath = path.join(__dirname, '..', 'MMM-Webuntis.js');
+    // Read the file to extract defaults object
+    const content = fs.readFileSync(mmmPath, 'utf8');
+
+    // Use regex to find the defaults object
+    // Match from "defaults: {" to the closing "}" before getStyles()
+    const match = content.match(/defaults:\s*\{([\s\S]*?)\n\s*\},\s*getStyles/);
+    if (!match) {
+      throw new Error('Could not find defaults object in MMM-Webuntis.js');
+    }
+
+    // Build a valid JavaScript object string
+    const defaultsStr = `({${match[1]}\n})`;
+
+    // Evaluate to get the object (safe because we control the file)
+    const defaults = eval(defaultsStr); // eslint-disable-line no-eval
+
+    return defaults;
+  } catch (err) {
+    // Fallback to hardcoded defaults if dynamic load fails
+    console.warn(`Warning: Could not load defaults from MMM-Webuntis.js: ${err.message}`);
+    return {
+      header: 'MMM-Webuntis',
+      fetchIntervalMs: 15 * 60 * 1000,
+      logLevel: 'none',
+      displayMode: 'list',
+      mode: 'verbose',
+      daysToShow: 7,
+      pastDaysToShow: 0,
+      showStartTime: false,
+      showRegularLessons: true,
+      showTeacherMode: 'full',
+      useShortSubject: false,
+      showSubstitutionText: false,
+      examsDaysAhead: 21,
+      showExamSubject: true,
+      showExamTeacher: true,
+      mergeGapMinutes: 15,
+      maxGridLessons: 0,
+      showNowLine: true,
+      absencesPastDays: 21,
+      absencesFutureDays: 7,
+      dateFormat: 'dd.MM.',
+      examDateFormat: 'dd.MM.',
+      homeworkDateFormat: 'dd.MM.',
+      useClassTimetable: false,
+      dumpBackendPayloads: false,
+      students: [],
+    };
+  }
+}
+
+// Cache the defaults on first load
+let cachedDefaults = null;
+
+/**
+ * Load defaults from MMM-Webuntis.js and merge with module config
+ * Ensures all expected fields have values (either from config or defaults)
+ */
+function mergeWithModuleDefaults(moduleConfig) {
+  // Load defaults once and cache them
+  if (cachedDefaults === null) {
+    cachedDefaults = loadModuleDefaults();
+  }
+
+  // Merge: defaults first, then override with config values
+  const merged = { ...cachedDefaults, ...moduleConfig };
+  return merged;
+}
+
+/**
  * Get student credentials from config
  * Supports both direct credentials and parent account mode
  */
 function getStudentCredentials(config, studentIndex) {
   const moduleConfig = getModuleConfig(config);
-  const students = moduleConfig.students || [];
+  // Merge with defaults to ensure all values are present
+  const mergedConfig = mergeWithModuleDefaults(moduleConfig);
+  const students = mergedConfig.students || [];
 
   if (!students.length) {
     throw new Error('No students configured in config file');
@@ -225,19 +303,19 @@ function getStudentCredentials(config, studentIndex) {
   const qrcode = student.qrcode;
 
   // Try direct credentials first, then fall back to parent account
-  let username = student.username || moduleConfig.username;
-  let password = student.password || moduleConfig.password;
+  let username = student.username || mergedConfig.username;
+  let password = student.password || mergedConfig.password;
 
   // Parent account fallback
   if (!username) {
-    username = student.username || moduleConfig.username;
+    username = student.username || mergedConfig.username;
   }
   if (!password) {
-    password = student.password || moduleConfig.password;
+    password = student.password || mergedConfig.password;
   }
 
-  let school = student.school || moduleConfig.school;
-  let server = student.server || moduleConfig.server;
+  let school = student.school || mergedConfig.school;
+  let server = student.server || mergedConfig.server;
 
   // Derive school/server from QR code if present
   if ((!school || !server) && qrcode && qrcode.startsWith('untis://')) {
@@ -257,10 +335,10 @@ function getStudentCredentials(config, studentIndex) {
     if (!school || !username || !password || !server) {
       throw new Error(
         `Missing credentials for student ${studentIndex}. ` +
-        `Found: school=${school ? 'yes' : 'no'}, ` +
-        `username=${username ? 'yes' : 'no'}, ` +
-        `password=${password ? 'yes' : 'no'}, ` +
-        `server=${server ? 'yes' : 'no'}`
+          `Found: school=${school ? 'yes' : 'no'}, ` +
+          `username=${username ? 'yes' : 'no'}, ` +
+          `password=${password ? 'yes' : 'no'}, ` +
+          `server=${server ? 'yes' : 'no'}`
       );
     }
   } else {
@@ -276,8 +354,8 @@ function getStudentCredentials(config, studentIndex) {
     password,
     server,
     studentId: student.studentId,
-    daysToShow: student.daysToShow || moduleConfig.daysToShow || 1,
-    examsDaysAhead: student.examsDaysAhead || moduleConfig.examsDaysAhead || 30,
+    daysToShow: student.daysToShow || mergedConfig.daysToShow || 7,
+    examsDaysAhead: student.examsDaysAhead || mergedConfig.examsDaysAhead || 21,
   };
 }
 
@@ -295,7 +373,9 @@ async function cmdFetch(flags) {
     const { config, filePath } = loadConfig(configPath);
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
-    const moduleConfig = getModuleConfig(config);
+    let moduleConfig = getModuleConfig(config);
+    // Merge with module defaults to ensure all options have values
+    moduleConfig = mergeWithModuleDefaults(moduleConfig);
     await nodeHelper._ensureStudentsFromAppData(moduleConfig);
     // Emulate MagicMirror socket payload: set id, config and per-student fallbacks
     moduleConfig.id = moduleConfig.id || 'wrapper-cli';
@@ -339,7 +419,6 @@ async function cmdFetch(flags) {
     const today = new Date();
     const timetableEnd = new Date(today.getTime() + daysToShow * 24 * 60 * 60 * 1000);
     const examsEnd = new Date(today.getTime() + examsDaysAhead * 24 * 60 * 60 * 1000);
-
 
     Log.wrapper_info('\n--- QR student: using node_helper.fetchData() ---');
     try {

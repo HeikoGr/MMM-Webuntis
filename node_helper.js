@@ -403,27 +403,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position2[0].current.shortName,
+                        longname: entry.position2[0].current.longName,
+                      },
+                    ]
                   : [],
                 te: entry.position1
                   ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position1[0].current.shortName,
+                        longname: entry.position1[0].current.longName,
+                      },
+                    ]
                   : [],
                 ro: entry.position3
                   ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position3[0].current.shortName,
+                        longname: entry.position3[0].current.longName,
+                      },
+                    ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -802,9 +802,9 @@ module.exports = NodeHelper.create({
       if (!moduleConfig || typeof moduleConfig !== 'object') return;
 
       const configuredStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-      const missingStudentIds = configuredStudents.length === 0 || configuredStudents.every((s) => !s || !Number.isFinite(Number(s.studentId)));
+      // const missingStudentIds = configuredStudents.length === 0 || configuredStudents.every((s) => !s || !Number.isFinite(Number(s.studentId)));
 
-      if (!missingStudentIds) return;
+      // if (!missingStudentIds) return;
 
       const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
       if (!hasParentCreds) return;
