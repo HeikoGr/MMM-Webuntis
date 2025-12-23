@@ -5,12 +5,12 @@ import pluginN from 'eslint-plugin-n';
 
 export default defineConfig([
   {
-    ignores: ['**/node_modules/**', '**/*.png', '**/*.md'],
+    ignores: ['**/node_modules/**', '**/*.png', '**/*.md', 'cli/**'],
   },
   js.configs.recommended,
   {
     files: ['**/*.js'],
-    ignores: ['MMM-Webuntis.js'],
+    ignores: ['MMM-Webuntis.js', 'cli/**'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'commonjs',

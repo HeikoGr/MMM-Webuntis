@@ -72,99 +72,179 @@ Restart MagicMirror after updating.
 
 ## Quick start
 
-Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. The example below shows the most common global options and a minimal per-student credential configuration.
+Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. Here's a **minimal** example:
 
 ```javascript
 {
-    module: "MMM-Webuntis",
-    position: "top_right",
-    header: "Untis",
-    config: {
-        // global options
-    logLevel: "debug",
-        fetchIntervalMs: 15 * 60 * 1000, // 15 minutes
-        daysToShow: 7,
-        pastDaysToShow: 0,
-        mergeGapMinutes: 15,
-
-        // per-student credentials
-        students: [
-            { title: "Alice", qrcode: "untis://setschool?..." },
-            { title: "Bob", qrcode: "untis://setschool?..." }
-        ]
-    }
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    students: [
+      { title: "Alice", qrcode: "untis://setschool?..." },
+    ]
+  }
 },
 ```
 
-Note: The option names listed here are the canonical names. A small compatibility mapper exists (see "BREAKING CHANGES" above) that will translate commonly-used legacy aliases during startup and print a console warning; however, you should still rename keys in your `config.js` to the canonical names for clarity and future compatibility.
+For a more complete example with common options, see [config/config.template.js](config/config.template.js).
 
 ## Template-based config workflow
 
 - This repository ships with templates in `config/` so you can bootstrap a MagicMirror setup quickly without committing personal credentials or styling tweaks.
 
-- Copy the template files to `config.js` / `custom.css` inside the same folder (both paths are listed in `.gitignore`) and customize them locally. A simple helper command is:
+- Copy the template files to `config.js` / `custom.css` inside the same folder (both paths are listed in `.gitignore`) and customize them locally:
 
 ```bash
 cp config/config.template.js config/config.js
 cp config/custom.template.css config/custom.css
 ```
 
-- The DevContainer now mounts the whole `config/` folder into `/opt/magic_mirror/config/` (see `mounts` in `.devcontainer/devcontainer.json`). During startup the container copies `config.template.js` → `config.js` and `custom.template.css` → `custom.css` when the user files are missing, and it also syncs `config/custom.css` into `/opt/magic_mirror/css/custom.css`. That means editing the repo files inside the container updates them directly, and your overrides are kept in sync while the templates continue acting as safe defaults.
-
 If you are not using the DevContainer, you can still treat the template files as examples—copy them into your MagicMirror core folder manually and adjust them there.
 
 ## Configuration options
 
-The following configuration options are supported. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
+All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1-L48) in the `defaults` object, organized by feature area. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
+
+### Global Options
 
 | Option | Type | Default | Description |
-| --- | --: | --: | --- |
-| `students` | array | required | Array of student credential objects (see below). |
-| `header` | string | none | Optional title printed by MagicMirror for this module instance. |
-| `daysToShow` | int | `7` | Number of upcoming days to fetch/display (0..10). Set to `0` to disable. Can be overridden in a student object. |
-| `pastDaysToShow` | int | `0` | How many past days to include in the grid (useful for debugging). |
-| `absencesPastDays` | int | `14` | How many past days to include when fetching absences from WebUntis. Can be set globally or per-student. |
-| `absencesFutureDays` | int | `0` | How many future days to extend the absences fetch beyond the normal `daysToShow` range. Can be set globally or per-student. |
+| --- | --- | --- | --- |
+| `header` | string | `'MMM-Webuntis'` | Title displayed by MagicMirror for this module. |
 | `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
-| `mergeGapMinutes` | int | `15` | Allowed gap in minutes between consecutive lessons to consider them mergeable. Lower = stricter merging. |
-| `showStartTime` | bool | `false` | When `true` show the lesson start time; when `false` show the lesson number (if available). |
-| `useClassTimetable` | bool | `false` | Some schools only provide a class timetable; set `true` to request class timetable instead of the student timetable. |
-| `showRegularLessons` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
-| `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` , `'full'` , `'none'`. |
+| `logLevel` | string | `'none'` | Log verbosity: `'none'` or `'debug'`. |
+
+### Display Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. Backwards-compatible: `'list'` = `lessons, exams`; `'grid'` = `grid`. |
+| `mode` | string | `'verbose'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
+
+### Timetable Fetch Range
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `daysToShow` | int | `7` | Number of upcoming days to fetch/display per student (0 = off). Can be overridden per-student. |
+| `pastDaysToShow` | int | `0` | Number of past days to include (useful for debugging). |
+
+### Lessons Widget
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `showStartTime` | bool | `false` | Show start time instead of lesson number in listings. |
+| `showRegularLessons` | bool | `true` | Show regular lessons (not only substitutions/cancellations). |
+| `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` (first name), `'full'` (full name), or `'none'`. |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
 | `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
-| `fetchHomeworks` | bool | deprecated | Deprecated: homework is fetched automatically when `displayMode` includes the `homework` widget. |
-| `examsDaysAhead` | int | `0` | How many days ahead to fetch exams. `0` disables exams. |
+
+### Exams Widget
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `examsDaysAhead` | int | `7` | Number of days ahead to fetch exams (0 = off). |
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
-| `mode` | string | `'compact'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
-| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. Backwards-compatible single values: `list` = `lessons, exams` and `grid` = `grid`. |
-| `maxGridLessons` | int | `0` | Limit number of periods/timeUnits shown in grid view. `0` = show all. `>=1` is interpreted as the number of `timeUnits` (periods) to display starting from the first period; when `timeUnits` are not available the module falls back to a simple count-based limit. This option can be set globally or per-student. |
-| `fetchAbsences` | bool | deprecated | Deprecated: absences are fetched automatically when `displayMode` includes the `absences` widget. |
-| `dateFormat` | string | `'dd.MM.'` | Format string used when displaying dates in lists (supports `dd`, `mm`, `yyyy`, `yy`). Use `d`, `m` variants for non-zero padded numbers (e.g., `d.m.yyyy`). |
-| `examDateFormat` | string | `'dd.MM.'` | Same as `dateFormat` but for exam widgets. |
-| `homeworkDateFormat` | string | `'dd.MM.'` | Same as `dateFormat` but for homework widgets. |
-| `logLevel` | string | `'none'` | string to enable debugging: `'debug'`. |
 
-### Student credential object
+### Grid View
 
-A single `students` entry is an object with credential and per-student overrides. Common fields:
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `mergeGapMinutes` | int | `15` | Maximum gap (in minutes) between consecutive lessons to consider them mergeable. Lower = stricter merging. |
+| `maxGridLessons` | int | `0` | Limit lessons per day in grid view. `0` = show all. `>=1` limits to the first N `timeUnits` (periods). |
+| `showNowLine` | bool | `true` | Show the current time line in grid view. |
 
-- `title` (string) — displayed name for the student.
-- `qrcode` (string) — preferred: QR-code login string from WebUntis (`untis://...`). If provided this is used for login.
-- `school`, `username`, `password`, `server` — alternative credentials if QR code is not used.
-- `class` — name of the class (used in anonymous/class mode).
-- Per-student overrides: any global option (like `daysToShow`, `examsDaysAhead`, `logLevel`, `enableDebug`, etc.) can be supplied inside the student object to override the global value for that student.
+### Absences Widget
 
-Example student entry:
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `absencesPastDays` | int | `14` | Number of past days to include when fetching absences. Can be overridden per-student. |
+| `absencesFutureDays` | int | `7` | Number of future days to extend the absences fetch beyond `daysToShow`. |
+
+### Date Formats
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dateFormat` | string | `'dd.MM.'` | Format for timetable/lessons dates. Supports `dd`, `mm`, `yyyy`, `yy`, and non-padded variants `d`, `m` (e.g., `d.m.yyyy`). |
+| `examDateFormat` | string | `'dd.MM.'` | Format for exam widget dates. |
+| `homeworkDateFormat` | string | `'dd.MM.'` | Format for homework widget dates. |
+
+### Timetable Source
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `useClassTimetable` | bool | `false` | Use class timetable instead of student timetable (some schools only provide class data). |
+
+### Parent Account Support (Optional)
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `parentUsername` | string | - | Parent account email/username for accessing multiple children's data. |
+| `parentPassword` | string | - | Parent account password. |
+| `school` | string | - | School name (can be overridden per student). |
+| `server` | string | `'webuntis.com'` | WebUntis server hostname. |
+
+### Debug / Development Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dumpBackendPayloads` | bool | `false` | Dump backend API responses to `debug_dumps/` folder for troubleshooting. |
+
+### Student Credential Object
+
+Each entry in the `students` array is an object with the following fields:
+
+#### Required
+
+- `title` (string) — displayed name for the student in the module output.
+
+#### Credentials (choose one)
+
+**Option A: QR Code (Recommended)**
+- `qrcode` (string) — WebUntis QR code string (`untis://setschool?url=...&school=...&user=...&key=...`).
+  - To get the QR code: log into WebUntis → Account → Data Access → generate QR code for this app.
+
+**Option B: Direct Credentials**
+- `username` (string) — student's WebUntis username or email.
+- `password` (string) — student's WebUntis password.
+- `school` (string) — school name in WebUntis.
+- `server` (string, optional) — WebUntis server hostname (defaults to `webuntis.com`).
+
+#### Optional Fields
+
+- `class` (string) — class name (only needed if `useClassTimetable: true` and you want to fetch class timetable data).
+- `studentId` (number) — when using parent account mode (see [Parent Account Support](README.md#parent-account-support-optional)), use this to configure children by their ID instead of individual credentials.
+- Per-student option overrides — any global option (like `daysToShow`, `examsDaysAhead`, `logLevel`, etc.) can be supplied here to override the global value for this student only.
+
+#### Example with QR Code
 
 ```javascript
 {
   title: "Alice",
-  qrcode: "untis://setschool?url=...&school=...&user=...&key=..."
-  // optional override:
-  // daysToShow: 3,
-  // logLevel: 'debug'
+  qrcode: "untis://setschool?url=https://example.webuntis.com&school=example&user=alice&key=ABC123XYZ",
+  daysToShow: 5, // override global daysToShow for this student
+}
+```
+
+#### Example with Direct Credentials
+
+```javascript
+{
+  title: "Bob",
+  username: "bob.smith@school.edu",
+  password: "password123",
+  school: "Example School",
+  server: "example.webuntis.com",
+}
+```
+
+#### Example with Parent Account (studentId)
+
+When using parent account credentials (see [Parent Account Support](README.md#parent-account-support-optional)), you can also configure children by `studentId`:
+
+```javascript
+{
+  title: "Child 1",
+  studentId: 12345, // retrieved from parent account API
 }
 ```
 
@@ -178,19 +258,17 @@ Additional grid rendering notes:
 
 - When `maxGridLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
 
-### Date format customization
+## Debugging and Logging
 
-- `dateFormat`, `examDateFormat`, and `homeworkDateFormat` were introduced so you can control how dates are shown in the list/exam/homework widgets. They accept the placeholders `dd`, `mm`, `yyyy`, `yy` and support single-digit variants by dropping the leading zero (e.g., `d.m.yyyy`). Since the values are resolved inside the widgets, you can set formats per student by adding these keys directly to a student object.
-
-## Log levels and debugging
-
-- Use `logLevel` to control logging verbosity. For normal usage `info` or `none` is fine. Use `debug` for troubleshooting.
+- Use `logLevel: 'debug'` to enable detailed logging. For normal usage, `'none'` is sufficient.
+- Enable `dumpBackendPayloads: true` to save API responses to the `debug_dumps/` folder for detailed inspection.
 
 ## Troubleshooting
 
-- If you see empty results, check credentials and try `useClassTimetable: true` — some schools expose only class timetables.
-- Enable `logLevel: 'debug'` to get more information in the MagicMirror server log.
-- If a student uses MS365 or SSO logins that cannot be automated, prefer generating a WebUntis data-access QR code inside the student's account and use that value.
+- **Empty results:** Check credentials and try `useClassTimetable: true` — some schools expose only class timetables.
+- **Debug info:** Enable `logLevel: 'debug'` in the config and check the MagicMirror server log.
+- **SSO/MS365 logins:** If a student uses corporate SSO, generate a WebUntis data-access QR code inside the student's account and use that instead of direct credentials.
+- **Absences with parent accounts:** The WebUntis API does not support retrieving absences through parent account logins. Absences are only available when logged in directly as the student. If `displayMode` includes `absences` but uses parent account credentials, the module will silently skip absences.
 
 ## CLI tool (config check)
 

@@ -14,6 +14,13 @@
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     const nowHm = now.getHours() * 100 + now.getMinutes();
 
+    // Get exams options from nested config
+    const rangeEnd = studentConfig?.exams_DaysAhead ?? 7;
+    const showSubject = studentConfig?.exams?.showSubject ?? true;
+    const showTeacher = studentConfig?.exams?.showTeacher ?? true;
+
+    console.warn(`[exams] Input: ${exams.length} exams, rangeEnd=${rangeEnd}, nowYmd=${nowYmd}`);
+
     exams
       .slice()
       .sort((a, b) => (Number(a.examDate) || 0) - (Number(b.examDate) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0))
@@ -23,20 +30,28 @@
         const examInPast = examYmd < nowYmd || (examYmd === nowYmd && examHm < nowHm);
         if (examInPast && ctx.config.logLevel !== 'debug') return;
 
+        // Check if exam is within range
+        // const daysDiff = Math.floor((examYmd - nowYmd) / 100) + ((examYmd % 100) - (nowYmd % 100));
+
+        // if (daysDiff > rangeEnd) return;
+
+        console.warn(`  [exams] Including exam ${examYmd} (${exam.subject}: ${exam.name})`);
+
         addedRows++;
 
-        const examDateFormat = studentConfig.examDateFormat ?? ctx.config.examDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.';
+        const examDateFormat =
+          studentConfig?.dateFormats?.exams ?? ctx.config?.dateFormats?.exams ?? ctx.config?.dateFormats?.default ?? 'dd.MM.';
         const fallbackDay = String(examYmd % 100).padStart(2, '0');
         const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
         const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
         const dateTimeCell = formattedDate ? `${formattedDate}` : '';
 
         let nameCell = escapeHtml(exam.name);
-        if (studentConfig.showExamSubject) {
+        if (showSubject) {
           nameCell = `${escapeHtml(exam.subject)}: &nbsp;${escapeHtml(exam.name)}`;
         }
 
-        if (studentConfig.showExamTeacher) {
+        if (showTeacher) {
           const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
           if (teacher) nameCell += '&nbsp;' + `(${escapeHtml(teacher)})`;
         }

@@ -13,5 +13,6 @@
   "unexcused": "unexcused",
   "messagesofday": "Messages of the Day",
   "no_messages": "no messages",
-  "no_text": "(no text)"
+  "no_text": "(no text)",
+  "absences_unavailable_parent_account": "Absences are not available with parent accounts (WebUntis API limitation)"
 }
