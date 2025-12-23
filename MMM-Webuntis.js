@@ -557,7 +557,11 @@ Module.register('MMM-Webuntis', {
           const exams = this.examsByStudent?.[studentTitle] || [];
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
 
-          if (timeUnits.length > 0 && timetable.length > 0) {
+          // Render grid if we have timeUnits AND (lessons OR holidays)
+          // This ensures the grid is shown even during holidays when there are no lessons
+          const hasLessons = timetable.length > 0;
+          const hasHolidays = holidays.length > 0;
+          if (timeUnits.length > 0 && (hasLessons || hasHolidays)) {
             const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
             if (gridElem) wrapper.appendChild(gridElem);
           }
