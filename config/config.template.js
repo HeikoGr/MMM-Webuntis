@@ -44,7 +44,7 @@ let config = {
         showSubstitutionText: false,
 
         // === EXAMS WIDGET ===
-        exams_DaysAhead: 7,
+        examsDaysAhead: 7,
         showExamSubject: true,
         showExamTeacher: true,
 
