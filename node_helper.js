@@ -24,7 +24,7 @@ module.exports = NodeHelper.create({
    * Use this hook to perform startup initialization.
    */
   start() {
-    this._mmLog('info', null, 'Node helper started');
+    this._mmLog('debug', null, 'Node helper started');
     // initialize a tiny in-memory response cache
     this._responseCache = new Map(); // signature -> { ts, payload }
     this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
@@ -164,7 +164,7 @@ module.exports = NodeHelper.create({
    * Returns: { token, cookieString, tenantId, schoolYearId, expiresAt }
    */
   async _getRestAuthTokenAndCookies(school, username, password, server, options = {}) {
-    this._mmLog('info', null, `Obtaining REST auth token and cookies for user=${username || 'session'}`);
+    this._mmLog('debug', null, `Obtaining REST auth token and cookies for user=${username || 'session'}`);
     const restCache = this._restAuthCache instanceof Map ? this._restAuthCache : new Map();
     this._restAuthCache = restCache;
 
@@ -321,7 +321,7 @@ module.exports = NodeHelper.create({
         expiresAt: Date.now() + 14 * 60 * 1000,
       });
 
-      this._mmLog('info', null, 'REST auth token obtained successfully');
+      this._mmLog('debug', null, 'REST auth token obtained successfully');
       return { token, cookieString, tenantId, schoolYearId, appData };
     } catch (error) {
       Log.error(`REST auth failed: ${error.message}`);
@@ -335,7 +335,7 @@ module.exports = NodeHelper.create({
   async _getTimetableViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('info', null, `Fetching timetable via REST API (${startDate} to ${endDate})`);
+    this._mmLog('debug', null, `Fetching timetable via REST API (${startDate} to ${endDate})`);
     try {
       const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
         school,
@@ -403,27 +403,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                      {
-                        name: entry.position2[0].current.shortName,
-                        longname: entry.position2[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
                   : [],
                 te: entry.position1
                   ? [
-                      {
-                        name: entry.position1[0].current.shortName,
-                        longname: entry.position1[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
                   : [],
                 ro: entry.position3
                   ? [
-                      {
-                        name: entry.position3[0].current.shortName,
-                        longname: entry.position3[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -440,7 +440,7 @@ module.exports = NodeHelper.create({
         });
       }
 
-      this._mmLog('info', null, `REST API returned ${lessons.length} lessons`);
+      this._mmLog('debug', null, `REST API returned ${lessons.length} lessons`);
       return lessons;
     } catch (error) {
       this._mmLog('error', null, `getTimetableViaRest failed: ${error.message}`);
@@ -455,7 +455,7 @@ module.exports = NodeHelper.create({
   async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('info', null, `Fetching exams via REST API (${startDate} to ${endDate})`);
+    this._mmLog('debug', null, `Fetching exams via REST API (${startDate} to ${endDate})`);
     try {
       const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
 
@@ -521,7 +521,7 @@ module.exports = NodeHelper.create({
         }
       });
 
-      this._mmLog('info', null, `REST API returned ${exams.length} exams`);
+      this._mmLog('debug', null, `REST API returned ${exams.length} exams`);
       return exams;
     } catch (error) {
       this._mmLog('error', null, `getExamsViaRest failed: ${error.message}`);
@@ -537,7 +537,7 @@ module.exports = NodeHelper.create({
   async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, options = {}) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('info', null, `Fetching homework via REST API (${startDate} to ${endDate})`);
+    this._mmLog('debug', null, `Fetching homework via REST API (${startDate} to ${endDate})`);
     try {
       const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
 
@@ -619,7 +619,7 @@ module.exports = NodeHelper.create({
         });
       }
 
-      this._mmLog('info', null, `REST API returned ${homeworks.length} homeworks`);
+      this._mmLog('debug', null, `REST API returned ${homeworks.length} homeworks`);
       return homeworks;
     } catch (error) {
       this._mmLog('error', null, `getHomeworkViaRest failed: ${error.message}`);
@@ -635,7 +635,7 @@ module.exports = NodeHelper.create({
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('info', null, `Fetching absences via REST API (${startDate} to ${endDate})`);
+    this._mmLog('debug', null, `Fetching absences via REST API (${startDate} to ${endDate})`);
     try {
       const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
 
@@ -698,7 +698,7 @@ module.exports = NodeHelper.create({
         });
       });
 
-      this._mmLog('info', null, `REST API returned ${absences.length} absences`);
+      this._mmLog('debug', null, `REST API returned ${absences.length} absences`);
       return absences;
     } catch (error) {
       this._mmLog('error', null, `getAbsencesViaRest failed: ${error.message}`);
@@ -707,7 +707,7 @@ module.exports = NodeHelper.create({
   },
 
   async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
-    this._mmLog('info', null, `Fetching messages of day via REST API for date=${date.toISOString()}`);
+    this._mmLog('debug', null, `Fetching messages of day via REST API for date=${date.toISOString()}`);
     try {
       const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
 
@@ -751,7 +751,7 @@ module.exports = NodeHelper.create({
         messages = resp.data;
       }
 
-      this._mmLog('info', null, `REST API returned ${messages.length} messages of the day`);
+      this._mmLog('debug', null, `REST API returned ${messages.length} messages of the day`);
       return messages;
     } catch (error) {
       this._mmLog('error', null, `getMessagesOfDayViaRest failed: ${error.message}`);
@@ -802,12 +802,17 @@ module.exports = NodeHelper.create({
       if (!moduleConfig || typeof moduleConfig !== 'object') return;
 
       const configuredStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-      // const missingStudentIds = configuredStudents.length === 0 || configuredStudents.every((s) => !s || !Number.isFinite(Number(s.studentId)));
-
-      // if (!missingStudentIds) return;
 
       const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
       if (!hasParentCreds) return;
+
+      // CRITICAL: Only auto-discover if NO students are configured at all
+      // If user explicitly configured ANY students, respect that choice
+      // (even if it's just 1 of 2 available students)
+      if (configuredStudents.length > 0) {
+        this._mmLog('debug', null, `Students manually configured (${configuredStudents.length} configured); skipping auto-discovery`);
+        return;
+      }
 
       const server = moduleConfig.server || 'webuntis.com';
       const { appData } = await this._getRestAuthTokenAndCookies(moduleConfig.school, moduleConfig.username, moduleConfig.password, server);
@@ -818,23 +823,12 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      const merged = autoStudents.map((auto, idx) => {
-        const existing = configuredStudents[idx] || {};
-        return {
-          ...existing,
-          title: existing.title || auto.title,
-          studentId: existing.studentId || auto.studentId,
-          imageUrl: existing.imageUrl || auto.imageUrl,
-        };
-      });
+      // Use all discovered students as-is (no merging, no skipping)
+      moduleConfig.students = autoStudents;
 
-      // Preserve any manual entries beyond discovered students
-      if (configuredStudents.length > autoStudents.length) {
-        merged.push(...configuredStudents.slice(autoStudents.length));
-      }
-
-      moduleConfig.students = merged;
-      this._mmLog('info', null, `Auto-configured ${merged.length} student(s) from app/data response`);
+      // Log all discovered students with their IDs in a prominent way
+      const studentList = autoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+      this._mmLog('info', null, `✓ Auto-discovered ${autoStudents.length} student(s):\n  ${studentList}`);
     } catch (err) {
       this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
     }
@@ -1345,7 +1339,7 @@ module.exports = NodeHelper.create({
           // Run sequentially to reduce peak memory usage on low-RAM devices
           await this.processGroup(credKey, students, identifier);
         }
-        this._mmLog('info', null, 'Successfully fetched data');
+        this._mmLog('debug', null, 'Successfully fetched data');
       } catch (error) {
         this._mmLog('error', null, `Error loading Untis data: ${error}`);
       }
@@ -1690,7 +1684,7 @@ module.exports = NodeHelper.create({
       }
 
       this._mmLog(
-        'info',
+        'debug',
         student,
         `✓ Data ready: timetable=${compactTimetable.length} exams=${compactExams.length} hw=${compactHomeworks.length} abs=${compactAbsences.length}\n`
       );

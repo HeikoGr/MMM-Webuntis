@@ -183,6 +183,164 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | `school` | string | - | School name (can be overridden per student). |
 | `server` | string | `'webuntis.com'` | WebUntis server hostname. |
 
+## Auto-Discovery Feature
+
+The module includes an **automatic student discovery** feature that eliminates the need to manually configure each child's `studentId` when using parent account credentials.
+
+### How it works
+
+When you provide **parent account credentials** (`username`, `password`, `school`, `server`) and leave the `students` array **empty**, the module will:
+
+1. Authenticate with the parent account credentials
+2. Fetch the list of children from WebUntis (`app/data` endpoint)
+3. Automatically populate the `students` array with all children's names and IDs
+4. Display all discovered children in the MagicMirror logs for reference
+
+**Important:** Auto-discovery only happens when `students: []` is empty. If you manually configure ANY student, auto-discovery is skipped (respecting your explicit configuration).
+
+### Example: Auto-Discovery Configuration
+
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    // Parent account credentials
+    username: "parent@example.com",
+    password: "parentPassword123",
+    school: "myschool",
+    server: "myschool.webuntis.com",
+
+    // Empty students array triggers auto-discovery
+    students: [],
+
+    // Rest of your config
+    displayMode: "grid,exams,homeworks",
+    daysToShow: 7,
+  }
+},
+```
+
+When MagicMirror starts, you'll see output like:
+
+```
+✓ Auto-discovered 2 student(s):
+  • Emma Schmidt (ID: 12345)
+  • Jonas Schmidt (ID: 12346)
+```
+
+### Customizing discovered students
+
+If you want to customize the display names or settings for auto-discovered students, you can **add custom student entries** to override the auto-discovered defaults:
+
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    // Parent account credentials
+    username: "parent@example.com",
+    password: "parentPassword123",
+    school: "myschool",
+    server: "myschool.webuntis.com",
+
+    // Configure only the students you want to customize
+    students: [
+      {
+        title: "Emma (11th grade)",  // Custom display name
+        studentId: 12345,             // Must match the auto-discovered ID
+        daysToShow: 5,                // Custom settings per student
+      },
+      // Jonas will still use auto-discovered name and defaults
+    ],
+
+    displayMode: "grid,exams,homeworks",
+  }
+},
+```
+
+This way, Emma will display as "Emma (11th grade)" while Jonas keeps the auto-discovered "Jonas Schmidt".
+
+### How to get the `studentId` from logs
+
+If you need to manually add a `studentId` to your configuration, follow these steps:
+
+#### Step 1: Enable Auto-Discovery Temporarily
+
+Create a config with empty `students` array and parent credentials:
+
+```javascript
+{
+  module: "MMM-Webuntis",
+  config: {
+    username: "parent@example.com",
+    password: "parentPassword123",
+    school: "myschool",
+    server: "myschool.webuntis.com",
+    students: [],  // Empty = trigger auto-discovery
+  }
+},
+```
+
+#### Step 2: Check the MagicMirror Logs
+
+Start MagicMirror and look at the **console logs or server terminal output**. You'll see:
+
+```
+✓ Auto-discovered 2 student(s):
+  • Emma Schmidt (ID: 12345)
+  • Jonas Schmidt (ID: 12346)
+```
+
+**The ID in parentheses is the `studentId` you need.**
+
+#### Step 3: Copy the IDs to Your Config
+
+Now update your config with the student IDs and custom names:
+
+```javascript
+{
+  module: "MMM-Webuntis",
+  config: {
+    username: "parent@example.com",
+    password: "parentPassword123",
+    school: "myschool",
+    server: "myschool.webuntis.com",
+
+    students: [
+      {
+        title: "Emma",
+        studentId: 12345,  // From the auto-discovery log
+      },
+      {
+        title: "Jonas",
+        studentId: 12346,  // From the auto-discovery log
+      },
+    ],
+
+    displayMode: "grid,exams,homeworks",
+  }
+},
+```
+
+#### Troubleshooting: No logs visible?
+
+If you don't see the auto-discovery message:
+
+1. **Verify parent credentials** — Make sure `username`, `password`, `school`, and `server` are correct
+2. **Check logLevel** — Set `logLevel: 'debug'` temporarily to see more details:
+   ```javascript
+   config: {
+     username: "parent@example.com",
+     password: "parentPassword123",
+     school: "myschool",
+     server: "myschool.webuntis.com",
+     students: [],
+     logLevel: 'debug',  // Enable debug output
+   }
+   ```
+3. **Check MagicMirror logs** — Look at the terminal where you started MagicMirror (not just the browser console)
+
 ### Debug / Development Options
 
 | Option | Type | Default | Description |
