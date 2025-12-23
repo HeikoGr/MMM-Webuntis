@@ -359,12 +359,89 @@ function getStudentCredentials(config, studentIndex) {
   };
 }
 
+/**
+ * Fetch data for a single student
+ * Now accepts mergedConfig directly to avoid file-based lookup
+ */
+async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, verbose) {
+  const students = mergedConfig.students || [];
+
+  if (studentIndex < 0 || studentIndex >= students.length) {
+    throw new Error(`Student index ${studentIndex} out of range (0-${students.length - 1})`);
+  }
+
+  const student = students[studentIndex];
+  const qrcode = student.qrcode;
+  const school = student.school || mergedConfig.school;
+  const server = student.server || mergedConfig.server || 'webuntis.com';
+  const username = student.username || mergedConfig.username;
+  const password = student.password || mergedConfig.password;
+  const daysToShow = student.daysToShow || mergedConfig.daysToShow || 7;
+  const examsDaysAhead = student.examsDaysAhead || mergedConfig.examsDaysAhead || 21;
+  const studentId = student.studentId;
+  const title = student.title || `Student ${studentIndex}`;
+
+  Log.wrapper_info(`\n📚 Student ${studentIndex}: "${title}"`);
+  Log.wrapper_info(`  School: ${school}`);
+  Log.wrapper_info(`  Mode: ${qrcode ? 'qrcode' : 'username/password'}`);
+
+  try {
+    const untis = nodeHelper._createUntisClient(student, mergedConfig);
+    await untis.login();
+
+    const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
+
+    // Enable dumping if requested
+    if (shouldDump) {
+      mergedConfig.dumpBackendPayloads = true;
+    }
+
+    const payload = await nodeHelper.fetchData(untis, { ...student }, 'wrapper-fetch', credKey);
+
+    const results = {
+      timetable: payload?.timetableRange?.length || 0,
+      exams: payload?.exams?.length || 0,
+      homework: payload?.homeworks?.length || 0,
+      absences: payload?.absences?.length || 0,
+    };
+
+    if (action === 'auth') {
+      Log.wrapper_info('  ✓ Auth: login ok');
+    } else if (action === 'all') {
+      Log.wrapper_info(`  ✓ Timetable entries: ${results.timetable}`);
+      Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
+      Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
+      Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
+    } else {
+      Log.wrapper_info(`  ✓ ${action.charAt(0).toUpperCase() + action.slice(1)}: ${results[action] || 0}`);
+    }
+
+    if (shouldDump) {
+      try {
+        const dumpsDir = path.join(__dirname, '..', 'debug_dumps');
+        const files = fs.readdirSync(dumpsDir).sort().reverse();
+        const recentDumps = files.filter((f) => f.includes(title) || f.includes(String(Date.now()).slice(0, 7))).slice(0, 1);
+        if (recentDumps.length > 0) {
+          Log.wrapper_info(`  📄 Dump: debug_dumps/${recentDumps[0]}`);
+        }
+      } catch (e) {
+        // ignore if can't find dumps dir
+      }
+    }
+  } catch (err) {
+    Log.error(`  ✗ Student ${studentIndex} fetch failed: ${err.message}`);
+    if (verbose) console.error(err.stack);
+    throw err;
+  }
+}
+
 async function cmdFetch(flags) {
   const configPath = flags.config || flags.c;
-  const studentIndex = parseInt(flags.student || flags.s || '0', 10);
+  const studentIndexFlag = flags.student || flags.s;
   const action = flags.action || flags.a || 'all';
   const verbose = flags.verbose || flags.v;
   const shouldDump = flags.dump || flags.d;
+  const allStudents = flags.all || flags.a_all; // Special flag to iterate all students
 
   if (verbose) setLogLevel('debug');
 
@@ -407,69 +484,41 @@ async function cmdFetch(flags) {
         stu.displayMode = 'lessons,exams';
       }
     });
-    const student = moduleConfig.students[studentIndex];
-    const credentials = getStudentCredentials(config, studentIndex);
-    const { school, username, password, server, daysToShow, examsDaysAhead, qrcode } = credentials;
 
-    Log.wrapper_info(`✓ Using student ${studentIndex}`);
-    Log.wrapper_info(`  School: ${school}`);
-    Log.wrapper_info(`  Mode: ${qrcode ? 'qrcode' : 'username/password'}`);
+    // Decide which students to iterate
+    let studentIndices = [];
+    if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== '') {
+      // Specific student requested
+      const idx = parseInt(studentIndexFlag, 10);
+      studentIndices = [idx];
+    } else if (allStudents) {
+      // All students requested (explicit flag)
+      studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
+    } else {
+      // Default: first student only (backward compatibility)
+      studentIndices = [0];
+    }
 
-    // Determine date ranges
-    const today = new Date();
-    const timetableEnd = new Date(today.getTime() + daysToShow * 24 * 60 * 60 * 1000);
-    const examsEnd = new Date(today.getTime() + examsDaysAhead * 24 * 60 * 60 * 1000);
+    Log.wrapper_info(`\n📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
+    Log.wrapper_info(`Testing student(s): [${studentIndices.join(', ')}]`);
 
-    Log.wrapper_info('\n--- QR student: using node_helper.fetchData() ---');
-    try {
-      const untis = nodeHelper._createUntisClient(student, moduleConfig);
-      await untis.login();
+    // Fetch data for each selected student
+    let successCount = 0;
+    let failureCount = 0;
 
-      const credKey = nodeHelper._getCredentialKey(student, moduleConfig);
-      Log.wrapper_info(`Using credential key`);
-
-      // Enable dumping if requested
-      if (shouldDump) {
-        moduleConfig.dumpBackendPayloads = true;
+    for (const idx of studentIndices) {
+      try {
+        await fetchStudentData(moduleConfig, idx, action, shouldDump, verbose);
+        successCount++;
+      } catch (err) {
+        failureCount++;
       }
+    }
 
-      const payload = await nodeHelper.fetchData(untis, { ...student }, 'wrapper-fetch', credKey);
-
-      Log.wrapper_info('✓ Fetch via fetchData finished');
-      if (action === 'auth') {
-        Log.wrapper_info('Auth: login ok');
-      }
-      if (action === 'all' || action === 'timetable') {
-        Log.wrapper_info(`Timetable entries: ${payload?.timetableRange?.length || 0}`);
-      }
-      if (action === 'all' || action === 'exams') {
-        Log.wrapper_info(`Exams: ${payload?.exams?.length || 0}`);
-      }
-      if (action === 'all' || action === 'homework') {
-        Log.wrapper_info(`Homework: ${payload?.homeworks?.length || 0}`);
-      }
-      if (action === 'all' || action === 'absences') {
-        Log.wrapper_info(`Absences: ${payload?.absences?.length || 0}`);
-      }
-
-      if (shouldDump) {
-        try {
-          const dumpsDir = path.join(__dirname, '..', 'debug_dumps');
-          const files = fs.readdirSync(dumpsDir).sort().reverse();
-          const recentDumps = files.filter((f) => f.includes(student.title) || f.includes(String(Date.now()).slice(0, 7))).slice(0, 1);
-          if (recentDumps.length > 0) {
-            console.log(`\n📄 Dump file: debug_dumps/${recentDumps[0]}`);
-          }
-        } catch (e) {
-          // ignore if can't find dumps dir
-        }
-      }
-    } catch (err) {
-      Log.error(`✗ QR fetch failed: ${err.message}`);
-      if (verbose) console.error(err.stack);
+    Log.wrapper_info(`\n✓ Completed: ${successCount} successful, ${failureCount} failed`);
+    if (failureCount > 0) {
       process.exit(1);
     }
-    return;
   } catch (err) {
     Log.error(`✗ Command failed: ${err.message}`);
     if (verbose) console.error(err.stack);
@@ -490,7 +539,7 @@ USAGE:
 
 OPTIONS:
   --config  | -c   <path>    Path to config.js (auto-detected if omitted)
-  --student | -s   <index>   Student index to test (default: 0)
+  --student | -s   <index>   Student index to test (default: 0, or all if no -s given)
   --action  | -a   <action>  Which data to fetch (default: all):
                              all, auth, timetable, exams, homework, absences
   --dump    | -d             Also write debug dump JSON to debug_dumps/
@@ -499,23 +548,26 @@ OPTIONS:
 
 EXAMPLES:
 
-  # Fetch all data for first student
+  # Fetch all data for first student only (default)
   npm run debug
+
+  # Fetch for all configured students
+  npm run debug -- --all
 
   # Fetch for specific student with verbose output
   npm run debug -- --student 1 --verbose
 
-  # Fetch only timetable and homework
-  npm run debug -- --action timetable
+  # Fetch only exams for all students
+  npm run debug -- --all --action exams
 
-  # Fetch and create debug dump
+  # Fetch and create debug dump for student 0
   npm run debug -- --dump --verbose
 
-  # Use custom config file
-  npm run debug -- --config ./custom-config.js --student 0
+  # Use custom config file, test student 1
+  npm run debug -- --config ./custom-config.js --student 1
 
-  # Test authentication only
-  npm run debug -- --action auth --verbose
+  # Test authentication only for all students
+  npm run debug -- --all --action auth --verbose
 `);
 }
 
