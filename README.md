@@ -189,7 +189,7 @@ The module includes an **automatic student discovery** feature that eliminates t
 
 ### How it works
 
-When you provide **parent account credentials** (`username`, `password`, `school`, `server`) and leave the `students` array **empty**, the module will:
+When you provide **parent account credentials** (`username`, `password`, `school`, `server`), the module will:
 
 1. Authenticate with the parent account credentials
 2. Fetch the list of children from WebUntis (`app/data` endpoint)
@@ -231,7 +231,7 @@ When MagicMirror starts, you'll see output like:
 
 ### Customizing discovered students
 
-If you want to customize the display names or settings for auto-discovered students, you can **add custom student entries** to override the auto-discovered defaults:
+If you want to customize settings for specific auto-discovered students using parent account mode, you can configure them with `studentId`. If you omit the `title`, the auto-discovered name will be used automatically:
 
 ```javascript
 {
@@ -247,11 +247,15 @@ If you want to customize the display names or settings for auto-discovered stude
     // Configure only the students you want to customize
     students: [
       {
-        title: "Emma (11th grade)",  // Custom display name
         studentId: 12345,             // Must match the auto-discovered ID
+        // title omitted - will use auto-discovered name "Emma Schmidt"
         daysToShow: 5,                // Custom settings per student
       },
-      // Jonas will still use auto-discovered name and defaults
+      {
+        studentId: 12346,
+        title: "Jonas (custom)",       // Override auto-discovered name
+        daysToShow: 7,
+      },
     ],
 
     displayMode: "grid,exams,homeworks",
@@ -259,7 +263,10 @@ If you want to customize the display names or settings for auto-discovered stude
 },
 ```
 
-This way, Emma will display as "Emma (11th grade)" while Jonas keeps the auto-discovered "Jonas Schmidt".
+**Result:**
+- Emma (ID 12345) will display with auto-discovered name but `daysToShow: 5`
+- Jonas (ID 12346) will display as "Jonas (custom)" with `daysToShow: 7`
+- Only the configured students are shown (no additional auto-discovery)
 
 ### How to get the `studentId` from logs
 
