@@ -24,7 +24,7 @@ Module.register('MMM-Webuntis', {
     showSubstitutionText: false, // show substitution text from WebUntis
 
     // === EXAMS WIDGET OPTIONS ===
-    examsDaysAhead: 7, // number of days ahead to fetch exams (0 = off)
+    examsDaysAhead: 21, // number of days ahead to fetch exams (0 = off)
     showExamSubject: true, // show subject for exams
     showExamTeacher: true, // show teacher name for exams
 
@@ -34,7 +34,7 @@ Module.register('MMM-Webuntis', {
     showNowLine: true, // show the current time line in grid view
 
     // === ABSENCES WIDGET OPTIONS ===
-    absencesPastDays: 14, // past days to include when fetching absences
+    absencesPastDays: 21, // past days to include when fetching absences
     absencesFutureDays: 7, // future days to include when fetching absences
 
     // === DATE FORMAT OPTIONS ===
