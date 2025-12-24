@@ -39,6 +39,25 @@
       "problemMatcher": []
     },
     {
+      "label": "prettier: write widgets",
+      "type": "shell",
+      "command": "npx prettier --write .",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "isBackground": false,
+      "options": {
+        "statusbar": {
+          "label": "$(paintcan) Prettier",
+          "color": "#8BC34A",
+          "detail": "Format all files"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "pm2: logs (follow)",
       "type": "shell",
       "command": "pm2 logs --lines 200",
