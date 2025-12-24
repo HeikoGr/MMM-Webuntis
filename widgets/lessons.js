@@ -1,10 +1,10 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => { };
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
 
   // Helper: Check if a date falls within a holiday period
   function isDateInHoliday(dateYmd, holidays) {
