@@ -3,7 +3,7 @@ Module.register('MMM-Webuntis', {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
     fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
-    logLevel: 'none', // 'debug' or 'none' - controls verbosity of logging
+    logLevel: 'debug', // One of: "error", "warn", "info", "debug". Default is "info".
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
@@ -18,10 +18,8 @@ Module.register('MMM-Webuntis', {
 
     // === LESSONS WIDGET OPTIONS ===
     showStartTime: false, // show start time instead of lesson number
-    showRegularLessons: true, // show regular lessons (not only substitutions/cancellations)
-    showTeacherMode: 'full', // 'initial' (first name), 'full' (full name), 'none'
+    showRegularLessons: false, // show regular lessons (not only substitutions/cancellations)
     useShortSubject: false, // use short subject names where available
-    showSubstitutionText: false, // show substitution text from WebUntis
 
     // === EXAMS WIDGET OPTIONS ===
     examsDaysAhead: 21, // number of days ahead to fetch exams (0 = off)
@@ -79,6 +77,9 @@ Module.register('MMM-Webuntis', {
   },
 
   getScripts() {
+    // Store logLevel globally so widgets can access it during initialization
+    window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
+
     const scripts = [this.file('widgets/util.js')];
     const widgetScriptMap = {
       lessons: 'widgets/lessons.js',
@@ -161,27 +162,21 @@ Module.register('MMM-Webuntis', {
     return out.length > 0 ? out : ['lessons', 'exams'];
   },
 
+  // Simple log helper to control verbosity from the module config
   _log(level, ...args) {
-    try {
-      const prefix = '[MMM-Webuntis]';
-      const logger = typeof Log !== 'undefined' && Log ? Log : null;
-      if (level === 'info') {
-        if (logger?.info) logger.info(prefix, ...args);
-        else console.warn(prefix, ...args);
-      } else if (level === 'warn') {
-        if (logger?.warn) logger.warn(prefix, ...args);
-        else console.warn(prefix, ...args);
-      } else if (level === 'debug') {
-        if (this?.config?.logLevel === 'debug') {
-          if (logger?.log) logger.log(prefix + ' [DEBUG]', ...args);
-          else console.warn(prefix + ' [DEBUG]', ...args);
-        }
-      } else {
-        if (logger?.log) logger.log(prefix, ...args);
-        else console.warn(prefix, ...args);
+    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+    const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
+    const configuredLevel = levels[configured] !== undefined ? configured : 'info';
+    const msgLevel = levels[level] !== undefined ? level : 'info';
+    if (levels[msgLevel] <= levels[configuredLevel]) {
+      try {
+        if (msgLevel === 'error') console.error('[MMM-Webuntis]', ...args);
+        else if (msgLevel === 'warn') console.warn('[MMM-Webuntis]', ...args);
+        else if (msgLevel === 'info') console.warn('[MMM-Webuntis]', ...args);
+        else console.warn('[MMM-Webuntis]', ...args);
+      } catch {
+        // ignore any console errors
       }
-    } catch (e) {
-      console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
     }
   },
 
@@ -443,6 +438,12 @@ Module.register('MMM-Webuntis', {
   start() {
     this.config = this._normalizeLegacyConfig(this.config, this.defaults);
 
+    // Store logLevel in global config so widgets can access it independently
+    if (typeof window !== 'undefined') {
+      window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
+      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
+    }
+
     // Ensure we always have a locale string for widgets.
     try {
       if (!this.config.language && typeof config !== 'undefined' && config && config.language) {
@@ -473,6 +474,8 @@ Module.register('MMM-Webuntis', {
 
     this.config.id = this.identifier;
     this.sendSocketNotification('FETCH_DATA', this.config);
+
+    this._log('info', 'MMM-Webuntis started with config:', this.config);
   },
 
   _startNowLineUpdater() {

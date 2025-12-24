@@ -133,9 +133,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | --- | --- | --- | --- |
 | `showStartTime` | bool | `false` | Show start time instead of lesson number in listings. |
 | `showRegularLessons` | bool | `true` | Show regular lessons (not only substitutions/cancellations). |
-| `showTeacherMode` | string | `'full'` | How to show teacher names: `'initial'` (first name), `'full'` (full name), or `'none'`. |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
-| `showSubstitutionText` | bool | `false` | Show substitution text from WebUntis (if present). |
 
 ### Exams Widget
 

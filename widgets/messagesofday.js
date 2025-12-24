@@ -1,6 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
@@ -32,9 +33,12 @@
     let addedRows = 0;
 
     if (!Array.isArray(messagesOfDay) || messagesOfDay.length === 0) {
+      log('debug', `[messagesofday] no data`);
       addTableRow(table, 'messageRowEmpty', studentCellTitle, ctx.translate('no_messages'));
       return 1;
     }
+
+    log('debug', `[messagesofday] render start | entries: ${messagesOfDay.length}`);
 
     const sorted = messagesOfDay.slice();
 
@@ -42,6 +46,8 @@
       const subject = String(msg?.subject || '').trim();
       const rawText = String(msg?.text || '').trim();
       const isExpanded = msg?.isExpanded === true;
+
+      log('debug', `[messagesofday] add: subj="${subject}", text_len=${rawText.length}`);
 
       // Subject is displayed as the "meta" column (similar to date in other widgets)
       const meta = subject || '';
@@ -62,6 +68,7 @@
       addedRows++;
     }
 
+    log('debug', `[messagesofday] render complete | rows: ${addedRows}`);
     return addedRows;
   }
 

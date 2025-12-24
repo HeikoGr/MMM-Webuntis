@@ -1,6 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
@@ -22,11 +23,24 @@
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     let addedRows = 0;
 
-    if (!(studentConfig && studentConfig.daysToShow > 0)) return 0;
+    if (!(studentConfig && studentConfig.daysToShow > 0)) {
+      log('debug', `[lessons] skipped: daysToShow not configured for "${studentTitle}"`);
+      return 0;
+    }
+
+    const timetableLength = Array.isArray(timetable) ? timetable.length : 0;
+    const holidaysLength = Array.isArray(holidays) ? holidays.length : 0;
+    log(
+      ctx,
+      'debug',
+      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | days: ${studentConfig.daysToShow}`
+    );
 
     const now = new Date();
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     const nowHm = now.getHours() * 100 + now.getMinutes();
+
+    log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
     // Group lessons by date
     const lessonsByDate = {};
@@ -37,11 +51,16 @@
       lessonsByDate[dateYmd].push(entry);
     }
 
+    const dateCount = Object.keys(lessonsByDate).length;
+    log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
+
     // Determine display window (align with grid behavior)
     const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
     const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
     const startOffset = -pastDays;
     const totalDisplayDays = daysToShow;
+
+    log('debug', `[lessons] window: ${totalDisplayDays} future days + ${pastDays} past days`);
 
     // Iterate display days in order and render either lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
@@ -58,6 +77,7 @@
         // No lessons that day — check for holiday
         const holiday = isDateInHoliday(dateYmd, holidays);
         if (holiday) {
+          log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = dayDate
             .toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' })
             .toUpperCase();
@@ -72,6 +92,8 @@
         }
         continue;
       }
+
+      log('debug', `[lessons] ${dateYmd}: ${entries.length} entries`);
 
       // Render lessons for this date
       for (const entry of entries) {
@@ -89,6 +111,7 @@
           (!studentConfig.showRegularLessons && (entry.code || '') === '') ||
           (isPast && (entry.code || '') !== 'error' && ctx.config.logLevel !== 'debug')
         ) {
+          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
           continue;
         }
 
@@ -110,6 +133,7 @@
 
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
+        log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
         let subjectStr = escapeHtml(studentConfig.useShortSubject ? subjShort : subjLong);
 
         if (studentConfig.showTeacherMode === 'initial') {
@@ -147,10 +171,12 @@
     }
 
     if (addedRows === 0) {
+      log('debug', `[lessons] no entries to display`);
       addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('nothing'));
       return 1;
     }
 
+    log('debug', `[lessons] render complete | rows: ${addedRows}`);
     return addedRows;
   }
 

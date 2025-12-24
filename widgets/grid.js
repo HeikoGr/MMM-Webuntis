@@ -10,6 +10,7 @@ function getNowLineState(ctx) {
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
 
   function startNowLineUpdater(ctx) {
@@ -18,12 +19,15 @@ function getNowLineState(ctx) {
     const state = getNowLineState(ctx);
     if (state.timer || state.initialTimeout) return;
 
+    log('debug', '[grid] Starting now-line updater');
+
     const tick = () => {
       try {
         const nowLocal = new Date();
         const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
         if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
         if (nowYmd !== ctx._currentTodayYmd) {
+          log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
           try {
             ctx.sendSocketNotification('FETCH_DATA', ctx.config);
           } catch {
@@ -43,7 +47,7 @@ function getNowLineState(ctx) {
           if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx);
         }
       } catch (err) {
-        ctx._log('warn', 'minute tick update failed', err);
+        log('debug', 'minute tick update failed', err);
       }
     };
 
@@ -55,6 +59,7 @@ function getNowLineState(ctx) {
         tick();
         state.timer = setInterval(tick, 60 * 1000);
         state.initialTimeout = null;
+        log('debug', '[grid] Now-line updater initialized');
       },
       Math.max(0, msToNextMinute)
     );
@@ -73,6 +78,7 @@ function getNowLineState(ctx) {
       clearTimeout(state.initialTimeout);
       state.initialTimeout = null;
     }
+    log('debug', '[grid] Now-line updater stopped');
   }
 
   function isDateInHoliday(dateYmd, holidays) {
@@ -94,6 +100,12 @@ function getNowLineState(ctx) {
     const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
     const startOffset = -pastDays;
     const totalDisplayDays = daysToShow;
+
+    log(
+      ctx,
+      'debug',
+      `[grid] render start | student: "${studentTitle}" | entries: ${Array.isArray(timetable) ? timetable.length : 0} | days: ${totalDisplayDays}/${pastDays}`
+    );
 
     const header = document.createElement('div');
     header.className = 'grid-days-header';
@@ -178,7 +190,8 @@ function getNowLineState(ctx) {
       }
       if (cutoff !== undefined && cutoff !== null && cutoff > allStart) {
         if (cutoff < allEnd) {
-          ctx._log(
+          log(
+            ctx,
             'debug',
             `Grid: vertical range limited to first ${maxGridLessons_before} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`
           );
@@ -324,6 +337,8 @@ function getNowLineState(ctx) {
       const targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
+      log('debug', `[grid] Processing day ${dateStr} for student "${studentTitle}"`);
+
       const groupedRaw =
         ctx.preprocessedByStudent && ctx.preprocessedByStudent[studentTitle] && ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
           ? ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
@@ -335,6 +350,8 @@ function getNowLineState(ctx) {
           : (Array.isArray(timetable) ? timetable : [])
               .filter((el) => String(el.date) === dateStr)
               .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+
+      log('debug', `[grid] Day ${dateStr}: found ${sourceForDay.length} lessons`);
 
       let dayLessons = sourceForDay.map((el) => ({
         dateStr: String(el.date),
@@ -361,6 +378,7 @@ function getNowLineState(ctx) {
         curr.substText = curr.substText || '';
         curr.text = curr.text || '';
         let j = i + 1;
+        let mergedCount = 0;
 
         while (j < dayLessons.length) {
           const cand = dayLessons[j];
@@ -375,6 +393,7 @@ function getNowLineState(ctx) {
           if (currEndMin === null || candStartMin === null) break;
           if (!(candStartMin >= currEndMin && gapMin <= allowedGap && sameContent)) break;
 
+          mergedCount++;
           curr.endTime = cand.endTime;
           curr.endMin = candEndMin !== null ? candEndMin : candStartMin + 45;
           curr.substText = curr.substText || '';
@@ -386,10 +405,19 @@ function getNowLineState(ctx) {
           j++;
         }
 
+        if (mergedCount > 0) {
+          log(
+            ctx,
+            'debug',
+            `[grid] Day ${dateStr}: merged ${mergedCount} lesson blocks for ${curr.subject} (gap=${ctx.config.mergeGapMinutes}min)`
+          );
+        }
+
         if ((!curr.lessonId || curr.lessonId === null) && curr.lessonIds && curr.lessonIds.length > 0) curr.lessonId = curr.lessonIds[0];
         if (curr.startMin === undefined || curr.startMin === null) {
-          ctx._log(
-            'warn',
+          log(
+            ctx,
+            'debug',
             'Merged lesson missing startMin; backend should provide numeric startMin/endMin',
             curr.lessonId ? { lessonId: curr.lessonId } : curr
           );
@@ -436,7 +464,8 @@ function getNowLineState(ctx) {
 
           if (Array.isArray(filtered) && filtered.length < mergedLessons.length) {
             const hidden = mergedLessons.length - filtered.length;
-            ctx._log(
+            log(
+              ctx,
               'debug',
               `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (timeUnits-based). Showing first ${maxGridLessons} period(s).`
             );
@@ -446,7 +475,8 @@ function getNowLineState(ctx) {
           if (Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
             const sliced = mergedLessons.slice(0, maxGridLessons);
             const hidden = mergedLessons.length - sliced.length;
-            ctx._log(
+            log(
+              ctx,
               'debug',
               `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (count-based fallback).`
             );
@@ -542,7 +572,7 @@ function getNowLineState(ctx) {
           }
         }
       } catch (e) {
-        ctx._log('warn', 'failed to draw hour lines', e);
+        log('debug', 'failed to draw hour lines', e);
       }
 
       const nowLine = document.createElement('div');
@@ -739,7 +769,7 @@ function getNowLineState(ctx) {
         else ln.classList.remove('past');
       });
     } catch (e) {
-      ctx?._log?.('warn', 'failed to refresh past masks', e);
+      log('warn', 'failed to refresh past masks', e);
     }
   }
 
@@ -779,7 +809,7 @@ function getNowLineState(ctx) {
       });
       return updated;
     } catch (e) {
-      ctx?._log?.('warn', 'updateNowLinesAll failed', e);
+      log('warn', 'updateNowLinesAll failed', e);
       return 0;
     }
   }
