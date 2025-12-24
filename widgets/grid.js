@@ -10,7 +10,7 @@ function getNowLineState(ctx) {
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
 
   function startNowLineUpdater(ctx) {
@@ -348,8 +348,8 @@ function getNowLineState(ctx) {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+            .filter((el) => String(el.date) === dateStr)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       log('debug', `[grid] Day ${dateStr}: found ${sourceForDay.length} lessons`);
 
