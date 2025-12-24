@@ -1,6 +1,19 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
+  // Global log function - respects window.MMMWebuntisLogLevel set by main module
+  function log(level, ...args) {
+    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+    const configured = window.MMMWebuntisLogLevel || 'info';
+    const configuredLevel = levels[configured] !== undefined ? configured : 'info';
+    const msgLevel = levels[level] !== undefined ? level : 'info';
+    if (levels[msgLevel] <= levels[configuredLevel]) {
+      const prefix = '[MMM-Webuntis]';
+      const tag = `${prefix} [${String(level).toUpperCase()}]`;
+      console.warn(tag, ...args);
+    }
+  }
+
   function formatYmd(ymd) {
     return formatDate(ymd, 'dd.MM.yyyy');
   }
@@ -112,6 +125,8 @@
     toMinutes,
     formatDate,
     escapeHtml,
+    log,
+    _log: log, // backward compatibility alias
   };
 
   root.dom = {

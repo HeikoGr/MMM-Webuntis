@@ -1,6 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
@@ -9,9 +10,12 @@
     let addedRows = 0;
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
+      log('debug', `[homework] no data`);
       addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
       return 1;
     }
+
+    log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
     const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
 
@@ -26,6 +30,8 @@
       const subj = hw?.su?.longname || hw?.su?.name || '';
       const text = String(hw?.text || hw?.remark || '').trim();
 
+      log('debug', `[homework] add: due="${due}" subj="${subj}" text_len=${text.length}`);
+
       const left = due ? `${due}` : ctx.translate('homework');
       const rightParts = [];
       if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);
@@ -36,6 +42,7 @@
       addedRows++;
     }
 
+    log('debug', `[homework] render complete | rows: ${addedRows}`);
     return addedRows;
   }
 

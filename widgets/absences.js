@@ -1,6 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
+  const log = typeof util.log === 'function' ? util.log : () => {};
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
@@ -9,9 +10,12 @@
     let addedRows = 0;
 
     if (!Array.isArray(absences) || absences.length === 0) {
+      log('debug', `[absences] no data`);
       addTableRow(table, 'absenceRowEmpty', studentCellTitle, ctx.translate('no_absences'));
       return 1;
     }
+
+    log('debug', `[absences] render start | entries: ${absences.length}`);
 
     // Get absences options from nested config
     const maxItems = studentConfig?.absences?.maxItems ?? null;
@@ -26,9 +30,11 @@
     const rangeStart = studentConfig?.absences?.rangeStart ?? 30;
     const rangeEnd = studentConfig?.absences?.rangeEnd ?? 7;
 
-    if (ctx?.config?.logLevel === 'debug') {
-      console.warn(`[absences] Input: ${absences.length} absences, rangeStart=${rangeStart}, rangeEnd=${rangeEnd}, nowYmd=${nowYmd}`);
-    }
+    log(
+      ctx,
+      'debug',
+      `[absences] config: range=${rangeStart}d_past/${rangeEnd}d_future | max=${maxItems} | show: date=${showDate}, excused=${showExcused}, reason=${showReason}`
+    );
 
     const sorted = absences
       .slice()
@@ -48,43 +54,31 @@
         const nowDate = new Date(nowYear, nowMonth - 1, nowDay);
         const daysDiff = Math.floor((nowDate - absDate) / (1000 * 60 * 60 * 24));
 
-        if (ctx?.config?.logLevel === 'debug') {
-          console.warn(`  [absences] Absence ${absenceYmd}: daysDiff=${daysDiff}, reason="${ab.reason}"`);
-        }
+        log('debug', `  [absences] ${absenceYmd}: daysDiff=${daysDiff}, reason="${ab.reason}"`);
 
         // daysDiff > 0 = past, daysDiff < 0 = future
         // rangeStart: show up to N days in the past
         // rangeEnd: show up to N days in the future
         if (rangeStart !== null && daysDiff > rangeStart) {
-          if (ctx?.config?.logLevel === 'debug') {
-            console.warn(`    → filtered: daysDiff (${daysDiff}) > rangeStart (${rangeStart})`);
-          }
+          log('debug', `    → filter: daysDiff(${daysDiff}) > rangeStart(${rangeStart})`);
           return false;
         }
         if (rangeEnd !== null && daysDiff < -rangeEnd) {
-          if (ctx?.config?.logLevel === 'debug') {
-            console.warn(`    → filtered: daysDiff (${daysDiff}) < -rangeEnd (${-rangeEnd})`);
-          }
+          log('debug', `    → filter: daysDiff(${daysDiff}) < -rangeEnd(${-rangeEnd})`);
           return false;
         }
-        if (ctx?.config?.logLevel === 'debug') {
-          console.warn(`    → INCLUDED`);
-        }
+        log('debug', `    → INCLUDE`);
         return true;
       })
       .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
 
-    if (ctx?.config?.logLevel === 'debug') {
-      console.warn(`[absences] After filter: ${sorted.length} absences`);
-    }
+    log('debug', `[absences] after filter: ${sorted.length} entries`);
 
     let visibleCount = 0;
     for (const ab of sorted) {
       if (maxItems !== null && maxItems > 0 && visibleCount >= maxItems) break;
 
-      if (ctx?.config?.logLevel === 'debug') {
-        console.warn(`[absences] Processing absence: date=${ab?.date}, reason=${ab?.reason}`);
-      }
+      log('debug', `[absences] add: date=${ab?.date}, reason="${ab?.reason || 'none'}"`);
 
       const dateRaw = ab?.date;
       const dateFormat =
@@ -133,17 +127,13 @@
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 
-      if (ctx?.config?.logLevel === 'debug') {
-        console.warn(`[absences] Adding row: meta="${meta || ctx.translate('absences')}", data="${data.substring(0, 50)}..."`);
-      }
+      log('debug', `[absences] Adding row: meta="${meta || ctx.translate('absences')}", data="${data.substring(0, 50)}..."`);
       addTableRow(table, 'absenceRow', studentCellTitle, meta || ctx.translate('absences'), data);
       addedRows++;
       visibleCount++;
     }
 
-    if (ctx?.config?.logLevel === 'debug') {
-      console.warn(`[absences] Final result: addedRows=${addedRows}`);
-    }
+    log('debug', `[absences] final: addedRows=${addedRows}`);
     return addedRows;
   }
 
