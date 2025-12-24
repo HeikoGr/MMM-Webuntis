@@ -369,74 +369,30 @@ function getNowLineState(ctx) {
         lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
       }));
 
-      const mergedLessons = [];
-      for (let i = 0; i < dayLessons.length; i++) {
-        let curr = { ...dayLessons[i] };
-        curr.lessonIds = [];
-        const firstId = curr.lessonId ?? curr.id ?? curr.lid ?? null;
-        if (firstId !== null && firstId !== undefined) curr.lessonIds.push(String(firstId));
-        curr.substText = curr.substText || '';
-        curr.text = curr.text || '';
-        let j = i + 1;
-        let mergedCount = 0;
-
-        while (j < dayLessons.length) {
-          const cand = dayLessons[j];
-          const currEndMin = curr.endMin !== undefined && curr.endMin !== null ? curr.endMin : null;
-          const candStartMin = cand.startMin !== undefined && cand.startMin !== null ? cand.startMin : null;
-          const candEndMin = cand.endMin !== undefined && cand.endMin !== null ? cand.endMin : null;
-          const gapMin = candStartMin - currEndMin;
-          const allowedGap = Number(ctx.config.mergeGapMinutes ?? 15);
-          const sameContent =
-            cand.subjectShort === curr.subjectShort && cand.teacherInitial === curr.teacherInitial && cand.code === curr.code;
-
-          if (currEndMin === null || candStartMin === null) break;
-          if (!(candStartMin >= currEndMin && gapMin <= allowedGap && sameContent)) break;
-
-          mergedCount++;
-          curr.endTime = cand.endTime;
-          curr.endMin = candEndMin !== null ? candEndMin : candStartMin + 45;
-          curr.substText = curr.substText || '';
-          curr.text = curr.text || '';
-          if (cand.substText && !curr.substText.includes(cand.substText)) curr.substText += `\n${cand.substText}`;
-          if (cand.text && !curr.text.includes(cand.text)) curr.text += `\n${cand.text}`;
-          const addId = cand.lessonId ?? cand.id ?? cand.lid ?? null;
-          if (addId !== null && addId !== undefined) curr.lessonIds.push(String(addId));
-          j++;
-        }
-
-        if (mergedCount > 0) {
-          log(
-            ctx,
-            'debug',
-            `[grid] Day ${dateStr}: merged ${mergedCount} lesson blocks for ${curr.subject} (gap=${ctx.config.mergeGapMinutes}min)`
-          );
-        }
-
-        if ((!curr.lessonId || curr.lessonId === null) && curr.lessonIds && curr.lessonIds.length > 0) curr.lessonId = curr.lessonIds[0];
+      // The backend now returns already-merged lesson blocks. Use the data as-is
+      // and perform light validation (ensure endMin exists where possible).
+      for (const curr of dayLessons) {
+        curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
         if (curr.startMin === undefined || curr.startMin === null) {
           log(
-            ctx,
             'debug',
-            'Merged lesson missing startMin; backend should provide numeric startMin/endMin',
+            'Lesson missing startMin; backend should provide numeric startMin/endMin',
             curr.lessonId ? { lessonId: curr.lessonId } : curr
           );
         }
         if (curr.endMin === undefined || curr.endMin === null) {
           if (curr.startMin !== undefined && curr.startMin !== null) curr.endMin = curr.startMin + 45;
         }
-        mergedLessons.push(curr);
-        i = j - 1;
       }
 
       const maxGridLessonsCfg = Number(studentConfig.maxGridLessons ?? ctx.config.maxGridLessons ?? 0);
       const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
-      let lessonsToRender = mergedLessons;
+      let lessonsToRender = dayLessons;
 
       if (maxGridLessons >= 1) {
         if (Array.isArray(timeUnits) && timeUnits.length > 0) {
           const tu = timeUnits;
-          const filtered = mergedLessons.filter((lesson) => {
+          const filtered = lessonsToRender.filter((lesson) => {
             const s = lesson.startMin;
             if (s === undefined || s === null || Number.isNaN(s)) return true;
 
@@ -462,8 +418,8 @@ function getNowLineState(ctx) {
             return matchedIndex === -1 ? true : matchedIndex < maxGridLessons;
           });
 
-          if (Array.isArray(filtered) && filtered.length < mergedLessons.length) {
-            const hidden = mergedLessons.length - filtered.length;
+          if (Array.isArray(filtered) && filtered.length < dayLessons.length) {
+            const hidden = dayLessons.length - filtered.length;
             log(
               ctx,
               'debug',
@@ -472,9 +428,9 @@ function getNowLineState(ctx) {
           }
           lessonsToRender = filtered;
         } else {
-          if (Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
-            const sliced = mergedLessons.slice(0, maxGridLessons);
-            const hidden = mergedLessons.length - sliced.length;
+          if (Array.isArray(dayLessons) && dayLessons.length > maxGridLessons) {
+            const sliced = dayLessons.slice(0, maxGridLessons);
+            const hidden = dayLessons.length - sliced.length;
             log(
               ctx,
               'debug',
@@ -584,8 +540,8 @@ function getNowLineState(ctx) {
       bothInner._allEnd = allEnd;
       bothInner._totalHeight = totalHeight;
 
-      const hiddenCount = Array.isArray(mergedLessons)
-        ? Math.max(0, mergedLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0))
+      const hiddenCount = Array.isArray(dayLessons)
+        ? Math.max(0, dayLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0))
         : 0;
       if (hiddenCount > 0) {
         const moreBadge = document.createElement('div');
