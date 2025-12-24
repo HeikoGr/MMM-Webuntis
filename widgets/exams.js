@@ -2,10 +2,10 @@
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
     try {
@@ -19,10 +19,10 @@
       const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
       const nowHm = now.getHours() * 100 + now.getMinutes();
 
-      // Get exams options from nested config
-      const rangeEnd = studentConfig?.exams_DaysAhead ?? 7;
-      const showSubject = studentConfig?.exams?.showSubject ?? true;
-      const showTeacher = studentConfig?.exams?.showTeacher ?? true;
+      // Get exams options from nested or top-level config (backwards compatibility)
+      const rangeEnd = studentConfig?.examsDaysAhead ?? studentConfig?.exams_DaysAhead ?? ctx.config?.examsDaysAhead ?? 7;
+      const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? ctx.config?.showExamSubject ?? true;
+      const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? ctx.config?.showExamTeacher ?? true;
 
       log(
         ctx,
