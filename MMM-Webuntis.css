@@ -30,7 +30,7 @@
   margin-bottom: 0.6rem;
 }
 
-.MMM-Webuntis > table:last-child {
+.MMM-Webuntis>table:last-child {
   margin-bottom: 0;
 }
 
@@ -42,7 +42,8 @@
 }
 
 .MMM-Webuntis td.wu-col-data {
-  width: auto;
+  /* Make data column greedy so it takes remaining table width */
+  width: 100%;
   word-break: break-word;
   white-space: pre-line;
 }
@@ -123,7 +124,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell > div {
+.MMM-Webuntis .grid-combined .grid-timecell>div {
   margin: 0;
   padding: 0;
   line-height: 1;

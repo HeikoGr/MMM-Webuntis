@@ -5,6 +5,7 @@
   const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
+  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => { };
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
@@ -19,13 +20,17 @@
       const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
       const nowHm = now.getHours() * 100 + now.getMinutes();
 
-      // Get exams options from nested or top-level config (backwards compatibility)
+      // Determine mode (module-level only) and student cell handling
+      const mode = studentConfig?.mode ?? ctx.config?.mode ?? 'compact';
+      const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+      if (mode === 'verbose') addTableHeader(table, studentCellTitle);
+
+      // Use module-level config only (node_helper applies per-student normalization)
       const rangeEnd = studentConfig?.examsDaysAhead ?? studentConfig?.exams_DaysAhead ?? ctx.config?.examsDaysAhead ?? 7;
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? ctx.config?.showExamSubject ?? true;
       const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? ctx.config?.showExamTeacher ?? true;
 
       log(
-        ctx,
         'debug',
         `[exams] render start | entries: ${exams.length} | range: ${rangeEnd}d | show: subject=${showSubject}, teacher=${showTeacher}`
       );
@@ -72,12 +77,12 @@
             nameCell += `<br/><span class="xsmall dimmed">${escapeHtml(exam.text)}</span>`;
           }
 
-          addTableRow(table, 'examRow', studentCellTitle, dateTimeCell, nameCell);
+          addTableRow(table, 'examRow', studentCell, dateTimeCell, nameCell);
         });
 
       if (addedRows === 0) {
         log('debug', `[exams] no entries to display`);
-        addTableRow(table, 'examRowEmpty', studentCellTitle, ctx.translate('no_exams'));
+        addTableRow(table, 'examRowEmpty', studentCell, ctx.translate('no_exams'));
       } else {
         log('debug', `[exams] render complete | rows: ${addedRows}`);
       }
