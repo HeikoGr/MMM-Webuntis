@@ -88,46 +88,34 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------
 
   _mmLog(level, student, message) {
-    try {
-      const moduleTag = '[MMM-Webuntis]';
-      const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
-      const formatted = `${moduleTag}${studentTag} ${message}`;
+    const moduleTag = '[MMM-Webuntis]';
+    const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
+    const formatted = `${moduleTag}${studentTag} ${message}`;
 
-      if (level === 'debug') {
-        if (this.config && this.config.logLevel === 'debug') {
-          if (typeof Log.debug === 'function') {
-            Log.debug(formatted);
-          } else {
-            Log.info(`${moduleTag}${studentTag} [DEBUG] ${message}`);
-          }
-        }
-        return;
+    if (level === 'debug') {
+      if (this.config && this.config.logLevel === 'debug') {
+        Log.debug(formatted);
       }
-
-      if (level === 'error') {
-        Log.error(formatted);
-        return;
-      }
-
-      if (level === 'warn') {
-        if (typeof Log.warn === 'function') {
-          Log.warn(formatted);
-        } else {
-          Log.info(formatted);
-        }
-        return;
-      }
-
-      // default/info
-      Log.info(formatted);
-    } catch (e) {
-      Log.error(`Error in logging: ${e && e.message ? e.message : e}`);
+      return;
     }
+
+    if (level === 'error') {
+      Log.error(formatted);
+      return;
+    }
+
+    if (level === 'warn') {
+      Log.warn(formatted);
+      return;
+    }
+
+    // default/info
+    Log.info(formatted);
   },
 
   _formatErr(err) {
     if (!err) return '(no error)';
-    return err && err.message ? err.message : String(err);
+    return String(err?.message || err);
   },
 
   /**
@@ -1416,12 +1404,7 @@ module.exports = NodeHelper.create({
 
   _storeCachedResponse(signature, payload) {
     if (!this._responseCache) this._responseCache = new Map();
-    try {
-      this._responseCache.set(signature, { ts: Date.now(), payload });
-    } catch (e) {
-      // if cache insert fails, don't block operation
-      this._mmLog('debug', null, `Cache store failed for ${signature}: ${e && e.message ? e.message : e}`);
-    }
+    this._responseCache.set(signature, { ts: Date.now(), payload });
   },
 
   /* Periodic cache cleanup ------------------------------------------------
@@ -1429,23 +1412,19 @@ module.exports = NodeHelper.create({
    * `_cacheCleanupIntervalMs` and respects `_cacheTTLMs` for entry expiration.
    */
   _cacheCleanup() {
-    try {
-      if (!this._responseCache || this._responseCache.size === 0) return;
-      const now = Date.now();
-      const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
-      for (const [sig, rec] of this._responseCache.entries()) {
-        if (!rec || !rec.ts) {
-          this._responseCache.delete(sig);
-          continue;
-        }
-        if (now - rec.ts > ttl) {
-          this._responseCache.delete(sig);
-        }
+    if (!this._responseCache || this._responseCache.size === 0) return;
+    const now = Date.now();
+    const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
+    for (const [sig, rec] of this._responseCache.entries()) {
+      if (!rec || !rec.ts) {
+        this._responseCache.delete(sig);
+        continue;
       }
-      this._mmLog('debug', null, `Cache cleanup completed (remaining=${this._responseCache.size})`);
-    } catch (err) {
-      this._mmLog('debug', null, `Cache cleanup error: ${this._formatErr(err)}`);
+      if (now - rec.ts > ttl) {
+        this._responseCache.delete(sig);
+      }
     }
+    this._mmLog('debug', null, `Cache cleanup completed (remaining=${this._responseCache.size})`);
   },
 
   _startCacheCleanup() {

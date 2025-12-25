@@ -36,24 +36,15 @@
     if (Number.isNaN(dt.getTime())) return '';
 
     // Use Intl.DateTimeFormat.formatToParts to obtain locale-aware, zero-padded parts
-    try {
-      const parts = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
-      const map = {};
-      for (const p of parts) {
-        if (p.type === 'day') map.dd = p.value;
-        if (p.type === 'month') map.mm = p.value;
-        if (p.type === 'year') map.yyyy = p.value;
-      }
-      map.yy = (map.yyyy || '').slice(-2);
-      return String(format).replace(/(yyyy|yy|dd|mm)/gi, (match) => map[match.toLowerCase()] || match);
-    } catch (e) {
-      // Fallback to simple implementation if Intl is not available
-      const day = String(dt.getDate()).padStart(2, '0');
-      const month = String(dt.getMonth() + 1).padStart(2, '0');
-      const year = String(dt.getFullYear());
-      const replacements = { dd: day, mm: month, yyyy: year, yy: year.slice(-2) };
-      return String(format).replace(/(yyyy|yy|dd|mm)/gi, (match) => replacements[match.toLowerCase()] || match);
+    const parts = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
+    const map = {};
+    for (const p of parts) {
+      if (p.type === 'day') map.dd = p.value;
+      if (p.type === 'month') map.mm = p.value;
+      if (p.type === 'year') map.yyyy = p.value;
     }
+    map.yy = (map.yyyy || '').slice(-2);
+    return String(format).replace(/(yyyy|yy|dd|mm)/gi, (match) => map[match.toLowerCase()] || match);
   }
 
   function formatTime(v) {
