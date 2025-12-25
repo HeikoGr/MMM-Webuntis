@@ -38,6 +38,7 @@
     // Use Intl.DateTimeFormat.formatToParts to obtain locale-aware, zero-padded parts
     // and optionally weekday names. Support tokens:
     //  - yyyy, yy, dd, mm
+    //  - d, m      -> non-padded day/month
     //  - EEE  -> localized short weekday (e.g. 'Do')
     //  - EEEE -> localized long weekday (e.g. 'Donnerstag')
     const parts = new Intl.DateTimeFormat(undefined, {
@@ -54,17 +55,20 @@
       if (p.type === 'weekday') map._weekdayShort = p.value;
     }
     map.yy = (map.yyyy || '').slice(-2);
+    // non-padded variants
+    map.d = String(Number(map.dd || '0'));
+    map.m = String(Number(map.mm || '0'));
 
     const weekdayShort = map._weekdayShort || new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt);
     const weekdayLong = new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(dt);
 
-    let out = String(format || '');
-    // Replace weekday tokens first (EEEE before EEE to avoid partial matches)
-    out = out.replace(/EEEE/g, weekdayLong);
-    out = out.replace(/EEE/g, weekdayShort);
-    // Replace date parts
-    out = out.replace(/(yyyy|yy|dd|mm)/gi, (match) => map[match.toLowerCase()] || match);
-    return out;
+    // Replace known tokens (longer tokens first to avoid partial matches)
+    return String(format || '').replace(/(EEEE|EEE|yyyy|yy|dd|d|mm|m)/gi, (match) => {
+      const key = String(match).toLowerCase();
+      if (key === 'eeee') return weekdayLong;
+      if (key === 'eee') return weekdayShort;
+      return map[key] ?? match;
+    });
   }
 
   function formatTime(v) {
