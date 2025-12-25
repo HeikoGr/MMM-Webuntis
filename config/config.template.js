@@ -57,18 +57,13 @@ let config = {
         absencesPastDays: 14,
         absencesFutureDays: 7,
 
-        // === DATE FORMATS ===
-        // Simple (backwards-compatible) keys
-        dateFormat: 'dd.MM.',
-        examDateFormat: 'dd.MM.',
-        homeworkDateFormat: 'dd.MM.',
         // Structured per-widget formats (preferred)
-        dateFormats: {
-          default: 'dd.MM.',
-          lessons: 'dd.MM.',
-          exams: 'dd.MM.',
-          homework: 'dd.MM.',
-          absences: 'dd.MM.',
+        dateFormats: { // (optional) - defaults to 'dd.mm.' if not set
+          default: 'dd.mm.', // set default
+          lessons: 'dd.mm.', // (optional) override for lessons
+          exams: 'dd.mm.', // (optional) override for exams
+          homework: 'dd.mm.', // (optional) override for homework
+          absences: 'dd.mm.', // (optional) override for absences
         },
         // Minimal example: override only absences format without specifying whole object
         // dateFormats: { absences: 'd.M.yyyy' },
