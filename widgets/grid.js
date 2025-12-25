@@ -96,8 +96,8 @@ function getNowLineState(ctx) {
   }
 
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
-    const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
-    const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
+    const daysToShow = ctx.config.daysToShow && ctx.config.daysToShow > 0 ? parseInt(ctx.config.daysToShow) : 1;
+    const pastDays = Math.max(0, parseInt(ctx.config.pastDaysToShow ?? 0));
     const startOffset = -pastDays;
     const totalDisplayDays = daysToShow;
 
@@ -385,7 +385,7 @@ function getNowLineState(ctx) {
         }
       }
 
-      const maxGridLessonsCfg = Number(studentConfig.maxGridLessons ?? ctx.config.maxGridLessons ?? 0);
+      const maxGridLessonsCfg = Number(ctx.config.maxGridLessons ?? 0);
       const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
       let lessonsToRender = dayLessons;
 

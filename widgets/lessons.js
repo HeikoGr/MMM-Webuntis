@@ -5,6 +5,7 @@
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
   const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
 
   // Helper: Check if a date falls within a holiday period
   function isDateInHoliday(dateYmd, holidays) {
@@ -54,13 +55,18 @@
     const dateCount = Object.keys(lessonsByDate).length;
     log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
 
-    // Determine display window (align with grid behavior)
+    // Determine display window (align with grid behavior) - studentConfig has priority
     const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
     const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
     const startOffset = -pastDays;
     const totalDisplayDays = daysToShow;
 
     log('debug', `[lessons] window: ${totalDisplayDays} future days + ${pastDays} past days`);
+
+    // Determine mode (student-config has priority)
+    const mode = studentConfig?.mode ?? ctx.config?.mode ?? 'compact';
+    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+    if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
     // Iterate display days in order and render either lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
@@ -81,13 +87,7 @@
           const holidayDateStr = dayDate
             .toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' })
             .toUpperCase();
-          addTableRow(
-            table,
-            'lessonRow holiday-notice',
-            studentCellTitle,
-            holidayDateStr,
-            `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`
-          );
+          addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
         continue;
@@ -108,8 +108,8 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
-          (!studentConfig.showRegularLessons && (entry.code || '') === '') ||
-          (isPast && (entry.code || '') !== 'error' && ctx.config.logLevel !== 'debug')
+          (!(studentConfig.showRegularLessons ?? ctx.config.showRegularLessons) && (entry.code || '') === '') ||
+          (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? ctx.config.logLevel) !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
           continue;
@@ -123,7 +123,7 @@
         const formattedStart = `${hh}:${mm}`;
         const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
         const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
-        if (studentConfig.showStartTime) {
+        if (studentConfig.showStartTime ?? ctx.config.showStartTime) {
           timeStr += formattedStart;
         } else if (startLabel !== undefined) {
           timeStr += `${startLabel}.`;
@@ -134,17 +134,18 @@
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = escapeHtml(studentConfig.useShortSubject ? subjShort : subjLong);
+        let subjectStr = escapeHtml((studentConfig.useShortSubject ?? ctx.config.useShortSubject) ? subjShort : subjLong);
 
-        if (studentConfig.showTeacherMode === 'initial') {
+        const teacherMode = studentConfig.showTeacherMode ?? ctx.config.showTeacherMode;
+        if (teacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
           if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherInitial)})`;
-        } else if (studentConfig.showTeacherMode === 'full') {
+        } else if (teacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
           if (teacherFull !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherFull)})`;
         }
 
-        if (studentConfig.showSubstitutionText && (entry.substText || '') !== '') {
+        if ((studentConfig.showSubstitutionText ?? ctx.config.showSubstitutionText) && (entry.substText || '') !== '') {
           subjectStr += `<br/><span class='xsmall dimmed'>${escapeHtml(entry.substText)}</span>`;
         }
 
@@ -166,13 +167,13 @@
           addClass = 'substitution';
         }
 
-        addTableRow(table, 'lessonRow', studentCellTitle, timeStr, subjectStr, addClass);
+        addTableRow(table, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
       }
     }
 
     if (addedRows === 0) {
       log('debug', `[lessons] no entries to display`);
-      addTableRow(table, 'lessonRowEmpty', studentCellTitle, ctx.translate('nothing'));
+      addTableRow(table, 'lessonRowEmpty', studentCell, ctx.translate('nothing'));
       return 1;
     }
 

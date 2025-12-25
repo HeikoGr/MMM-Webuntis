@@ -17,7 +17,7 @@
 
     log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
-    const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
+    const dateFormat = studentConfig?.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
 
     const sorted = homeworks
       .slice()

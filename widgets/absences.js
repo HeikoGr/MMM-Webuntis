@@ -17,18 +17,27 @@
 
     log('debug', `[absences] render start | entries: ${absences.length}`);
 
-    // Get absences options from nested config
-    const maxItems = studentConfig?.absences?.maxItems ?? null;
-    const showDate = studentConfig?.absences?.showDate ?? true;
-    const showExcused = studentConfig?.absences?.showExcused ?? true;
-    const showReason = studentConfig?.absences?.showReason ?? true;
-
+    // Prefer studentConfig (node_helper normalizes per-student); fall back to module config
+    const maxItems = studentConfig?.absences?.maxItems ?? ctx.config?.absences?.maxItems ?? null;
+    const showDate = studentConfig?.absences?.showDate ?? ctx.config?.absences?.showDate ?? true;
+    const showExcused = studentConfig?.absences?.showExcused ?? ctx.config?.absences?.showExcused ?? true;
+    const showReason = studentConfig?.absences?.showReason ?? ctx.config?.absences?.showReason ?? true;
     const now = new Date();
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
-    // Absence range options
-    const rangeStart = studentConfig?.absences?.rangeStart ?? 30;
-    const rangeEnd = studentConfig?.absences?.rangeEnd ?? 7;
+    // Absence range options (student-level preference)
+    const rangeStart =
+      studentConfig?.absencesPastDays ??
+      studentConfig?.absences?.rangeStart ??
+      ctx.config?.absencesPastDays ??
+      ctx.config?.absences?.rangeStart ??
+      30;
+    const rangeEnd =
+      studentConfig?.absencesFutureDays ??
+      studentConfig?.absences?.rangeEnd ??
+      ctx.config?.absencesFutureDays ??
+      ctx.config?.absences?.rangeEnd ??
+      7;
 
     log(
       ctx,

@@ -198,12 +198,13 @@ Module.register('MMM-Webuntis', {
     return table;
   },
 
-  _shouldRenderStudentHeader() {
-    return this.config.mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
+  _shouldRenderStudentHeader(studentConfig) {
+    const mode = studentConfig?.mode ?? this.config.mode;
+    return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
   },
 
-  _prepareStudentCellTitle(table, studentTitle) {
-    if (this._shouldRenderStudentHeader()) {
+  _prepareStudentCellTitle(table, studentTitle, studentConfig) {
+    if (this._shouldRenderStudentHeader(studentConfig)) {
       const helper = this._getDomHelper();
       if (helper && typeof helper.addTableHeader === 'function') {
         helper.addTableHeader(table, studentTitle);
@@ -229,17 +230,20 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderWidgetTableRows(studentTitles, renderRow) {
-    const table = this._createWidgetTable();
-    let tableHasRows = false;
+    // Create a fragment that will contain one table per student (if they have rows).
+    const frag = document.createDocumentFragment();
 
     for (const studentTitle of studentTitles) {
       const studentConfig = this.configByStudent?.[studentTitle] || this.config;
-      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle);
+      const table = this._createWidgetTable();
+      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle, studentConfig);
       const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
-      if (count > 0) tableHasRows = true;
+      if (count > 0) {
+        frag.appendChild(table);
+      }
     }
 
-    return tableHasRows ? table : null;
+    return frag.hasChildNodes() ? frag : null;
   },
 
   _computeTodayYmdValue() {
