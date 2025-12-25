@@ -36,9 +36,18 @@ Module.register('MMM-Webuntis', {
     absencesFutureDays: 7, // future days to include when fetching absences
 
     // === DATE FORMAT OPTIONS ===
+    // Backwards-compatible single-value keys remain, but prefer using `dateFormats` object
     dateFormat: 'dd.MM.', // format for timetable/lessons (supports dd, mm, yyyy, yy, and single d, m variants)
     examDateFormat: 'dd.MM.', // format for exam widget dates
     homeworkDateFormat: 'dd.MM.', // format for homework widget dates
+    // Structured date formats (per-widget). Widgets will prefer values from `dateFormats`.
+    dateFormats: {
+      default: 'dd.MM.',
+      lessons: 'dd.MM.',
+      exams: 'dd.MM.',
+      homework: 'dd.MM.',
+      absences: 'dd.MM.',
+    },
 
     // === TIMETABLE SOURCE OPTIONS ===
     useClassTimetable: false, // use class timetable instead of student timetable

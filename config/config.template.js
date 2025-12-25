@@ -58,9 +58,20 @@ let config = {
         absencesFutureDays: 7,
 
         // === DATE FORMATS ===
+        // Simple (backwards-compatible) keys
         dateFormat: 'dd.MM.',
         examDateFormat: 'dd.MM.',
         homeworkDateFormat: 'dd.MM.',
+        // Structured per-widget formats (preferred)
+        dateFormats: {
+          default: 'dd.MM.',
+          lessons: 'dd.MM.',
+          exams: 'dd.MM.',
+          homework: 'dd.MM.',
+          absences: 'dd.MM.',
+        },
+        // Minimal example: override only absences format without specifying whole object
+        // dateFormats: { absences: 'd.M.yyyy' },
 
         // === TIMETABLE SOURCE ===
         useClassTimetable: false,

@@ -36,15 +36,35 @@
     if (Number.isNaN(dt.getTime())) return '';
 
     // Use Intl.DateTimeFormat.formatToParts to obtain locale-aware, zero-padded parts
-    const parts = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(dt);
+    // and optionally weekday names. Support tokens:
+    //  - yyyy, yy, dd, mm
+    //  - EEE  -> localized short weekday (e.g. 'Do')
+    //  - EEEE -> localized long weekday (e.g. 'Donnerstag')
+    const parts = new Intl.DateTimeFormat(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+    }).formatToParts(dt);
     const map = {};
     for (const p of parts) {
       if (p.type === 'day') map.dd = p.value;
       if (p.type === 'month') map.mm = p.value;
       if (p.type === 'year') map.yyyy = p.value;
+      if (p.type === 'weekday') map._weekdayShort = p.value;
     }
     map.yy = (map.yyyy || '').slice(-2);
-    return String(format).replace(/(yyyy|yy|dd|mm)/gi, (match) => map[match.toLowerCase()] || match);
+
+    const weekdayShort = map._weekdayShort || new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt);
+    const weekdayLong = new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(dt);
+
+    let out = String(format || '');
+    // Replace weekday tokens first (EEEE before EEE to avoid partial matches)
+    out = out.replace(/EEEE/g, weekdayLong);
+    out = out.replace(/EEE/g, weekdayShort);
+    // Replace date parts
+    out = out.replace(/(yyyy|yy|dd|mm)/gi, (match) => map[match.toLowerCase()] || match);
+    return out;
   }
 
   function formatTime(v) {
