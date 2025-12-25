@@ -91,7 +91,11 @@
 
       const dateRaw = ab?.date;
       const dateFormat =
-        studentConfig?.dateFormats?.absences ?? ctx.config?.dateFormats?.absences ?? ctx.config?.dateFormats?.default ?? 'dd.MM.yyyy';
+        studentConfig?.dateFormats?.absences ??
+        ctx.config?.dateFormats?.absences ??
+        ctx.config?.dateFormats?.default ??
+        ctx.config?.dateFormat ??
+        'dd.MM.';
       const dateStr = dateRaw ? (util?.formatDate ? util.formatDate(dateRaw, dateFormat) : util.formatYmd(dateRaw)) : '';
       const st = util.formatTime(ab?.startTime);
       const et = util.formatTime(ab?.endTime);

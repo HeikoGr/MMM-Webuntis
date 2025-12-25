@@ -255,6 +255,13 @@ function loadModuleDefaults() {
       dateFormat: 'dd.MM.',
       examDateFormat: 'dd.MM.',
       homeworkDateFormat: 'dd.MM.',
+      dateFormats: {
+        default: 'dd.MM.',
+        lessons: 'dd.MM.',
+        exams: 'dd.MM.',
+        homework: 'dd.MM.',
+        absences: 'dd.MM.',
+      },
       useClassTimetable: false,
       dumpBackendPayloads: false,
       students: [],

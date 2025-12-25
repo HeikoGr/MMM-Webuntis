@@ -166,6 +166,23 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | `examDateFormat` | string | `'dd.MM.'` | Format for exam widget dates. |
 | `homeworkDateFormat` | string | `'dd.MM.'` | Format for homework widget dates. |
 
+Additionally, the module supports a structured `dateFormats` object to configure per-widget formats in one place. Widgets will prefer values from `dateFormats` when present and fall back to the legacy single-value keys.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dateFormats.default` | string | `'dd.MM.'` | Default date format used by widgets when no widget-specific format is set. |
+| `dateFormats.lessons` | string | `'dd.MM.'` | Date format for lessons/timetable. |
+| `dateFormats.exams` | string | `'dd.MM.'` | Date format for exams. |
+| `dateFormats.homework` | string | `'dd.MM.'` | Date format for homework. |
+| `dateFormats.absences` | string | `'dd.MM.'` | Date format for absences widget. |
+
+Example - override only the absences format (minimal):
+
+```javascript
+// in your module config
+dateFormats: { absences: 'd.M.yyyy' },
+```
+
 ### Timetable Source
 
 | Option | Type | Default | Description |

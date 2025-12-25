@@ -49,6 +49,41 @@ Send to Frontend: { date: 20251217, startTime: 800, ... }
 
 ### Frontend (widgets)
 
+
+## DATE FORMATS: `dateFormats.absences`
+
+A new configuration key `dateFormats` was introduced to allow per-widget date format configuration in one place. The Absences widget now prefers the following lookup order for its displayed date format:
+
+1. `studentConfig.dateFormats.absences` (per-student override)
+2. `config.dateFormats.absences` (module-level per-widget format)
+3. `config.dateFormats.default` (module-level default)
+4. Legacy `config.dateFormat` (backwards compatibility)
+5. Fallback `'dd.MM.'`
+
+Example:
+
+ - Per-student override:
+
+ ```js
+ // inside a student entry
+ student: {
+   title: 'Alice',
+   dateFormats: { absences: 'd.M.yyyy' }
+ }
+ ```
+
+ - Module-level minimal example (only absences overridden):
+
+ ```js
+ // in module config
+ dateFormats: {
+   absences: 'd.M.yyyy'
+ }
+ ```
+
+This keeps backwards compatibility with existing single-value options such as `dateFormat`, while providing a clear and centralized way to control formats per widget.
+
+
 **Data Flow:**
 ```
 Backend sends: { date: 20251217, startTime: 800, ... }
@@ -452,3 +487,5 @@ The string-based (numeric YYYYMMDD + HHMM) strategy is **optimal** for MMM-Webun
 - [node_helper.js:1330-1475](../../node_helper.js#L1330-L1475) - Normalization functions
 - [widgets/util.js](../../widgets/util.js) - formatDate implementation with Intl.DateTimeFormat
 - [widgets/lessons.js:11-17](../../widgets/lessons.js#L11-L17) - Date comparison examples
+
+
