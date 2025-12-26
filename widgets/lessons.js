@@ -68,6 +68,14 @@
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
+    // Determine lessons date format (student -> widget -> default -> legacy -> fallback)
+    const lessonsDateFormat =
+      studentConfig?.dateFormats?.lessons ??
+      ctx.config?.dateFormats?.lessons ??
+      ctx.config?.dateFormats?.default ??
+      ctx.config?.dateFormat ??
+      'EEE';
+
     // Iterate display days in order and render either lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
@@ -84,9 +92,7 @@
         const holiday = isDateInHoliday(dateYmd, holidays);
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
-          const holidayDateStr = dayDate
-            .toLocaleDateString(ctx.config.language, { weekday: 'short', day: '2-digit', month: '2-digit' })
-            .toUpperCase();
+          const holidayDateStr = util.formatDate(dayDate, /EEE/i.test(lessonsDateFormat) ? lessonsDateFormat : 'EEE dd.MM.');
           addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
@@ -117,7 +123,11 @@
 
         addedRows++;
 
-        let timeStr = `${timeForDay.toLocaleDateString(ctx.config.language, { weekday: 'short' }).toUpperCase()}&nbsp;`;
+        const weekdayMode =
+          studentConfig?.studentslessons?.weekday ?? studentConfig?.weekday ?? ctx.config?.lessonsWeekday ?? ctx.config?.weekday ?? 'short';
+        const weekdayToken = weekdayMode === 'long' ? 'EEEE' : 'EEE';
+        const weekdayName = util.formatDate(timeForDay, weekdayToken);
+        let timeStr = `${weekdayName}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;

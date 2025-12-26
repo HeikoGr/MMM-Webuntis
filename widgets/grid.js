@@ -129,7 +129,14 @@ function getNowLineState(ctx) {
       const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
-      dayLabel.innerText = `${dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' })}`;
+      // Determine date format from student -> global
+      const gridDateFormat = studentConfig?.dateFormats?.grid ?? ctx.config?.dateFormats?.grid;
+      let headerFormat = gridDateFormat;
+
+      const dayLabelText = util?.formatDate
+        ? util.formatDate(dayDate, headerFormat)
+        : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
+      dayLabel.innerText = dayLabelText;
       const startCol = 2 + d * 2;
       const endCol = startCol + 2;
       dayLabel.style.gridColumn = `${startCol} / ${endCol}`;

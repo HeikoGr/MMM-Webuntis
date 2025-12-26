@@ -325,6 +325,12 @@
   color: #2e7d32;
 }
 
+/* Presentation: uppercase day labels and meta/date columns */
+.MMM-Webuntis .grid-daylabel,
+.MMM-Webuntis td.wu-col-meta {
+  text-transform: uppercase;
+}
+
 .MMM-Webuntis .absence-unexcused {
   color: #b71c1c;
   font-weight: 600;
@@ -337,4 +343,14 @@
   border-left: 3px solid #ff9800;
   background-color: rgba(255, 152, 0, 0.1);
   font-style: italic;
+}
+
+.MMM-Webuntis .mmm-webuntis-warning {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.6rem;
+  border-left: 3px solid #ff9800;
+  background-color: rgba(255, 152, 0, 0.06);
+  color: #ff9800;
+  font-weight: 600;
 }

@@ -23,14 +23,18 @@
 
     // Support numeric ymd (20251214) or ISO date strings (2025-12-14 / 2025-12-14T00:00:00Z)
     let dt;
-    const n = Number(ymd);
-    if (Number.isFinite(n) && n > 0) {
-      const day = n % 100;
-      const month = Math.floor(n / 100) % 100;
-      const year = Math.floor(n / 10000);
-      dt = new Date(year, month - 1, day);
+    if (ymd instanceof Date) {
+      dt = ymd;
     } else {
-      dt = new Date(String(ymd));
+      const n = Number(ymd);
+      if (Number.isFinite(n) && n > 0) {
+        const day = n % 100;
+        const month = Math.floor(n / 100) % 100;
+        const year = Math.floor(n / 10000);
+        dt = new Date(year, month - 1, day);
+      } else {
+        dt = new Date(String(ymd));
+      }
     }
 
     if (Number.isNaN(dt.getTime())) return '';
@@ -145,11 +149,18 @@
     return t;
   }
 
+  // NOTE: `formatDate` now accepts Date objects directly. No separate
+  // `formatDayHeader`/`formatDayLabel` helpers are required.
+
   root.util = {
     formatYmd,
     formatTime,
     toMinutes,
     formatDate,
+    // backward compatibility: keep alias name for callers that may still use it
+    formatHolidayDate: function (dateInput, format) {
+      return formatDate(dateInput, format);
+    },
     escapeHtml,
     log,
     _log: log, // backward compatibility alias

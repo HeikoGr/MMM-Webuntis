@@ -36,14 +36,11 @@ Module.register('MMM-Webuntis', {
     absencesFutureDays: 7, // future days to include when fetching absences
 
     // === DATE FORMAT OPTIONS ===
-    // Backwards-compatible single-value keys remain, but prefer using `dateFormats` object
-    dateFormat: 'dd.MM.', // format for timetable/lessons (supports dd, mm, yyyy, yy, and single d, m variants)
-    examDateFormat: 'dd.MM.', // format for exam widget dates
-    homeworkDateFormat: 'dd.MM.', // format for homework widget dates
-    // Structured date formats (per-widget). Widgets will prefer values from `dateFormats`.
+    // Structured date formats (per-widget).
     dateFormats: {
       default: 'dd.MM.',
-      lessons: 'dd.MM.',
+      lessons: 'EEE', // prefix weekday for lessons
+      grid: 'EEE dd.MM.',
       exams: 'dd.MM.',
       homework: 'dd.MM.',
       absences: 'dd.MM.',
@@ -382,6 +379,16 @@ Module.register('MMM-Webuntis', {
     return out;
   },
 
+  _buildSendConfig() {
+    const defNoStudents = { ...(this.config || {}) };
+    delete defNoStudents.students;
+
+    const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
+    const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
+
+    return { ...this.config, students: mergedStudents, id: this.identifier };
+  },
+
   _toMinutes(t) {
     const util = this._getWidgetApi()?.util;
     if (util && typeof util.toMinutes === 'function') {
@@ -449,7 +456,7 @@ Module.register('MMM-Webuntis', {
   },
 
   start() {
-    this.config = this._normalizeLegacyConfig(this.config, this.defaults);
+    // Normalization moved to backend (node_helper); keep frontend config untouched
 
     // Store logLevel in global config so widgets can access it independently
     if (typeof window !== 'undefined') {
@@ -477,6 +484,7 @@ Module.register('MMM-Webuntis', {
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.preprocessedByStudent = {};
+    this.moduleWarningsSet = new Set();
     this._domUpdateTimer = null;
 
     this._paused = false;
@@ -485,8 +493,10 @@ Module.register('MMM-Webuntis', {
     const now = new Date();
     this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
-    this.config.id = this.identifier;
-    this.sendSocketNotification('FETCH_DATA', this.config);
+    // Send a sanitized copy to the backend where each student inherits module
+    // defaults and legacy keys have been mapped. The backend (node_helper)
+    // expects normalized student objects in a closed system.
+    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
 
     this._log('info', 'MMM-Webuntis started with config:', this.config);
   },
@@ -509,7 +519,7 @@ Module.register('MMM-Webuntis', {
     if (typeof this.config?.fetchIntervalMs !== 'number') return;
 
     this._fetchTimer = setInterval(() => {
-      this.sendSocketNotification('FETCH_DATA', this.config);
+      this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
     }, this.config.fetchIntervalMs);
   },
 
@@ -542,7 +552,7 @@ Module.register('MMM-Webuntis', {
 
   resume() {
     this._paused = false;
-    this.sendSocketNotification('FETCH_DATA', this.config);
+    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
     this._startFetchTimer();
     this._startNowLineUpdater();
   },
@@ -556,6 +566,22 @@ Module.register('MMM-Webuntis', {
       'debug',
       `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
     );
+
+    // Render any module-level warnings once, above all widgets
+    if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
+      const warnContainer = document.createDocumentFragment();
+      for (const w of Array.from(this.moduleWarningsSet)) {
+        const warnDiv = document.createElement('div');
+        warnDiv.className = 'mmm-webuntis-warning small bright';
+        try {
+          warnDiv.textContent = `⚠️ ${w}`;
+        } catch {
+          warnDiv.textContent = '⚠️ Configuration warning';
+        }
+        warnContainer.appendChild(warnDiv);
+      }
+      wrapper.appendChild(warnContainer);
+    }
 
     if (sortedStudentTitles.length === 0) {
       return wrapper;
@@ -662,6 +688,20 @@ Module.register('MMM-Webuntis', {
     const title = payload.title;
     const cfg = payload.config || {};
     this.configByStudent[title] = cfg;
+    // Collect module-level warnings (deduped) and log newly seen ones to console
+    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+      payload.warnings.forEach((w) => {
+        if (!this.moduleWarningsSet.has(w)) {
+          this.moduleWarningsSet.add(w);
+          try {
+            console.warn('MMM-Webuntis warning:', w);
+          } catch {
+            /* ignore console errors */
+          }
+        }
+      });
+    }
 
     const timeUnitsList = payload.timeUnits || [];
     let timeUnits = [];
