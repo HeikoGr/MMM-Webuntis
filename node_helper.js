@@ -671,27 +671,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                      {
-                        name: entry.position2[0].current.shortName,
-                        longname: entry.position2[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
                   : [],
                 te: entry.position1
                   ? [
-                      {
-                        name: entry.position1[0].current.shortName,
-                        longname: entry.position1[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
                   : [],
                 ro: entry.position3
                   ? [
-                      {
-                        name: entry.position3[0].current.shortName,
-                        longname: entry.position3[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -2239,12 +2239,6 @@ module.exports = NodeHelper.create({
       if (timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
         const emptyWarn = this._checkEmptyDataWarning(timetable, 'lessons', student.title, true);
         if (emptyWarn) warnings.push(emptyWarn);
-      }
-
-      // ===== ADD PARENT ACCOUNT LIMITATIONS WARNING =====
-      const isParentAccount = !Boolean(student.qrcode) && Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
-      if (isParentAccount && wantsAbsencesWidget) {
-        warnings.push(`Student "${student.title}": Absences cannot be fetched via parent account. Absences require direct student login.`);
       }
 
       const uniqWarnings = Array.from(new Set(warnings));
