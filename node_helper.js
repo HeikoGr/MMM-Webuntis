@@ -39,6 +39,55 @@ module.exports = NodeHelper.create({
     this._classIdCache = new Map(); // cacheKey -> classId
   },
 
+  _normalizeLegacyConfig(cfg) {
+    if (!cfg || typeof cfg !== 'object') return cfg;
+    const out = { ...cfg };
+
+    const legacyUsed = [];
+    const mapLegacy = (obj, legacyKey, newKey, transform, context = 'config') => {
+      if (!obj || typeof obj !== 'object') return;
+      const hasLegacy = obj[legacyKey] !== undefined && obj[legacyKey] !== null && obj[legacyKey] !== '';
+      if (!hasLegacy) return;
+      legacyUsed.push(`${context}.${legacyKey}`);
+      const legacyVal = typeof transform === 'function' ? transform(obj[legacyKey]) : obj[legacyKey];
+      obj[newKey] = legacyVal;
+    };
+
+    mapLegacy(out, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
+    mapLegacy(out, 'days', 'daysToShow', (v) => Number(v), 'config');
+    mapLegacy(out, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
+    mapLegacy(out, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
+
+    const dbg = out.debug ?? out.enableDebug;
+    if (typeof dbg === 'boolean') {
+      legacyUsed.push('config.debug|enableDebug');
+      out.logLevel = dbg ? 'debug' : 'none';
+    }
+
+    if (out.displaymode !== undefined && out.displaymode !== null && out.displaymode !== '') {
+      legacyUsed.push('config.displaymode');
+      out.displayMode = String(out.displaymode).toLowerCase();
+    }
+    if (typeof out.displayMode === 'string') out.displayMode = out.displayMode.toLowerCase();
+
+    if (legacyUsed.length > 0) {
+      try {
+        const uniq = Array.from(new Set(legacyUsed));
+        const msg = `Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
+        if (typeof Log !== 'undefined' && Log && typeof Log.warn === 'function') {
+          Log.warn('[MMM-Webuntis] ' + msg);
+        } else {
+          console.warn('[MMM-Webuntis] ' + msg);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    this._mmLog('debug', null, 'Normalized legacy config keys (node helper)');
+    return out;
+  },
+
   /**
    * Build REST targets for a student depending on login mode (QR vs. parent account).
    * Returns an ordered array of targets; QR login (if present) comes first, then parent.
@@ -668,7 +717,13 @@ module.exports = NodeHelper.create({
     const endDate = rangeEnd.toISOString().split('T')[0];
     this._mmLog('debug', null, `Fetching exams via REST API (${startDate} to ${endDate})`);
     try {
-      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+        school,
+        username,
+        password,
+        server,
+        options
+      );
 
       const formatDateYYYYMMDD = (date) => {
         const year = date.getFullYear();
@@ -683,6 +738,8 @@ module.exports = NodeHelper.create({
         Cookie: cookieString,
         Accept: 'application/json',
       };
+      if (tenantId) headers['Tenant-Id'] = String(tenantId);
+      if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
       if (token) headers.Authorization = `Bearer ${token}`;
 
       const resp = await axios.get(`https://${server}/WebUntis/api/exams`, {
@@ -879,7 +936,14 @@ module.exports = NodeHelper.create({
       });
 
       if (resp.status !== 200) {
-        throw new Error(`REST API returned status ${resp.status} for absences`);
+        let bodyStr = '';
+        try {
+          bodyStr = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+        } catch {
+          bodyStr = String(resp.data);
+        }
+        this._mmLog('error', null, `getAbsencesViaRest: REST ${resp.status} response body: ${bodyStr}`);
+        throw new Error(`REST API returned status ${resp.status} for absences: ${bodyStr}`);
       }
 
       // Transform REST response to expected format
@@ -1012,13 +1076,22 @@ module.exports = NodeHelper.create({
     try {
       if (!moduleConfig || typeof moduleConfig !== 'object') return;
 
-      const configuredStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
+      const configuredStudentsRaw = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
+      // Treat students array as "not configured" when it contains no real credentials
+      const configuredStudents = configuredStudentsRaw.filter((s) => {
+        if (!s || typeof s !== 'object') return false;
+        const hasStudentId = s.studentId !== undefined && s.studentId !== null && String(s.studentId).trim() !== '';
+        const hasQr = Boolean(s.qrcode);
+        const hasCreds = Boolean(s.username && s.password);
+        return hasStudentId || hasQr || hasCreds;
+      });
+      let autoStudents = null;
 
       const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
       if (!hasParentCreds) return;
 
-      // Only auto-discover if NO students are configured at all
-      // If user explicitly configured ANY students, respect that choice
+      // Only auto-discover if NO students with real credentials are configured at all
+      // If user explicitly configured ANY real students, respect that choice
       if (configuredStudents.length > 0) {
         // However, if any student is missing a title but has a studentId,
         // try to fetch auto-discovered data to fill in the missing titles
@@ -1030,13 +1103,17 @@ module.exports = NodeHelper.create({
             moduleConfig.password,
             server
           );
-          const autoStudents = this._deriveStudentsFromAppData(appData);
+          autoStudents = this._deriveStudentsFromAppData(appData);
 
           if (autoStudents && autoStudents.length > 0) {
-            // For each configured student with studentId but no title,
-            // fill in the auto-discovered name as fallback
+            // For each configured student try to improve the configured data:
+            // - If studentId exists but title is missing, fill title from auto-discovered list
+            // - If title exists but no studentId, compute candidate ids (prefer title matches)
             configuredStudents.forEach((configStudent) => {
-              if (configStudent && configStudent.studentId && !configStudent.title) {
+              if (!configStudent || typeof configStudent !== 'object') return;
+
+              // Fill missing title when we have an id
+              if (configStudent.studentId && !configStudent.title) {
                 const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
                 if (autoStudent) {
                   configStudent.title = autoStudent.title;
@@ -1045,30 +1122,75 @@ module.exports = NodeHelper.create({
                     configStudent,
                     `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
                   );
+                  return;
                 }
+              }
+
+              // If title is present but no studentId, suggest candidate ids based on title match
+              if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
+                const titleLower = String(configStudent.title).toLowerCase();
+                const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
+                const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
+                const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
+                configStudent.__warnings = configStudent.__warnings || [];
+                configStudent.__warnings.push(msg);
+                this._mmLog('warn', configStudent, msg);
+                return;
               }
             });
           }
         } catch (err) {
           this._mmLog('warn', null, `Could not fetch auto-discovered names for title fallback: ${this._formatErr(err)}`);
         }
+        // Additionally validate configured studentIds against discovered students
+        try {
+          if (autoStudents && autoStudents.length > 0) {
+            configuredStudents.forEach((configStudent) => {
+              if (!configStudent || !configStudent.studentId) return;
+              const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
+              if (!match) {
+                // Prefer candidates that match by title; otherwise include all ids
+                const candidateMatches = configStudent.title
+                  ? autoStudents.filter((a) => (a.title || '').toLowerCase().includes(String(configStudent.title).toLowerCase()))
+                  : [];
+                const candidateIds = (candidateMatches.length > 0 ? candidateMatches : autoStudents).map((s) => Number(s.studentId));
+                const msg = `Configured studentId ${configStudent.studentId} for title "${configStudent.title || ''}" was not found in auto-discovered students. Possible studentIds: ${candidateIds.join(', ')}.`;
+                configStudent.__warnings = configStudent.__warnings || [];
+                configStudent.__warnings.push(msg);
+                this._mmLog('warn', configStudent, msg);
+              }
+            });
+          }
+        } catch {
+          // ignore validation errors
+        }
+
         return;
       }
 
       const server = moduleConfig.server || 'webuntis.com';
       const { appData } = await this._getRestAuthTokenAndCookies(moduleConfig.school, moduleConfig.username, moduleConfig.password, server);
-      const autoStudents = this._deriveStudentsFromAppData(appData);
+      autoStudents = this._deriveStudentsFromAppData(appData);
 
       if (!autoStudents || autoStudents.length === 0) {
         this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
         return;
       }
 
-      moduleConfig.students = autoStudents;
+      // Merge module-level defaults into each discovered student so downstream
+      // fetch logic has the expected fields (daysToShow, examsDaysAhead, etc.)
+      const defNoStudents = { ...(moduleConfig || {}) };
+      delete defNoStudents.students;
+      const normalizedAutoStudents = autoStudents.map((s) => {
+        const merged = { ...defNoStudents, ...(s || {}) };
+        return this._normalizeLegacyConfig(merged, this.defaults);
+      });
+
+      moduleConfig.students = normalizedAutoStudents;
 
       // Log all discovered students with their IDs in a prominent way
-      const studentList = autoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-      this._mmLog('info', null, `✓ Auto-discovered ${autoStudents.length} student(s):\n  ${studentList}`);
+      const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+      this._mmLog('info', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
     } catch (err) {
       this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
     }
@@ -1533,32 +1655,34 @@ module.exports = NodeHelper.create({
         // Auto-discover students from app/data when parent credentials are provided but students[] is missing
         await this._ensureStudentsFromAppData(this.config);
 
+        // If after normalization there are still no students configured, attempt to build
+        // the students array internally from app/data so the rest of the flow can proceed.
+        if (!Array.isArray(this.config.students) || this.config.students.length === 0) {
+          try {
+            const server = this.config.server || 'webuntis.com';
+            const creds = { username: this.config.username, password: this.config.password, school: this.config.school };
+            if (creds.username && creds.password && creds.school) {
+              const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
+              const autoStudents = this._deriveStudentsFromAppData(appData);
+              if (autoStudents && autoStudents.length > 0) {
+                this.config.students = autoStudents;
+                const studentList = autoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+                this._mmLog('info', null, `Auto-built students array from app/data: ${autoStudents.length} students:\n  ${studentList}`);
+              }
+            }
+          } catch (e) {
+            this._mmLog('debug', null, `Auto-build students from app/data failed: ${this._formatErr(e)}`);
+          }
+        }
+
         // Group students by credential so we can reuse the same untis session
         const identifier = this.config.id;
         const groups = new Map();
 
-        const properties = [
-          'mode',
-          'daysToShow',
-          'pastDaysToShow',
-          'showStartTime',
-          'useClassTimetable',
-          'useShortSubject',
-          'examsDaysAhead',
-          'showExamSubject',
-          'showExamTeacher',
-          'logLevel',
-        ];
-
-        // normalize student configs and group
-        for (const student of this.config.students) {
-          properties.forEach((prop) => {
-            student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
-          });
-          if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
-            student.daysToShow = 1;
-          }
-
+        // Group students by credential. Student configs are expected to be
+        // normalized by the frontend before sending FETCH_DATA
+        const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
+        for (const student of studentsList) {
           const credKey = this._getCredentialKey(student, this.config);
           if (!groups.has(credKey)) groups.set(credKey, []);
           groups.get(credKey).push(student);
@@ -1912,7 +2036,15 @@ module.exports = NodeHelper.create({
       absencesUnavailable: false,
     };
     try {
-      const forSend = { ...payload, id: identifier };
+      // Collect any warnings attached to the student and expose them at the
+      // top-level payload so the frontend can display module-level warnings
+      // independent of per-student sections. Dedupe messages so each is shown once.
+      let warnings = [];
+      if (payload && payload.config && Array.isArray(payload.config.__warnings)) {
+        warnings = warnings.concat(payload.config.__warnings);
+      }
+      const uniqWarnings = Array.from(new Set(warnings));
+      const forSend = { ...payload, id: identifier, warnings: uniqWarnings };
 
       // Optional: write debug dumps of the payload delivered to the frontend.
       // Enable by setting `dumpBackendPayloads: true` in the module config.
@@ -1926,8 +2058,8 @@ module.exports = NodeHelper.create({
           fs.writeFileSync(target, JSON.stringify(forSend, null, 2), 'utf8');
           this._mmLog('debug', student, `Wrote debug payload to ${path.join('debug_dumps', fname)}`, 'debug');
         }
-      } catch (e) {
-        this._mmLog('error', student, `Failed to write debug payload: ${e && e.message ? e.message : e}`, 'debug');
+      } catch (err) {
+        this._mmLog('error', student, `Failed to write debug payload: ${err && err.message ? err.message : err}`, 'debug');
       }
 
       this._mmLog(

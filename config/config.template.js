@@ -58,9 +58,12 @@ let config = {
         absencesFutureDays: 7,
 
         // Structured per-widget formats (preferred)
-        dateFormats: { // (optional) - defaults to 'dd.mm.' if not set
+        dateFormats: {
+          // (optional) - defaults to 'dd.mm.' if not set
           default: 'dd.mm.', // set default
           lessons: 'dd.mm.', // (optional) override for lessons
+          // lessonsWeekday: 'short', // optional: 'short' or 'long' for weekday display before time
+          grid: 'dd.mm.', // (optional) override for grid
           exams: 'dd.mm.', // (optional) override for exams
           homework: 'dd.mm.', // (optional) override for homework
           absences: 'dd.mm.', // (optional) override for absences
