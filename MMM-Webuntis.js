@@ -3,7 +3,7 @@ Module.register('MMM-Webuntis', {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
     fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
-    logLevel: 'debug', // One of: "error", "warn", "info", "debug". Default is "info".
+    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
@@ -20,6 +20,8 @@ Module.register('MMM-Webuntis', {
     showStartTime: false, // show start time instead of lesson number
     showRegularLessons: false, // show regular lessons (not only substitutions/cancellations)
     useShortSubject: false, // use short subject names where available
+    showTeacherMode: 'full', // teacher display: 'full', 'initial', or null/falsy for none
+    showSubstitutionText: false, // show substitution text/notes for changed lessons
 
     // === EXAMS WIDGET OPTIONS ===
     examsDaysAhead: 21, // number of days ahead to fetch exams (0 = off)

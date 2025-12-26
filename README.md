@@ -12,6 +12,40 @@
 
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend["🖥️ Frontend (Browser)"]
+        MM["MagicMirror Core"]
+        FE["MMM-Webuntis.js"]
+        Widgets["Widgets<br/>(lessons/grid/exams<br/>homework/absences)"]
+        Util["widgets/util.js<br/>(formatDate, helpers)"]
+    end
+
+    subgraph Backend["⚙️ Backend (Node.js)"]
+        NH["node_helper.js"]
+        Cache["Auth/Response<br/>Cache"]
+        Untis["WebUntis<br/>Client"]
+    end
+
+    subgraph External["🌐 External APIs"]
+        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences)"]
+        QR["QR Code<br/>Authentication"]
+    end
+
+    MM <-->|socketNotification| FE
+    FE <-->|sendSocketNotification| NH
+    FE --> Widgets
+    Widgets --> Util
+    NH --> Cache
+    NH --> Untis
+    Untis --> QR
+    Untis --> REST
+```
+
+→ For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## BREAKING CHANGES in 0.4.0
 
 This release consolidates several configuration keys and changes how the module handles config compatibility.
@@ -111,7 +145,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | --- | --- | --- | --- |
 | `header` | string | `'MMM-Webuntis'` | Title displayed by MagicMirror for this module. |
 | `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
-| `logLevel` | string | `'none'` | Log verbosity: `'none'` or `'debug'`. |
+| `logLevel` | string | `'none'` | Log verbosity: `'debug'`, `'info'`, `'warn'`, `'error'`, or `'none'`. |
 
 ### Display Options
 
@@ -132,14 +166,17 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `showStartTime` | bool | `false` | Show start time instead of lesson number in listings. |
-| `showRegularLessons` | bool | `true` | Show regular lessons (not only substitutions/cancellations). |
+| `showRegularLessons` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
 | `useShortSubject` | bool | `false` | Use short subject names where available. |
+| `showTeacherMode` | string | `'full'` | Teacher display mode: `'full'` (full name), `'initial'` (initials), or falsy/null for none. |
+| `showSubstitutionText` | bool | `false` | Show substitution text/notes for changed lessons. |
+
 
 ### Exams Widget
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `examsDaysAhead` | int | `7` | Number of days ahead to fetch exams (0 = off). |
+| `examsDaysAhead` | int | `21` | Number of days ahead to fetch exams (0 = off). |
 | `showExamSubject` | bool | `true` | Show subject for exams. |
 | `showExamTeacher` | bool | `true` | Show teacher for exams. |
 
@@ -155,7 +192,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `absencesPastDays` | int | `14` | Number of past days to include when fetching absences. Can be overridden per-student. |
+| `absencesPastDays` | int | `21` | Number of past days to include when fetching absences. Can be overridden per-student. |
 | `absencesFutureDays` | int | `7` | Number of future days to extend the absences fetch beyond `daysToShow`. |
 
 ### Date Formats
@@ -430,9 +467,9 @@ When using parent account credentials (see [Parent Account Support](README.md#pa
 
 ## How the timetable grid works (developer notes)
 
-- The backend (`node_helper.js`) fetches raw WebUntis data only. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
+- The backend (`node_helper.js`) fetches raw WebUntis data from the REST API. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
 - The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGapMinutes`. A merged block keeps a `lessonIds` array; `lessonId` is set when available.
-- There is no explicit caching layer. Parallel fetches for the same credential are coalesced to avoid duplicate work.
+- The backend includes a response cache (30s TTL) and REST auth token cache (14min TTL) to minimize redundant API calls and avoid authentication overhead.
 
 Additional grid rendering notes:
 
@@ -440,8 +477,8 @@ Additional grid rendering notes:
 
 ## Debugging and Logging
 
-- Use `logLevel: 'debug'` to enable detailed logging. For normal usage, `'none'` is sufficient.
-- Enable `dumpBackendPayloads: true` to save API responses to the `debug_dumps/` folder for detailed inspection.
+- The default `logLevel` is `'none'` (silent). Set it to `'debug'` to enable detailed logging.
+- Enable `dumpBackendPayloads: true` to save backend API responses to the `debug_dumps/` folder for detailed inspection and troubleshooting.
 
 ## Troubleshooting
 
@@ -452,17 +489,12 @@ Additional grid rendering notes:
 
 ## CLI tool (config check)
 
-This module includes a small interactive CLI tool that reads your MagicMirror config, lists all configured students (duplicates are allowed), and lets you query a selected student for:
-
-- current timetable (today, with changes)
-- next exams
-- homeworks
-- absences
+This module includes an interactive CLI tool that reads your MagicMirror config, lists configured students, and lets you query a selected student's timetable, exams, homework, and absences.
 
 Run from the module directory:
 
 ```bash
-node --run check
+node cli/cli.js
 ```
 
 If your config is not in a standard location, pass it explicitly:
