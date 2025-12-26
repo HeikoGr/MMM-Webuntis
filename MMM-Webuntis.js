@@ -388,7 +388,68 @@ Module.register('MMM-Webuntis', {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
     const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
 
-    return { ...this.config, students: mergedStudents, id: this.identifier };
+    const sendConfig = { ...this.config, students: mergedStudents, id: this.identifier };
+
+    // ===== VALIDATE MODULE CONFIG =====
+    this._validateAndWarnConfig(sendConfig);
+
+    return sendConfig;
+  },
+
+  /**
+   * Validate module configuration and collect warnings before sending to backend
+   */
+  _validateAndWarnConfig(config) {
+    const warnings = [];
+
+    // Validate displayMode
+    const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
+    if (config.displayMode && typeof config.displayMode === 'string') {
+      const widgets = config.displayMode
+        .split(',')
+        .map((w) => w.trim())
+        .filter(Boolean)
+        .map((w) => w.toLowerCase());
+      const invalid = widgets.filter((w) => !validWidgets.includes(w));
+      if (invalid.length > 0) {
+        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
+      }
+    }
+
+    // Validate logLevel
+    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
+    if (config.logLevel && !validLogLevels.includes(String(config.logLevel).toLowerCase())) {
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use one of: ${validLogLevels.join(', ')}`);
+    }
+
+    // Validate numeric ranges
+    if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
+      warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
+    }
+
+    if (Number.isFinite(config.examsDaysAhead) && (config.examsDaysAhead < 0 || config.examsDaysAhead > 365)) {
+      warnings.push(`examsDaysAhead should be between 0 and 365. Value: ${config.examsDaysAhead}`);
+    }
+
+    if (Number.isFinite(config.mergeGapMinutes) && config.mergeGapMinutes < 0) {
+      warnings.push(`mergeGapMinutes cannot be negative. Value: ${config.mergeGapMinutes}`);
+    }
+
+    // Check if no students configured
+    if (!Array.isArray(config.students) || config.students.length === 0) {
+      warnings.push(
+        'No students configured. Module is idle. Configure students[] or provide parent account credentials for auto-discovery.'
+      );
+    }
+
+    // Warn for each unique warning
+    warnings.forEach((warning) => {
+      if (!this.moduleWarningsSet.has(warning)) {
+        this.moduleWarningsSet.add(warning);
+        this._log('warn', warning);
+        console.warn(`[MMM-Webuntis] ⚠️ ${warning}`);
+      }
+    });
   },
 
   _toMinutes(t) {

@@ -641,7 +641,15 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', null, `REST API response status: ${resp.status}`);
       if (resp.status !== 200) {
         this._mmLog('debug', null, `REST API response body: ${JSON.stringify(resp.data).substring(0, 500)}`);
-        throw new Error(`REST API returned status ${resp.status}`);
+        // ===== ENHANCE ERROR MESSAGES =====
+        if (resp.status === 401 || resp.status === 403) {
+          throw new Error(`Authentication failed (HTTP ${resp.status}): Check credentials`);
+        } else if (resp.status === 404) {
+          throw new Error(`Resource not found (HTTP 404): Check school name or studentId`);
+        } else if (resp.status === 503) {
+          throw new Error(`WebUntis API unavailable (HTTP 503): Server temporarily down`);
+        }
+        throw new Error(`REST API returned HTTP ${resp.status}`);
       }
 
       // Transform REST response to JSON-RPC format
@@ -703,6 +711,21 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', null, `REST API returned ${lessons.length} lessons`);
       return lessons;
     } catch (error) {
+      // ===== ENHANCED ERROR HANDLING =====
+      if (error.code === 'ECONNREFUSED') {
+        const msg = `Cannot connect to WebUntis server "${server}". Check server name and network connection.`;
+        this._mmLog('error', null, msg);
+        const err = new Error(msg);
+        err.response = { status: 'ECONNREFUSED' };
+        throw err;
+      }
+      if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+        const msg = `Connection timeout to WebUntis server "${server}". Check network or try again.`;
+        this._mmLog('error', null, msg);
+        const err = new Error(msg);
+        err.response = { status: 'TIMEOUT' };
+        throw err;
+      }
       this._mmLog('error', null, `getTimetableViaRest failed: ${error.message}`);
       throw error;
     }
@@ -1473,6 +1496,134 @@ module.exports = NodeHelper.create({
       });
   },
 
+  // ===== WARNING VALIDATION FUNCTIONS =====
+
+  /**
+   * Validate student credentials and configuration before attempting fetch
+   */
+  _validateStudentConfig(student) {
+    const warnings = [];
+
+    // Check for missing credentials
+    const hasQr = Boolean(student.qrcode);
+    const hasDirectCreds = Boolean(student.username && student.password && student.school);
+    const hasStudentId = Number.isFinite(Number(student.studentId));
+
+    if (!hasQr && !hasDirectCreds && !hasStudentId) {
+      warnings.push(
+        `Student "${student.title}": No credentials configured. Provide either qrcode OR (username + password + school) OR studentId (for parent account).`
+      );
+    }
+
+    // Check for invalid QR code format
+    if (hasQr && !student.qrcode.startsWith('untis://')) {
+      warnings.push(
+        `Student "${student.title}": QR code malformed. Expected format: untis://setschool?url=...&school=...&user=...&key=...`
+      );
+    }
+
+    return warnings;
+  },
+
+  /**
+   * Convert REST API errors to user-friendly warning messages
+   */
+  _convertRestErrorToWarning(error, context = {}) {
+    const { studentTitle = 'Student', school = 'school', server = 'server' } = context;
+
+    if (!error) return null;
+
+    const msg = (error.message || '').toLowerCase();
+    const status = error.response?.status;
+
+    // Authentication errors
+    if (status === 401 || status === 403 || msg.includes('401') || msg.includes('403')) {
+      return `Authentication failed for "${studentTitle}": Invalid credentials or insufficient permissions.`;
+    }
+
+    // Network errors
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || msg.includes('timeout')) {
+      return `Cannot connect to WebUntis server "${server}". Check server name and network connection.`;
+    }
+
+    // API unavailable
+    if (status === 503 || msg.includes('503')) {
+      return `WebUntis API temporarily unavailable (HTTP 503). Retrying on next fetch...`;
+    }
+
+    // School not found (typically 401 with specific error message)
+    if (msg.includes('school') || msg.includes('not found')) {
+      return `School "${school}" not found or invalid credentials. Check school name and spelling.`;
+    }
+
+    // Generic network error
+    if (!error.response) {
+      return `Network error connecting to WebUntis: ${error.message || 'Unknown error'}`;
+    }
+
+    // Generic HTTP error
+    if (status && status >= 400 && status < 500) {
+      return `HTTP ${status} error for "${studentTitle}": ${error.message || 'Client error'}`;
+    }
+
+    if (status && status >= 500) {
+      return `Server error (HTTP ${status}): ${error.message || 'Server error'}`;
+    }
+
+    return null;
+  },
+
+  /**
+   * Check if empty data array should trigger a warning
+   */
+  _checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData = true) {
+    if (Array.isArray(dataArray) && dataArray.length === 0 && isExpectedData) {
+      return `Student "${studentTitle}": No ${dataType} found in selected date range. Check if student is enrolled.`;
+    }
+    return null;
+  },
+
+  /**
+   * Validate module configuration for common issues
+   */
+  _validateModuleConfig(config) {
+    const warnings = [];
+
+    // Validate displayMode
+    const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
+    if (config.displayMode && typeof config.displayMode === 'string') {
+      const widgets = config.displayMode
+        .split(',')
+        .map((w) => w.trim())
+        .filter(Boolean);
+      const invalid = widgets.filter((w) => !validWidgets.includes(w.toLowerCase()));
+      if (invalid.length > 0) {
+        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
+      }
+    }
+
+    // Validate logLevel
+    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
+    if (config.logLevel && !validLogLevels.includes(config.logLevel.toLowerCase())) {
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
+    }
+
+    // Validate numeric ranges
+    if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
+      warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
+    }
+
+    if (Number.isFinite(config.examsDaysAhead) && (config.examsDaysAhead < 0 || config.examsDaysAhead > 365)) {
+      warnings.push(`examsDaysAhead should be between 0 and 365. Value: ${config.examsDaysAhead}`);
+    }
+
+    if (Number.isFinite(config.mergeGapMinutes) && config.mergeGapMinutes < 0) {
+      warnings.push(`mergeGapMinutes cannot be negative. Value: ${config.mergeGapMinutes}`);
+    }
+
+    return warnings;
+  },
+
   // Backend performs API calls only; no data normalization here.
 
   /*
@@ -1580,17 +1731,44 @@ module.exports = NodeHelper.create({
     // Single-run processing: authenticate, fetch data for each student, and logout.
     let untis = null;
     const sample = students[0];
+    const groupWarnings = [];
+
     try {
       try {
         untis = this._createUntisClient(sample, this.config);
-      } catch {
-        this._mmLog('error', null, `No credentials for group ${credKey}`);
+      } catch (err) {
+        const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
+        this._mmLog('error', null, msg);
+        groupWarnings.push(msg);
+        // Send error payload to frontend with warnings
+        for (const student of students) {
+          this.sendSocketNotification('GOT_DATA', {
+            title: student.title,
+            id: identifier,
+            config: student,
+            warnings: groupWarnings,
+            timeUnits: [],
+            timetableRange: [],
+            exams: [],
+            homeworks: [],
+            absences: [],
+          });
+        }
         return;
       }
 
       await untis.login();
       for (const student of students) {
         try {
+          // ===== VALIDATE STUDENT CONFIG =====
+          const studentValidationWarnings = this._validateStudentConfig(student);
+          if (studentValidationWarnings.length > 0) {
+            studentValidationWarnings.forEach((w) => {
+              this._mmLog('warn', student, w);
+            });
+            groupWarnings.push(...studentValidationWarnings);
+          }
+
           // Build a signature for this student's request and consult cache
           const sig = this._makeRequestSignature(student);
           const cached = this._getCachedResponse(sig);
@@ -1620,11 +1798,24 @@ module.exports = NodeHelper.create({
             }
           }
         } catch (err) {
-          this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
+          const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
+          this._mmLog('error', student, errorMsg);
+
+          // ===== CONVERT REST ERRORS TO USER-FRIENDLY WARNINGS =====
+          const warningMsg = this._convertRestErrorToWarning(err, {
+            studentTitle: student.title,
+            school: student.school || this.config?.school,
+            server: student.server || this.config?.server || 'webuntis.com',
+          });
+          if (warningMsg) {
+            groupWarnings.push(warningMsg);
+            this._mmLog('warn', student, warningMsg);
+          }
         }
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
+      groupWarnings.push(`Authentication failed for group: ${this._formatErr(error)}`);
     } finally {
       try {
         if (untis) await untis.logout();
@@ -2043,6 +2234,19 @@ module.exports = NodeHelper.create({
       if (payload && payload.config && Array.isArray(payload.config.__warnings)) {
         warnings = warnings.concat(payload.config.__warnings);
       }
+
+      // ===== ADD EMPTY DATA WARNINGS =====
+      if (timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
+        const emptyWarn = this._checkEmptyDataWarning(timetable, 'lessons', student.title, true);
+        if (emptyWarn) warnings.push(emptyWarn);
+      }
+
+      // ===== ADD PARENT ACCOUNT LIMITATIONS WARNING =====
+      const isParentAccount = !Boolean(student.qrcode) && Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
+      if (isParentAccount && wantsAbsencesWidget) {
+        warnings.push(`Student "${student.title}": Absences cannot be fetched via parent account. Absences require direct student login.`);
+      }
+
       const uniqWarnings = Array.from(new Set(warnings));
       const forSend = { ...payload, id: identifier, warnings: uniqWarnings };
 
