@@ -26,7 +26,7 @@ let config = {
         // === GLOBAL OPTIONS ===
         header: 'Timetable',
         fetchIntervalMs: 15 * 60 * 1000, // 15 minutes
-        logLevel: 'none',
+        logLevel: 'debug',
 
         // === DISPLAY OPTIONS ===
         displayMode: 'list', // 'list', 'grid', or comma-separated: 'lessons,exams,grid'
@@ -38,13 +38,13 @@ let config = {
 
         // === LESSONS WIDGET ===
         showStartTime: false,
-        showRegularLessons: true,
+        showRegularLessons: false,
         showTeacherMode: 'full',
         useShortSubject: false,
         showSubstitutionText: false,
 
         // === EXAMS WIDGET ===
-        examsDaysAhead: 7,
+        examsDaysAhead: 21,
         showExamSubject: true,
         showExamTeacher: true,
 
@@ -54,19 +54,18 @@ let config = {
         showNowLine: true,
 
         // === ABSENCES ===
-        absencesPastDays: 14,
+        absencesPastDays: 21,
         absencesFutureDays: 7,
 
         // Structured per-widget formats (preferred)
         dateFormats: {
-          // (optional) - defaults to 'dd.mm.' if not set
-          default: 'dd.mm.', // set default
-          lessons: 'dd.mm.', // (optional) override for lessons
-          // lessonsWeekday: 'short', // optional: 'short' or 'long' for weekday display before time
-          grid: 'dd.mm.', // (optional) override for grid
-          exams: 'dd.mm.', // (optional) override for exams
-          homework: 'dd.mm.', // (optional) override for homework
-          absences: 'dd.mm.', // (optional) override for absences
+          // (optional) - defaults to 'dd.MM.' if not set
+          default: 'dd.MM.', // set default
+          lessons: 'EEE', // weekday only (e.g., "Mon")
+          grid: 'EEE dd.MM.', // (optional) override for grid
+          exams: 'dd.MM.', // (optional) override for exams
+          homework: 'dd.MM.', // (optional) override for homework
+          absences: 'dd.MM.', // (optional) override for absences
         },
         // Minimal example: override only absences format without specifying whole object
         // dateFormats: { absences: 'd.M.yyyy' },
