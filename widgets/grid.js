@@ -129,8 +129,8 @@ function getNowLineState(ctx) {
       const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
-      // Determine date format from student -> global
-      const gridDateFormat = studentConfig?.dateFormats?.grid ?? ctx.config?.dateFormats?.grid;
+      // Determine date format from student namespace -> dateFormats -> global
+      const gridDateFormat = studentConfig?.grid?.dateFormat ?? studentConfig?.dateFormats?.grid ?? ctx.config?.grid?.dateFormat ?? ctx.config?.dateFormats?.grid;
       let headerFormat = gridDateFormat;
 
       const dayLabelText = util?.formatDate

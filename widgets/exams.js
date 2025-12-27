@@ -56,8 +56,8 @@
 
           addedRows++;
 
-          const examDateFormat =
-            studentConfig?.dateFormats?.exams ?? ctx.config?.dateFormats?.exams ?? ctx.config?.dateFormats?.default ?? 'dd.MM.';
+              const examDateFormat =
+                studentConfig?.exams?.dateFormat ?? studentConfig?.dateFormats?.exams ?? ctx.config?.exams?.dateFormat ?? ctx.config?.dateFormats?.exams ?? ctx.config?.dateFormats?.default ?? 'dd.MM.';
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
           const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;

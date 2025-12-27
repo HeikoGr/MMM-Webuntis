@@ -48,6 +48,43 @@ Module.register('MMM-Webuntis', {
       absences: 'dd.MM.',
     },
 
+    // === WIDGET NAMESPACED DEFAULTS ===
+    // New per-widget configuration namespaces for future refactor.
+    lessons: {
+      dateFormat: 'EEE',
+      showStartTime: false,
+      showRegularLessons: false,
+      useShortSubject: false,
+      showTeacherMode: 'full',
+      showSubstitutionText: false,
+    },
+
+    grid: {
+      dateFormat: 'EEE dd.MM.',
+      mergeGapMinutes: 15,
+      maxGridLessons: 0,
+      showNowLine: true,
+    },
+
+    exams: {
+      dateFormat: 'dd.MM.',
+      examsDaysAhead: 21,
+      showExamSubject: true,
+      showExamTeacher: true,
+    },
+
+    homework: {
+      dateFormat: 'dd.MM.',
+    },
+
+    absences: {
+      dateFormat: 'dd.MM.',
+      absencesPastDays: 21,
+      absencesFutureDays: 7,
+    },
+
+    messagesofday: {},
+
     // === TIMETABLE SOURCE OPTIONS ===
     useClassTimetable: false, // use class timetable instead of student timetable
 
@@ -389,6 +426,9 @@ Module.register('MMM-Webuntis', {
     const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
 
     const sendConfig = { ...this.config, students: mergedStudents, id: this.identifier };
+
+    // Note: legacy config normalization is performed server-side in node_helper.js.
+    // Keep client-side bundle minimal and rely on backend normalization for compatibility.
 
     // ===== VALIDATE MODULE CONFIG =====
     this._validateAndWarnConfig(sendConfig);

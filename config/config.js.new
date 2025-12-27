@@ -1,0 +1,6 @@
+/**
+ * Temporary replacement for broken config.js
+ */
+let config = { test: true };
+
+if (typeof module !== 'undefined') module.exports = config;
