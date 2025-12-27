@@ -208,7 +208,7 @@ Additionally, the module supports a structured `dateFormats` object to configure
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `dateFormats.default` | string | `'dd.MM.'` | Default date format used by widgets when no widget-specific format is set. |
-| `dateFormats.lessons` | string | `'dd.MM.'` | Date format for lessons/timetable. |
+| `dateFormats.lessons` | string | `'EEE'` | Date format for lessons/timetable. (default to EEE, short weekday) |
 | `dateFormats.exams` | string | `'dd.MM.'` | Date format for exams. |
 | `dateFormats.homework` | string | `'dd.MM.'` | Date format for homework. |
 | `dateFormats.absences` | string | `'dd.MM.'` | Date format for absences widget. |

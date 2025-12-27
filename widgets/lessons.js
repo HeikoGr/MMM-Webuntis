@@ -92,7 +92,7 @@
         const holiday = isDateInHoliday(dateYmd, holidays);
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
-          const holidayDateStr = util.formatDate(dayDate, /EEE/i.test(lessonsDateFormat) ? lessonsDateFormat : 'EEE dd.MM.');
+          const holidayDateStr = util.formatDate(dayDate, lessonsDateFormat);
           addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
@@ -123,11 +123,9 @@
 
         addedRows++;
 
-        const weekdayMode =
-          studentConfig?.studentslessons?.weekday ?? studentConfig?.weekday ?? ctx.config?.lessonsWeekday ?? ctx.config?.weekday ?? 'short';
-        const weekdayToken = weekdayMode === 'long' ? 'EEEE' : 'EEE';
-        const weekdayName = util.formatDate(timeForDay, weekdayToken);
-        let timeStr = `${weekdayName}&nbsp;`;
+        // Use only the lessons-specific date format as requested by configuration
+        const dateLabel = util.formatDate(timeForDay, lessonsDateFormat);
+        let timeStr = `${dateLabel}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
