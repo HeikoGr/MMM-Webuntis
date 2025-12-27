@@ -11,10 +11,16 @@ const { URL } = require('url');
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 
+// New utility modules for refactoring
+const restClient = require('./lib/restClient');
+const { compactArray, schemas } = require('./lib/payloadCompactor');
+const { validateConfig } = require('./lib/configValidator');
+const { createBackendLogger } = require('./lib/logger');
+
 // Default cache TTL for per-request responses (ms). Small to favor freshness.
-const DEFAULT_CACHE_TTL_MS = 30 * 1;
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // Default interval for periodic cache cleanup (ms)
-const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 30 * 1;
+const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 // Create a NodeHelper module
@@ -25,6 +31,10 @@ module.exports = NodeHelper.create({
    */
   start() {
     this._mmLog('debug', null, 'Node helper started');
+    // Initialize unified logger
+    this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
+    // expose payload compactor so linters don't flag unused imports until full refactor
+    this.payloadCompactor = { compactArray };
     // initialize a tiny in-memory response cache
     this._responseCache = new Map(); // signature -> { ts, payload }
     this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
@@ -37,6 +47,8 @@ module.exports = NodeHelper.create({
     this._restAuthCache = new Map(); // cacheKey -> { token, cookieString, expiresAt }
     // Cache resolved class ids per credential/class name to avoid repeated filter calls
     this._classIdCache = new Map(); // cacheKey -> classId
+    // Track whether config warnings have been emitted to frontend to avoid repeat spam
+    this._configWarningsSent = false;
   },
 
   _normalizeLegacyConfig(cfg) {
@@ -54,7 +66,8 @@ module.exports = NodeHelper.create({
     };
 
     mapLegacy(out, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
-    mapLegacy(out, 'days', 'daysToShow', (v) => Number(v), 'config');
+    // Map legacy `days` to the new preferred `nextDays` key
+    mapLegacy(out, 'days', 'nextDays', (v) => Number(v), 'config');
     mapLegacy(out, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
     mapLegacy(out, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
 
@@ -73,7 +86,7 @@ module.exports = NodeHelper.create({
     if (legacyUsed.length > 0) {
       try {
         const uniq = Array.from(new Set(legacyUsed));
-        const warningMsg = `⚠️ Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
+        const warningMsg = `⚠️ Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys. Look in debug output for the normalized config.`;
 
         // Attach warning to config.__warnings so it gets sent to frontend and displayed in GUI
         out.__warnings = out.__warnings || [];
@@ -157,10 +170,12 @@ module.exports = NodeHelper.create({
     const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
     const formatted = `${moduleTag}${studentTag} ${message}`;
 
+    // Always forward debug messages to the underlying MagicMirror logger.
+    // The MagicMirror logging subsystem (or the environment) decides which
+    // levels to actually emit. Avoid double-filtering here to ensure debug
+    // output is visible when the system is configured for debug logging.
     if (level === 'debug') {
-      if (this.config && this.config.logLevel === 'debug') {
-        Log.debug(formatted);
-      }
+      Log.debug(formatted);
       return;
     }
 
@@ -568,7 +583,7 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Get timetable via REST API
+   * Get timetable via REST API using unified restClient
    */
   async _getTimetableViaRest(
     school,
@@ -582,10 +597,14 @@ module.exports = NodeHelper.create({
     useClassTimetable = false,
     className = null
   ) {
-    const startDate = rangeStart.toISOString().split('T')[0];
-    const endDate = rangeEnd.toISOString().split('T')[0];
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
-    this._mmLog('debug', null, `Fetching ${wantsClass ? 'class' : 'student'} timetable via REST API (${startDate} to ${endDate})`);
+    this._mmLog(
+      'debug',
+      null,
+      `Fetching ${wantsClass ? 'class' : 'student'} timetable via REST API (${restClient.formatDateForAPI(
+        rangeStart
+      )} to ${restClient.formatDateForAPI(rangeEnd)})`
+    );
     try {
       const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
         school,
@@ -598,23 +617,6 @@ module.exports = NodeHelper.create({
       if (!cookieString) {
         throw new Error('Missing REST auth cookies');
       }
-
-      // Format dates as YYYY-MM-DD for API
-      const formatDate = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
-
-      const headers = {
-        Cookie: cookieString,
-        Accept: 'application/json',
-      };
-      // Add tenant/schoolyear headers if available (needed for some schools)
-      if (tenantId) headers['Tenant-Id'] = String(tenantId);
-      if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
-      if (token) headers.Authorization = `Bearer ${token}`;
 
       let resourceType = wantsClass ? 'CLASS' : 'STUDENT';
       let resourceId = wantsClass ? options.classId : studentId;
@@ -641,82 +643,74 @@ module.exports = NodeHelper.create({
         throw new Error('Missing resource id for timetable request');
       }
 
-      const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/entries`, {
+      // ✅ Use unified REST call with restClient.callRestAPI
+      const resp = await restClient.callRestAPI({
+        server,
+        path: '/WebUntis/api/rest/view/v1/timetable/entries',
+        method: 'GET',
         params: {
-          start: formatDate(rangeStart),
-          end: formatDate(rangeEnd),
+          start: restClient.formatDateForAPI(rangeStart),
+          end: restClient.formatDateForAPI(rangeEnd),
           resourceType,
-          resources: String(resourceId), // IMPORTANT: Must be string, not number!
+          resources: String(resourceId),
           timetableType: 'STANDARD',
         },
-        headers,
-        validateStatus: () => true,
+        token,
+        cookies: cookieString,
+        tenantId,
+        schoolYearId,
         timeout: 15000,
+        logger: (level, msg) => this._mmLog(level, null, msg),
       });
-
-      this._mmLog('debug', null, `REST API response status: ${resp.status}`);
-      if (resp.status !== 200) {
-        this._mmLog('debug', null, `REST API response body: ${JSON.stringify(resp.data).substring(0, 500)}`);
-        // ===== ENHANCE ERROR MESSAGES =====
-        if (resp.status === 401 || resp.status === 403) {
-          throw new Error(`Authentication failed (HTTP ${resp.status}): Check credentials`);
-        } else if (resp.status === 404) {
-          throw new Error(`Resource not found (HTTP 404): Check school name or studentId`);
-        } else if (resp.status === 503) {
-          throw new Error(`WebUntis API unavailable (HTTP 503): Server temporarily down`);
-        }
-        throw new Error(`REST API returned HTTP ${resp.status}`);
-      }
 
       // Transform REST response to JSON-RPC format
       const lessons = [];
       this._mmLog(
         'debug',
         null,
-        `Response data structure: days=${resp.data?.days ? 'present' : 'missing'}, hasDays=${Array.isArray(resp.data?.days)}`
+        `Response data structure: days=${resp?.days ? 'present' : 'missing'}, hasDays=${Array.isArray(resp?.days)}`
       );
-      if (resp.data && resp.data.days && Array.isArray(resp.data.days)) {
-        this._mmLog('debug', null, `Processing ${resp.data.days.length} days from API response`);
-        resp.data.days.forEach((day) => {
+      if (resp && resp.days && Array.isArray(resp.days)) {
+        this._mmLog('debug', null, `Processing ${resp.days.length} days from API response`);
+        resp.days.forEach((day) => {
           if (day.gridEntries && Array.isArray(day.gridEntries)) {
             day.gridEntries.forEach((entry) => {
               const lesson = {
                 id: entry.ids && entry.ids[0] ? entry.ids[0] : null,
-                date: day.date.split('T')[0], // Extract date part only
-                startTime: entry.duration?.start ? entry.duration.start.split('T')[1] : '', // Extract time
-                endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
+                date: day.date.split('T')[0],
+                startTime: entry.duration?.start ? entry.duration.start.split('T')[1] : '',
+                endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '',
                 su: entry.position2
                   ? [
-                      {
-                        name: entry.position2[0].current.shortName,
-                        longname: entry.position2[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
                   : [],
                 te: entry.position1
                   ? [
-                      {
-                        name: entry.position1[0].current.shortName,
-                        longname: entry.position1[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
                   : [],
                 ro: entry.position3
                   ? [
-                      {
-                        name: entry.position3[0].current.shortName,
-                        longname: entry.position3[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
                 lstext: entry.lessonInfo || '',
                 activityType: entry.type || 'NORMAL_TEACHING_PERIOD',
                 lessonText: entry.lessonText || '',
-                // Status information: cancelled, regular, substitution
-                status: entry.status || 'REGULAR', // REGULAR, CANCELLED, SUBSTITUTION, etc.
-                statusDetail: entry.statusDetail || null, // Additional detail (e.g., reason)
+                status: entry.status || 'REGULAR',
+                statusDetail: entry.statusDetail || null,
               };
               lessons.push(lesson);
             });
@@ -727,21 +721,6 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', null, `REST API returned ${lessons.length} lessons`);
       return lessons;
     } catch (error) {
-      // ===== ENHANCED ERROR HANDLING =====
-      if (error.code === 'ECONNREFUSED') {
-        const msg = `Cannot connect to WebUntis server "${server}". Check server name and network connection.`;
-        this._mmLog('error', null, msg);
-        const err = new Error(msg);
-        err.response = { status: 'ECONNREFUSED' };
-        throw err;
-      }
-      if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
-        const msg = `Connection timeout to WebUntis server "${server}". Check network or try again.`;
-        this._mmLog('error', null, msg);
-        const err = new Error(msg);
-        err.response = { status: 'TIMEOUT' };
-        throw err;
-      }
       this._mmLog('error', null, `getTimetableViaRest failed: ${error.message}`);
       throw error;
     }
@@ -771,17 +750,10 @@ module.exports = NodeHelper.create({
         return `${year}${month}${day}`;
       };
 
-      // Build request for exams
-      // Endpoint: /WebUntis/api/exams (from WebUI, uses startDate/endDate in YYYYMMDD format)
-      const headers = {
-        Cookie: cookieString,
-        Accept: 'application/json',
-      };
-      if (tenantId) headers['Tenant-Id'] = String(tenantId);
-      if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const resp = await axios.get(`https://${server}/WebUntis/api/exams`, {
+      const data = await restClient.callRestAPI({
+        server,
+        path: '/WebUntis/api/exams',
+        method: 'GET',
         params: {
           startDate: formatDateYYYYMMDD(rangeStart),
           endDate: formatDateYYYYMMDD(rangeEnd),
@@ -789,32 +761,29 @@ module.exports = NodeHelper.create({
           klasseId: -1,
           withGrades: true,
         },
-        headers,
-        validateStatus: () => true,
+        token,
+        cookies: cookieString,
+        tenantId,
+        schoolYearId,
         timeout: 15000,
+        logger: (level, msg) => this._mmLog(level, null, msg),
       });
-
-      if (resp.status !== 200) {
-        throw new Error(`REST API returned status ${resp.status} for exams`);
-      }
 
       // Transform REST response to expected format
       const exams = [];
       let examArr = [];
-      if (Array.isArray(resp.data?.data?.exams)) {
-        examArr = resp.data.data.exams;
-      } else if (Array.isArray(resp.data?.exams)) {
-        examArr = resp.data.exams;
-      } else if (Array.isArray(resp.data)) {
-        examArr = resp.data;
+      if (Array.isArray(data?.data?.exams)) {
+        examArr = data.data.exams;
+      } else if (Array.isArray(data?.exams)) {
+        examArr = data.exams;
+      } else if (Array.isArray(data)) {
+        examArr = data;
       }
 
       examArr.forEach((exam) => {
-        // Filter to only include exams assigned to the requested studentId
         const isAssignedToStudent =
           studentId && Array.isArray(exam.assignedStudents) && exam.assignedStudents.some((s) => s.id === studentId);
 
-        // Include exam if we're not filtering by studentId OR if student is assigned
         if (!studentId || isAssignedToStudent) {
           exams.push({
             examDate: this._normalizeDateToInteger(exam.examDate ?? exam.date),
@@ -840,13 +809,29 @@ module.exports = NodeHelper.create({
    * Fetch homework via REST API for a student (parent account or own)
    * Returns homework in the format: [{ id, lid, lessonId, dueDate, completed, text, remark, su }, ...]
    * Uses /WebUntis/api/homeworks/lessons which returns homework and lesson data in parallel arrays
+   *
+   * @param {string} school - School identifier
+   * @param {string} username - Username or email
+   * @param {string} password - Password
+   * @param {string} server - WebUntis server (e.g., "school.webuntis.com")
+   * @param {Date} rangeStart - Start date for range
+   * @param {Date} rangeEnd - End date for range
+   * @param {number} studentId - Student ID for filtering homework
+   * @param {object} options - Additional options (e.g., { logger: fn })
+   * @returns {Promise<Array>} Normalized homework array
    */
-  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, options = {}) {
+  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const startDate = rangeStart.toISOString().split('T')[0];
     const endDate = rangeEnd.toISOString().split('T')[0];
     this._mmLog('debug', null, `Fetching homework via REST API (${startDate} to ${endDate})`);
     try {
-      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+        school,
+        username,
+        password,
+        server,
+        options
+      );
 
       const formatDateYYYYMMDD = (date) => {
         const year = date.getFullYear();
@@ -857,71 +842,110 @@ module.exports = NodeHelper.create({
 
       // Build request for homework via lessons endpoint
       // Endpoint: /WebUntis/api/homeworks/lessons
-      // Returns: { data: { homeworks: [...], lessons: [...], records: [...], teachers: [...] } }
-      const headers = {
-        Cookie: cookieString,
-        Accept: 'application/json',
+      // Returns: { data: { homeworks: [...], lessons: [...], teachers: [...], records: [...] } }
+      // Build query params; include studentId when provided to allow server-side filtering
+      const hwParams = {
+        startDate: formatDateYYYYMMDD(rangeStart),
+        endDate: formatDateYYYYMMDD(rangeEnd),
       };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      // Do not pass studentId as a query parameter to the /homeworks/lessons
+      // endpoint — filter client-side using records/elementIds instead.
 
-      const resp = await axios.get(`https://${server}/WebUntis/api/homeworks/lessons`, {
-        params: {
-          startDate: formatDateYYYYMMDD(rangeStart),
-          endDate: formatDateYYYYMMDD(rangeEnd),
-        },
-        headers,
-        validateStatus: () => true,
+      const data = await restClient.callRestAPI({
+        server,
+        path: '/WebUntis/api/homeworks/lessons',
+        method: 'GET',
+        params: hwParams,
+        token,
+        cookies: cookieString,
+        tenantId,
+        schoolYearId,
         timeout: 15000,
+        logger: (level, msg) => this._mmLog(level, null, msg),
       });
 
-      if (resp.status !== 200) {
-        throw new Error(`REST API returned status ${resp.status} for homework`);
-      }
-
       // Extract homework from response
-      // Response structure: { data: { homeworks: [...], lessons: [...] } }
+      // API returns: { data: { homeworks: [...], lessons: [...], records: [...], teachers: [...] } }
+
       const homeworks = [];
       const seenIds = new Set(); // Avoid duplicates
 
-      const data = resp.data.data || resp.data;
+      // Handle both response formats:
+      // Old (direct): { homeworks: [...], lessons: [...] }
+      // New (nested): { data: { homeworks: [...], lessons: [...], records: [...] } }
+      let hwArray = data.homeworks;
+      let lessonsArray = data.lessons;
 
-      if (Array.isArray(data.homeworks)) {
+      if (!hwArray && data.data) {
+        hwArray = data.data.homeworks;
+        lessonsArray = data.data.lessons;
+      }
+
+      if (Array.isArray(hwArray)) {
         const lessonsMap = {};
-        if (Array.isArray(data.lessons)) {
-          data.lessons.forEach((lesson) => {
+        if (Array.isArray(lessonsArray)) {
+          lessonsArray.forEach((lesson) => {
             if (lesson.id) {
               lessonsMap[lesson.id] = lesson;
             }
           });
         }
 
-        data.homeworks.forEach((hw) => {
+        // Build map of homeworkId -> elementIds from records (if provided)
+        let recordsArray = data.records;
+        if (!recordsArray && data.data) recordsArray = data.data.records;
+        const recordsMap = {};
+        if (Array.isArray(recordsArray)) {
+          recordsArray.forEach((rec) => {
+            if (rec && rec.homeworkId !== undefined && rec.homeworkId !== null) {
+              recordsMap[rec.homeworkId] = Array.isArray(rec.elementIds) ? rec.elementIds.slice() : [];
+            }
+          });
+        }
+
+        hwArray.forEach((hw) => {
           // Avoid duplicates by checking homework ID
           const hwId = hw.id ?? `${hw.lessonId}_${hw.dueDate}`;
           if (!seenIds.has(hwId)) {
             seenIds.add(hwId);
             const lesson = lessonsMap[hw.lessonId];
 
-            // Extract subject name from lesson object
-            let suName = null;
-            if (lesson) {
-              if (lesson.su && lesson.su[0]) {
-                suName = { name: lesson.su[0].name, longname: lesson.su[0].longname };
-              } else if (lesson.subject) {
-                suName = { name: lesson.subject };
-              }
+            if (!lesson && hw.lessonId) {
+              this._mmLog(
+                'debug',
+                null,
+                `⚠️ No lesson found for homework ${hwId}. hw.lessonId=${hw.lessonId}, available lessonIds: ${Object.keys(lessonsMap).slice(0, 3).join(', ')}`
+              );
             }
 
-            homeworks.push({
+            // elementIds from records (may be empty)
+            const elementIds = recordsMap[hw.id] || [];
+
+            // If a specific studentId was requested, skip homeworks that don't target that element
+            if (Number.isFinite(Number(studentId)) && Number(studentId) !== -1) {
+              const matchesByElement = Array.isArray(elementIds) && elementIds.some((e) => Number(e) === Number(studentId));
+              const matchesByField = hw.studentId && Number(hw.studentId) === Number(studentId);
+              if (!matchesByElement && !matchesByField) return; // skip
+            }
+
+            // Build homework record
+            const hwRecord = {
               id: hw.id ?? null,
-              lid: hw.lid ?? hw.lessonId ?? null,
-              lessonId: hw.lessonId ?? null,
-              dueDate: this._normalizeDateToInteger(hw.dueDate ?? hw.date),
-              completed: hw.completed ?? hw.isCompleted ?? false,
-              text: this._sanitizeHtmlText(hw.text ?? hw.description ?? hw.remark ?? '', true),
-              remark: this._sanitizeHtmlText(hw.remark ?? '', false),
-              su: suName,
-            });
+              lessonId: hw.lessonId ?? hw.lid ?? null,
+              dueDate: hw.dueDate ?? hw.date ?? null,
+              completed: hw.completed ?? hw.isDone ?? false,
+              text: hw.text ?? hw.homework ?? hw.remark ?? '',
+              remark: hw.remark ?? '',
+              // Transform lesson data into su format { name, longname }
+              // If lesson has subject field, use it; otherwise use existing su
+              su: lesson && lesson.subject ? [{ name: lesson.subject, longname: lesson.subject }] : (lesson?.su ?? (hw.su ? hw.su : [])),
+              // Preserve elementIds so frontend can determine which students this homework targets
+              elementIds,
+              // Try to preserve an explicit studentId if present; otherwise infer from elementIds or request
+              studentId: hw.studentId ?? (elementIds && elementIds.length ? elementIds[0] : (studentId ?? null)),
+            };
+
+            homeworks.push(hwRecord);
           }
         });
       }
@@ -934,68 +958,51 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /**
-   * Fetch absences via REST API for a student (parent account or own)
-   * Returns absences in the format: [{ date, startTime, endTime, reason, excused, student, su, te, lessonId }, ...]
-   * Note: The REST API /WebUntis/api/absences returns all absences for the authenticated user
-   */
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
-    const startDate = rangeStart.toISOString().split('T')[0];
-    const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('debug', null, `Fetching absences via REST API (${startDate} to ${endDate})`);
     try {
-      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
+      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+        school,
+        username,
+        password,
+        server,
+        options
+      );
 
-      const formatDateYYYYMMDD = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+      const formatDateYYYYMMDD = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
       };
 
-      // Build request for absences
-      // Endpoint: /WebUntis/api/classreg/absences/students (from WebUI)
-      // Parameters: startDate, endDate (YYYYMMDD format), studentId, excuseStatusId
-      const headers = {
-        Cookie: cookieString,
-        Accept: 'application/json',
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const resp = await axios.get(`https://${server}/WebUntis/api/classreg/absences/students`, {
+      const data = await restClient.callRestAPI({
+        server,
+        path: '/WebUntis/api/classreg/absences/students',
+        method: 'GET',
         params: {
           startDate: formatDateYYYYMMDD(rangeStart),
           endDate: formatDateYYYYMMDD(rangeEnd),
           studentId: studentId ?? -1,
           excuseStatusId: -1,
         },
-        headers,
-        validateStatus: () => true,
+        token,
+        cookies: cookieString,
+        tenantId,
+        schoolYearId,
         timeout: 15000,
+        logger: (level, msg) => this._mmLog(level, null, msg),
       });
 
-      if (resp.status !== 200) {
-        let bodyStr = '';
-        try {
-          bodyStr = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
-        } catch {
-          bodyStr = String(resp.data);
-        }
-        this._mmLog('error', null, `getAbsencesViaRest: REST ${resp.status} response body: ${bodyStr}`);
-        throw new Error(`REST API returned status ${resp.status} for absences: ${bodyStr}`);
-      }
-
-      // Transform REST response to expected format
       const absences = [];
       let absArr = [];
-      if (Array.isArray(resp.data?.data?.absences)) {
-        absArr = resp.data.data.absences;
-      } else if (Array.isArray(resp.data?.absences)) {
-        absArr = resp.data.absences;
-      } else if (Array.isArray(resp.data?.absentLessons)) {
-        absArr = resp.data.absentLessons;
-      } else if (Array.isArray(resp.data)) {
-        absArr = resp.data;
+      if (Array.isArray(data?.data?.absences)) {
+        absArr = data.data.absences;
+      } else if (Array.isArray(data?.absences)) {
+        absArr = data.absences;
+      } else if (Array.isArray(data?.absentLessons)) {
+        absArr = data.absentLessons;
+      } else if (Array.isArray(data)) {
+        absArr = data;
       }
 
       absArr.forEach((abs) => {
@@ -1218,18 +1225,26 @@ module.exports = NodeHelper.create({
 
       // Merge module-level defaults into each discovered student so downstream
       // fetch logic has the expected fields (daysToShow, examsDaysAhead, etc.)
-      const defNoStudents = { ...(moduleConfig || {}) };
-      delete defNoStudents.students;
-      const normalizedAutoStudents = autoStudents.map((s) => {
-        const merged = { ...defNoStudents, ...(s || {}) };
-        return this._normalizeLegacyConfig(merged, this.defaults);
-      });
+      // Only assign discovered students once to avoid repeated re-assignment
+      // during periodic fetches which can lead to duplicate or inconsistent
+      // entries being appended to the runtime config.
+      if (!moduleConfig._autoStudentsAssigned) {
+        const defNoStudents = { ...(moduleConfig || {}) };
+        delete defNoStudents.students;
+        const normalizedAutoStudents = autoStudents.map((s) => {
+          const merged = { ...defNoStudents, ...(s || {}) };
+          return this._normalizeLegacyConfig(merged, this.defaults);
+        });
 
-      moduleConfig.students = normalizedAutoStudents;
+        moduleConfig.students = normalizedAutoStudents;
+        moduleConfig._autoStudentsAssigned = true;
 
-      // Log all discovered students with their IDs in a prominent way
-      const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-      this._mmLog('info', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
+        // Log all discovered students with their IDs in a prominent way
+        const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+        this._mmLog('info', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
+      } else {
+        this._mmLog('debug', null, 'Auto-discovered students already assigned; skipping reassignment');
+      }
     } catch (err) {
       this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
     }
@@ -1376,110 +1391,6 @@ module.exports = NodeHelper.create({
     return num >= 0 && num < 2400 ? num : null;
   },
 
-  _compactLessons(rawLessons) {
-    if (!Array.isArray(rawLessons)) return [];
-    return rawLessons.map((el) => ({
-      date: this._normalizeDateToInteger(el.date),
-      startTime: this._normalizeTimeToMinutes(el.startTime),
-      endTime: this._normalizeTimeToMinutes(el.endTime),
-      su: el.su && el.su[0] ? [{ name: el.su[0].name, longname: el.su[0].longname }] : [],
-      te: el.te && el.te[0] ? [{ name: el.te[0].name, longname: el.te[0].longname }] : [],
-      code: el.code || '',
-      substText: el.substText || '',
-      lstext: el.lstext || '',
-      id: el.id ?? null,
-      lid: el.lid ?? null,
-      lessonId: el.lessonId ?? null,
-    }));
-  },
-
-  _compactExams(rawExams) {
-    if (!Array.isArray(rawExams)) return [];
-    return rawExams.map((ex) => ({
-      examDate: this._normalizeDateToInteger(ex.examDate),
-      startTime: this._normalizeTimeToMinutes(ex.startTime),
-      endTime: this._normalizeTimeToMinutes(ex.endTime),
-      name: this._sanitizeHtmlText(ex.name ?? '', false),
-      subject: this._sanitizeHtmlText(ex.subject ?? '', false),
-      teachers: Array.isArray(ex.teachers) ? ex.teachers.slice(0, 2) : [],
-      text: this._sanitizeHtmlText(ex.text ?? '', true),
-    }));
-  },
-
-  _compactHomeworks(rawHw, studentId = null) {
-    if (!rawHw) return [];
-    const hwArr = Array.isArray(rawHw)
-      ? rawHw
-      : Array.isArray(rawHw.homeworks)
-        ? rawHw.homeworks
-        : Array.isArray(rawHw.homework)
-          ? rawHw.homework
-          : [];
-
-    // Build a map from homeworkId to elementIds (studentIds) using the records
-    const homeworkToStudents = {};
-    if (rawHw && Array.isArray(rawHw.records)) {
-      for (const record of rawHw.records) {
-        if (record.homeworkId && Array.isArray(record.elementIds)) {
-          homeworkToStudents[record.homeworkId] = record.elementIds;
-        }
-      }
-    }
-
-    // If we have student filtering info, filter the homework list
-    let filteredHw = hwArr;
-    if (studentId !== null && Object.keys(homeworkToStudents).length > 0) {
-      filteredHw = hwArr.filter((hw) => {
-        const elementIds = homeworkToStudents[hw.id];
-        // Include homework if: no mapping found (all get it) OR studentId is in elementIds
-        return !elementIds || elementIds.includes(studentId);
-      });
-    }
-
-    return filteredHw.map((hw) => ({
-      id: hw.id ?? null,
-      lid: hw.lid ?? null,
-      lessonId: hw.lessonId ?? null,
-      dueDate: hw.dueDate ?? hw.date ?? null,
-      completed: hw.completed ?? null,
-      text: this._sanitizeHtmlText(hw.text ?? hw.description ?? hw.remark ?? '', true),
-      remark: this._sanitizeHtmlText(hw.remark ?? '', false),
-      su:
-        hw.su && typeof hw.su === 'object'
-          ? { name: hw.su.name, longname: hw.su.longname }
-          : hw.su && hw.su[0]
-            ? { name: hw.su[0].name, longname: hw.su[0].longname }
-            : null,
-    }));
-  },
-
-  _compactAbsences(rawAbsences) {
-    if (!Array.isArray(rawAbsences)) return [];
-    return rawAbsences.map((a) => ({
-      // Accept several common date field names returned by different
-      // webuntis versions/providers (startDate, date, absenceDate, day)
-      date: this._normalizeDateToInteger(a.date ?? a.startDate ?? a.absenceDate ?? a.day),
-      startTime: this._normalizeTimeToMinutes(a.startTime ?? a.start),
-      endTime: this._normalizeTimeToMinutes(a.endTime ?? a.end),
-      reason: this._sanitizeHtmlText(a.reason ?? a.reasonText ?? a.text ?? '', false),
-      excused: a.isExcused ?? a.excused ?? null,
-      student: a.student ?? null,
-      su: a.su && a.su[0] ? [{ name: a.su[0].name, longname: a.su[0].longname }] : [],
-      te: a.te && a.te[0] ? [{ name: a.te[0].name, longname: a.te[0].longname }] : [],
-      lessonId: a.lessonId ?? a.lid ?? a.id ?? null,
-    }));
-  },
-
-  _compactMessagesOfDay(rawMessages) {
-    if (!Array.isArray(rawMessages)) return [];
-    return rawMessages.map((m) => ({
-      id: m.id ?? null,
-      subject: this._sanitizeHtmlText(m.subject ?? m.title ?? '', true),
-      text: this._sanitizeHtmlText(m.text ?? m.content ?? '', true),
-      isExpanded: m.isExpanded ?? false,
-    }));
-  },
-
   _compactHolidays(rawHolidays) {
     if (!Array.isArray(rawHolidays)) return [];
     return rawHolidays.map((h) => ({
@@ -1624,9 +1535,15 @@ module.exports = NodeHelper.create({
       warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
     }
 
-    // Validate numeric ranges
+    // Validate numeric ranges (prefer new keys `nextDays` / `pastDays`)
+    if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
+      warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
+    }
+    if (Number.isFinite(config.pastDays) && config.pastDays < 0) {
+      warnings.push(`pastDays cannot be negative. Value: ${config.pastDays}`);
+    }
     if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
-      warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
+      warnings.push(`daysToShow cannot be negative (deprecated). Value: ${config.daysToShow}`);
     }
 
     // Get exams.daysAhead (from new namespace or legacy)
@@ -1660,25 +1577,29 @@ module.exports = NodeHelper.create({
       const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
       const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
-      // include the most relevant options that affect the backend fetch
-      // Include studentId to differentiate caches when multiple students use the same credentials
-      const sig = {
+      // Use the normalized student configuration as part of the cache signature
+      // to make caching more aggressive (higher hit rate) while still keeping
+      // a stable grouping by credentials. Redact sensitive fields before
+      // stringifying to avoid storing secrets in the signature string.
+      const normalizedStudent = this._normalizeLegacyConfig(student || {});
+      // Redact sensitive values that should not contribute to the raw signature
+      if (normalizedStudent.password) normalizedStudent.password = '***REDACTED***';
+      if (normalizedStudent.qrcode) normalizedStudent.qrcode = '***REDACTED***';
+      if (normalizedStudent.qr) normalizedStudent.qr = '***REDACTED***';
+
+      const sigObj = {
         credKey,
-        studentId: student.studentId,
-        className: student.class || student.className || null,
-        daysToShow: Number(student.daysToShow ?? this.config?.daysToShow ?? 0),
-        pastDaysToShow: Number(student.pastDaysToShow ?? this.config?.pastDaysToShow ?? 0),
-        useClassTimetable: Boolean(student.useClassTimetable ?? this.config?.useClassTimetable ?? false),
-        examsDaysAhead: Number(
-          student.exams?.daysAhead ?? student.examsDaysAhead ?? this.config?.exams?.daysAhead ?? this.config?.examsDaysAhead ?? 0
-        ),
-        wantsGrid: wantsGridWidget,
-        wantsLessons: wantsLessonsWidget,
-        wantsExams: wantsExamsWidget,
-        fetchHomeworks: Boolean(wantsHomeworkWidget),
-        fetchAbsences: Boolean(wantsAbsencesWidget),
+        student: normalizedStudent,
+        widgets: {
+          wantsGrid: wantsGridWidget,
+          wantsLessons: wantsLessonsWidget,
+          wantsExams: wantsExamsWidget,
+          fetchHomeworks: Boolean(wantsHomeworkWidget),
+          fetchAbsences: Boolean(wantsAbsencesWidget),
+        },
       };
-      return JSON.stringify(sig);
+
+      return JSON.stringify(sigObj);
     } catch {
       return String(Date.now());
     }
@@ -1754,6 +1675,9 @@ module.exports = NodeHelper.create({
     let untis = null;
     const sample = students[0];
     const groupWarnings = [];
+    // Per-fetch-cycle warning deduplication set. Ensures identical warnings
+    // are reported only once per processing run (prevents spam across students).
+    this._currentFetchWarnings = new Set();
 
     try {
       try {
@@ -1761,7 +1685,11 @@ module.exports = NodeHelper.create({
       } catch (err) {
         const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
         this._mmLog('error', null, msg);
-        groupWarnings.push(msg);
+        // Record and mark this warning for the current fetch cycle
+        if (!this._currentFetchWarnings.has(msg)) {
+          groupWarnings.push(msg);
+          this._currentFetchWarnings.add(msg);
+        }
         // Send error payload to frontend with warnings
         for (const student of students) {
           this.sendSocketNotification('GOT_DATA', {
@@ -1787,8 +1715,11 @@ module.exports = NodeHelper.create({
           if (studentValidationWarnings.length > 0) {
             studentValidationWarnings.forEach((w) => {
               this._mmLog('warn', student, w);
+              if (!this._currentFetchWarnings.has(w)) {
+                groupWarnings.push(w);
+                this._currentFetchWarnings.add(w);
+              }
             });
-            groupWarnings.push(...studentValidationWarnings);
           }
 
           // Build a signature for this student's request and consult cache
@@ -1830,19 +1761,33 @@ module.exports = NodeHelper.create({
             server: student.server || this.config?.server || 'webuntis.com',
           });
           if (warningMsg) {
-            groupWarnings.push(warningMsg);
+            // Only record each distinct warning once per fetch cycle
+            if (!this._currentFetchWarnings.has(warningMsg)) {
+              groupWarnings.push(warningMsg);
+              this._currentFetchWarnings.add(warningMsg);
+            }
             this._mmLog('warn', student, warningMsg);
           }
         }
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
-      groupWarnings.push(`Authentication failed for group: ${this._formatErr(error)}`);
+      const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
+      if (!this._currentFetchWarnings.has(authMsg)) {
+        groupWarnings.push(authMsg);
+        this._currentFetchWarnings.add(authMsg);
+      }
     } finally {
       try {
         if (untis) await untis.logout();
       } catch (err) {
         this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(err)}`);
+      }
+      // Clear per-fetch warning dedupe set now that processing for this group finished
+      try {
+        this._currentFetchWarnings = undefined;
+      } catch {
+        this._currentFetchWarnings = undefined;
       }
     }
   },
@@ -1860,7 +1805,7 @@ module.exports = NodeHelper.create({
       // Normalize legacy config keys server-side as a defensive measure
       try {
         // require can fail in browser-like environments; wrap defensively
-        const mapper = require(path.join(__dirname, 'config', 'legacy-config-mapper.js'));
+        const mapper = require(path.join(__dirname, 'lib', 'legacy-config-mapper.js'));
         if (mapper && typeof mapper.normalizeConfig === 'function') {
           this.config = mapper.normalizeConfig(payload);
         } else {
@@ -1875,11 +1820,52 @@ module.exports = NodeHelper.create({
       // Apply legacy config normalization to show warnings and formatted output
       this.config = this._normalizeLegacyConfig(this.config);
 
+      // Validate configuration and return errors to frontend if invalid
+      try {
+        const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
+        const { valid, errors, warnings } = validateConfig(this.config, validatorLogger);
+        if (!valid) {
+          this.sendSocketNotification('CONFIG_ERROR', {
+            errors,
+            warnings,
+            severity: 'ERROR',
+            message: 'Configuration validation failed',
+          });
+          return;
+        }
+        if (warnings && warnings.length > 0) {
+          // Only send CONFIG_WARNING once per helper lifecycle to avoid repeated warnings
+          if (!this._configWarningsSent) {
+            this.sendSocketNotification('CONFIG_WARNING', {
+              warnings,
+              severity: 'WARN',
+              message: 'Configuration has warnings (deprecated fields detected)',
+            });
+            this._configWarningsSent = true;
+          } else {
+            this._mmLog('debug', null, 'CONFIG_WARNING suppressed (already sent)');
+          }
+        }
+      } catch (e) {
+        this._mmLog('debug', null, `Config validation failed unexpectedly: ${this._formatErr(e)}`);
+      }
+
       this._mmLog(
         'info',
         null,
         `Data request received (FETCH_DATA for students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`
       );
+
+      // Debug: show which interval keys frontend sent (updateInterval preferred)
+      try {
+        this._mmLog(
+          'debug',
+          null,
+          `Received intervals: updateInterval=${this.config.updateInterval} fetchIntervalMs=${this.config.fetchIntervalMs}`
+        );
+      } catch {
+        // ignore
+      }
 
       try {
         // Auto-discover students from app/data when parent credentials are provided but students[] is missing
@@ -1895,9 +1881,19 @@ module.exports = NodeHelper.create({
               const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
               const autoStudents = this._deriveStudentsFromAppData(appData);
               if (autoStudents && autoStudents.length > 0) {
-                this.config.students = autoStudents;
-                const studentList = autoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-                this._mmLog('info', null, `Auto-built students array from app/data: ${autoStudents.length} students:\n  ${studentList}`);
+                if (!this.config._autoStudentsAssigned) {
+                  const defNoStudents = { ...(this.config || {}) };
+                  delete defNoStudents.students;
+                  const normalized = autoStudents.map((s) =>
+                    this._normalizeLegacyConfig({ ...defNoStudents, ...(s || {}) }, this.defaults)
+                  );
+                  this.config.students = normalized;
+                  this.config._autoStudentsAssigned = true;
+                  const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+                  this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
+                } else {
+                  this._mmLog('debug', null, 'Auto-built students already assigned; skipping');
+                }
               }
             }
           } catch (e) {
@@ -1911,7 +1907,7 @@ module.exports = NodeHelper.create({
 
         // Group students by credential. Normalize each student config for legacy key compatibility.
         const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
-        const mapper = require('./config/legacy-config-mapper');
+        const mapper = require('./lib/legacy-config-mapper');
         for (const student of studentsList) {
           // Apply legacy config mapping to student-level config
           const normalizedStudent = mapper && typeof mapper.normalizeConfig === 'function' ? mapper.normalizeConfig(student) : student;
@@ -2014,8 +2010,6 @@ module.exports = NodeHelper.create({
 
     // Detect login mode
     const useQrLogin = Boolean(student.qrcode);
-    const isParentAccount = !useQrLogin && Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
-    const studentId = isParentAccount ? Number(student.studentId) : null;
     const restOptions = { cacheKey: credKey, untisClient: untis };
     const { school, server } = this._resolveSchoolAndServer(student);
     const ownPersonId = useQrLogin && untis?.sessionInformation ? untis.sessionInformation.personId : null;
@@ -2041,13 +2035,50 @@ module.exports = NodeHelper.create({
     const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
     const fetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
 
-    let rangeStart = new Date(Date.now());
-    let rangeEnd = new Date(Date.now());
+    // Respect optional debug date from module config to allow reproducible fetches.
+    const baseNow = function () {
+      try {
+        const dbg = (typeof this.config?.debugDate === 'string' && this.config.debugDate) || null;
+        if (dbg) {
+          // accept YYYY-MM-DD or YYYYMMDD
+          const s = String(dbg).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
+          if (/^\d{8}$/.test(s)) return new Date(`${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}T00:00:00`);
+        }
+      } catch {
+        // fall through to real now
+      }
+      return new Date(Date.now());
+    }.call(this);
 
-    const pastDaysValue = student.pastDaysToShow ?? this.config?.pastDaysToShow ?? 0;
-    const daysToShowValue = student.daysToShow ?? this.config?.daysToShow ?? 2;
-    rangeStart.setDate(rangeStart.getDate() - pastDaysValue);
-    rangeEnd.setDate(rangeEnd.getDate() - pastDaysValue + parseInt(daysToShowValue));
+    let rangeStart = new Date(baseNow);
+    let rangeEnd = new Date(baseNow);
+
+    // Use per-student `pastDays` / `nextDays` (preferred). Fall back to legacy keys.
+    const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? this.config?.pastDays ?? this.config?.pastDaysToShow ?? 0);
+    // Prefer explicit `nextDays` (student), then module-level `nextDays`,
+    // then fall back to legacy `daysToShow` values.
+    const nextDaysValue = Number(student.nextDays ?? this.config?.nextDays ?? student.daysToShow ?? this.config?.daysToShow ?? 2);
+
+    // For timetable/grid, also check grid-specific nextDays/pastDays
+    // If grid.nextDays is set, use max(global nextDays, grid.nextDays) to ensure we fetch enough data
+    let gridNextDays = nextDaysValue;
+    let gridPastDays = pastDaysValue;
+    if (wantsGridWidget) {
+      const gridNext = Number(student.grid?.nextDays ?? this.config?.grid?.nextDays ?? 0);
+      const gridPast = Number(student.grid?.pastDays ?? this.config?.grid?.pastDays ?? 0);
+      gridNextDays = Math.max(nextDaysValue, gridNext > 0 ? gridNext : 0);
+      gridPastDays = Math.max(pastDaysValue, gridPast > 0 ? gridPast : 0);
+    }
+
+    rangeStart.setDate(rangeStart.getDate() - gridPastDays);
+    rangeEnd.setDate(rangeEnd.getDate() - gridPastDays + parseInt(gridNextDays, 10));
+    logger(
+      `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${gridPastDays}, nextDays=${gridNextDays}`
+    );
+    logger(
+      `Config values: module.nextDays=${this.config?.nextDays}, module.grid.nextDays=${this.config?.grid?.nextDays}, student.grid.nextDays=${student.grid?.nextDays}`
+    );
     // Compute absences-specific start and end dates (allow per-student override or global config)
     const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
       ? Number(student.absences?.pastDays ?? student.absencesPastDays)
@@ -2060,9 +2091,9 @@ module.exports = NodeHelper.create({
         ? Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays)
         : 0;
 
-    const absencesRangeStart = new Date(Date.now());
+    const absencesRangeStart = new Date(baseNow);
     absencesRangeStart.setDate(absencesRangeStart.getDate() - absPast);
-    const absencesRangeEnd = new Date(Date.now());
+    const absencesRangeEnd = new Date(baseNow);
     absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
     // Get Timegrid (raw) - only needed for grid widget
@@ -2078,7 +2109,7 @@ module.exports = NodeHelper.create({
     // Prepare raw timetable containers
     let timetable = [];
 
-    if (fetchTimetable && student.daysToShow > 0) {
+    if (fetchTimetable && (student.daysToShow ?? student.nextDays ?? this.config?.daysToShow ?? this.config?.nextDays) > 0) {
       try {
         for (const target of restTargets) {
           logger(`Timetable: fetching via REST (${describeTarget(target)})...`);
@@ -2123,9 +2154,9 @@ module.exports = NodeHelper.create({
         validatedDays = 30;
       }
 
-      rangeStart = new Date(Date.now());
-      rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow); // important for grid widget
-      rangeEnd = new Date(Date.now());
+      rangeStart = new Date(baseNow);
+      rangeStart.setDate(rangeStart.getDate() - (student.pastDaysToShow ?? student.pastDays ?? this.config?.pastDays ?? 0));
+      rangeEnd = new Date(baseNow);
       rangeEnd.setDate(rangeEnd.getDate() + validatedDays);
 
       logger(`Exams: querying ${validatedDays} days ahead...`);
@@ -2149,19 +2180,40 @@ module.exports = NodeHelper.create({
       logger(`Exams: skipped (exams.daysAhead=${examsDaysAheadValue})`);
     }
 
-    // Load homework for the period (from today until N days in the future) – keep raw
+    // Load homework for the period – keep raw
     let hwResult = null;
     if (fetchHomeworks) {
       logger(`Homework: fetching...`);
       try {
-        const hwRangeStart = new Date(Date.now());
-        const hwRangeEnd = new Date(Date.now());
-        hwRangeEnd.setDate(hwRangeEnd.getDate() + 28); // Default: 28 days ahead
+        // Homework range can be specified per widget with homework.nextDays and homework.pastDays
+        const hwDaysAhead = Number(
+          student.homework?.nextDays ??
+          student.homework?.daysAhead ??
+          this.config?.homework?.nextDays ??
+          this.config?.homework?.daysAhead ??
+          28
+        );
+        const hwDaysPast = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 0);
+        const hwRangeStart = new Date(baseNow);
+        const hwRangeEnd = new Date(baseNow);
+        hwRangeStart.setDate(hwRangeStart.getDate() - hwDaysPast);
+        hwRangeEnd.setDate(hwRangeEnd.getDate() + (Number.isFinite(hwDaysAhead) ? hwDaysAhead : 28));
+
+        logger(
+          `Homework range: ${hwRangeStart.toISOString().split('T')[0]} to ${hwRangeEnd.toISOString().split('T')[0]} (past: ${hwDaysPast}, future: ${hwDaysAhead})`
+        );
 
         for (const target of restTargets) {
           logger(`Homework: fetching via REST (${describeTarget(target)})...`);
           try {
-            const homeworks = await this._callRest(this._getHomeworkViaRest, target, hwRangeStart, hwRangeEnd, restOptions);
+            const homeworks = await this._callRest(
+              this._getHomeworkViaRest,
+              target,
+              hwRangeStart,
+              hwRangeEnd,
+              target.studentId,
+              restOptions
+            );
             hwResult = homeworks;
             logger(`✓ Homework: ${homeworks.length} items\n`);
             break;
@@ -2251,11 +2303,11 @@ module.exports = NodeHelper.create({
 
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
-    const compactTimetable = this._compactLessons(timetable);
-    const compactExams = this._compactExams(rawExams);
-    const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult, studentId) : [];
-    const compactAbsences = fetchAbsences ? this._compactAbsences(rawAbsences) : [];
-    const compactMessagesOfDay = fetchMessagesOfDay ? this._compactMessagesOfDay(rawMessagesOfDay) : [];
+    const compactTimetable = compactArray(timetable, schemas.lesson);
+    const compactExams = compactArray(rawExams, schemas.exam);
+    const compactHomeworks = fetchHomeworks ? compactArray(hwResult, schemas.homework) : [];
+    const compactAbsences = fetchAbsences ? compactArray(rawAbsences, schemas.absence) : [];
+    const compactMessagesOfDay = fetchMessagesOfDay ? compactArray(rawMessagesOfDay, schemas.message) : [];
     const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
 
     // Build payload and send it. Also return the payload for caching callers.
@@ -2279,20 +2331,31 @@ module.exports = NodeHelper.create({
       // independent of per-student sections. Dedupe messages so each is shown once.
       let warnings = [];
 
+      // Include module-level and per-student warnings, but ensure each
+      // distinct warning is emitted only once per fetch cycle to avoid spam.
+      const addWarning = (msg) => {
+        if (!msg) return;
+        if (!this._currentFetchWarnings) this._currentFetchWarnings = new Set();
+        if (!this._currentFetchWarnings.has(msg)) {
+          warnings.push(msg);
+          this._currentFetchWarnings.add(msg);
+        }
+      };
+
       // Include module-level warnings (e.g., legacy config warnings)
       if (this.config && Array.isArray(this.config.__warnings)) {
-        warnings = warnings.concat(this.config.__warnings);
+        this.config.__warnings.forEach(addWarning);
       }
 
       // Include per-student warnings
       if (payload && payload.config && Array.isArray(payload.config.__warnings)) {
-        warnings = warnings.concat(payload.config.__warnings);
+        payload.config.__warnings.forEach(addWarning);
       }
 
       // ===== ADD EMPTY DATA WARNINGS =====
       if (timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
         const emptyWarn = this._checkEmptyDataWarning(timetable, 'lessons', student.title, true);
-        if (emptyWarn) warnings.push(emptyWarn);
+        addWarning(emptyWarn);
       }
 
       const uniqWarnings = Array.from(new Set(warnings));

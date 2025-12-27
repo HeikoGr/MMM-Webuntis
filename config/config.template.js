@@ -33,8 +33,11 @@ let config = {
         mode: 'verbose', // 'verbose' or 'compact'
 
         // === TIMETABLE FETCH RANGE ===
-        daysToShow: 7,
-        pastDaysToShow: 0,
+        // Use `nextDays` and `pastDays` (preferred). Legacy keys `daysToShow`/`pastDaysToShow` are still accepted.
+        // Set `debugDate` to a YYYY-MM-DD string to freeze "today" for debugging (null = disabled).
+        debugDate: null,
+        nextDays: 7,
+        pastDays: 0,
 
         // === LESSONS WIDGET ===
         showStartTime: false,
@@ -54,8 +57,7 @@ let config = {
         showNowLine: true,
 
         // === ABSENCES ===
-        pastDays: 21,
-        futureDays: 7,
+        // Per-widget absences options are provided in the `absences` namespace below.
         // Structured per-widget formats (preferred)
         dateFormats: {
           // (optional) - defaults to 'dd.MM.' if not set
@@ -73,8 +75,9 @@ let config = {
           showStartTime: false,
           showRegular: false,
           useShortSubject: false,
-          showTeacherMode: 'full',
+          showTeacherMode: 'full', // 'off'|'initial'|'full'
           showSubstitution: false,
+          nextDays: 7, // (optional) widget-specific days ahead
         },
 
         grid: {
@@ -82,6 +85,8 @@ let config = {
           mergeGap: 15,
           maxLessons: 0,
           showNowLine: true,
+          nextDays: 1, // (optional) widget-specific days ahead
+          pastDays: 0, // (optional) widget-specific days past
         },
 
         exams: {
@@ -93,12 +98,20 @@ let config = {
 
         homework: {
           dateFormat: 'dd.MM.',
+          showSubject: true, // (optional) show subject name with homework
+          showText: true, // (optional) show homework description/text
+          nextDays: 28, // (optional) widget-specific days ahead
+          pastDays: 0, // (optional) widget-specific days past
         },
 
         absences: {
           dateFormat: 'dd.MM.',
-          pastDays: 21,
-          futureDays: 7,
+          pastDays: 21, // days in the past to show
+          futureDays: 7, // days in the future to show
+          showDate: true, // (optional) show absence date
+          showExcused: true, // (optional) show excused/unexcused status
+          showReason: true, // (optional) show reason for absence
+          maxItems: null, // (optional) max number of absence entries to show (null = no limit)
         },
 
         messagesofday: {},

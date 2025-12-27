@@ -17,17 +17,17 @@
 
     log('debug', `[absences] render start | entries: ${absences.length}`);
 
-    // Prefer studentConfig (node_helper normalizes per-student); fall back to module config
-    const maxItems = studentConfig?.absences?.maxItems ?? ctx.config?.absences?.maxItems ?? null;
-    const showDate = studentConfig?.absences?.showDate ?? ctx.config?.absences?.showDate ?? true;
-    const showExcused = studentConfig?.absences?.showExcused ?? ctx.config?.absences?.showExcused ?? true;
-    const showReason = studentConfig?.absences?.showReason ?? ctx.config?.absences?.showReason ?? true;
+    // Use studentConfig only (backend normalization already applied)
+    const maxItems = studentConfig?.absences?.maxItems ?? null;
+    const showDate = studentConfig?.absences?.showDate ?? true;
+    const showExcused = studentConfig?.absences?.showExcused ?? true;
+    const showReason = studentConfig?.absences?.showReason ?? true;
     const now = new Date();
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
     // Absence range options (student-level preference)
-    const rangeStart = studentConfig?.absences?.pastDays ?? ctx.config?.absences?.pastDays ?? 30;
-    const rangeEnd = studentConfig?.absences?.futureDays ?? ctx.config?.absences?.futureDays ?? 7;
+    const rangeStart = studentConfig?.absences?.pastDays ?? 30;
+    const rangeEnd = studentConfig?.absences?.futureDays ?? 7;
 
     log(
       ctx,
@@ -80,7 +80,7 @@
       log('debug', `[absences] add: date=${ab?.date}, reason="${ab?.reason || 'none'}"`);
 
       const dateRaw = ab?.date;
-      const dateFormat = studentConfig?.absences?.dateFormat ?? ctx.config?.absences?.dateFormat ?? 'dd.MM.';
+      const dateFormat = studentConfig?.absences?.dateFormat ?? 'dd.MM.';
       const dateStr = dateRaw ? (util?.formatDate ? util.formatDate(dateRaw, dateFormat) : util.formatYmd(dateRaw)) : '';
       const st = util.formatTime(ab?.startTime);
       const et = util.formatTime(ab?.endTime);

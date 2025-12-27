@@ -24,8 +24,10 @@
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     let addedRows = 0;
 
-    if (!(studentConfig && studentConfig.daysToShow > 0)) {
-      log('debug', `[lessons] skipped: daysToShow not configured for "${studentTitle}"`);
+    // Normalized config from backend already has all legacy keys mapped
+    const configuredNext = studentConfig?.lessons?.nextDays ?? studentConfig?.nextDays ?? 0;
+    if (!configuredNext || Number(configuredNext) <= 0) {
+      log('debug', `[lessons] skipped: nextDays not configured for "${studentTitle}"`);
       return 0;
     }
 
@@ -37,9 +39,10 @@
       `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | days: ${studentConfig.daysToShow}`
     );
 
-    const now = new Date();
-    const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-    const nowHm = now.getHours() * 100 + now.getMinutes();
+    // Use module's computed today value when available (supports debugDate), else local now
+    const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
+    const nowLocal = new Date();
+    const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
 
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
@@ -56,25 +59,39 @@
     log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
 
     // Determine display window (align with grid behavior) - studentConfig has priority
-    const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
-    const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
+    const daysToShow = Number(configuredNext) > 0 ? Math.max(1, parseInt(configuredNext, 10)) : 1;
+    const pastDays = Math.max(0, parseInt(studentConfig?.lessons?.pastDays ?? studentConfig?.pastDays ?? 0, 10));
     const startOffset = -pastDays;
-    const totalDisplayDays = daysToShow;
+    // totalDisplayDays = past + today + future
+    // Example: pastDays=1, daysToShow=7 → 1 + 1 + 7 = 9 days
+    const totalDisplayDays = pastDays + 1 + daysToShow;
 
-    log('debug', `[lessons] window: ${totalDisplayDays} future days + ${pastDays} past days`);
+    log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
     // Determine mode (student-config has priority)
-    const mode = studentConfig?.mode ?? ctx.config?.mode ?? 'compact';
+    const mode = studentConfig?.mode ?? 'compact';
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-    // Determine lessons date format (student -> module config -> default)
-    const lessonsDateFormat = studentConfig?.lessons?.dateFormat ?? ctx.config?.lessons?.dateFormat ?? 'EEE';
+    // Determine lessons date format (student config has priority)
+    const lessonsDateFormat = studentConfig?.lessons?.dateFormat ?? 'EEE';
+
+    // Determine base date (supports debugDate via ctx._currentTodayYmd)
+    let baseDate;
+    if (ctx._currentTodayYmd) {
+      const s = String(ctx._currentTodayYmd);
+      const by = parseInt(s.substring(0, 4), 10);
+      const bm = parseInt(s.substring(4, 6), 10) - 1;
+      const bd = parseInt(s.substring(6, 8), 10);
+      baseDate = new Date(by, bm, bd);
+    } else {
+      baseDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
+    }
 
     // Iterate display days in order and render either lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
-      const dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayIndex);
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const y = dayDate.getFullYear();
       const m = ('0' + (dayDate.getMonth() + 1)).slice(-2);
       const dd = ('0' + dayDate.getDate()).slice(-2);
@@ -109,14 +126,8 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
-          (!(
-            studentConfig.lessons?.showRegular ??
-            studentConfig?.showRegular ??
-            ctx.config?.lessons?.showRegular ??
-            ctx.config.showRegular
-          ) &&
-            (entry.code || '') === '') ||
-          (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? ctx.config.logLevel) !== 'debug')
+          (!(studentConfig.lessons?.showRegular ?? studentConfig?.showRegular ?? true) && (entry.code || '') === '') ||
+          (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? 'info') !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
           continue;
@@ -154,13 +165,7 @@
           if (teacherFull !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherFull)})`;
         }
 
-        if (
-          (studentConfig.lessons?.showSubstitution ??
-            studentConfig?.showSubstitution ??
-            ctx.config?.lessons?.showSubstitution ??
-            ctx.config.showSubstitution) &&
-          (entry.substText || '') !== ''
-        ) {
+        if ((studentConfig.lessons?.showSubstitution ?? studentConfig?.showSubstitution ?? false) && (entry.substText || '') !== '') {
           subjectStr += `<br/><span class='xsmall dimmed'>${escapeHtml(entry.substText)}</span>`;
         }
 
@@ -170,16 +175,24 @@
         }
 
         let addClass = '';
-        if (entry.code === 'cancelled') {
-          addClass = 'cancelled';
-        } else if (entry.code === 'irregular') {
-          addClass = 'substitution';
-        } else if (entry.code === 'error' || entry.code === 'info') {
-          addClass = entry.code;
-        } else if (entry.status === 'CANCELLED') {
-          addClass = 'cancelled';
-        } else if (entry.status === 'SUBSTITUTION' || (entry.substText && entry.substText.trim() !== '')) {
-          addClass = 'substitution';
+        // Check for exam type: REST API type field ("EXAM" uppercase) or text-based fallback (lstext keywords)
+        if (entry.type && String(entry.type).toUpperCase() === 'EXAM') {
+          addClass = 'exam';
+        } else {
+          const entryText = String(entry.lstext || '').toLowerCase();
+          if (entryText.includes('klassenarbeit') || entryText.includes('klausur') || entryText.includes('arbeit')) {
+            addClass = 'exam';
+          } else if (entry.code === 'cancelled') {
+            addClass = 'cancelled';
+          } else if (entry.code === 'irregular') {
+            addClass = 'substitution';
+          } else if (entry.code === 'error' || entry.code === 'info') {
+            addClass = entry.code;
+          } else if (entry.status === 'CANCELLED') {
+            addClass = 'cancelled';
+          } else if (entry.status === 'SUBSTITUTION' || (entry.substText && entry.substText.trim() !== '')) {
+            addClass = 'substitution';
+          }
         }
 
         addTableRow(table, 'lessonRow', studentCell, timeStr, subjectStr, addClass);

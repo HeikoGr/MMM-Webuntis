@@ -970,7 +970,7 @@ async fetchData(untis, restClient, apiMode, student, identifier, credKey) {
 
   // Absences
   let rawAbsences = [];
-  if (fetchAbsences && !isParentAccount) {
+  if (fetchAbsences && !isParentMode) {
     rawAbsences = await this._fetchAbsences(untis, restClient, apiMode, student, absenceStart, absenceEnd);
   }
 
