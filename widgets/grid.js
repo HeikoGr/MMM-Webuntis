@@ -129,8 +129,8 @@ function getNowLineState(ctx) {
       const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
-      // Determine date format from student namespace -> dateFormats -> global
-      const gridDateFormat = studentConfig?.grid?.dateFormat ?? studentConfig?.dateFormats?.grid ?? ctx.config?.grid?.dateFormat ?? ctx.config?.dateFormats?.grid;
+      // Determine date format from student -> module config -> default
+      const gridDateFormat = studentConfig?.grid?.dateFormat ?? ctx.config?.grid?.dateFormat ?? 'EEE dd.MM.';
       let headerFormat = gridDateFormat;
 
       const dayLabelText = util?.formatDate
@@ -177,7 +177,9 @@ function getNowLineState(ctx) {
       allEnd = 17 * 60;
     }
 
-    const maxGridLessonsCfg_before = Number(studentConfig.maxGridLessons ?? ctx.config.maxGridLessons ?? 0);
+    const maxGridLessonsCfg_before = Number(
+      studentConfig?.grid?.maxLessons ?? studentConfig?.maxLessons ?? ctx.config?.grid?.maxLessons ?? ctx.config.maxLessons ?? 0
+    );
     const maxGridLessons_before = Number.isFinite(maxGridLessonsCfg_before) ? Math.max(0, Math.floor(maxGridLessonsCfg_before)) : 0;
     if (maxGridLessons_before >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
       const tu = timeUnits;
@@ -392,7 +394,7 @@ function getNowLineState(ctx) {
         }
       }
 
-      const maxGridLessonsCfg = Number(ctx.config.maxGridLessons ?? 0);
+      const maxGridLessonsCfg = Number(ctx.config?.grid?.maxLessons ?? ctx.config.maxLessons ?? 0);
       const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
       let lessonsToRender = dayLessons;
 

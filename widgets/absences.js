@@ -26,18 +26,8 @@
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
     // Absence range options (student-level preference)
-    const rangeStart =
-      studentConfig?.absencesPastDays ??
-      studentConfig?.absences?.rangeStart ??
-      ctx.config?.absencesPastDays ??
-      ctx.config?.absences?.rangeStart ??
-      30;
-    const rangeEnd =
-      studentConfig?.absencesFutureDays ??
-      studentConfig?.absences?.rangeEnd ??
-      ctx.config?.absencesFutureDays ??
-      ctx.config?.absences?.rangeEnd ??
-      7;
+    const rangeStart = studentConfig?.absences?.pastDays ?? ctx.config?.absences?.pastDays ?? 30;
+    const rangeEnd = studentConfig?.absences?.futureDays ?? ctx.config?.absences?.futureDays ?? 7;
 
     log(
       ctx,
@@ -90,14 +80,7 @@
       log('debug', `[absences] add: date=${ab?.date}, reason="${ab?.reason || 'none'}"`);
 
       const dateRaw = ab?.date;
-      const dateFormat =
-        studentConfig?.absences?.dateFormat ??
-        studentConfig?.dateFormats?.absences ??
-        ctx.config?.absences?.dateFormat ??
-        ctx.config?.dateFormats?.absences ??
-        ctx.config?.dateFormats?.default ??
-        ctx.config?.dateFormat ??
-        'dd.MM.';
+      const dateFormat = studentConfig?.absences?.dateFormat ?? ctx.config?.absences?.dateFormat ?? 'dd.MM.';
       const dateStr = dateRaw ? (util?.formatDate ? util.formatDate(dateRaw, dateFormat) : util.formatYmd(dateRaw)) : '';
       const st = util.formatTime(ab?.startTime);
       const et = util.formatTime(ab?.endTime);

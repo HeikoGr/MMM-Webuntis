@@ -38,24 +38,24 @@ let config = {
 
         // === LESSONS WIDGET ===
         showStartTime: false,
-        showRegularLessons: false,
+        showRegular: false,
         showTeacherMode: 'full',
         useShortSubject: false,
-        showSubstitutionText: false,
+        showSubstitution: false,
 
         // === EXAMS WIDGET ===
-        examsDaysAhead: 21,
-        showExamSubject: true,
-        showExamTeacher: true,
+        daysAhead: 21,
+        showSubject: true,
+        showTeacher: true,
 
         // === GRID VIEW ===
-        mergeGapMinutes: 15,
-        maxGridLessons: 0,
+        mergeGap: 15,
+        maxLessons: 0,
         showNowLine: true,
 
         // === ABSENCES ===
-        absencesPastDays: 21,
-        absencesFutureDays: 7,
+        pastDays: 21,
+        futureDays: 7,
         // Structured per-widget formats (preferred)
         dateFormats: {
           // (optional) - defaults to 'dd.MM.' if not set
@@ -71,24 +71,24 @@ let config = {
         lessons: {
           dateFormat: 'EEE',
           showStartTime: false,
-          showRegularLessons: false,
+          showRegular: false,
           useShortSubject: false,
           showTeacherMode: 'full',
-          showSubstitutionText: false,
+          showSubstitution: false,
         },
 
         grid: {
           dateFormat: 'EEE dd.MM.',
-          mergeGapMinutes: 15,
-          maxGridLessons: 0,
+          mergeGap: 15,
+          maxLessons: 0,
           showNowLine: true,
         },
 
         exams: {
           dateFormat: 'dd.MM.',
-          examsDaysAhead: 21,
-          showExamSubject: true,
-          showExamTeacher: true,
+          daysAhead: 21,
+          showSubject: true,
+          showTeacher: true,
         },
 
         homework: {
@@ -97,8 +97,8 @@ let config = {
 
         absences: {
           dateFormat: 'dd.MM.',
-          absencesPastDays: 21,
-          absencesFutureDays: 7,
+          pastDays: 21,
+          futureDays: 7,
         },
 
         messagesofday: {},

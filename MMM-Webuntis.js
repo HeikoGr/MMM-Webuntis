@@ -16,61 +16,29 @@ Module.register('MMM-Webuntis', {
     daysToShow: 7, // number of upcoming days to fetch/display per student (0 = off)
     pastDaysToShow: 0, // number of past days to include (useful for debugging)
 
-    // === LESSONS WIDGET OPTIONS ===
-    showStartTime: false, // show start time instead of lesson number
-    showRegularLessons: false, // show regular lessons (not only substitutions/cancellations)
-    useShortSubject: false, // use short subject names where available
-    showTeacherMode: 'full', // teacher display: 'full', 'initial', or null/falsy for none
-    showSubstitutionText: false, // show substitution text/notes for changed lessons
-
-    // === EXAMS WIDGET OPTIONS ===
-    examsDaysAhead: 21, // number of days ahead to fetch exams (0 = off)
-    showExamSubject: true, // show subject for exams
-    showExamTeacher: true, // show teacher name for exams
-
-    // === GRID VIEW OPTIONS ===
-    mergeGapMinutes: 15, // max gap (minutes) between lessons to merge them
-    maxGridLessons: 0, // max lessons per day in grid (0 = show all)
-    showNowLine: true, // show the current time line in grid view
-
-    // === ABSENCES WIDGET OPTIONS ===
-    absencesPastDays: 21, // past days to include when fetching absences
-    absencesFutureDays: 7, // future days to include when fetching absences
-
-    // === DATE FORMAT OPTIONS ===
-    // Structured date formats (per-widget).
-    dateFormats: {
-      default: 'dd.MM.',
-      lessons: 'EEE', // prefix weekday for lessons
-      grid: 'EEE dd.MM.',
-      exams: 'dd.MM.',
-      homework: 'dd.MM.',
-      absences: 'dd.MM.',
-    },
-
     // === WIDGET NAMESPACED DEFAULTS ===
-    // New per-widget configuration namespaces for future refactor.
+    // Per-widget configuration namespaces
     lessons: {
       dateFormat: 'EEE',
       showStartTime: false,
-      showRegularLessons: false,
+      showRegular: false,
       useShortSubject: false,
       showTeacherMode: 'full',
-      showSubstitutionText: false,
+      showSubstitution: false,
     },
 
     grid: {
       dateFormat: 'EEE dd.MM.',
-      mergeGapMinutes: 15,
-      maxGridLessons: 0,
+      mergeGap: 15, // in minutes
+      maxLessons: 0,
       showNowLine: true,
     },
 
     exams: {
       dateFormat: 'dd.MM.',
-      examsDaysAhead: 21,
-      showExamSubject: true,
-      showExamTeacher: true,
+      daysAhead: 21,
+      showSubject: true,
+      showTeacher: true,
     },
 
     homework: {
@@ -79,8 +47,8 @@ Module.register('MMM-Webuntis', {
 
     absences: {
       dateFormat: 'dd.MM.',
-      absencesPastDays: 21,
-      absencesFutureDays: 7,
+      pastDays: 21,
+      futureDays: 7,
     },
 
     messagesofday: {},
@@ -282,9 +250,13 @@ Module.register('MMM-Webuntis', {
       const studentConfig = this.configByStudent?.[studentTitle] || this.config;
       const table = this._createWidgetTable();
       const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle, studentConfig);
-      const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
-      if (count > 0) {
-        frag.appendChild(table);
+      try {
+        const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
+        if (count > 0) {
+          frag.appendChild(table);
+        }
+      } catch (err) {
+        this._log('error', `Error rendering widget for ${studentTitle}:`, err);
       }
     }
 
@@ -339,85 +311,6 @@ Module.register('MMM-Webuntis', {
     });
   },
 
-  _normalizeLegacyConfig(cfg, defaultsRef) {
-    if (!cfg || typeof cfg !== 'object') return cfg;
-    const out = { ...cfg };
-    const def = defaultsRef && typeof defaultsRef === 'object' ? defaultsRef : this?.defaults || {};
-
-    const legacyUsed = [];
-    const mapLegacy = (obj, legacyKey, newKey, transform, context = 'config') => {
-      if (!obj || typeof obj !== 'object') return;
-      const hasLegacy = obj[legacyKey] !== undefined && obj[legacyKey] !== null && obj[legacyKey] !== '';
-      if (!hasLegacy) return;
-      legacyUsed.push(`${context}.${legacyKey}`);
-      const legacyVal = typeof transform === 'function' ? transform(obj[legacyKey]) : obj[legacyKey];
-      obj[newKey] = legacyVal;
-    };
-
-    mapLegacy(out, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
-    mapLegacy(out, 'days', 'daysToShow', (v) => Number(v), 'config');
-    mapLegacy(out, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
-    mapLegacy(out, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
-
-    const dbg = out.debug ?? out.enableDebug;
-    if (typeof dbg === 'boolean') {
-      legacyUsed.push('config.debug|enableDebug');
-      out.logLevel = dbg ? 'debug' : 'none';
-    }
-
-    if (out.displaymode !== undefined && out.displaymode !== null && out.displaymode !== '') {
-      legacyUsed.push('config.displaymode');
-      out.displayMode = String(out.displaymode).toLowerCase();
-    }
-    if (typeof out.displayMode === 'string') out.displayMode = out.displayMode.toLowerCase();
-
-    if (Array.isArray(out.students)) {
-      for (let i = 0; i < out.students.length; i++) {
-        const s = out.students[i];
-        if (!s || typeof s !== 'object') continue;
-        // IMPORTANT: do not merge `students` into each student config.
-        // Doing so creates circular references (student -> students[] -> student)
-        // which breaks Socket.IO payload serialization (hasBinary recursion).
-        const defNoStudents = { ...def };
-        delete defNoStudents.students;
-        const outNoStudents = { ...out };
-        delete outNoStudents.students;
-
-        const ns = { ...defNoStudents, ...outNoStudents, ...s };
-
-        mapLegacy(ns, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'days', 'daysToShow', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'examsDays', 'examsDaysAhead', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), `students[${i}]`);
-
-        if (ns.displaymode !== undefined && ns.displaymode !== null && ns.displaymode !== '') {
-          ns.displayMode = String(ns.displaymode).toLowerCase();
-          legacyUsed.push(`students[${i}].displaymode`);
-        }
-        if (typeof ns.displayMode === 'string') ns.displayMode = ns.displayMode.toLowerCase();
-
-        out.students[i] = ns;
-      }
-    }
-
-    if (legacyUsed.length > 0) {
-      try {
-        const uniq = Array.from(new Set(legacyUsed));
-        const msg = `Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
-        if (typeof Log !== 'undefined' && Log && typeof Log.warn === 'function') {
-          Log.warn('[MMM-Webuntis] ' + msg);
-        } else {
-          console.warn('[MMM-Webuntis] ' + msg);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    this._log('debug', 'Normalized legacy config keys (post-merge)', out);
-    return out;
-  },
-
   _buildSendConfig() {
     const defNoStudents = { ...(this.config || {}) };
     delete defNoStudents.students;
@@ -467,12 +360,12 @@ Module.register('MMM-Webuntis', {
       warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
     }
 
-    if (Number.isFinite(config.examsDaysAhead) && (config.examsDaysAhead < 0 || config.examsDaysAhead > 365)) {
-      warnings.push(`examsDaysAhead should be between 0 and 365. Value: ${config.examsDaysAhead}`);
+    if (Number.isFinite(config.exams?.daysAhead) && (config.exams.daysAhead < 0 || config.exams.daysAhead > 365)) {
+      warnings.push(`exams.daysAhead should be between 0 and 365. Value: ${config.exams.daysAhead}`);
     }
 
-    if (Number.isFinite(config.mergeGapMinutes) && config.mergeGapMinutes < 0) {
-      warnings.push(`mergeGapMinutes cannot be negative. Value: ${config.mergeGapMinutes}`);
+    if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
+      warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
     }
 
     // Check if no students configured

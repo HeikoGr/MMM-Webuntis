@@ -161,63 +161,100 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | `daysToShow` | int | `7` | Number of upcoming days to fetch/display per student (0 = off). Can be overridden per-student. |
 | `pastDaysToShow` | int | `0` | Number of past days to include (useful for debugging). |
 
-### Lessons Widget
+### Lessons Widget Options
+
+Configure lessons widget behavior using the `lessons` configuration namespace:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `showStartTime` | bool | `false` | Show start time instead of lesson number in listings. |
-| `showRegularLessons` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
-| `useShortSubject` | bool | `false` | Use short subject names where available. |
-| `showTeacherMode` | string | `'full'` | Teacher display mode: `'full'` (full name), `'initial'` (initials), or falsy/null for none. |
-| `showSubstitutionText` | bool | `false` | Show substitution text/notes for changed lessons. |
+| `lessons.dateFormat` | string | `'EEE'` | Date format for lessons. Supports tokens like `EEE` (short weekday), `EEEE` (long weekday), `dd`, `mm`, `yyyy`. Example: `'EEEE'` shows the full weekday name. |
+| `lessons.showStartTime` | bool | `false` | Show start time instead of lesson number in listings. |
+| `lessons.showRegular` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
+| `lessons.useShortSubject` | bool | `false` | Use short subject names where available. |
+| `lessons.showTeacherMode` | string | `'full'` | Teacher display mode: `'full'` (full name), `'initial'` (initials), or null/falsy for none. |
+| `lessons.showSubstitution` | bool | `false` | Show substitution text/notes for changed lessons. |
 
-
-### Exams Widget
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `examsDaysAhead` | int | `21` | Number of days ahead to fetch exams (0 = off). |
-| `showExamSubject` | bool | `true` | Show subject for exams. |
-| `showExamTeacher` | bool | `true` | Show teacher for exams. |
-
-### Grid View
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `mergeGapMinutes` | int | `15` | Maximum gap (in minutes) between consecutive lessons to consider them mergeable. Lower = stricter merging. |
-| `maxGridLessons` | int | `0` | Limit lessons per day in grid view. `0` = show all. `>=1` limits to the first N `timeUnits` (periods). |
-| `showNowLine` | bool | `true` | Show the current time line in grid view. |
-
-### Absences Widget
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `absencesPastDays` | int | `21` | Number of past days to include when fetching absences. Can be overridden per-student. |
-| `absencesFutureDays` | int | `7` | Number of future days to extend the absences fetch beyond `daysToShow`. |
-
-### Date Formats
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `dateFormat` | string | `'dd.MM.'` | Format for timetable/lessons dates. Supports `dd`, `mm`, `yyyy`, `yy`, and non-padded variants `d`, `m` (e.g., `d.m.yyyy`). |
-| `examDateFormat` | string | `'dd.MM.'` | Format for exam widget dates. |
-| `homeworkDateFormat` | string | `'dd.MM.'` | Format for homework widget dates. |
-
-Additionally, the module supports a structured `dateFormats` object to configure per-widget formats in one place. Widgets will prefer values from `dateFormats` when present and fall back to the legacy single-value keys.
-
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `dateFormats.default` | string | `'dd.MM.'` | Default date format used by widgets when no widget-specific format is set. |
-| `dateFormats.lessons` | string | `'EEE'` | Date format for lessons/timetable. (default to EEE). Prefer `lessons.dateFormat` namespace for explicit widget config. |
-| `dateFormats.exams` | string | `'dd.MM.'` | Date format for exams. |
-| `dateFormats.homework` | string | `'dd.MM.'` | Date format for homework. |
-| `dateFormats.absences` | string | `'dd.MM.'` | Date format for absences widget. |
-
-Example - override only the absences format (minimal):
-
+**Example:**
 ```javascript
-// in your module config
-dateFormats: { absences: 'd.M.yyyy' },
+lessons: {
+  dateFormat: 'EEEE',
+  showStartTime: false,
+  showTeacherMode: 'full',
+}
+```
+
+### Grid Widget Options
+
+Configure grid widget behavior using the `grid` configuration namespace:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `grid.dateFormat` | string | `'EEE dd.MM.'` | Date format for grid header. Example: `'EEE dd.MM.'` shows weekday and date. |
+| `grid.mergeGap` | int | `15` | Maximum gap (in minutes) between consecutive lessons to consider them mergeable. |
+| `grid.maxLessons` | int | `0` | Limit lessons per day in grid view. `0` = show all; `>=1` limits to first N timeUnits. |
+| `grid.showNowLine` | bool | `true` | Show the current time line in grid view. |
+
+**Example:**
+```javascript
+grid: {
+  dateFormat: 'EEE dd.MM.',
+  mergeGap: 15,
+  maxLessons: 0,
+}
+```
+
+### Exams Widget Options
+
+Configure exams widget behavior using the `exams` configuration namespace:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `exams.dateFormat` | string | `'dd.MM.'` | Date format for exam dates. |
+| `exams.daysAhead` | int | `21` | Number of days ahead to fetch exams (0 = off). |
+| `exams.showSubject` | bool | `true` | Show subject for exams. |
+| `exams.showTeacher` | bool | `true` | Show teacher for exams. |
+
+**Example:**
+```javascript
+exams: {
+  dateFormat: 'dd.MM.',
+  daysAhead: 21,
+  showSubject: true,
+}
+```
+
+### Homework Widget Options
+
+Configure homework widget behavior using the `homework` configuration namespace:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `homework.dateFormat` | string | `'dd.MM.'` | Date format for homework due dates. |
+
+**Example:**
+```javascript
+homework: {
+  dateFormat: 'dd.MM.',
+}
+```
+
+### Absences Widget Options
+
+Configure absences widget behavior using the `absences` configuration namespace:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `absences.dateFormat` | string | `'dd.MM.'` | Date format for absence dates. |
+| `absences.pastDays` | int | `21` | Number of past days to include when fetching absences. |
+| `absences.futureDays` | int | `7` | Number of future days to extend the absences fetch beyond `daysToShow`. |
+
+**Example:**
+```javascript
+absences: {
+  dateFormat: 'dd.MM.',
+  pastDays: 21,
+  futureDays: 7,
+}
 ```
 
 ### Timetable Source
@@ -430,7 +467,7 @@ Each entry in the `students` array is an object with the following fields:
 
 - `class` (string) — class name (only needed if `useClassTimetable: true` and you want to fetch class timetable data).
 - `studentId` (number) — when using parent account mode (see [Parent Account Support](README.md#parent-account-support-optional)), use this to configure children by their ID instead of individual credentials.
-- Per-student option overrides — any global option (like `daysToShow`, `examsDaysAhead`, `logLevel`, etc.) can be supplied here to override the global value for this student only.
+- Per-student option overrides — any global option (like `daysToShow`, `exams.daysAhead`, `logLevel`, etc.) can be supplied here to override the global value for this student only.
 
 #### Example with QR Code
 
@@ -468,12 +505,12 @@ When using parent account credentials (see [Parent Account Support](README.md#pa
 ## How the timetable grid works (developer notes)
 
 - The backend (`node_helper.js`) fetches raw WebUntis data from the REST API. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
-- The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGapMinutes`. A merged block keeps a `lessonIds` array; `lessonId` is set when available.
+- The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGap` (minutes). A merged block keeps a `lessonIds` array; `lessonId` is set when available.
 - The backend includes a response cache (30s TTL) and REST auth token cache (14min TTL) to minimize redundant API calls and avoid authentication overhead.
 
 Additional grid rendering notes:
 
-- When `maxGridLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
+- When `maxLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
 
 ## Debugging and Logging
 

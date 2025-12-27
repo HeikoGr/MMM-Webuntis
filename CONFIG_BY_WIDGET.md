@@ -1,82 +1,92 @@
 # MMM-Webuntis — Configuration Options Per Widget
 
-This document summarizes the effective configuration keys that each widget reads (based on current code). The goal is to present each widget's options as a grouped object (like `dateFormats`) so future refactors can move widget options under widget-specific namespaces.
+This document describes the per-widget configuration structure used by MMM-Webuntis.
 
-Guiding rules:
-- Widgets prefer per-student overrides (`studentConfig.widgetName?.option`) then module-level (`config.widgetName?.option`), then legacy keys, then defaults.
-- `dateFormats` is already used as a per-widget map (e.g. `dateFormats.lessons`). A migration to `lessons.dateFormat` / `grid.dateFormat` etc. is recommended.
-- Do not remove legacy keys until a small compatibility mapper is in place (see `config/legacy-config-mapper.js`).
+## Configuration Lookup Order
 
----
+Widgets follow this priority for configuration:
+1. Student-specific override (`studentConfig.widgetName?.option`)
+2. Module-level widget namespace (`config.widgetName?.option`)
+3. Hardcoded defaults in widget code
 
-**Module-level / Common**
-- `header` (string)
-- `fetchIntervalMs` (ms)
-- `logLevel` (none|error|warn|info|debug)
-- `displayMode` (comma list: grid, lessons, exams, homework, absences, messagesofday)
-- `mode` (verbose|compact)
-- `daysToShow`, `pastDaysToShow`
-- `students` (array)
-- `dumpBackendPayloads` (boolean)
+## Widget Configuration Namespaces
 
----
+All widgets now use the new widget-namespaced configuration structure. Legacy `dateFormats` object has been deprecated.
 
-**Suggested Widget-Namespace Structure**
-(Recommended new shape; legacy mapper will populate these from existing keys.)
+### Module-level Common Options
 
-- `lessons` (object)
-  - `dateFormat` (string) — formerly `dateFormats.lessons` or `dateFormat`
-  - `showStartTime` (boolean)
-  - `showRegularLessons` (boolean)
-  - `useShortSubject` (boolean)
-  - `showTeacherMode` ("full"|"initial"|null)
-  - `showSubstitutionText` (boolean)
-  - (removed) `weekday` — use `dateFormat` tokens `EEE` / `EEEE` instead
-
-- `grid` (object)
-  - `dateFormat` (string) — formerly `dateFormats.grid`
-  - `mergeGapMinutes` (number)
-  - `maxGridLessons` (number)
-  - `showNowLine` (boolean)
-
-- `exams` (object)
-  - `dateFormat` (string) — formerly `dateFormats.exams`
-  - `examsDaysAhead` (number)
-  - `showExamSubject` (boolean)
-  - `showExamTeacher` (boolean)
-
-- `homework` (object)
-  - `dateFormat` (string) — formerly `dateFormats.homework` or `homeworkDateFormat`
-
-- `absences` (object)
-  - `dateFormat` (string) — formerly `dateFormats.absences`
-  - `absencesPastDays` (number)
-  - `absencesFutureDays` (number)
-
-- `messagesofday` (object)
-  - (no date-specific options currently)
+- `header` (string) — displayed module title
+- `fetchIntervalMs` (milliseconds) — fetch interval
+- `logLevel` (string) — 'none'|'error'|'warn'|'info'|'debug'
+- `displayMode` (string) — comma-separated widget list: grid, lessons, exams, homework, absences, messagesofday
+- `mode` (string) — 'verbose' (per-student sections) or 'compact' (combined)
+- `daysToShow` (number) — days to display/fetch per student
+- `pastDaysToShow` (number) — past days to include
+- `students` (array) — student configurations
+- `dumpBackendPayloads` (boolean) — debug option
 
 ---
 
-**Legacy keys that are still in use in code**
-- `dateFormats` (map: default, lessons, grid, exams, homework, absences)
-- `dateFormat` (legacy single date format)
-- `homeworkDateFormat`, `examDateFormat` (older single keys)
-- `showStartTime`, `showRegularLessons`, `useShortSubject`, etc. at module-level
+## Per-Widget Configuration
 
-These will be mapped into the widget namespaces by the compatibility mapper.
+### Lessons Widget
+
+- `lessons.dateFormat` (string, default: `'EEE'`) — date format for lessons (supports `EEE`, `EEEE`, `dd`, `mm`, `yyyy`)
+- `lessons.showStartTime` (boolean, default: `false`)
+- `lessons.showRegular` (boolean, default: `false`)
+- `lessons.useShortSubject` (boolean, default: `false`)
+- `lessons.showTeacherMode` (string, default: `'full'`) — `'full'`, `'initial'`, or null/falsy
+- `lessons.showSubstitution` (boolean, default: `false`)
+
+### Grid Widget
+
+- `grid.dateFormat` (string, default: `'EEE dd.MM.'`)
+- `grid.mergeGap` (number, default: `15`) — in minutes
+- `grid.maxLessons` (number, default: `0`)
+- `grid.showNowLine` (boolean, default: `true`)
+
+### Exams Widget
+
+- `exams.dateFormat` (string, default: `'dd.MM.'`)
+- `exams.daysAhead` (number, default: `21`)
+- `exams.showSubject` (boolean, default: `true`)
+- `exams.showTeacher` (boolean, default: `true`)
+
+### Homework Widget
+
+- `homework.dateFormat` (string, default: `'dd.MM.'`)
+
+### Absences Widget
+
+- `absences.dateFormat` (string, default: `'dd.MM.'`)
+- `absences.pastDays` (number, default: `21`)
+- `absences.futureDays` (number, default: `7`)
+
+### Messages of Day Widget
+
+- `messagesofday` (currently no options)
 
 ---
 
-**Migration notes / recommendations**
-- Introduce widget namespaces in `defaults` in `MMM-Webuntis.js` and `config.template.js` (non-breaking: leave legacy keys in place for now).
-- Add `config/legacy-config-mapper.js` that exports `normalizeConfig(cfg)` to convert old keys into the new shape at runtime (used by frontend before sending to backend and by backend when normalizing).
-- Once adequate time has passed and users have migrated, remove legacy fallbacks.
+## Legacy Configuration Support
+
+The module includes a compatibility mapper (`config/legacy-config-mapper.js`) that automatically translates old configuration keys to the new widget-namespaced structure at runtime. Old keys such as:
+
+- `dateFormat`, `dateFormats.*`
+- `homeworkDateFormat`, `examDateFormat`
+- `showStartTime`, `showRegularLessons`, etc. at module-level
+
+are automatically mapped to their widget-namespaced equivalents. However, **widgets now read ONLY from the new widget namespaces** in the code (see `widgets/*.js` for current lookup order).
 
 ---
 
-**Testing expectation**
-- After mapper is in place, the module should behave the same for existing configs.
-- Example acceptance: For child `M`, the backend log should include: `Data ready: timetable=21 exams=2 hw=11 abs=1` when fetching with the provided configuration.
+## Testing & Verification
+
+The module should work correctly with both new widget-namespaced configs and legacy configs (via the compatibility mapper). Example acceptance criterion:
+
+For a student `M`, the backend should report: `✓ Data ready: timetable=21 exams=2 hw=11 abs=1`
+
+This confirms all widgets are fetching and rendering data correctly.
+
 
 
