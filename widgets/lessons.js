@@ -68,15 +68,8 @@
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-    // Determine lessons date format (student -> widget namespace -> dateFormats -> legacy -> fallback)
-    const lessonsDateFormat =
-      studentConfig?.lessons?.dateFormat ??
-      studentConfig?.dateFormats?.lessons ??
-      ctx.config?.lessons?.dateFormat ??
-      ctx.config?.dateFormats?.lessons ??
-      ctx.config?.dateFormats?.default ??
-      ctx.config?.dateFormat ??
-      'EEE';
+    // Determine lessons date format (student -> module config -> default)
+    const lessonsDateFormat = studentConfig?.lessons?.dateFormat ?? ctx.config?.lessons?.dateFormat ?? 'EEE';
 
     // Iterate display days in order and render either lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
@@ -116,7 +109,13 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
-          (!(studentConfig.showRegularLessons ?? ctx.config.showRegularLessons) && (entry.code || '') === '') ||
+          (!(
+            studentConfig.lessons?.showRegular ??
+            studentConfig?.showRegular ??
+            ctx.config?.lessons?.showRegular ??
+            ctx.config.showRegular
+          ) &&
+            (entry.code || '') === '') ||
           (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? ctx.config.logLevel) !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
@@ -155,7 +154,13 @@
           if (teacherFull !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherFull)})`;
         }
 
-        if ((studentConfig.showSubstitutionText ?? ctx.config.showSubstitutionText) && (entry.substText || '') !== '') {
+        if (
+          (studentConfig.lessons?.showSubstitution ??
+            studentConfig?.showSubstitution ??
+            ctx.config?.lessons?.showSubstitution ??
+            ctx.config.showSubstitution) &&
+          (entry.substText || '') !== ''
+        ) {
           subjectStr += `<br/><span class='xsmall dimmed'>${escapeHtml(entry.substText)}</span>`;
         }
 

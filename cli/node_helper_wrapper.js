@@ -240,18 +240,18 @@ function loadModuleDefaults() {
       daysToShow: 7,
       pastDaysToShow: 0,
       showStartTime: false,
-      showRegularLessons: true,
+      showRegular: true,
       showTeacherMode: 'full',
       useShortSubject: false,
-      showSubstitutionText: false,
-      examsDaysAhead: 21,
-      showExamSubject: true,
-      showExamTeacher: true,
-      mergeGapMinutes: 15,
-      maxGridLessons: 0,
+      showSubstitution: false,
+      daysAhead: 21,
+      showSubject: true,
+      showTeacher: true,
+      mergeGap: 15,
+      maxLessons: 0,
       showNowLine: true,
-      absencesPastDays: 21,
-      absencesFutureDays: 7,
+      pastDays: 21,
+      futureDays: 7,
       dateFormat: 'dd.MM.',
       examDateFormat: 'dd.MM.',
       homeworkDateFormat: 'dd.MM.',
@@ -362,7 +362,8 @@ function getStudentCredentials(config, studentIndex) {
     server,
     studentId: student.studentId,
     daysToShow: student.daysToShow || mergedConfig.daysToShow || 7,
-    examsDaysAhead: student.examsDaysAhead || mergedConfig.examsDaysAhead || 21,
+    examsDaysAhead:
+      student.exams?.daysAhead || student.examsDaysAhead || mergedConfig.exams?.daysAhead || mergedConfig.examsDaysAhead || 21,
   };
 }
 
@@ -384,7 +385,8 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
   const username = student.username || mergedConfig.username;
   const password = student.password || mergedConfig.password;
   const daysToShow = student.daysToShow || mergedConfig.daysToShow || 7;
-  const examsDaysAhead = student.examsDaysAhead || mergedConfig.examsDaysAhead || 21;
+  const examsDaysAhead =
+    student.exams?.daysAhead || student.examsDaysAhead || mergedConfig.exams?.daysAhead || mergedConfig.examsDaysAhead || 21;
   const studentId = student.studentId;
   const title = student.title || `Student ${studentIndex}`;
 
@@ -471,10 +473,10 @@ async function cmdFetch(flags) {
       'useClassTimetable',
       'showTeacherMode',
       'useShortSubject',
-      'showSubstitutionText',
-      'examsDaysAhead',
-      'showExamSubject',
-      'showExamTeacher',
+      'showSubstitution',
+      'daysAhead',
+      'showSubject',
+      'showTeacher',
       'logLevel',
     ];
     moduleConfig.students.forEach((stu) => {

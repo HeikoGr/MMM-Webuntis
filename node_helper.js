@@ -73,18 +73,34 @@ module.exports = NodeHelper.create({
     if (legacyUsed.length > 0) {
       try {
         const uniq = Array.from(new Set(legacyUsed));
-        const msg = `Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
-        if (typeof Log !== 'undefined' && Log && typeof Log.warn === 'function') {
-          Log.warn('[MMM-Webuntis] ' + msg);
-        } else {
-          console.warn('[MMM-Webuntis] ' + msg);
+        const warningMsg = `⚠️ Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
+
+        // Attach warning to config.__warnings so it gets sent to frontend and displayed in GUI
+        out.__warnings = out.__warnings || [];
+        out.__warnings.push(warningMsg);
+
+        // Also log it to server logs
+        this._mmLog('warn', null, warningMsg);
+
+        // Log the normalized config as formatted JSON (with redacted sensitive data) for reference (server-side only)
+        const redacted = { ...out };
+        if (redacted.password) redacted.password = '***redacted***';
+        if (redacted.qrcode) redacted.qrcode = '***redacted***';
+        if (redacted.students && Array.isArray(redacted.students)) {
+          redacted.students = redacted.students.map((s) => {
+            const student = { ...s };
+            if (student.password) student.password = '***redacted***';
+            if (student.qrcode) student.qrcode = '***redacted***';
+            return student;
+          });
         }
-      } catch {
-        // ignore
+        const formattedJson = JSON.stringify(redacted, null, 2);
+        this._mmLog('info', null, `Normalized config:\n${formattedJson}`);
+      } catch (e) {
+        this._mmLog('debug', null, `Failed to process legacy config: ${e && e.message ? e.message : e}`);
       }
     }
 
-    this._mmLog('debug', null, 'Normalized legacy config keys (node helper)');
     return out;
   },
 
@@ -671,27 +687,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position2[0].current.shortName,
+                        longname: entry.position2[0].current.longName,
+                      },
+                    ]
                   : [],
                 te: entry.position1
                   ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position1[0].current.shortName,
+                        longname: entry.position1[0].current.longName,
+                      },
+                    ]
                   : [],
                 ro: entry.position3
                   ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position3[0].current.shortName,
+                        longname: entry.position3[0].current.longName,
+                      },
+                    ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -1613,12 +1629,16 @@ module.exports = NodeHelper.create({
       warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
     }
 
-    if (Number.isFinite(config.examsDaysAhead) && (config.examsDaysAhead < 0 || config.examsDaysAhead > 365)) {
-      warnings.push(`examsDaysAhead should be between 0 and 365. Value: ${config.examsDaysAhead}`);
+    // Get exams.daysAhead (from new namespace or legacy)
+    const examsDaysAhead = config.exams?.daysAhead ?? config.examsDaysAhead ?? 0;
+    if (Number.isFinite(examsDaysAhead) && (examsDaysAhead < 0 || examsDaysAhead > 365)) {
+      warnings.push(`exams.daysAhead should be between 0 and 365. Value: ${examsDaysAhead}`);
     }
 
-    if (Number.isFinite(config.mergeGapMinutes) && config.mergeGapMinutes < 0) {
-      warnings.push(`mergeGapMinutes cannot be negative. Value: ${config.mergeGapMinutes}`);
+    // Get grid.mergeGap (from new namespace or legacy)
+    const gridMergeGap = config.grid?.mergeGap ?? config.mergeGapMinutes ?? 0;
+    if (Number.isFinite(gridMergeGap) && gridMergeGap < 0) {
+      warnings.push(`grid.mergeGap cannot be negative. Value: ${gridMergeGap}`);
     }
 
     return warnings;
@@ -1646,10 +1666,12 @@ module.exports = NodeHelper.create({
         credKey,
         studentId: student.studentId,
         className: student.class || student.className || null,
-        daysToShow: Number(student.daysToShow || 0),
-        pastDaysToShow: Number(student.pastDaysToShow || 0),
-        useClassTimetable: Boolean(student.useClassTimetable),
-        examsDaysAhead: Number(student.examsDaysAhead || 0),
+        daysToShow: Number(student.daysToShow ?? this.config?.daysToShow ?? 0),
+        pastDaysToShow: Number(student.pastDaysToShow ?? this.config?.pastDaysToShow ?? 0),
+        useClassTimetable: Boolean(student.useClassTimetable ?? this.config?.useClassTimetable ?? false),
+        examsDaysAhead: Number(
+          student.exams?.daysAhead ?? student.examsDaysAhead ?? this.config?.exams?.daysAhead ?? this.config?.examsDaysAhead ?? 0
+        ),
         wantsGrid: wantsGridWidget,
         wantsLessons: wantsLessonsWidget,
         wantsExams: wantsExamsWidget,
@@ -1849,6 +1871,10 @@ module.exports = NodeHelper.create({
         this._mmLog('debug', null, `legacy-config-mapper not available or failed: ${e && e.message ? e.message : e}`);
         this.config = payload;
       }
+
+      // Apply legacy config normalization to show warnings and formatted output
+      this.config = this._normalizeLegacyConfig(this.config);
+
       this._mmLog(
         'info',
         null,
@@ -1883,13 +1909,15 @@ module.exports = NodeHelper.create({
         const identifier = this.config.id;
         const groups = new Map();
 
-        // Group students by credential. Student configs are expected to be
-        // normalized by the frontend before sending FETCH_DATA
+        // Group students by credential. Normalize each student config for legacy key compatibility.
         const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
+        const mapper = require('./config/legacy-config-mapper');
         for (const student of studentsList) {
-          const credKey = this._getCredentialKey(student, this.config);
+          // Apply legacy config mapping to student-level config
+          const normalizedStudent = mapper && typeof mapper.normalizeConfig === 'function' ? mapper.normalizeConfig(student) : student;
+          const credKey = this._getCredentialKey(normalizedStudent, this.config);
           if (!groups.has(credKey)) groups.set(credKey, []);
-          groups.get(credKey).push(student);
+          groups.get(credKey).push(normalizedStudent);
         }
 
         // For each credential group process independently. Do not coalesce requests
@@ -2016,23 +2044,25 @@ module.exports = NodeHelper.create({
     let rangeStart = new Date(Date.now());
     let rangeEnd = new Date(Date.now());
 
-    rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
-    rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
+    const pastDaysValue = student.pastDaysToShow ?? this.config?.pastDaysToShow ?? 0;
+    const daysToShowValue = student.daysToShow ?? this.config?.daysToShow ?? 2;
+    rangeStart.setDate(rangeStart.getDate() - pastDaysValue);
+    rangeEnd.setDate(rangeEnd.getDate() - pastDaysValue + parseInt(daysToShowValue));
     // Compute absences-specific start and end dates (allow per-student override or global config)
-    const absPast = Number.isFinite(Number(student.absencesPastDays))
-      ? Number(student.absencesPastDays)
-      : Number.isFinite(Number(this.config?.absencesPastDays))
-        ? Number(this.config.absencesPastDays)
+    const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
+      ? Number(student.absences?.pastDays ?? student.absencesPastDays)
+      : Number.isFinite(Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays))
+        ? Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays)
         : 0;
-    const absFuture = Number.isFinite(Number(student.absencesFutureDays))
-      ? Number(student.absencesFutureDays)
-      : Number.isFinite(Number(this.config?.absencesFutureDays))
-        ? Number(this.config.absencesFutureDays)
+    const absFuture = Number.isFinite(Number(student.absences?.futureDays ?? student.absencesFutureDays))
+      ? Number(student.absences?.futureDays ?? student.absencesFutureDays)
+      : Number.isFinite(Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays))
+        ? Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays)
         : 0;
 
     const absencesRangeStart = new Date(Date.now());
     absencesRangeStart.setDate(absencesRangeStart.getDate() - absPast);
-    const absencesRangeEnd = new Date(rangeEnd);
+    const absencesRangeEnd = new Date(Date.now());
     absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
     // Get Timegrid (raw) - only needed for grid widget
@@ -2084,18 +2114,21 @@ module.exports = NodeHelper.create({
 
     // Exams (raw)
     let rawExams = [];
-    if (fetchExams && student.examsDaysAhead > 0) {
+    const examsDaysAheadValue =
+      student.exams?.daysAhead ?? student.examsDaysAhead ?? this.config?.exams?.daysAhead ?? this.config?.examsDaysAhead ?? 0;
+    if (fetchExams && examsDaysAheadValue > 0) {
       // Validate the number of days
-      if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
-        student.examsDaysAhead = 30;
+      let validatedDays = examsDaysAheadValue;
+      if (validatedDays < 1 || validatedDays > 360 || isNaN(validatedDays)) {
+        validatedDays = 30;
       }
 
       rangeStart = new Date(Date.now());
       rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow); // important for grid widget
       rangeEnd = new Date(Date.now());
-      rangeEnd.setDate(rangeEnd.getDate() + student.examsDaysAhead);
+      rangeEnd.setDate(rangeEnd.getDate() + validatedDays);
 
-      logger(`Exams: querying ${student.examsDaysAhead} days ahead...`);
+      logger(`Exams: querying ${validatedDays} days ahead...`);
 
       try {
         for (const target of restTargets) {
@@ -2113,21 +2146,22 @@ module.exports = NodeHelper.create({
         this._mmLog('error', student, `Exams failed: ${error && error.message ? error.message : error}\n`);
       }
     } else {
-      logger(`Exams: skipped (examsDaysAhead=${student.examsDaysAhead})`);
+      logger(`Exams: skipped (exams.daysAhead=${examsDaysAheadValue})`);
     }
 
-    // Load homework for the period (from today until rangeEnd + 7 days) – keep raw
+    // Load homework for the period (from today until N days in the future) – keep raw
     let hwResult = null;
     if (fetchHomeworks) {
       logger(`Homework: fetching...`);
       try {
-        let hwRangeEnd = new Date(rangeEnd);
-        hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
+        const hwRangeStart = new Date(Date.now());
+        const hwRangeEnd = new Date(Date.now());
+        hwRangeEnd.setDate(hwRangeEnd.getDate() + 28); // Default: 28 days ahead
 
         for (const target of restTargets) {
           logger(`Homework: fetching via REST (${describeTarget(target)})...`);
           try {
-            const homeworks = await this._callRest(this._getHomeworkViaRest, target, new Date(), hwRangeEnd, restOptions);
+            const homeworks = await this._callRest(this._getHomeworkViaRest, target, hwRangeStart, hwRangeEnd, restOptions);
             hwResult = homeworks;
             logger(`✓ Homework: ${homeworks.length} items\n`);
             break;
@@ -2244,6 +2278,13 @@ module.exports = NodeHelper.create({
       // top-level payload so the frontend can display module-level warnings
       // independent of per-student sections. Dedupe messages so each is shown once.
       let warnings = [];
+
+      // Include module-level warnings (e.g., legacy config warnings)
+      if (this.config && Array.isArray(this.config.__warnings)) {
+        warnings = warnings.concat(this.config.__warnings);
+      }
+
+      // Include per-student warnings
       if (payload && payload.config && Array.isArray(payload.config.__warnings)) {
         warnings = warnings.concat(payload.config.__warnings);
       }

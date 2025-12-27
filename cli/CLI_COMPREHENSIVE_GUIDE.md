@@ -175,9 +175,8 @@ module.exports = {
         displayMode: "list", // or "grid"
         daysToShow: 14,
         pastDaysToShow: 0,
-        examsDaysAhead: 60,
-        absencesPastDays: 30,
-        absencesFutureDays: 60,
+        exams: { daysAhead: 60 },
+        absences: { pastDays: 30, futureDays: 60 },
 
         // Students
         students: [
@@ -508,7 +507,7 @@ REST API returned 0 exams
 4. Adjust date configuration in config.js:
    ```javascript
    daysToShow: 21,        // Increase to see more days
-   examsDaysAhead: 90,    // Increase exam look-ahead
+   exams: { daysAhead: 90 },    // Increase exam look-ahead
    ```
 
 ### Node process exits with code 1
@@ -547,7 +546,7 @@ interface StudentConfig {
   qrcode?: string;            // QR code (alternative to credentials)
   daysToShow?: number;        // Override module daysToShow
   pastDaysToShow?: number;    // Override module pastDaysToShow
-  examsDaysAhead?: number;    // Override module examsDaysAhead
+  exams?: { daysAhead?: number }; // Override exams.daysAhead
 }
 ```
 
@@ -561,12 +560,11 @@ interface ModuleConfig {
   password?: string;
   school: string;
   server: string;
-  daysToShow?: number;           // Default: 14
-  pastDaysToShow?: number;       // Default: 0
-  examsDaysAhead?: number;       // Default: 60
-  absencesPastDays?: number;     // Default: 0
-  absencesFutureDays?: number;   // Default: 60
+  daysToShow?: number;        // Default: 14
+  pastDaysToShow?: number;    // Default: 0
   displayMode?: "list" | "grid"; // Default: "list"
+  exams?: { daysAhead?: number }; // Default: 60
+  absences?: { pastDays?: number; futureDays?: number }; // Default: 0, 60
   students: StudentConfig[];
 }
 ```
