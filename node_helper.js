@@ -671,27 +671,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '', // Extract time
                 su: entry.position2
                   ? [
-                      {
-                        name: entry.position2[0].current.shortName,
-                        longname: entry.position2[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
                   : [],
                 te: entry.position1
                   ? [
-                      {
-                        name: entry.position1[0].current.shortName,
-                        longname: entry.position1[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
                   : [],
                 ro: entry.position3
                   ? [
-                      {
-                        name: entry.position3[0].current.shortName,
-                        longname: entry.position3[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -1835,7 +1835,20 @@ module.exports = NodeHelper.create({
   async socketNotificationReceived(notification, payload) {
     if (notification === 'FETCH_DATA') {
       // Assign incoming payload to module config
-      this.config = payload;
+      // Normalize legacy config keys server-side as a defensive measure
+      try {
+        // require can fail in browser-like environments; wrap defensively
+        const mapper = require(path.join(__dirname, 'config', 'legacy-config-mapper.js'));
+        if (mapper && typeof mapper.normalizeConfig === 'function') {
+          this.config = mapper.normalizeConfig(payload);
+        } else {
+          this.config = payload;
+        }
+      } catch (e) {
+        // If mapping fails, fall back to raw payload
+        this._mmLog('debug', null, `legacy-config-mapper not available or failed: ${e && e.message ? e.message : e}`);
+        this.config = payload;
+      }
       this._mmLog(
         'info',
         null,

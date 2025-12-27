@@ -18,7 +18,9 @@
     log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
     const dateFormat =
+      studentConfig?.homework?.dateFormat ??
       studentConfig?.dateFormats?.homework ??
+      ctx.config?.homework?.dateFormat ??
       ctx.config?.dateFormats?.homework ??
       ctx.config?.dateFormats?.default ??
       studentConfig?.homeworkDateFormat ??

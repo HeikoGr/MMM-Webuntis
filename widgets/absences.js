@@ -91,7 +91,9 @@
 
       const dateRaw = ab?.date;
       const dateFormat =
+        studentConfig?.absences?.dateFormat ??
         studentConfig?.dateFormats?.absences ??
+        ctx.config?.absences?.dateFormat ??
         ctx.config?.dateFormats?.absences ??
         ctx.config?.dateFormats?.default ??
         ctx.config?.dateFormat ??

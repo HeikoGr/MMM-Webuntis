@@ -56,7 +56,6 @@ let config = {
         // === ABSENCES ===
         absencesPastDays: 21,
         absencesFutureDays: 7,
-
         // Structured per-widget formats (preferred)
         dateFormats: {
           // (optional) - defaults to 'dd.MM.' if not set
@@ -67,6 +66,42 @@ let config = {
           homework: 'dd.MM.', // (optional) override for homework
           absences: 'dd.MM.', // (optional) override for absences
         },
+
+        // Per-widget namespaces (new preferred structure)
+        lessons: {
+          dateFormat: 'EEE',
+          showStartTime: false,
+          showRegularLessons: false,
+          useShortSubject: false,
+          showTeacherMode: 'full',
+          showSubstitutionText: false,
+        },
+
+        grid: {
+          dateFormat: 'EEE dd.MM.',
+          mergeGapMinutes: 15,
+          maxGridLessons: 0,
+          showNowLine: true,
+        },
+
+        exams: {
+          dateFormat: 'dd.MM.',
+          examsDaysAhead: 21,
+          showExamSubject: true,
+          showExamTeacher: true,
+        },
+
+        homework: {
+          dateFormat: 'dd.MM.',
+        },
+
+        absences: {
+          dateFormat: 'dd.MM.',
+          absencesPastDays: 21,
+          absencesFutureDays: 7,
+        },
+
+        messagesofday: {},
         // Minimal example: override only absences format without specifying whole object
         // dateFormats: { absences: 'd.M.yyyy' },
 

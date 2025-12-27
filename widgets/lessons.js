@@ -68,9 +68,11 @@
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-    // Determine lessons date format (student -> widget -> default -> legacy -> fallback)
+    // Determine lessons date format (student -> widget namespace -> dateFormats -> legacy -> fallback)
     const lessonsDateFormat =
+      studentConfig?.lessons?.dateFormat ??
       studentConfig?.dateFormats?.lessons ??
+      ctx.config?.lessons?.dateFormat ??
       ctx.config?.dateFormats?.lessons ??
       ctx.config?.dateFormats?.default ??
       ctx.config?.dateFormat ??
