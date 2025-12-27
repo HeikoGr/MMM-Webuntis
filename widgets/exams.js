@@ -16,20 +16,21 @@
         return 0;
       }
 
-      const now = new Date();
-      const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-      const nowHm = now.getHours() * 100 + now.getMinutes();
+      const nowLocal = new Date();
+      const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
 
-      // Determine mode (module-level only) and student cell handling
-      const mode = studentConfig?.mode ?? ctx.config?.mode ?? 'compact';
+      // Determine mode (normalized from student config)
+      const mode = studentConfig?.mode ?? 'compact';
       const studentCell = mode === 'verbose' ? '' : studentCellTitle;
       if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-      // Use module-level config only (node_helper applies per-student normalization)
-      const rangeEnd =
-        studentConfig?.exams?.daysAhead ?? studentConfig?.daysAhead ?? ctx.config?.exams?.daysAhead ?? ctx.config?.daysAhead ?? 7;
-      const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? ctx.config?.showExamSubject ?? true;
-      const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? ctx.config?.showExamTeacher ?? true;
+      // Use student config only (backend normalization already applied)
+      const rangeEnd = Number(studentConfig?.exams?.daysAhead ?? studentConfig?.daysAhead ?? studentConfig?.nextDays ?? 7);
+
+      if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
+      const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;
+      const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? true;
 
       log(
         'debug',
@@ -57,7 +58,7 @@
 
           addedRows++;
 
-          const examDateFormat = studentConfig?.exams?.dateFormat ?? ctx.config?.exams?.dateFormat ?? 'dd.MM.';
+          const examDateFormat = studentConfig?.exams?.dateFormat ?? 'dd.MM.';
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
           const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;

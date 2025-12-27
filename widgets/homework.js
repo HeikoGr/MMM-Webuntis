@@ -17,7 +17,9 @@
 
     log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
-    const dateFormat = studentConfig?.homework?.dateFormat ?? ctx.config?.homework?.dateFormat ?? 'dd.MM.';
+    const dateFormat = studentConfig?.homework?.dateFormat ?? 'dd.MM.';
+    const showSubject = studentConfig?.homework?.showSubject ?? true;
+    const showText = studentConfig?.homework?.showText ?? true;
 
     const sorted = homeworks
       .slice()
@@ -27,8 +29,8 @@
 
     for (const hw of sorted) {
       const due = hw?.dueDate ? util.formatDate(hw.dueDate, dateFormat) : '';
-      const subj = hw?.su?.longname || hw?.su?.name || '';
-      const text = String(hw?.text || hw?.remark || '').trim();
+      const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
+      const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
       log('debug', `[homework] add: due="${due}" subj="${subj}" text_len=${text.length}`);
 

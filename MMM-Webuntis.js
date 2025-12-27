@@ -1,25 +1,112 @@
 Module.register('MMM-Webuntis', {
+  // Simple frontend logger factory (lightweight, avoids bundler require() issues)
+  _createFrontendLogger(moduleName = 'MMM-Webuntis') {
+    // Use only console methods allowed by linting rules (warn, error)
+    const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
+    return {
+      log(level, msg) {
+        try {
+          const method = METHODS[level] || 'warn';
+          // eslint-disable-next-line no-console
+          console[method](`${moduleName}: ${msg}`);
+        } catch {
+          // ignore
+        }
+      },
+    };
+  },
+
   defaults: {
-    // === GLOBAL OPTIONS ===
-    header: 'MMM-Webuntis', // displayed as module title in MagicMirror
-    fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
-    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
+    updateInterval: 1 * 60 * 1000,
+    logLevel: 'none', // TESTING: Set to "debug" for extensive logging
+    dumpBackendPayloads: true,
+    displayMode: 'grid,homework,lessons,exams,absences',
 
-    // === DISPLAY OPTIONS ===
-    // Comma-separated list of widgets to render (top-to-bottom).
-    // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
-    // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
-    displayMode: 'list',
-    mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+    // Parent account
+    username: 'heiko.grossstueck@gmail.com',
+    password: 'AqP5SR7kxj&',
+    school: 'bachgymnasium',
+    server: 'bachgymnasium.webuntis.com',
 
-    // === TIMETABLE FETCH RANGE ===
-    daysToShow: 7, // number of upcoming days to fetch/display per student (0 = off)
-    pastDaysToShow: 0, // number of past days to include (useful for debugging)
+    // Display
+    // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
+    // debugDate: '2025-12-08',
 
-    // === WIDGET NAMESPACED DEFAULTS ===
-    // Per-widget configuration namespaces
+    grid: {
+      nextDays: 2, // show 2 days ahead (3 in total) in grid by default
+      pastDays: 0,
+    },
+
+    // === WIDGET-SPECIFIC CONFIG (new notation) ===
     lessons: {
-      dateFormat: 'EEE',
+      nextDays: 1, // show only today by default
+      pastDays: 0,
+      dateFormat: 'EEEE', // full weekday name
+      showStartTime: false, // show start time in lessons list
+      showRegular: false, // show regular lessons in lessons list
+      useShortSubject: false, // use short subject names in lessons list
+      showTeacherMode: 'full', // 'off'|'initial'|'full'
+      showSubstitution: false, // show substitution info in lessons list
+    },
+
+    exams: {
+      dateFormat: 'EEE dd.MM.', // weekday + date
+      daysAhead: 45,   // show exams up to 45 days ahead by default
+      pastDays: 0,
+      showSubject: true, // show subject by default
+      showTeacher: false, // show teacher by default
+    },
+
+    homework: {
+      dateFormat: 'EEE dd.MM.', // weekday + date
+      pastDays: 2,
+      nextDays: 14,
+      showSubject: true,
+    },
+
+    absences: {
+      dateFormat: 'EEE dd.MM.', // weekday + date
+      pastDays: 40,
+      futureDays: 20,
+    },
+
+    // === STUDENTS ===
+    students: [
+      {
+        title: 'M',
+        studentId: 1774, // replace with actual student ID
+      },
+    ],
+  },
+
+  defaultsx: {
+    updateInterval: 1 * 60 * 1000,
+    logLevel: 'debug', // TESTING: Set to "none" to test debug message suppression
+    dumpBackendPayloads: true,
+    displayMode: 'grid,homework,lessons,exams,absences',
+
+    // Parent account
+    username: 'heiko.grossstueck@gmail.com',
+    password: 'AqP5SR7kxj&',
+    school: 'bachgymnasium',
+    server: 'bachgymnasium.webuntis.com',
+
+    // Display
+    // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
+    // Set to 2025-12-01 for comparison with older dump (outside main Christmas holidays)
+    //debugDate: '2025-12-08',
+    // Global ranges (preferred keys)
+    nextDays: 7,
+    pastDays: 30,
+
+    grid: {
+      nextDays: 3,
+      pastDays: 1,
+    },
+
+    // === WIDGET-SPECIFIC CONFIG (new notation) ===
+    lessons: {
+      dateFormat: 'EEEE',
       showStartTime: false,
       showRegular: false,
       useShortSubject: false,
@@ -27,60 +114,30 @@ Module.register('MMM-Webuntis', {
       showSubstitution: false,
     },
 
-    grid: {
-      dateFormat: 'EEE dd.MM.',
-      mergeGap: 15, // in minutes
-      maxLessons: 0,
-      showNowLine: true,
-    },
-
     exams: {
       dateFormat: 'dd.MM.',
-      daysAhead: 21,
+      daysAhead: 45,
       showSubject: true,
       showTeacher: true,
     },
 
     homework: {
       dateFormat: 'dd.MM.',
+      pastDays: 14,
+      nextDays: 45,
     },
 
     absences: {
       dateFormat: 'dd.MM.',
-      pastDays: 21,
-      futureDays: 7,
+      pastDays: 20,
+      futureDays: 20,
     },
 
-    messagesofday: {},
-
-    // === TIMETABLE SOURCE OPTIONS ===
-    useClassTimetable: false, // use class timetable instead of student timetable
-
-    // === PARENT ACCOUNT SUPPORT (optional) ===
-    // Uncomment and configure if using parent account to display multiple children
-    // parentUsername: '', // parent account email/username
-    // parentPassword: '', // parent account password
-    // school: '', // school name (can be overridden per student)
-    // server: '', // WebUntis server (default: webuntis.com)
-
-    // === DEBUG / DEVELOPMENT OPTIONS ===
-    dumpBackendPayloads: false, // dump backend API responses to debug_dumps/ folder
-
-    // === STUDENT CREDENTIALS ===
-    // Array of student objects
-    // Optional: any global option can be set per-student to override it
-    // (fancy but mostly useless)
+    // === STUDENTS ===
     students: [
       {
-        title: 'SET CONFIG!', // displayed name for the student
-        // - studentId (number): student ID when using parent account [parent account mode]
-        qrcode: '', // WebUntis QR code (untis://setschool?...) [direct student login]
-        // alternative (if no qrcode):
-        username: '',
-        password: '',
-        school: '',
-        server: '', // defaults to 'webuntis.at'
-        class: '', // class name (only needed for class timetable mode)
+        title: 'M',
+        studentId: 1774, // replace with actual student ID
       },
     ],
   },
@@ -177,6 +234,21 @@ Module.register('MMM-Webuntis', {
 
   // Simple log helper to control verbosity from the module config
   _log(level, ...args) {
+    // If a frontend logger is available, delegate to it. Otherwise fallback to console.
+    try {
+      const frontendFactory = this._createFrontendLogger;
+      if (frontendFactory && !this.frontendLogger) {
+        this.frontendLogger = frontendFactory('MMM-Webuntis');
+      }
+      if (this.frontendLogger && typeof this.frontendLogger.log === 'function') {
+        const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        this.frontendLogger.log(level, msg);
+        return;
+      }
+    } catch {
+      // ignore and fallback to legacy console behavior
+    }
+
     const levels = { error: 0, warn: 1, info: 2, debug: 3 };
     const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
     const configuredLevel = levels[configured] !== undefined ? configured : 'info';
@@ -285,8 +357,17 @@ Module.register('MMM-Webuntis', {
     const fallback = this.config || {};
     const defaults = this.defaults || {};
 
-    const daysVal = cfg.daysToShow ?? fallback.daysToShow ?? defaults.daysToShow ?? 0;
-    const pastVal = cfg.pastDaysToShow ?? fallback.pastDaysToShow ?? defaults.pastDaysToShow ?? 0;
+    // Prefer new keys `nextDays` / `pastDays`, fall back to legacy `daysToShow` / `pastDaysToShow`.
+    const daysVal =
+      cfg.nextDays ?? cfg.daysToShow ?? fallback.nextDays ?? fallback.daysToShow ?? defaults.nextDays ?? defaults.daysToShow ?? 0;
+    const pastVal =
+      cfg.pastDays ??
+      cfg.pastDaysToShow ??
+      fallback.pastDays ??
+      fallback.pastDaysToShow ??
+      defaults.pastDays ??
+      defaults.pastDaysToShow ??
+      0;
     const daysToShow = Number(daysVal);
     const pastDaysToShow = Number(pastVal);
     const limitFuture = Number.isFinite(daysToShow) && daysToShow > 0;
@@ -356,8 +437,15 @@ Module.register('MMM-Webuntis', {
     }
 
     // Validate numeric ranges
+    // Validate new and legacy range keys
+    if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
+      warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
+    }
+    if (Number.isFinite(config.pastDays) && config.pastDays < 0) {
+      warnings.push(`pastDays cannot be negative. Value: ${config.pastDays}`);
+    }
     if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
-      warnings.push(`daysToShow cannot be negative. Value: ${config.daysToShow}`);
+      warnings.push(`daysToShow cannot be negative (deprecated key). Value: ${config.daysToShow}`);
     }
 
     if (Number.isFinite(config.exams?.daysAhead) && (config.exams.daysAhead < 0 || config.exams.daysAhead > 365)) {
@@ -380,7 +468,6 @@ Module.register('MMM-Webuntis', {
       if (!this.moduleWarningsSet.has(warning)) {
         this.moduleWarningsSet.add(warning);
         this._log('warn', warning);
-        console.warn(`[MMM-Webuntis] ⚠️ ${warning}`);
       }
     });
   },
@@ -486,8 +573,25 @@ Module.register('MMM-Webuntis', {
     this._paused = false;
     this._startNowLineUpdater();
 
-    const now = new Date();
-    this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    // Initialize module-level today value. If `debugDate` is configured, use it
+    // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
+    if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
+      const s = String(this.config.debugDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(s + 'T00:00:00');
+        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+      } else if (/^\d{8}$/.test(s)) {
+        const by = parseInt(s.substring(0, 4), 10);
+        const bm = parseInt(s.substring(4, 6), 10) - 1;
+        const bd = parseInt(s.substring(6, 8), 10);
+        const d = new Date(by, bm, bd);
+        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+      }
+    }
+    if (!this._currentTodayYmd) {
+      const now = new Date();
+      this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    }
 
     // Send a sanitized copy to the backend where each student inherits module
     // defaults and legacy keys have been mapped. The backend (node_helper)
@@ -512,11 +616,18 @@ Module.register('MMM-Webuntis', {
   _startFetchTimer() {
     if (this._paused) return;
     if (this._fetchTimer) return;
-    if (typeof this.config?.fetchIntervalMs !== 'number') return;
+    // Prefer the new `updateInterval` config key, fall back to legacy `fetchIntervalMs`.
+    const interval =
+      typeof this.config?.updateInterval === 'number'
+        ? Number(this.config.updateInterval)
+        : typeof this.config?.fetchIntervalMs === 'number'
+          ? Number(this.config.fetchIntervalMs)
+          : null;
+    if (!interval || !Number.isFinite(interval) || interval <= 0) return;
 
     this._fetchTimer = setInterval(() => {
       this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
-    }, this.config.fetchIntervalMs);
+    }, interval);
   },
 
   _stopFetchTimer() {
@@ -690,11 +801,7 @@ Module.register('MMM-Webuntis', {
       payload.warnings.forEach((w) => {
         if (!this.moduleWarningsSet.has(w)) {
           this.moduleWarningsSet.add(w);
-          try {
-            console.warn('MMM-Webuntis warning:', w);
-          } catch {
-            /* ignore console errors */
-          }
+          this._log('warn', `Module warning: ${w}`);
         }
       });
     }

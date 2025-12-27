@@ -158,8 +158,15 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `daysToShow` | int | `7` | Number of upcoming days to fetch/display per student (0 = off). Can be overridden per-student. |
-| `pastDaysToShow` | int | `0` | Number of past days to include (useful for debugging). |
+| `nextDays` | int | `7` | Number of upcoming days to display **starting from tomorrow**. Example: `nextDays: 3` shows tomorrow, +2 days, +3 days. |
+| `pastDays` | int | `0` | Number of past days to display **before today**. Example: `pastDays: 1` shows yesterday. |
+| `debugDate` | string|null | `null` | Optional debug override for "today" in `YYYY-MM-DD` format. When set, the module will treat this date as the current day for all range calculations and rendering. |
+
+**Range Calculation:** `totalDays = pastDays + 1 (today) + nextDays`
+- Example: `pastDays: 1, nextDays: 3` = Yesterday + Today + Tomorrow + +2 days + +3 days = **5 days total**
+- Default: `pastDays: 0, nextDays: 7` = Today + 7 future days = **8 days total**
+
+Note: Legacy keys `daysToShow` and `pastDaysToShow` are still supported but deprecated — update your `config.js` to use `nextDays`/`pastDays`.
 
 ### Lessons Widget Options
 
@@ -193,13 +200,19 @@ Configure grid widget behavior using the `grid` configuration namespace:
 | `grid.mergeGap` | int | `15` | Maximum gap (in minutes) between consecutive lessons to consider them mergeable. |
 | `grid.maxLessons` | int | `0` | Limit lessons per day in grid view. `0` = show all; `>=1` limits to first N timeUnits. |
 | `grid.showNowLine` | bool | `true` | Show the current time line in grid view. |
+| `grid.nextDays` | int | - | (optional) Days ahead to display. **Range = `pastDays + 1 + nextDays`**. Example: `pastDays: 1, nextDays: 3` = 5 days. |
+| `grid.pastDays` | int | - | (optional) Days past to display. If not set, uses global values. |
 
-**Example:**
+**Example (5-day view: yesterday + today + 3 days ahead):**
 ```javascript
 grid: {
   dateFormat: 'EEE dd.MM.',
   mergeGap: 15,
-  maxLessons: 0,
+  maxLessons: 8,
+  showNowLine: true,
+  nextDays: 3,  // 3 days ahead
+  pastDays: 1,  // 1 day past
+  // Total: 1 + 1 + 3 = 5 days
 }
 ```
 
@@ -230,11 +243,18 @@ Configure homework widget behavior using the `homework` configuration namespace:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `homework.dateFormat` | string | `'dd.MM.'` | Date format for homework due dates. |
+| `homework.showSubject` | boolean | `true` | Show subject name with homework. Set to `false` to hide. |
+| `homework.showText` | boolean | `true` | Show homework description/text. Set to `false` to display only subject and due date. |
+| `homework.nextDays` | int | `28` | (optional) Widget-specific days ahead override. If not set, uses global `nextDays`. |
+| `homework.pastDays` | int | `0` | (optional) Widget-specific days past override. If not set, uses global `pastDays`. |
 
 **Example:**
 ```javascript
 homework: {
   dateFormat: 'dd.MM.',
+  showSubject: true,
+  showText: true,
+  nextDays: 45,
 }
 ```
 
@@ -246,7 +266,11 @@ Configure absences widget behavior using the `absences` configuration namespace:
 | --- | --- | --- | --- |
 | `absences.dateFormat` | string | `'dd.MM.'` | Date format for absence dates. |
 | `absences.pastDays` | int | `21` | Number of past days to include when fetching absences. |
-| `absences.futureDays` | int | `7` | Number of future days to extend the absences fetch beyond `daysToShow`. |
+| `absences.futureDays` | int | `7` | Number of future days to include when fetching absences. |
+| `absences.showDate` | bool | `true` | Show absence date. |
+| `absences.showExcused` | bool | `true` | Show excused/unexcused status indicator. |
+| `absences.showReason` | bool | `true` | Show reason/note for absence. |
+| `absences.maxItems` | int | `null` | (optional) Max absences to display (null = unlimited). |
 
 **Example:**
 ```javascript
@@ -254,6 +278,10 @@ absences: {
   dateFormat: 'dd.MM.',
   pastDays: 21,
   futureDays: 7,
+  showDate: true,
+  showExcused: true,
+  showReason: true,
+  maxItems: 10,
 }
 ```
 

@@ -25,20 +25,24 @@ function getNowLineState(ctx) {
       try {
         const nowLocal = new Date();
         const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
-        if (nowYmd !== ctx._currentTodayYmd) {
-          log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
-          try {
-            ctx.sendSocketNotification('FETCH_DATA', ctx.config);
-          } catch {
-            // ignore
+        // Only refresh data if debugDate is NOT set (i.e., using real time) and the day has changed
+        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
+        if (!isDebugMode) {
+          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
+          if (nowYmd !== ctx._currentTodayYmd) {
+            log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
+            try {
+              ctx.sendSocketNotification('FETCH_DATA', ctx.config);
+            } catch {
+              // ignore
+            }
+            try {
+              ctx.updateDom();
+            } catch {
+              // ignore
+            }
+            ctx._currentTodayYmd = nowYmd;
           }
-          try {
-            ctx.updateDom();
-          } catch {
-            // ignore
-          }
-          ctx._currentTodayYmd = nowYmd;
         }
 
         const gridWidget = ctx._getWidgetApi()?.grid;
@@ -96,10 +100,15 @@ function getNowLineState(ctx) {
   }
 
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
-    const daysToShow = ctx.config.daysToShow && ctx.config.daysToShow > 0 ? parseInt(ctx.config.daysToShow) : 1;
-    const pastDays = Math.max(0, parseInt(ctx.config.pastDaysToShow ?? 0));
+    // Normalized config from backend already has all legacy keys mapped
+    const configuredNext = studentConfig?.grid?.nextDays ?? studentConfig?.nextDays ?? 1;
+    const configuredPast = studentConfig?.grid?.pastDays ?? studentConfig?.pastDays ?? 0;
+    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 1;
+    const pastDays = Math.max(0, parseInt(configuredPast, 10));
     const startOffset = -pastDays;
-    const totalDisplayDays = daysToShow;
+    // totalDisplayDays = past + today + future
+    // Example: pastDays=1, daysToShow=3 → 1 + 1 + 3 = 5 days (yesterday, today, tomorrow, +2d, +3d)
+    const totalDisplayDays = pastDays + 1 + daysToShow;
 
     log(
       ctx,
@@ -121,16 +130,24 @@ function getNowLineState(ctx) {
     emptyHeader.className = 'grid-days-header-empty';
     header.appendChild(emptyHeader);
 
-    const today = new Date();
-    const todayDateStr = `${today.getFullYear()}${('0' + (today.getMonth() + 1)).slice(-2)}${('0' + today.getDate()).slice(-2)}`;
+    const baseDate = ctx._currentTodayYmd
+      ? (() => {
+          const s = String(ctx._currentTodayYmd);
+          const by = parseInt(s.substring(0, 4), 10);
+          const bm = parseInt(s.substring(4, 6), 10) - 1;
+          const bd = parseInt(s.substring(6, 8), 10);
+          return new Date(by, bm, bd);
+        })()
+      : new Date();
+    const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
-      const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
-      // Determine date format from student -> module config -> default
-      const gridDateFormat = studentConfig?.grid?.dateFormat ?? ctx.config?.grid?.dateFormat ?? 'EEE dd.MM.';
+      // Determine date format from student config (already normalized by backend)
+      const gridDateFormat = studentConfig?.grid?.dateFormat ?? 'EEE dd.MM.';
       let headerFormat = gridDateFormat;
 
       const dayLabelText = util?.formatDate
@@ -177,9 +194,7 @@ function getNowLineState(ctx) {
       allEnd = 17 * 60;
     }
 
-    const maxGridLessonsCfg_before = Number(
-      studentConfig?.grid?.maxLessons ?? studentConfig?.maxLessons ?? ctx.config?.grid?.maxLessons ?? ctx.config.maxLessons ?? 0
-    );
+    const maxGridLessonsCfg_before = Number(studentConfig?.grid?.maxLessons ?? studentConfig?.maxLessons ?? 0);
     const maxGridLessons_before = Number.isFinite(maxGridLessonsCfg_before) ? Math.max(0, Math.floor(maxGridLessonsCfg_before)) : 0;
     if (maxGridLessons_before >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
       const tu = timeUnits;
@@ -294,48 +309,13 @@ function getNowLineState(ctx) {
     timeAxis.style.gridColumn = '1';
     grid.appendChild(timeAxis);
 
-    const examsByDate = {};
-    try {
-      (Array.isArray(exams) ? exams : []).forEach((ex) => {
-        const key = ex && ex.examDate != null ? String(ex.examDate) : null;
-        if (!key) return;
-        if (!examsByDate[key]) examsByDate[key] = [];
-        examsByDate[key].push(ex);
-      });
-    } catch {
-      // ignore
-    }
-
-    const lessonHasExam = (lesson, dateStrLocal) => {
-      const list = examsByDate[dateStrLocal];
-      if (!Array.isArray(list) || list.length === 0) return false;
-
-      const lStart = lesson?.startMin;
-      const lEnd = lesson?.endMin;
-      const lSubjShort = String(lesson?.subjectShort || '').toLowerCase();
-      const lSubjLong = String(lesson?.subject || '').toLowerCase();
-
-      for (const ex of list) {
-        try {
-          const exSubj = String(ex?.subject || '').toLowerCase();
-          const exStart = ex?.startTime !== undefined && ex?.startTime !== null ? ctx._toMinutes(ex.startTime) : NaN;
-          const exEnd = ex?.endTime !== undefined && ex?.endTime !== null ? ctx._toMinutes(ex.endTime) : NaN;
-
-          const subjectMatch = exSubj && (exSubj === lSubjShort || exSubj === lSubjLong);
-
-          if (Number.isFinite(exStart) && Number.isFinite(lStart)) {
-            if (Number.isFinite(exEnd) && Number.isFinite(lEnd)) {
-              const overlap = exStart < lEnd && exEnd > lStart;
-              if (overlap) return true;
-            } else {
-              if (Math.abs(exStart - lStart) <= 1) return true;
-            }
-          }
-
-          if (subjectMatch) return true;
-        } catch {
-          // ignore broken exam record
-        }
+    const lessonHasExam = (lesson) => {
+      // Primary check: REST API provides `type: 'EXAM'` (uppercase) directly on lessons that are exams.
+      if (lesson?.type && String(lesson.type).toUpperCase() === 'EXAM') return true;
+      // Fallback: Check if lesson text contains exam keywords like "Klassenarbeit", "Klausur", "Arbeit"
+      const lText = String(lesson?.text || lesson?.lstext || '').toLowerCase();
+      if (lText.includes('klassenarbeit') || lText.includes('klausur') || lText.includes('arbeit')) {
+        return true;
       }
 
       return false;
@@ -343,7 +323,7 @@ function getNowLineState(ctx) {
 
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
-      const targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
+      const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
       log('debug', `[grid] Processing day ${dateStr} for student "${studentTitle}"`);
@@ -375,6 +355,7 @@ function getNowLineState(ctx) {
         code: el.code || '',
         substText: el.substText || '',
         text: el.lstext || '',
+        type: el.type || null,
         lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
       }));
 
@@ -394,60 +375,61 @@ function getNowLineState(ctx) {
         }
       }
 
-      const maxGridLessonsCfg = Number(ctx.config?.grid?.maxLessons ?? ctx.config.maxLessons ?? 0);
+      // If grid.maxLessons is set, limit to that many timeUnits (school periods)
+      // Always keep cancelled/irregular lessons regardless of this limit.
+      const maxGridLessonsCfg = Number(studentConfig?.grid?.maxLessons ?? studentConfig?.maxLessons ?? 0);
       const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
       let lessonsToRender = dayLessons;
 
-      if (maxGridLessons >= 1) {
-        if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-          const tu = timeUnits;
-          const filtered = lessonsToRender.filter((lesson) => {
-            const s = lesson.startMin;
-            if (s === undefined || s === null || Number.isNaN(s)) return true;
+      if (maxGridLessons >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
+        const tu = timeUnits;
+        // Always keep cancelled and irregular (substitution) lessons; only limit regular lessons to first N periods.
+        const filtered = lessonsToRender.filter((lesson) => {
+          // Always keep cancelled and irregular lessons regardless of maxGridLessons
+          if (
+            lesson.code === 'cancelled' ||
+            lesson.status === 'CANCELLED' ||
+            lesson.code === 'irregular' ||
+            lesson.status === 'SUBSTITUTION'
+          ) {
+            return true;
+          }
 
-            let matchedIndex = -1;
-            for (let ui = 0; ui < tu.length; ui++) {
-              const u = tu[ui];
-              const uStart = u.startMin;
-              let uEnd = u.endMin;
-              if (uEnd === undefined || uEnd === null) {
-                if (ui + 1 < tu.length && tu[ui + 1] && tu[ui + 1].startMin !== undefined && tu[ui + 1].startMin !== null) {
-                  uEnd = tu[ui + 1].startMin;
-                } else {
-                  uEnd = uStart + 60;
-                }
-              }
-              if (s >= uStart && s < uEnd) {
-                matchedIndex = ui;
-                break;
+          const s = lesson.startMin;
+          if (s === undefined || s === null || Number.isNaN(s)) return true;
+
+          let matchedIndex = -1;
+          for (let ui = 0; ui < tu.length; ui++) {
+            const u = tu[ui];
+            const uStart = u.startMin;
+            let uEnd = u.endMin;
+            if (uEnd === undefined || uEnd === null) {
+              if (ui + 1 < tu.length && tu[ui + 1] && tu[ui + 1].startMin !== undefined && tu[ui + 1].startMin !== null) {
+                uEnd = tu[ui + 1].startMin;
+              } else {
+                uEnd = uStart + 60;
               }
             }
-            if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY))
-              matchedIndex = tu.length - 1;
-            return matchedIndex === -1 ? true : matchedIndex < maxGridLessons;
-          });
+            if (s >= uStart && s < uEnd) {
+              matchedIndex = ui;
+              break;
+            }
+          }
+          if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY))
+            matchedIndex = tu.length - 1;
+          // Only include if matched to one of the first maxGridLessons periods
+          return matchedIndex === -1 ? true : matchedIndex < maxGridLessons;
+        });
 
-          if (Array.isArray(filtered) && filtered.length < dayLessons.length) {
-            const hidden = dayLessons.length - filtered.length;
-            log(
-              ctx,
-              'debug',
-              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (timeUnits-based). Showing first ${maxGridLessons} period(s).`
-            );
-          }
-          lessonsToRender = filtered;
-        } else {
-          if (Array.isArray(dayLessons) && dayLessons.length > maxGridLessons) {
-            const sliced = dayLessons.slice(0, maxGridLessons);
-            const hidden = dayLessons.length - sliced.length;
-            log(
-              ctx,
-              'debug',
-              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (count-based fallback).`
-            );
-            lessonsToRender = sliced;
-          }
+        if (Array.isArray(filtered) && filtered.length < dayLessons.length) {
+          const hidden = dayLessons.length - filtered.length;
+          log(
+            ctx,
+            'debug',
+            `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+          );
         }
+        lessonsToRender = filtered;
       }
 
       const colLeft = 2 + d * 2;
@@ -586,7 +568,7 @@ function getNowLineState(ctx) {
       for (let idx = 0; idx < lessonsToRender.length; idx++) {
         const lesson = lessonsToRender[idx];
 
-        const hasExam = lessonHasExam(lesson, dateStr);
+        const hasExam = lessonHasExam(lesson);
 
         let sMin = lesson.startMin;
         let eMin = lesson.endMin;
@@ -596,8 +578,13 @@ function getNowLineState(ctx) {
         const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
         const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
 
+        // Use ctx._currentTodayYmd (which respects debugDate) instead of real system date
+        let nowYmd = ctx._currentTodayYmd;
+        if (nowYmd === undefined || nowYmd === null) {
+          const now = new Date();
+          nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        }
         const now = new Date();
-        const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
         const nowMin = now.getHours() * 60 + now.getMinutes();
         const lessonYmd = Number(dateStr) || 0;
         let isPast = false;
@@ -713,9 +700,12 @@ function getNowLineState(ctx) {
   function refreshPastMasks(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      const now = new Date();
-      const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowLocal = new Date();
+      const todayYmd =
+        typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd
+          ? ctx._currentTodayYmd
+          : nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
       lessons.forEach((ln) => {
@@ -741,8 +731,8 @@ function getNowLineState(ctx) {
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      // Respect the showNowLine config option
-      if (ctx.config?.showNowLine === false) {
+      // Respect the showNowLine config option (from current displayed student config)
+      if (ctx.studentConfig?.showNowLine === false) {
         // Hide all now lines if disabled
         const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
         const inners = scope.querySelectorAll('.day-column-inner');
@@ -754,10 +744,16 @@ function getNowLineState(ctx) {
       }
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const inners = scope.querySelectorAll('.day-column-inner');
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowLocal = new Date();
+      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {
+        // Only show the now-line for the column explicitly marked as "is-today".
+        if (!inner.classList || !inner.classList.contains('is-today')) {
+          const nl = inner._nowLine;
+          if (nl) nl.style.display = 'none';
+          return;
+        }
         const nl = inner._nowLine;
         const allS = inner._allStart;
         const allE = inner._allEnd;
