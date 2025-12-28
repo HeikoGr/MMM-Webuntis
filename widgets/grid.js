@@ -170,6 +170,16 @@ function getNowLineState(ctx) {
         }
       }
 
+      // Make sure cutoff includes the full timeUnit (go to the next unit's start if available)
+      if (
+        cutoff !== undefined &&
+        cutoff !== null &&
+        targetIndex + 1 < timeUnits.length &&
+        timeUnits[targetIndex + 1]?.startMin !== undefined
+      ) {
+        cutoff = timeUnits[targetIndex + 1].startMin;
+      }
+
       if (cutoff !== undefined && cutoff !== null && cutoff > allStart && cutoff < allEnd) {
         log(
           ctx,
@@ -354,45 +364,70 @@ function getNowLineState(ctx) {
     return dayLessons;
   }
 
-  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx) {
+  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
+      // If no maxGridLessons limit, still filter by allEnd cutoff if provided
+      if (allEnd !== null && allEnd !== undefined) {
+        return dayLessons.filter((lesson) => {
+          // Always keep cancelled and irregular lessons
+          if (
+            lesson.code === 'cancelled' ||
+            lesson.status === 'CANCELLED' ||
+            lesson.code === 'irregular' ||
+            lesson.status === 'SUBSTITUTION'
+          ) {
+            return true;
+          }
+          const s = lesson.startMin;
+          return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+        });
+      }
       return dayLessons;
     }
 
     const filtered = dayLessons.filter((lesson) => {
-      // Always keep cancelled and irregular lessons regardless of maxGridLessons
-      if (lesson.code === 'cancelled' || lesson.status === 'CANCELLED' || lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
+      const s = lesson.startMin;
+      if (s === undefined || s === null || Number.isNaN(s)) {
         return true;
       }
 
-      const s = lesson.startMin;
-      if (s === undefined || s === null || Number.isNaN(s)) return true;
+      // If maxGridLessons is set, filter ALL lessons (including cancelled/irregular) by period
+      if (maxGridLessons >= 1) {
+        // Check if the lesson's period index is within maxGridLessons
+        let matchedIndex = -1;
+        for (let ui = 0; ui < timeUnits.length; ui++) {
+          const u = timeUnits[ui];
+          const uStart = u.startMin;
+          let uEnd = u.endMin;
 
-      let matchedIndex = -1;
-      for (let ui = 0; ui < timeUnits.length; ui++) {
-        const u = timeUnits[ui];
-        const uStart = u.startMin;
-        let uEnd = u.endMin;
+          if (uEnd === undefined || uEnd === null) {
+            if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
+              uEnd = timeUnits[ui + 1].startMin;
+            } else {
+              uEnd = uStart + 60;
+            }
+          }
 
-        if (uEnd === undefined || uEnd === null) {
-          if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
-            uEnd = timeUnits[ui + 1].startMin;
-          } else {
-            uEnd = uStart + 60;
+          if (s >= uStart && s < uEnd) {
+            matchedIndex = ui;
+            break;
           }
         }
 
-        if (s >= uStart && s < uEnd) {
-          matchedIndex = ui;
-          break;
+        if (matchedIndex === -1 && timeUnits.length > 0 && s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) {
+          matchedIndex = timeUnits.length - 1;
         }
+
+        // Only keep lessons in the first maxGridLessons periods
+        return matchedIndex !== -1 && matchedIndex < maxGridLessons;
       }
 
-      if (matchedIndex === -1 && timeUnits.length > 0 && s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) {
-        matchedIndex = timeUnits.length - 1;
+      // Otherwise (no maxGridLessons limit), use allEnd cutoff if provided
+      if (allEnd !== null && allEnd !== undefined && s >= allEnd) {
+        return false;
       }
 
-      return matchedIndex === -1 ? true : matchedIndex < maxGridLessons;
+      return true;
     });
 
     if (filtered.length < dayLessons.length) {
@@ -730,8 +765,8 @@ function getNowLineState(ctx) {
       let dayLessons = extractDayLessons(sourceForDay, ctx);
       dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-      // Filter by max periods
-      const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx);
+      // Filter by max periods and time cutoff
+      const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
 
       // Create day columns
       const colLeft = 2 + d * 2;
@@ -771,7 +806,13 @@ function getNowLineState(ctx) {
       // Add "more" badge if lessons were hidden
       const hiddenCount = dayLessons.length - lessonsToRender.length;
       if (hiddenCount > 0) {
+        log('debug', `[grid] Day ${dateStr}: ${hiddenCount} lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown)`);
         addMoreBadge(bothInner, hiddenCount, ctx);
+      } else if (config.maxGridLessons && dayLessons.length > 0) {
+        log(
+          'debug',
+          `[grid] Day ${dateStr}: no lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown, maxLessons=${config.maxGridLessons})`
+        );
       }
 
       // Add "no lessons" notice if empty

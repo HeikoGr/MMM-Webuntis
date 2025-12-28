@@ -772,6 +772,14 @@ Module.register('MMM-Webuntis', {
 
   notificationReceived(notification) {
     if (notification === 'DOM_OBJECTS_CREATED') {
+      // Display deprecation warnings if legacy config keys are detected
+      if (this.config.__legacyUsed && this.config.__legacyUsed.length > 0) {
+        this._log('warn', `⚠️ DEPRECATED CONFIG DETECTED: ${this.config.__legacyUsed.join(', ')}`);
+        this._log('warn', 'Your configuration uses deprecated keys that will be removed in future versions.');
+        this._log('warn', 'Please update your config.js to use the new configuration format.');
+        this._log('warn', 'See the module documentation for migration details.');
+      }
+
       this._startFetchTimer();
     }
   },
