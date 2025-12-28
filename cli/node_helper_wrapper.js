@@ -79,7 +79,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -335,10 +335,10 @@ function getStudentCredentials(config, studentIndex) {
     if (!school || !username || !password || !server) {
       throw new Error(
         `Missing credentials for student ${studentIndex}. ` +
-          `Found: school=${school ? 'yes' : 'no'}, ` +
-          `username=${username ? 'yes' : 'no'}, ` +
-          `password=${password ? 'yes' : 'no'}, ` +
-          `server=${server ? 'yes' : 'no'}`
+        `Found: school=${school ? 'yes' : 'no'}, ` +
+        `username=${username ? 'yes' : 'no'}, ` +
+        `password=${password ? 'yes' : 'no'}, ` +
+        `server=${server ? 'yes' : 'no'}`
       );
     }
   } else {
