@@ -85,11 +85,12 @@ Module.register('MMM-Webuntis', {
     dumpBackendPayloads: true,
     displayMode: 'grid,homework,lessons,exams,absences',
 
-    // Parent account
-    username: 'heiko.grossstueck@gmail.com',
-    password: 'AqP5SR7kxj&',
-    school: 'bachgymnasium',
-    server: 'bachgymnasium.webuntis.com',
+    // === PARENT ACCOUNT SUPPORT (optional) ===
+    // Uncomment and configure if using parent account to display multiple children
+    // parentUsername: '', // parent account email/username
+    // parentPassword: '', // parent account password
+    // school: '', // school name
+    // server: '', // WebUntis server
 
     // Display
     // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
