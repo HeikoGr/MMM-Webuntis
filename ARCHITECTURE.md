@@ -12,25 +12,122 @@ graph TB
     end
 
     subgraph Backend["⚙️ Backend (Node.js)"]
-        NH["node_helper.js"]
-        Cache["Auth/Response<br/>Cache"]
-        Untis["WebUntis<br/>Client"]
+        NH["node_helper.js<br/>(Coordinator)"]
+        
+        subgraph Services["🔧 Services (lib/)"]
+            HttpClient["httpClient.js<br/>(Generic HTTP)"]
+            Auth["authService.js<br/>(Auth & Tokens)"]
+            API["webuntisApiService.js<br/>(API Calls)"]
+            Cache["cacheManager.js<br/>(TTL Cache)"]
+            Transform["dataTransformer.js<br/>(Data Transform)"]
+            Config["configValidator.js<br/>(Config & Legacy)"]
+            Errors["errorHandler.js<br/>(Error Handling)"]
+            Validators["widgetConfigValidator.js<br/>(Widget Validation)"]
+            DateTime["dateTimeUtils.js<br/>(Date/Time Utils)"]
+            Logger["logger.js<br/>(Backend Logging)"]
+        end
     end
 
     subgraph External["🌐 External APIs"]
         REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences)"]
-        QR["QR Code<br/>Authentication"]
+        JSONRPC["JSON-RPC API<br/>(auth, OTP)"]
     end
 
     MM <-->|socketNotification| FE
     FE <-->|sendSocketNotification| NH
     FE --> Widgets
     Widgets --> Util
-    NH --> Cache
-    NH --> Untis
-    Untis --> QR
-    Untis --> REST
+    NH --> Services
+    HttpClient --> JSONRPC
+    Auth --> HttpClient
+    API --> REST
+    NH --> REST
 ```
+
+## Modular Architecture (lib/)
+
+The module uses a **service-oriented architecture** with specialized modules in the `lib/` directory:
+
+### Core Services
+
+**httpClient.js** - Generic HTTP client for WebUntis API
+- QR code authentication (JSON-RPC with OTP)
+- Username/password authentication (JSON-RPC)
+- Bearer token retrieval
+- Session cookie management
+- Session caching (14-minute TTL)
+- **Independence**: No WebUntis library dependency for HTTP operations
+
+**authService.js** - Authentication and token management
+- REST API authentication (bearer tokens + cookies)
+- QR code authentication flow
+- Parent account authentication
+- Token caching (14-minute TTL, 1-minute buffer)
+- School/server resolution from QR codes
+- Multi-student target building
+- **Dependencies**: httpClient.js, axios (for app/data)
+
+**webuntisApiService.js** - Unified API client
+- Generic REST API call function
+- Timetable, exams, homework, absences, messages of day
+- Request/response handling
+- Error propagation
+- **Dependencies**: restClient.js, authService.js
+
+### Data Processing
+
+**dataTransformer.js** - Data transformation and normalization
+- Timetable data transformation
+- Exam, homework, absences transformation
+- HTML sanitization
+- Date/time normalization
+- **Dependencies**: None (pure functions)
+
+**cacheManager.js** - TTL-based caching
+- Class ID caching
+- Generic key-value cache with expiration
+- Cache statistics and cleanup
+- **Dependencies**: None
+
+**dateTimeUtils.js** - Date and time utilities
+- Date calculations (addDays, daysBetween)
+- Time formatting (toMinutes, formatTime)
+- Date comparisons (isToday, isBefore, isAfter)
+- YYYYMMDD formatting for API calls
+- **Dependencies**: None (pure functions)
+
+### Configuration & Validation
+
+**configValidator.js** - Configuration validation and legacy mapping
+- Schema-based validation
+- 25 legacy config key mappings
+- Detailed deprecation warnings
+- Config normalization
+- **Dependencies**: None
+
+**widgetConfigValidator.js** - Widget-specific validation
+- Grid, lessons, exams, homework, absences, messages validation
+- Range validation (nextDays: 0-365, pastDays: 0-90)
+- Student credential validation
+- Student widget overrides validation
+- **Dependencies**: None
+
+### Error Handling & Logging
+
+**errorHandler.js** - Centralized error handling
+- Error formatting
+- REST error to user-friendly warning conversion
+- Empty data warnings
+- Error severity classification (critical/warning/info)
+- Retry-after header extraction
+- Retryable error detection
+- **Dependencies**: None
+
+**logger.js** - Backend logging service
+- Configurable log levels (none/error/warn/info/debug)
+- Structured logging with student context
+- MagicMirror logger integration
+- **Dependencies**: MagicMirror logger
 
 ## Detailed Data Flow
 
@@ -41,6 +138,9 @@ sequenceDiagram
     participant B as Browser
     participant FE as MMM-Webuntis.js
     participant NH as node_helper.js
+    participant Auth as authService
+    participant HTTP as httpClient
+    participant API as webuntisApiService
     participant REST as WebUntis API
 
     Note over FE,NH: Module Initialization
@@ -49,36 +149,81 @@ sequenceDiagram
     FE->>FE: _buildSendConfig()<br/>(merge defaults into students[])
     FE->>NH: FETCH_DATA socket notification
 
-    Note over NH: Auto-Discovery & Normalization
-    NH->>NH: _ensureStudentsFromAppData()<br/>(if students empty/null)
+    Note over NH: Config Validation & Normalization
+    NH->>NH: configValidator.validateConfig()<br/>(schema validation)
+    NH->>NH: configValidator.applyLegacyMappings()<br/>(25 legacy key mappings)
+    NH->>NH: widgetConfigValidator.validateAllWidgets()<br/>(widget-specific validation)
+    
+    Note over NH: Auto-Discovery (if students[] empty)
     alt students[] is empty
-        NH->>REST: GET /app/data
-        REST-->>NH: appData (discover students)
-        NH->>NH: _deriveStudentsFromAppData()<br/>(extract studentId, title)
-        NH->>NH: merge module defaults into auto-discovered
-        NH->>NH: _normalizeLegacyConfig()<br/>(map old keys to new)
+        NH->>Auth: getAuth() for parent account
+        Auth->>HTTP: authenticateWithCredentials()
+        HTTP->>REST: POST /jsonrpc.do (authenticate)
+        REST-->>HTTP: sessionId, cookies
+        HTTP->>REST: GET /api/token/new
+        REST-->>HTTP: bearer token
+        HTTP-->>Auth: { cookies, token }
+        Auth->>REST: GET /app/data
+        REST-->>Auth: appData (students list)
+        Auth-->>NH: { students[], tenantId, schoolYearId }
+        NH->>NH: deriveStudentsFromAppData()<br/>(extract studentId, title)
+    end
+
+    Note over NH: Authentication Flow
+    loop for each student
+        alt QR Code Login
+            NH->>Auth: getAuthFromQRCode()
+            Auth->>HTTP: authenticateWithQRCode()
+            HTTP->>REST: POST /jsonrpc.do (OTP auth)
+            REST-->>HTTP: sessionId, personId
+        else Username/Password
+            NH->>Auth: getAuth()
+            Auth->>HTTP: authenticateWithCredentials()
+            HTTP->>REST: POST /jsonrpc.do (authenticate)
+            REST-->>HTTP: sessionId, cookies
+        end
+        HTTP->>REST: GET /api/token/new
+        REST-->>HTTP: bearer token (15min expiry)
+        HTTP-->>Auth: { cookies, token }
+        Auth->>Auth: Cache token (14min TTL)
     end
 
     Note over NH: Data Fetching
-    NH->>NH: _createUntisClient()<br/>(QR | parent | direct mode)
-    NH->>REST: authenticate (cookies + bearer token)
-    NH->>Cache: store token + cookies (900s cache)
-
     loop for each student
-        NH->>REST: GET /timetable (dates range)
-        REST-->>NH: timetable[]
-        NH->>REST: GET /exams
-        REST-->>NH: exams[]
-        NH->>REST: GET /homework
-        REST-->>NH: homework[]
-        NH->>REST: GET /absences
-        REST-->>NH: absences[]
+        NH->>API: callWebUntisAPI('timetable')
+        API->>Auth: getAuth() [from cache]
+        Auth-->>API: { token, cookies, tenantId }
+        API->>REST: GET /timetable/entries?tenantId=X&studentId=Y
+        REST-->>API: timetable[]
+        API->>API: dataTransformer.transformTimeTableData()
+        API-->>NH: normalized timetable
+
+        NH->>API: callWebUntisAPI('exams')
+        API->>REST: GET /exams
+        REST-->>API: exams[]
+        API->>API: dataTransformer.transformExamData()
+        API-->>NH: normalized exams
+
+        NH->>API: callWebUntisAPI('homework')
+        API->>REST: GET /homeworks/lessons
+        REST-->>API: homework[]
+        API-->>NH: normalized homework
+
+        NH->>API: callWebUntisAPI('absences')
+        API->>REST: GET /absences/students
+        REST-->>API: absences[]
+        API->>API: dataTransformer.transformAbsencesData()
+        API-->>NH: normalized absences
     end
 
+    Note over NH: Error Handling & Warnings
+    NH->>NH: errorHandler.checkEmptyDataWarning()<br/>(validate data arrays)
+    NH->>NH: errorHandler.convertRestErrorToWarning()<br/>(user-friendly messages)
+    NH->>NH: widgetConfigValidator.validateStudentWidgets()<br/>(collect config warnings)
+
     Note over NH: Payload Preparation
-    NH->>NH: _compact* functions<br/>(reduce size, normalize times/dates)
-    NH->>NH: collect warnings<br/>(invalid studentId, validation)
-    NH->>NH: build GOT_DATA payload<br/>(title, config, data[], warnings)
+    NH->>NH: payloadCompactor.compactArray()<br/>(reduce size, remove nulls)
+    NH->>NH: build GOT_DATA payload<br/>(title, config, data[], warnings[])
     NH->>FE: GOT_DATA socket notification
 
     Note over FE: Store & Render

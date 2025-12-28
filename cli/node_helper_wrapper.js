@@ -388,9 +388,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
   Log.wrapper_info(`  Mode: ${qrcode ? 'qrcode' : 'username/password'}`);
 
   try {
-    const untis = nodeHelper._createUntisClient(student, mergedConfig);
-    await untis.login();
-
+    const authSession = await nodeHelper._createAuthSession(student, mergedConfig);
     const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
 
     // Enable dumping if requested
@@ -398,7 +396,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
       mergedConfig.dumpBackendPayloads = true;
     }
 
-    const payload = await nodeHelper.fetchData(untis, { ...student }, 'wrapper-fetch', credKey);
+    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey);
 
     const results = {
       timetable: payload?.timetableRange?.length || 0,

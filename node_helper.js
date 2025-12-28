@@ -1,24 +1,23 @@
 /* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
 /* eslint-enable n/no-missing-require */
-const { WebUntis, WebUntisQR } = require('webuntis');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { authenticator: OtpAuthenticator } = require('otplib');
-const { URL } = require('url');
 /* eslint-disable n/no-missing-require */
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 
 // New utility modules for refactoring
 const { compactArray, schemas } = require('./lib/payloadCompactor');
-const { validateConfig, applyLegacyMappings } = require('./lib/configValidator');
+const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
 const webuntisApiService = require('./lib/webuntisApiService');
 const AuthService = require('./lib/authService');
 const dataTransformer = require('./lib/dataTransformer');
 const CacheManager = require('./lib/cacheManager');
+const errorHandler = require('./lib/errorHandler');
+const widgetConfigValidator = require('./lib/widgetConfigValidator');
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 // Create a NodeHelper module
@@ -59,14 +58,18 @@ module.exports = NodeHelper.create({
     if (legacyUsed.length > 0) {
       try {
         const uniq = Array.from(new Set(legacyUsed));
-        const warningMsg = `⚠️ Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys. Look in debug output for the normalized config.`;
 
-        // Attach warning to config.__warnings so it gets sent to frontend and displayed in GUI
+        // Generate detailed deprecation warnings
+        const detailedWarnings = generateDeprecationWarnings(uniq);
+
+        // Attach warnings to config.__warnings so they get sent to frontend and displayed in GUI
         normalizedConfig.__warnings = normalizedConfig.__warnings || [];
-        normalizedConfig.__warnings.push(warningMsg);
+        normalizedConfig.__warnings.push(...detailedWarnings);
 
-        // Also log it to server logs
-        this._mmLog('warn', null, warningMsg);
+        // Also log them to server logs (only detailed warnings, not the generic summary)
+        detailedWarnings.forEach((warning) => {
+          this._mmLog('warn', null, warning);
+        });
 
         // Log the normalized config as formatted JSON (with redacted sensitive data) for reference (server-side only)
         const redacted = { ...normalizedConfig };
@@ -131,8 +134,7 @@ module.exports = NodeHelper.create({
   },
 
   _formatErr(err) {
-    if (!err) return '(no error)';
-    return String(err?.message || err);
+    return errorHandler.formatError(err);
   },
 
   /**
@@ -593,13 +595,15 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /*
-   * Create an authenticated WebUntis client from a student sample config.
-   * For parent account mode (student has studentId but no own credentials),
-   * use the module-level username and password.
-   * Returns a WebUntis client instance (logged in) or throws an Error if credentials missing.
+  /**
+   * Create an authenticated session for a student
+   * Returns a session object with authentication data or throws an Error if credentials missing.
+   *
+   * @param {Object} sample - Student configuration sample
+   * @param {Object} moduleConfig - Module configuration
+   * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
    */
-  _createUntisClient(sample, moduleConfig) {
+  async _createAuthSession(sample, moduleConfig) {
     const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
@@ -607,22 +611,66 @@ module.exports = NodeHelper.create({
 
     // Mode 0: QR Code Login (student)
     if (useQrLogin) {
-      this._mmLog('debug', sample, 'Creating WebUntisQR client for QR code login');
-      return new WebUntisQR(sample.qrcode, 'MMM-Webuntis', OtpAuthenticator, URL);
+      this._mmLog('debug', sample, 'Authenticating with QR code');
+      const authResult = await this.authService.getAuthFromQRCode(sample.qrcode, {
+        cacheKey: `qr:${sample.qrcode}`,
+      });
+      return {
+        school: authResult.school,
+        server: authResult.server,
+        personId: authResult.personId,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        mode: 'qr',
+      };
     }
 
     // Mode 1: Parent Account (studentId + parent credentials from moduleConfig)
     if (isParentMode && moduleConfig && moduleConfig.username && moduleConfig.password) {
       const school = sample.school || moduleConfig.school;
       const server = sample.server || moduleConfig.server || 'webuntis.com';
-      this._mmLog('debug', sample, `Creating WebUntis client for parent account (school=${school}, server=${server})`);
-      return new WebUntis(school, moduleConfig.username, moduleConfig.password, server);
+      this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
+      const authResult = await this.authService.getAuth({
+        school,
+        username: moduleConfig.username,
+        password: moduleConfig.password,
+        server,
+        options: { cacheKey: `parent:${moduleConfig.username}@${server}` },
+      });
+      return {
+        school,
+        server,
+        personId: null,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        mode: 'parent',
+      };
     }
 
     // Mode 2: Direct Student Login (own credentials)
     if (hasOwnCredentials) {
-      this._mmLog('debug', sample, `Creating WebUntis client for direct login (school=${sample.school}, server=${sample.server})`);
-      return new WebUntis(sample.school, sample.username, sample.password, sample.server);
+      this._mmLog('debug', sample, `Authenticating with direct login (school=${sample.school}, server=${sample.server})`);
+      const authResult = await this.authService.getAuth({
+        school: sample.school,
+        username: sample.username,
+        password: sample.password,
+        server: sample.server,
+        options: { cacheKey: `direct:${sample.username}@${sample.server}` },
+      });
+      return {
+        school: sample.school,
+        server: sample.server,
+        personId: null,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        mode: 'direct',
+      };
     }
 
     // No valid credentials found
@@ -640,15 +688,28 @@ module.exports = NodeHelper.create({
   // since timeUnits (lesson slots) are the same for all days.
   _compactTimegrid(rawGrid) {
     if (!Array.isArray(rawGrid) || rawGrid.length === 0) return [];
-    // All rows should have identical timeUnits; use the first row as canonical
+
+    // Check if this is the old format (array of rows with timeUnits)
+    // or new format (direct array of time slots)
     const firstRow = rawGrid[0];
     if (firstRow && Array.isArray(firstRow.timeUnits)) {
+      // Old format: array of rows with timeUnits
       return firstRow.timeUnits.map((u) => ({
         startTime: u.startTime,
         endTime: u.endTime,
         name: u.name,
       }));
     }
+
+    // New format: direct array of time slots from _extractTimegridFromTimetable
+    if (firstRow && firstRow.startTime && firstRow.endTime) {
+      return rawGrid.map((u) => ({
+        startTime: u.startTime,
+        endTime: u.endTime,
+        name: u.name || '',
+      }));
+    }
+
     return [];
   },
 
@@ -711,85 +772,27 @@ module.exports = NodeHelper.create({
    * Validate student credentials and configuration before attempting fetch
    */
   _validateStudentConfig(student) {
-    const warnings = [];
+    // Validate credentials
+    const credentialWarnings = widgetConfigValidator.validateStudentCredentials(student);
 
-    // Check for missing credentials
-    const hasQr = Boolean(student.qrcode);
-    const hasDirectCreds = Boolean(student.username && student.password && student.school);
-    const hasStudentId = Number.isFinite(Number(student.studentId));
+    // Validate widget-specific configurations
+    const widgetWarnings = widgetConfigValidator.validateStudentWidgets(student);
 
-    if (!hasQr && !hasDirectCreds && !hasStudentId) {
-      warnings.push(
-        `Student "${student.title}": No credentials configured. Provide either qrcode OR (username + password + school) OR studentId (for parent account).`
-      );
-    }
-
-    // Check for invalid QR code format
-    if (hasQr && !student.qrcode.startsWith('untis://')) {
-      warnings.push(
-        `Student "${student.title}": QR code malformed. Expected format: untis://setschool?url=...&school=...&user=...&key=...`
-      );
-    }
-
-    return warnings;
+    return [...credentialWarnings, ...widgetWarnings];
   },
 
   /**
    * Convert REST API errors to user-friendly warning messages
    */
   _convertRestErrorToWarning(error, context = {}) {
-    const { studentTitle = 'Student', school = 'school', server = 'server' } = context;
-
-    if (!error) return null;
-
-    const msg = (error.message || '').toLowerCase();
-    const status = error.response?.status;
-
-    // Authentication errors
-    if (status === 401 || status === 403 || msg.includes('401') || msg.includes('403')) {
-      return `Authentication failed for "${studentTitle}": Invalid credentials or insufficient permissions.`;
-    }
-
-    // Network errors
-    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || msg.includes('timeout')) {
-      return `Cannot connect to WebUntis server "${server}". Check server name and network connection.`;
-    }
-
-    // API unavailable
-    if (status === 503 || msg.includes('503')) {
-      return `WebUntis API temporarily unavailable (HTTP 503). Retrying on next fetch...`;
-    }
-
-    // School not found (typically 401 with specific error message)
-    if (msg.includes('school') || msg.includes('not found')) {
-      return `School "${school}" not found or invalid credentials. Check school name and spelling.`;
-    }
-
-    // Generic network error
-    if (!error.response) {
-      return `Network error connecting to WebUntis: ${error.message || 'Unknown error'}`;
-    }
-
-    // Generic HTTP error
-    if (status && status >= 400 && status < 500) {
-      return `HTTP ${status} error for "${studentTitle}": ${error.message || 'Client error'}`;
-    }
-
-    if (status && status >= 500) {
-      return `Server error (HTTP ${status}): ${error.message || 'Server error'}`;
-    }
-
-    return null;
+    return errorHandler.convertRestErrorToWarning(error, context);
   },
 
   /**
    * Check if empty data array should trigger a warning
    */
   _checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData = true) {
-    if (Array.isArray(dataArray) && dataArray.length === 0 && isExpectedData) {
-      return `Student "${studentTitle}": No ${dataType} found in selected date range. Check if student is enrolled.`;
-    }
-    return null;
+    return errorHandler.checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData);
   },
 
   /**
@@ -817,28 +820,9 @@ module.exports = NodeHelper.create({
       warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
     }
 
-    // Validate numeric ranges (prefer new keys `nextDays` / `pastDays`)
-    if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
-      warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
-    }
-    if (Number.isFinite(config.pastDays) && config.pastDays < 0) {
-      warnings.push(`pastDays cannot be negative. Value: ${config.pastDays}`);
-    }
-    if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
-      warnings.push(`daysToShow cannot be negative (deprecated). Value: ${config.daysToShow}`);
-    }
-
-    // Get exams.nextDays (from new namespace or legacy)
-    const examsNextDays = config.exams?.nextDays ?? config.exams?.daysAhead ?? config.examsDaysAhead ?? 0;
-    if (Number.isFinite(examsNextDays) && (examsNextDays < 0 || examsNextDays > 365)) {
-      warnings.push(`exams.nextDays should be between 0 and 365. Value: ${examsNextDays}`);
-    }
-
-    // Get grid.mergeGap (from new namespace or legacy)
-    const gridMergeGap = config.grid?.mergeGap ?? config.mergeGapMinutes ?? 0;
-    if (Number.isFinite(gridMergeGap) && gridMergeGap < 0) {
-      warnings.push(`grid.mergeGap cannot be negative. Value: ${gridMergeGap}`);
-    }
+    // Validate widget-specific configurations
+    const widgetWarnings = widgetConfigValidator.validateAllWidgets(config);
+    warnings.push(...widgetWarnings);
 
     return warnings;
   },
@@ -859,7 +843,7 @@ module.exports = NodeHelper.create({
    */
   async processGroup(credKey, students, identifier) {
     // Single-run processing: authenticate, fetch data for each student, and logout.
-    let untis = null;
+    let authSession = null;
     const sample = students[0];
     const groupWarnings = [];
     // Per-fetch-cycle warning deduplication set. Ensures identical warnings
@@ -868,7 +852,7 @@ module.exports = NodeHelper.create({
 
     try {
       try {
-        untis = this._createUntisClient(sample, this.config);
+        authSession = await this._createAuthSession(sample, this.config);
       } catch (err) {
         const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
         this._mmLog('error', null, msg);
@@ -894,7 +878,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      await untis.login();
+      // Authentication complete via authService (no login() needed)
       for (const student of students) {
         try {
           // ===== VALIDATE STUDENT CONFIG =====
@@ -911,7 +895,7 @@ module.exports = NodeHelper.create({
 
           // Fetch fresh data for this student
           this._mmLog('debug', student, `Fetching data for ${student.title}...`);
-          const payload = await this.fetchData(untis, student, identifier, credKey);
+          const payload = await this.fetchData(authSession, student, identifier, credKey);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           }
@@ -943,11 +927,7 @@ module.exports = NodeHelper.create({
         this._currentFetchWarnings.add(authMsg);
       }
     } finally {
-      try {
-        if (untis) await untis.logout();
-      } catch (err) {
-        this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(err)}`);
-      }
+      // Cleanup not needed - session managed by authService cache
       // Clear per-fetch warning dedupe set now that processing for this group finished
       try {
         this._currentFetchWarnings = undefined;
@@ -996,23 +976,12 @@ module.exports = NodeHelper.create({
         // Persist normalized config so the helper uses mapped keys everywhere
         this.config = normalizedConfig;
 
-        // Log any legacy keys that were used
-        if (legacyUsed && legacyUsed.length > 0) {
-          this._mmLog(
-            'warn',
-            null,
-            `Legacy config keys detected: ${legacyUsed.join(', ')}. These are still supported but will be auto-converted.`
-          );
-        }
-
         const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
         const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
 
-        // Add legacy key usage to the warning list so users see a clear notice
-        const legacyWarnings = (legacyUsed || []).map(
-          (key) => `Deprecated configuration field detected: "${key}" has been mapped to the new schema.`
-        );
-        const combinedWarnings = [...(warnings || []), ...legacyWarnings];
+        // Generate detailed deprecation warnings for any legacy keys used
+        const detailedWarnings = legacyUsed && legacyUsed.length > 0 ? generateDeprecationWarnings(legacyUsed) : [];
+        const combinedWarnings = [...(warnings || []), ...detailedWarnings];
         if (!valid) {
           this.sendSocketNotification('CONFIG_ERROR', {
             errors,
@@ -1142,65 +1111,77 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Return the timegrid for the given credential. Always fetch fresh data from WebUntis.
+   * Extract timegrid from timetable data (REST API returns time slots with lessons)
+   * The REST API doesn't have a separate timegrid endpoint, but the timetable includes time information
    *
-   * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (currently unused)
-   * @returns {Promise<Array>} timegrid array
+   * @param {Array} timetable - Timetable array from REST API
+   * @returns {Array} timegrid array with timeUnits
    */
-  async _getTimegrid(untis, credKey) {
-    this._mmLog('debug', null, `Fetching timegrid`);
-    try {
-      const grid = await untis.getTimegrid();
-      return grid || [];
-    } catch (err) {
-      // return empty array on error
-      this._mmLog('error', null, `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`);
-      return [];
+  _extractTimegridFromTimetable(timetable) {
+    if (!Array.isArray(timetable) || timetable.length === 0) return [];
+
+    // Extract unique START times from all lessons
+    const startTimes = new Set();
+    timetable.forEach((lesson) => {
+      if (lesson.startTime) {
+        startTimes.add(lesson.startTime);
+      }
+    });
+
+    if (startTimes.size === 0) return [];
+
+    // Sort unique start times
+    const sortedStarts = Array.from(startTimes).sort((a, b) => {
+      const timeA = parseInt(a.replace(':', ''));
+      const timeB = parseInt(b.replace(':', ''));
+      return timeA - timeB;
+    });
+
+    // Create timeUnits (periods) from sorted start times
+    const timeUnits = [];
+    for (let i = 0; i < sortedStarts.length; i++) {
+      const startTime = sortedStarts[i];
+      // Estimate end time: either from next period or assume 45-minute period
+      let endTime = sortedStarts[i + 1];
+      if (!endTime) {
+        // For the last period, find the latest end time from lessons with this start
+        const lessonsWithThisStart = timetable.filter((l) => l.startTime === startTime);
+        endTime = lessonsWithThisStart.length > 0 ? lessonsWithThisStart[0].endTime : null;
+        if (!endTime) {
+          const [hh, mm] = startTime.split(':').map(Number);
+          endTime = `${String(hh).padStart(2, '0')}${String(mm + 45).padStart(2, '0')}`;
+        }
+      }
+
+      timeUnits.push({
+        startTime,
+        endTime,
+        name: `${i + 1}`, // Period number
+      });
     }
+
+    return timeUnits;
   },
 
   /**
-   * Return the week's timetable for the given credential and week start.
-   * Always fetch fresh data from WebUntis.
-   *
-   * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (currently unused)
-   * @param {Date} rangeStart - Week start date
-   * @returns {Promise<Array>} week timetable
-   */
-  async _getWeekTimetable(untis, credKey, rangeStart) {
-    this._mmLog('debug', null, `Fetching week timetable for ${credKey} starting ${rangeStart.toDateString()}`);
-    try {
-      const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
-      return weekTimetable || [];
-    } catch (err) {
-      this._mmLog('error', null, `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`);
-      return [];
-    }
-  },
-
-  /**
-   * Fetch and normalize data for a single student using the provided authenticated
-   * `untis` client. This collects lessons, exams and homeworks and sends a
+   * Fetch and normalize data for a single student using the provided authenticated session.
+   * This collects lessons, exams and homeworks and sends a
    * `GOT_DATA` socket notification back to the frontend.
    *
-   * @param {Object} untis - Authenticated WebUntis client
+   * @param {Object} authSession - Authenticated session with server, school, cookies, token
    * @param {Object} student - Student config object
    * @param {string} identifier - Module instance identifier
    * @param {string} credKey - Credential grouping key
    */
-  async fetchData(untis, student, identifier, credKey) {
+  async fetchData(authSession, student, identifier, credKey) {
     const logger = (msg) => {
       this._mmLog('debug', student, msg);
     };
     // Backend fetches raw data from Untis API. No transformation here.
 
-    // Detect login mode
-    const useQrLogin = Boolean(student.qrcode);
-    const restOptions = { cacheKey: credKey, untisClient: untis };
-    const { school, server } = this.authService.resolveSchoolAndServer(student, this.config);
-    const ownPersonId = useQrLogin && untis?.sessionInformation ? untis.sessionInformation.personId : null;
+    const restOptions = { cacheKey: credKey, authSession };
+    const { school, server } = authSession;
+    const ownPersonId = authSession.personId;
     const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
@@ -1285,15 +1266,9 @@ module.exports = NodeHelper.create({
     const absencesRangeEnd = new Date(baseNow);
     absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
-    // Get Timegrid (raw) - only needed for grid widget
+    // Get Timegrid (raw) - extract from timetable data (REST API doesn't have separate timegrid endpoint)
+    // We'll extract time slots after fetching timetable data
     let grid = [];
-    if (fetchTimegrid) {
-      try {
-        grid = await this._getTimegrid(untis, credKey);
-      } catch (error) {
-        this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
-      }
-    }
 
     // Prepare raw timetable containers
     let timetable = [];
@@ -1334,6 +1309,12 @@ module.exports = NodeHelper.create({
 
     // Exams (raw)
     let rawExams = [];
+
+    // Extract timegrid from timetable data if needed for grid widget
+    if (fetchTimegrid && timetable.length > 0) {
+      grid = this._extractTimegridFromTimetable(timetable);
+      logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable\n`);
+    }
     const examsNextDays =
       student.exams?.nextDays ??
       student.examsDaysAhead ??
@@ -1541,20 +1522,18 @@ module.exports = NodeHelper.create({
       logger(`MessagesOfDay: skipped`);
     }
 
-    // Holidays (raw)
+    // Holidays (raw) - REST API provides holidays in app/data, extract from authSession if available
     let rawHolidays = [];
     if (fetchHolidays) {
-      logger(`Holidays: fetching...`);
+      logger(`Holidays: extracting from app/data...`);
       try {
-        rawHolidays = await untis.getHolidays();
-        if (Array.isArray(rawHolidays)) {
-          logger(`✓ Holidays: ${rawHolidays.length} periods\n`);
-        } else {
-          logger(`Holidays: none\n`);
-          rawHolidays = [];
-        }
+        // Holidays are included in the app/data response (authSession.appData)
+        // For now, return empty array - holidays can be added later via REST API
+        // TODO: Implement holiday extraction from app/data or separate REST endpoint
+        rawHolidays = [];
+        logger(`Holidays: ${rawHolidays.length} periods (REST API holiday support pending)\n`);
       } catch (error) {
-        this._mmLog('error', student, `Holidays failed: ${error && error.message ? error.message : error}\n`);
+        this._mmLog('error', student, `Holidays extraction failed: ${error && error.message ? error.message : error}\n`);
       }
     } else {
       logger(`Holidays: skipped`);
