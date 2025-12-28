@@ -23,10 +23,10 @@ Module.register('MMM-Webuntis', {
     displayMode: 'grid,homework,lessons,exams,absences',
 
     // Parent account
-    username: 'heiko.grossstueck@gmail.com',
-    password: 'AqP5SR7kxj&',
-    school: 'bachgymnasium',
-    server: 'bachgymnasium.webuntis.com',
+    // username: <username>,
+    // password: <password>,
+    // school: <school>,
+    // server: <server>,
 
     // Display
     // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
@@ -51,7 +51,7 @@ Module.register('MMM-Webuntis', {
 
     exams: {
       dateFormat: 'EEE dd.MM.', // weekday + date
-      daysAhead: 45,   // show exams up to 45 days ahead by default
+      daysAhead: 45, // show exams up to 45 days ahead by default
       pastDays: 0,
       showSubject: true, // show subject by default
       showTeacher: false, // show teacher by default
@@ -66,8 +66,8 @@ Module.register('MMM-Webuntis', {
 
     absences: {
       dateFormat: 'EEE dd.MM.', // weekday + date
-      pastDays: 40,
-      futureDays: 20,
+      pastDays: 28,
+      futureDays: 7,
     },
 
     // === STUDENTS ===

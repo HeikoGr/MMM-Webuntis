@@ -682,27 +682,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '',
                 su: entry.position2
                   ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position2[0].current.shortName,
+                        longname: entry.position2[0].current.longName,
+                      },
+                    ]
                   : [],
                 te: entry.position1
                   ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position1[0].current.shortName,
+                        longname: entry.position1[0].current.longName,
+                      },
+                    ]
                   : [],
                 ro: entry.position3
                   ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position3[0].current.shortName,
+                        longname: entry.position3[0].current.longName,
+                      },
+                    ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -2188,10 +2188,10 @@ module.exports = NodeHelper.create({
         // Homework range can be specified per widget with homework.nextDays and homework.pastDays
         const hwDaysAhead = Number(
           student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          28
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            28
         );
         const hwDaysPast = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 0);
         const hwRangeStart = new Date(baseNow);

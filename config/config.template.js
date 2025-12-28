@@ -39,26 +39,9 @@ let config = {
         nextDays: 7,
         pastDays: 0,
 
-        // === LESSONS WIDGET ===
-        showStartTime: false,
-        showRegular: false,
-        showTeacherMode: 'full',
-        useShortSubject: false,
-        showSubstitution: false,
-
-        // === EXAMS WIDGET ===
-        daysAhead: 21,
-        showSubject: true,
-        showTeacher: true,
-
-        // === GRID VIEW ===
-        mergeGap: 15,
-        maxLessons: 0,
-        showNowLine: true,
-
         // === ABSENCES ===
         // Per-widget absences options are provided in the `absences` namespace below.
-        // Structured per-widget formats (preferred)
+        // Structured per-widget formats
         dateFormats: {
           // (optional) - defaults to 'dd.MM.' if not set
           default: 'dd.MM.', // set default
@@ -135,6 +118,7 @@ let config = {
         students: [
           {
             title: 'Alice',
+            studentId: 12345,
             qrcode: 'untis://setschool?url=https://example.webuntis.com&school=example&user=alice&key=ABC123',
             // OR use direct credentials if no QR code:
             // username: 'alice@example.com',
