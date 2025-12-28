@@ -10,3 +10,5 @@ debug_dumps/*
 config/.env
 config/config.js
 config/custom.css
+
+temp/*

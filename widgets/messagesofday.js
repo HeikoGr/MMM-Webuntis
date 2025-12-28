@@ -47,8 +47,6 @@
       const rawText = String(msg?.text || '').trim();
       const isExpanded = msg?.isExpanded === true;
 
-      log('debug', `[messagesofday] add: subj="${subject}", text_len=${rawText.length}`);
-
       // Subject is displayed as the "meta" column (similar to date in other widgets)
       const meta = subject || '';
 

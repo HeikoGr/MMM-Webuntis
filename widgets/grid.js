@@ -32,7 +32,12 @@ function getNowLineState(ctx) {
           if (nowYmd !== ctx._currentTodayYmd) {
             log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
             try {
-              ctx.sendSocketNotification('FETCH_DATA', ctx.config);
+              // Use the debounced _sendFetchData if available, otherwise direct socket call
+              if (typeof ctx._sendFetchData === 'function') {
+                ctx._sendFetchData('date-change');
+              } else {
+                ctx.sendSocketNotification('FETCH_DATA', ctx.config);
+              }
             } catch {
               // ignore
             }
@@ -101,19 +106,20 @@ function getNowLineState(ctx) {
 
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
     // Normalized config from backend already has all legacy keys mapped
-    const configuredNext = studentConfig?.grid?.nextDays ?? studentConfig?.nextDays ?? 1;
+    // Default grid.nextDays to 3 to show a few days ahead (homework matching needs reasonable visibility)
+    const configuredNext = studentConfig?.grid?.nextDays ?? studentConfig?.nextDays ?? 3;
     const configuredPast = studentConfig?.grid?.pastDays ?? studentConfig?.pastDays ?? 0;
-    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 1;
+    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
     const pastDays = Math.max(0, parseInt(configuredPast, 10));
     const startOffset = -pastDays;
     // totalDisplayDays = past + today + future
-    // Example: pastDays=1, daysToShow=3 → 1 + 1 + 3 = 5 days (yesterday, today, tomorrow, +2d, +3d)
+    // Example: pastDays=0, daysToShow=3 → 0 + 1 + 3 = 4 days (today, tomorrow, +2d, +3d)
     const totalDisplayDays = pastDays + 1 + daysToShow;
 
     log(
       ctx,
       'debug',
-      `[grid] render start | student: "${studentTitle}" | entries: ${Array.isArray(timetable) ? timetable.length : 0} | days: ${totalDisplayDays}/${pastDays}`
+      `[grid] render start | student: "${studentTitle}" | entries: ${Array.isArray(timetable) ? timetable.length : 0} | days: ${totalDisplayDays}/${pastDays} | homeworks: ${Array.isArray(homeworks) ? homeworks.length : 0}`
     );
 
     const header = document.createElement('div');
@@ -326,8 +332,6 @@ function getNowLineState(ctx) {
       const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
-      log('debug', `[grid] Processing day ${dateStr} for student "${studentTitle}"`);
-
       const groupedRaw =
         ctx.preprocessedByStudent && ctx.preprocessedByStudent[studentTitle] && ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
           ? ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
@@ -357,6 +361,8 @@ function getNowLineState(ctx) {
         text: el.lstext || '',
         type: el.type || null,
         lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+        su: el.su || [], // Preserve original su array for homework matching
+        date: el.date, // Preserve date for homework matching
       }));
 
       // The backend now returns already-merged lesson blocks. Use the data as-is
@@ -650,21 +656,31 @@ function getNowLineState(ctx) {
           bothCell.innerHTML = makeInner(lesson);
         }
 
-        if (homeworks && Array.isArray(homeworks)) {
+        if (homeworks && Array.isArray(homeworks) && homeworks.length > 0) {
+          // Match homework by dueDate and subject name/longname (all su entries, both lesson and homework)
+          const lessonDate = Number(lesson.date);
+          const lessonNames = Array.isArray(lesson.su) ? lesson.su.flatMap((su) => [su.name, su.longname].filter(Boolean)) : [];
+
           const hwMatch = homeworks.some((hw) => {
-            const hwLessonId = hw.lessonId ?? hw.lid ?? hw.id ?? null;
-            const lessonIds =
-              lesson.lessonIds && Array.isArray(lesson.lessonIds) ? lesson.lessonIds : lesson.lessonId ? [String(lesson.lessonId)] : [];
-            const lessonIdMatch = hwLessonId && lessonIds.length > 0 ? lessonIds.includes(String(hwLessonId)) : false;
-            const subjectMatch = hw.su && (hw.su.name === lesson.subjectShort || hw.su.longname === lesson.subject);
-            return lessonIdMatch || subjectMatch;
+            const hwDueDate = Number(hw.dueDate);
+            // homework su can be object or array (defensive)
+            const hwSuArr = Array.isArray(hw.su) ? hw.su : hw.su ? [hw.su] : [];
+            const hwNames = hwSuArr.flatMap((su) => [su.name, su.longname].filter(Boolean));
+            const subjectMatch = lessonNames.some((ln) => hwNames.includes(ln));
+            const matches = hwDueDate === lessonDate && subjectMatch;
+            return matches;
           });
           if (hwMatch) {
             const icon = document.createElement('span');
             icon.className = 'homework-icon';
             icon.innerHTML = '📘';
-            if (leftCell && leftCell.innerHTML) leftCell.appendChild(icon.cloneNode(true));
-            else if (rightCell && rightCell.innerHTML) rightCell.appendChild(icon);
+            if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
+              if (leftCell && leftCell.innerHTML) leftCell.appendChild(icon.cloneNode(true));
+            } else if (lesson.code === 'cancelled' || lesson.status === 'CANCELLED') {
+              if (rightCell && rightCell.innerHTML) rightCell.appendChild(icon.cloneNode(true));
+            } else {
+              if (bothCell && bothCell.innerHTML) bothCell.appendChild(icon.cloneNode(true));
+            }
           }
         }
 

@@ -45,7 +45,6 @@
           const examHm = Number(exam.startTime) || 0;
           const examInPast = examYmd < nowYmd || (examYmd === nowYmd && examHm < nowHm);
           if (examInPast && ctx.config.logLevel !== 'debug') {
-            log('debug', `[exams] skip past: ${examYmd} ${exam.subject}`);
             return;
           }
 
@@ -53,8 +52,6 @@
           // const daysDiff = Math.floor((examYmd - nowYmd) / 100) + ((examYmd % 100) - (nowYmd % 100));
 
           // if (daysDiff > rangeEnd) return;
-
-          log('debug', `[exams] add: ${examYmd} ${exam.subject}`);
 
           addedRows++;
 

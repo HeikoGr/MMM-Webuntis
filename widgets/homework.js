@@ -32,8 +32,6 @@
       const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
       const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
-      log('debug', `[homework] add: due="${due}" subj="${subj}" text_len=${text.length}`);
-
       const left = due ? `${due}` : ctx.translate('homework');
       const rightParts = [];
       if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);

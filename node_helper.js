@@ -223,7 +223,6 @@ module.exports = NodeHelper.create({
    * Returns: { token, cookieString, tenantId, schoolYearId, expiresAt }
    */
   async _getRestAuthTokenAndCookies(school, username, password, server, options = {}) {
-    this._mmLog('debug', null, `Obtaining REST auth token and cookies for user=${username || 'session'}`);
     const restCache = this._restAuthCache instanceof Map ? this._restAuthCache : new Map();
     this._restAuthCache = restCache;
 
@@ -232,7 +231,6 @@ module.exports = NodeHelper.create({
 
     const cached = restCache.get(effectiveCacheKey);
     if (cached && cached.expiresAt > Date.now() + 60000) {
-      this._mmLog('debug', null, `[REST] Using cached auth`);
       return {
         token: cached.token,
         cookieString: cached.cookieString,
@@ -671,27 +669,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '',
                 su: entry.position2
                   ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position2[0].current.shortName,
+                        longname: entry.position2[0].current.longName,
+                      },
+                    ]
                   : [],
                 te: entry.position1
                   ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position1[0].current.shortName,
+                        longname: entry.position1[0].current.longName,
+                      },
+                    ]
                   : [],
                 ro: entry.position3
                   ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
+                      {
+                        name: entry.position3[0].current.shortName,
+                        longname: entry.position3[0].current.longName,
+                      },
+                    ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -2059,23 +2057,46 @@ module.exports = NodeHelper.create({
     if (fetchHomeworks) {
       logger(`Homework: fetching...`);
       try {
-        // Homework range can be specified per widget with homework.nextDays and homework.pastDays
-        const hwDaysAhead = Number(
-          student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          28
-        );
-        const hwDaysPast = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 0);
+        // Calculate the maximum time range needed across ALL widgets to fetch comprehensive homework data.
+        // Then filter by dueDate during display based on homework.nextDays / homework.pastDays.
+
+        // Collect all the relevant day ranges from active widgets
+        const allRanges = [];
+
+        // Timetable/Grid range
+        allRanges.push({ pastDays: gridPastDays, futureDays: gridNextDays });
+
+        // Exams range
+        if (fetchExams && examsDaysAheadValue > 0) {
+          const examsPastDays = student.pastDaysToShow ?? student.pastDays ?? this.config?.pastDays ?? 0;
+          allRanges.push({ pastDays: examsPastDays, futureDays: examsDaysAheadValue });
+        }
+
+        // Absences range
+        if (fetchAbsences && (absPast > 0 || absFuture > 0)) {
+          allRanges.push({ pastDays: absPast, futureDays: absFuture });
+        }
+
+        // Find the maximum range
+        let maxPastDays = 0;
+        let maxFutureDays = 0;
+        allRanges.forEach((range) => {
+          maxPastDays = Math.max(maxPastDays, range.pastDays || 0);
+          maxFutureDays = Math.max(maxFutureDays, range.futureDays || 0);
+        });
+
+        // Apply at least some defaults if no other widgets are fetching
+        if (maxFutureDays === 0) {
+          maxFutureDays = 28; // Default homework lookahead
+        }
+
         const hwRangeStart = new Date(baseNow);
         const hwRangeEnd = new Date(baseNow);
-        hwRangeStart.setDate(hwRangeStart.getDate() - hwDaysPast);
-        hwRangeEnd.setDate(hwRangeEnd.getDate() + (Number.isFinite(hwDaysAhead) ? hwDaysAhead : 28));
+        hwRangeStart.setDate(hwRangeStart.getDate() - maxPastDays);
+        hwRangeEnd.setDate(hwRangeEnd.getDate() + maxFutureDays);
 
-        logger(
-          `Homework range: ${hwRangeStart.toISOString().split('T')[0]} to ${hwRangeEnd.toISOString().split('T')[0]} (past: ${hwDaysPast}, future: ${hwDaysAhead})`
-        );
+        logger(`Homework: fetching with max widget range (past: ${maxPastDays}, future: ${maxFutureDays})`);
+        logger(`Homework REST API range: ${hwRangeStart.toISOString().split('T')[0]} to ${hwRangeEnd.toISOString().split('T')[0]}`);
 
         for (const target of restTargets) {
           logger(`Homework: fetching via REST (${describeTarget(target)})...`);
@@ -2098,6 +2119,43 @@ module.exports = NodeHelper.create({
         // Send  raw homework payload to the frontend without normalization
       } catch (error) {
         this._mmLog('error', student, `Homework failed: ${error && error.message ? error.message : error}`);
+      }
+
+      // Filter homework by dueDate based on homework widget config (pastDays / nextDays)
+      if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
+        const hwNextDays = Number(
+          student.homework?.nextDays ??
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
+        );
+        const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
+
+        // Only filter if explicitly configured
+        if (hwNextDays < 999 || hwPastDays < 999) {
+          const filterStart = new Date(baseNow);
+          const filterEnd = new Date(baseNow);
+          filterStart.setDate(filterStart.getDate() - hwPastDays);
+          filterEnd.setDate(filterEnd.getDate() + hwNextDays);
+
+          // Filter by dueDate
+          hwResult = hwResult.filter((hw) => {
+            if (!hw.dueDate) return true; // Keep homeworks without dueDate
+            const dueDateNum = Number(hw.dueDate);
+            const dueDateStr = String(dueDateNum).padStart(8, '0');
+            const dueYear = parseInt(dueDateStr.substring(0, 4), 10);
+            const dueMonth = parseInt(dueDateStr.substring(4, 6), 10);
+            const dueDay = parseInt(dueDateStr.substring(6, 8), 10);
+            const dueDate = new Date(dueYear, dueMonth - 1, dueDay);
+            return dueDate >= filterStart && dueDate <= filterEnd;
+          });
+
+          logger(
+            `Homework: filtered to ${hwResult.length} items by dueDate range ` +
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+          );
+        }
       }
     } else {
       logger(`Homework: skipped`);
