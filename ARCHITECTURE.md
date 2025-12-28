@@ -114,10 +114,10 @@ graph TD
     --> WRN["render module warnings<br/>(above all widgets)"]
     --> RW["for each widget type:<br/>render_*ForStudent"]
     --> W1["lessons.js<br/>renderLessonsForStudent"]
-    --> W1B["uses: config.daysToShow<br/>dateFormats.lessons<br/>timetableRange[]"]
+    --> W1B["uses: config.daysToShow<br/>dateFormats.lessons<br/>timetableRange[]<br/>holidayByDate{}"]
 
     RW --> W2["grid.js<br/>renderGridForStudent"]
-    --> W2B["uses: mergeGapMinutes<br/>dateFormats.grid<br/>timeUnits[]"]
+    --> W2B["uses: mergeGapMinutes<br/>dateFormats.grid<br/>timeUnits[]<br/>holidayByDate{}"]
 
     RW --> W3["exams.js"]
     --> W3B["uses: examsDaysAhead<br/>dateFormats.exams<br/>exams[]"]
@@ -310,6 +310,16 @@ graph TD
   absences: [                         // absence records
     { date: 20251220, excused: true, ... }
   ],
+  holidays: [                         // all holiday periods
+    { id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105 }
+  ],
+  holidayByDate: {                    // pre-computed holiday lookup by YMD
+    20251226: { id: 1, name: "Xmas", longName: "Christmas", ... },
+    20251227: { id: 1, name: "Xmas", longName: "Christmas", ... }
+  },
+  currentHoliday: {                   // active holiday for today (or null)
+    id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105
+  },
   warnings: [                         // top-level deduped warnings
     "Configured studentId 7777 ... Possible studentIds: 1234, 5678"
   ]
@@ -384,7 +394,10 @@ graph TD
     G --> H
 
     H --> I["Collect top-level warnings"]
-    I --> J["Dedupe & send in GOT_DATA.warnings"]
+    I --> HOL{"Is today<br/>a holiday?"}
+    HOL -->|Yes| SKIP["Suppress 'no lessons'<br/>warning"]
+    HOL -->|No| J["Dedupe & send in GOT_DATA.warnings"]
+    SKIP --> J
     J --> K["Frontend console.warn()"]
     K --> L["Render ⚠️ message in UI"]
 
