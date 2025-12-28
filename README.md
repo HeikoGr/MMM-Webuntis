@@ -25,7 +25,7 @@ graph TB
 
     subgraph Backend["⚙️ Backend (Node.js)"]
         NH["node_helper.js<br/>(Coordinator)"]
-        
+
         subgraph Services["🔧 Services (lib/)"]
             HttpClient["httpClient.js<br/>(Generic HTTP)"]
             Auth["authService.js<br/>(Auth & Tokens)"]
