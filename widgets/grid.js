@@ -10,7 +10,7 @@ function getNowLineState(ctx) {
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
 
   function startNowLineUpdater(ctx) {
@@ -138,12 +138,12 @@ function getNowLineState(ctx) {
 
     const baseDate = ctx._currentTodayYmd
       ? (() => {
-          const s = String(ctx._currentTodayYmd);
-          const by = parseInt(s.substring(0, 4), 10);
-          const bm = parseInt(s.substring(4, 6), 10) - 1;
-          const bd = parseInt(s.substring(6, 8), 10);
-          return new Date(by, bm, bd);
-        })()
+        const s = String(ctx._currentTodayYmd);
+        const by = parseInt(s.substring(0, 4), 10);
+        const bm = parseInt(s.substring(4, 6), 10) - 1;
+        const bd = parseInt(s.substring(6, 8), 10);
+        return new Date(by, bm, bd);
+      })()
       : new Date();
     const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 
@@ -341,8 +341,8 @@ function getNowLineState(ctx) {
         groupedRaw && groupedRaw[dateStr]
           ? groupedRaw[dateStr]
           : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+            .filter((el) => String(el.date) === dateStr)
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
       log('debug', `[grid] Day ${dateStr}: found ${sourceForDay.length} lessons`);
 
