@@ -178,6 +178,20 @@
   // NOTE: `formatDate` now accepts Date objects directly. No separate
   // `formatDayHeader`/`formatDayLabel` helpers are required.
 
+  /**
+   * Get widget-specific configuration value from studentConfig
+   * No legacy fallbacks, no module-level config, no defaults
+   * (defaults are applied by MMM-Webuntis.js before reaching widgets)
+   *
+   * @param {Object} studentConfig - Student configuration object from backend
+   * @param {string} widgetName - Widget name (e.g., 'lessons', 'grid', 'exams')
+   * @param {string} configKey - Configuration key to retrieve
+   * @returns {*} Configuration value or undefined if not set
+   */
+  function getWidgetConfig(studentConfig, widgetName, configKey) {
+    return studentConfig?.[widgetName]?.[configKey];
+  }
+
   root.util = {
     formatYmd,
     formatTime,
@@ -190,6 +204,7 @@
     escapeHtml,
     log,
     _log: log, // backward compatibility alias
+    getWidgetConfig,
   };
 
   root.dom = {

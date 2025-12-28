@@ -2,11 +2,11 @@
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => { };
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
     try {
@@ -25,8 +25,8 @@
       const studentCell = mode === 'verbose' ? '' : studentCellTitle;
       if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-      // Use student config only (backend normalization already applied)
-      const rangeEnd = Number(studentConfig?.exams?.daysAhead ?? studentConfig?.daysAhead ?? studentConfig?.nextDays ?? 7);
+      // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
+      const rangeEnd = Number(util.getWidgetConfig(studentConfig, 'exams', 'daysAhead') ?? 7);
 
       if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;
