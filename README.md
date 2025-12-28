@@ -574,12 +574,19 @@ node cli/cli.js --config /path/to/config.js
 
 ## Holiday Display
 
-The `lessons` and `grid` widgets now automatically display holiday information from the WebUntis API:
+The `lessons` and `grid` widgets automatically display holiday information from the WebUntis API:
 
-- **Lessons widget:** Shows a holiday notice between lessons with the 🏖️ emoji and holiday name when a holiday period is detected
-- **Grid widget:** Displays a semi-transparent overlay with the 🏖️ emoji and holiday name on days that fall within a holiday period
+- **Lessons widget:** Shows a holiday notice with the 🏖️ emoji and holiday name on days that fall within a holiday period (no lessons shown)
+- **Grid widget:** Displays a semi-transparent overlay with the 🏖️ emoji and holiday name on holiday days
+- **Warning suppression:** The "No lessons found" warning is automatically suppressed during holiday periods
 
-Holiday data is automatically fetched from WebUntis alongside timetable data. No additional configuration is required.
+### How it works
+
+The backend pre-computes a `holidayByDate` lookup map for the requested date range and includes it in the payload. Widgets simply look up each date in this map instead of iterating through holiday periods. This centralizes holiday detection in the backend and simplifies widget code.
+
+The payload also includes a `currentHoliday` field (the active holiday for today, or `null`) which is used to suppress the "No lessons found" warning during vacation periods.
+
+No additional configuration is required — holiday data is automatically fetched from WebUntis alongside timetable data.
 
 ## Screenshot
 
