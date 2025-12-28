@@ -17,95 +17,24 @@ Module.register('MMM-Webuntis', {
   },
 
   defaults: {
-    updateInterval: 1 * 60 * 1000,
-    logLevel: 'none', // TESTING: Set to "debug" for extensive logging
-    dumpBackendPayloads: true,
-    displayMode: 'grid,homework,lessons,exams,absences',
+    // === GLOBAL OPTIONS ===
+    header: 'MMM-Webuntis', // displayed as module title in MagicMirror
+    fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
+    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
 
-    // Parent account
-    // username: <username>,
-    // password: <password>,
-    // school: <school>,
-    // server: <server>,
+    // === DISPLAY OPTIONS ===
+    // Comma-separated list of widgets to render (top-to-bottom).
+    // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
+    // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
+    displayMode: 'list',
+    mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
 
-    // Display
-    // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
-    // debugDate: '2025-12-08',
+    // === TIMETABLE FETCH RANGE ===
+    daysToShow: 7, // number of upcoming days to fetch/display per student (0 = off)
+    pastDaysToShow: 0, // number of past days to include (useful for debugging)
 
-    grid: {
-      nextDays: 2, // show 2 days ahead (3 in total) in grid by default
-      pastDays: 0,
-    },
-
-    // === WIDGET-SPECIFIC CONFIG (new notation) ===
-    lessons: {
-      nextDays: 1, // show only today by default
-      pastDays: 0,
-      dateFormat: 'EEEE', // full weekday name
-      showStartTime: false, // show start time in lessons list
-      showRegular: false, // show regular lessons in lessons list
-      useShortSubject: false, // use short subject names in lessons list
-      showTeacherMode: 'full', // 'off'|'initial'|'full'
-      showSubstitution: false, // show substitution info in lessons list
-    },
-
-    exams: {
-      dateFormat: 'EEE dd.MM.', // weekday + date
-      daysAhead: 45, // show exams up to 45 days ahead by default
-      pastDays: 0,
-      showSubject: true, // show subject by default
-      showTeacher: false, // show teacher by default
-    },
-
-    homework: {
-      dateFormat: 'EEE dd.MM.', // weekday + date
-      pastDays: 2,
-      nextDays: 14,
-      showSubject: true,
-    },
-
-    absences: {
-      dateFormat: 'EEE dd.MM.', // weekday + date
-      pastDays: 28,
-      futureDays: 7,
-    },
-
-    // === STUDENTS ===
-    students: [
-      {
-        title: 'M',
-        studentId: 1774, // replace with actual student ID
-      },
-    ],
-  },
-
-  defaultsx: {
-    updateInterval: 1 * 60 * 1000,
-    logLevel: 'debug', // TESTING: Set to "none" to test debug message suppression
-    dumpBackendPayloads: true,
-    displayMode: 'grid,homework,lessons,exams,absences',
-
-    // === PARENT ACCOUNT SUPPORT (optional) ===
-    // Uncomment and configure if using parent account to display multiple children
-    // parentUsername: '', // parent account email/username
-    // parentPassword: '', // parent account password
-    // school: '', // school name
-    // server: '', // WebUntis server
-
-    // Display
-    // Global debug date (YYYY-MM-DD) for reproducible rendering; null = disabled
-    // Set to 2025-12-01 for comparison with older dump (outside main Christmas holidays)
-    //debugDate: '2025-12-08',
-    // Global ranges (preferred keys)
-    nextDays: 7,
-    pastDays: 30,
-
-    grid: {
-      nextDays: 3,
-      pastDays: 1,
-    },
-
-    // === WIDGET-SPECIFIC CONFIG (new notation) ===
+    // === WIDGET NAMESPACED DEFAULTS ===
+    // Per-widget configuration namespaces
     lessons: {
       dateFormat: 'EEEE',
       showStartTime: false,
