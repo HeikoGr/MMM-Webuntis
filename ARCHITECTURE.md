@@ -114,19 +114,19 @@ graph TD
     --> WRN["render module warnings<br/>(above all widgets)"]
     --> RW["for each widget type:<br/>render_*ForStudent"]
     --> W1["lessons.js<br/>renderLessonsForStudent"]
-    --> W1B["uses: config.daysToShow<br/>dateFormats.lessons<br/>timetableRange[]<br/>holidayByDate{}"]
+    --> W1B["uses: config.daysToShow<br/>lessons.dateFormat<br/>timetableRange[]<br/>holidayByDate{}"]
 
     RW --> W2["grid.js<br/>renderGridForStudent"]
-    --> W2B["uses: mergeGapMinutes<br/>dateFormats.grid<br/>timeUnits[]<br/>holidayByDate{}"]
+    --> W2B["uses: mergeGapMinutes<br/>grid.dateFormat<br/>timeUnits[]<br/>holidayByDate{}"]
 
     RW --> W3["exams.js"]
-    --> W3B["uses: examsDaysAhead<br/>dateFormats.exams<br/>exams[]"]
+    --> W3B["uses: examsDaysAhead<br/>exams.dateFormat<br/>exams[]"]
 
     RW --> W4["homework.js"]
-    --> W4B["uses: dateFormats.homework<br/>homeworks[]"]
+    --> W4B["uses: homework.dateFormat<br/>homeworks[]"]
 
     RW --> W5["absences.js"]
-    --> W5B["uses: absencesPastDays<br/>dateFormats.absences<br/>absences[]"]
+    --> W5B["uses: absencesPastDays<br/>absences.dateFormat<br/>absences[]"]
 
     style W1B fill:#e3f2fd
     style W2B fill:#e3f2fd
@@ -292,7 +292,6 @@ graph TD
     daysToShow: 7,
     examsDaysAhead: 15,
     absencesPastDays: 21,
-    dateFormats: { lessons: "EEE", grid: "EEE dd.MM.", ... },
     __warnings: ["studentId not found in app/data. Possible: 456, 789"]
   },
   timeUnits: [                        // lesson time slots (grid)
@@ -407,16 +406,6 @@ graph TD
   },
 
   // === LEGACY OPTIONS (deprecated but still supported) ===
-  // Structured dateFormats object (use widget-specific dateFormat instead)
-  dateFormats: {
-    default: "dd.MM.",
-    lessons: "EEE",
-    grid: "EEE dd.MM.",
-    exams: "dd.MM.",
-    homework: "dd.MM.",
-    absences: "dd.MM."
-  },
-
   // Legacy top-level options (use widget namespaces instead)
   daysToShow: 7,                          // → nextDays
   pastDaysToShow: 0,                      // → pastDays

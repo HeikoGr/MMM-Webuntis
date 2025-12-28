@@ -11,7 +11,7 @@ Widgets follow this priority for configuration:
 
 ## Widget Configuration Namespaces
 
-All widgets now use the new widget-namespaced configuration structure. Legacy `dateFormats` object has been deprecated.
+All widgets now use the new widget-namespaced configuration structure.
 
 ### Module-level Common Options
 
@@ -72,7 +72,7 @@ All widgets now use the new widget-namespaced configuration structure. Legacy `d
 
 The module includes a compatibility mapper (`config/legacy-config-mapper.js`) that automatically translates old configuration keys to the new widget-namespaced structure at runtime. Old keys such as:
 
-- `dateFormat`, `dateFormats.*`
+- `dateFormat` (global)
 - `homeworkDateFormat`, `examDateFormat`
 - `showStartTime`, `showRegularLessons`, etc. at module-level
 

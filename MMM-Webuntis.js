@@ -19,55 +19,74 @@ Module.register('MMM-Webuntis', {
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
-    fetchIntervalMs: 15 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
+    updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
+
+    // === DEBUG OPTIONS ===
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
+    debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+    dumpBackendPayloads: true, // dump raw payloads from backend in ./debug_dumps/ folder
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
     // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
-    displayMode: 'list',
+    displayMode: 'lessons, exams',
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
-
-    // === TIMETABLE FETCH RANGE ===
-    daysToShow: 7, // number of upcoming days to fetch/display per student (0 = off)
-    pastDaysToShow: 0, // number of past days to include (useful for debugging)
 
     // === WIDGET NAMESPACED DEFAULTS ===
     // Per-widget configuration namespaces
     lessons: {
-      dateFormat: 'EEEE',
-      showStartTime: false,
-      showRegular: false,
-      useShortSubject: false,
-      showTeacherMode: 'full',
-      showSubstitution: false,
+      dateFormat: 'EEE', // format for lesson dates
+      showStartTime: false, // show lesson start time instead of timeunit
+      showRegular: false, // show also regular lessons
+      useShortSubject: false, // use short subject names
+      showTeacherMode: 'full', // 'off'|'initial'|'full'
+      showSubstitution: false, // show substitution info
+      nextDays: 7, // widget-specific days ahead
+    },
+
+    grid: {
+      dateFormat: 'EEE dd.MM.', // format for grid dates
+      nextDays: 1, // widget-specific days ahead
+      pastDays: 0, // widget-specific days past
+      mergeGap: 15, // minutes gap to merge adjacent lessons
+      maxLessons: 0, // max lessons per day (0 = no limit)
+      showNowLine: true, // show current time line
     },
 
     exams: {
-      dateFormat: 'dd.MM.',
-      daysAhead: 45,
-      showSubject: true,
-      showTeacher: true,
+      dateFormat: 'dd.MM.', // format for exam dates
+      daysAhead: 21, // widget-specific days ahead
+      showSubject: true, // show subject name with exam
+      showTeacher: true, // show teacher name with exam
     },
 
     homework: {
-      dateFormat: 'dd.MM.',
-      pastDays: 1,
-      nextDays: 7,
+      dateFormat: 'dd.MM.', // format for homework dates
+      showSubject: true, // show subject name with homework
+      showText: true, // show homework description/text
+      nextDays: 28, // widget-specific days ahead
+      pastDays: 0, // widget-specific days past
     },
 
     absences: {
-      dateFormat: 'dd.MM.',
-      pastDays: 20,
-      futureDays: 20,
+      dateFormat: 'dd.MM.', // format for absence dates
+      pastDays: 21, // days in the past to show
+      futureDays: 7, // days in the future to show
+      showDate: true, // show absence date
+      showExcused: true, // show excused/unexcused status
+      showReason: true, // show reason for absence
+      maxItems: null, // max number of absence entries to show (null = no limit)
     },
+
+    messagesofday: {}, // no specific defaults yet
 
     // === STUDENTS ===
     students: [
       {
-        title: 'M',
-        studentId: 1774, // replace with actual student ID
+        title: 'M', // Display name for the student
+        studentId: 1774, // replace with student ID for individual title
+        qrcode: null, // optional: untis:// URL from WebUntis QR code
       },
     ],
   },
