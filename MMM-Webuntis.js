@@ -54,7 +54,7 @@ Module.register('MMM-Webuntis', {
     homework: {
       dateFormat: 'dd.MM.',
       pastDays: 14,
-      nextDays: 45,
+      nextDays: 28,
     },
 
     absences: {
@@ -326,10 +326,22 @@ Module.register('MMM-Webuntis', {
     const defNoStudents = { ...(this.config || {}) };
     delete defNoStudents.students;
 
+    // Always include the persisted debugDate if it was configured, to ensure it persists
+    // across multiple FETCH_DATA requests. This allows time-based testing to work correctly.
+    if (this._persistedDebugDate) {
+      defNoStudents.debugDate = this._persistedDebugDate;
+      this._log('debug', `[_buildSendConfig] Persisting debugDate="${this._persistedDebugDate}"`);
+    }
+
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
     const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
 
     const sendConfig = { ...this.config, students: mergedStudents, id: this.identifier };
+
+    // Ensure debugDate persists in the send config
+    if (this._persistedDebugDate) {
+      sendConfig.debugDate = this._persistedDebugDate;
+    }
 
     // Note: legacy config normalization is performed server-side in node_helper.js.
     // Keep client-side bundle minimal and rely on backend normalization for compatibility.
@@ -505,17 +517,23 @@ Module.register('MMM-Webuntis', {
 
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
+    // Store debugDate separately so it persists across fetch cycles.
+    this._persistedDebugDate = null;
     if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
       const s = String(this.config.debugDate).trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         const d = new Date(s + 'T00:00:00');
         this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+        this._persistedDebugDate = s;
+        this._log('debug', `[start] Set _persistedDebugDate="${s}"`);
       } else if (/^\d{8}$/.test(s)) {
         const by = parseInt(s.substring(0, 4), 10);
         const bm = parseInt(s.substring(4, 6), 10) - 1;
         const bd = parseInt(s.substring(6, 8), 10);
         const d = new Date(by, bm, bd);
         this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+        this._persistedDebugDate = `${String(by).padStart(4, '0')}-${String(bm + 1).padStart(2, '0')}-${String(bd).padStart(2, '0')}`;
+        this._log('debug', `[start] Set _persistedDebugDate="${this._persistedDebugDate}"`);
       }
     }
     if (!this._currentTodayYmd) {
@@ -725,6 +743,13 @@ Module.register('MMM-Webuntis', {
     const title = payload.title;
     const cfg = payload.config || {};
     this.configByStudent[title] = cfg;
+
+    // Update persisted debugDate if it's included in the response, to handle any backend changes
+    if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
+      this._persistedDebugDate = cfg.debugDate;
+      this._log('debug', `[GOT_DATA] Updated _persistedDebugDate="${cfg.debugDate}"`);
+    }
+
     // Collect module-level warnings (deduped) and log newly seen ones to console
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
       this.moduleWarningsSet = this.moduleWarningsSet || new Set();

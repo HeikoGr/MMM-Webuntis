@@ -14,13 +14,8 @@ const Log = require('logger');
 // New utility modules for refactoring
 const restClient = require('./lib/restClient');
 const { compactArray, schemas } = require('./lib/payloadCompactor');
-const { validateConfig } = require('./lib/configValidator');
+const { validateConfig, applyLegacyMappings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
-
-// Default cache TTL for per-request responses (ms). Small to favor freshness.
-const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-// Default interval for periodic cache cleanup (ms)
-const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 // Create a NodeHelper module
@@ -35,20 +30,14 @@ module.exports = NodeHelper.create({
     this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
     // expose payload compactor so linters don't flag unused imports until full refactor
     this.payloadCompactor = { compactArray };
-    // initialize a tiny in-memory response cache
-    this._responseCache = new Map(); // signature -> { ts, payload }
-    this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
-    // cache cleanup timer id
-    this._cacheCleanupTimer = null;
-    this._cacheCleanupIntervalMs = DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
-    // start periodic cache cleanup
-    this._startCacheCleanup();
     // Initialize REST API cache (token + cookies) keyed by credential
     this._restAuthCache = new Map(); // cacheKey -> { token, cookieString, expiresAt }
     // Cache resolved class ids per credential/class name to avoid repeated filter calls
     this._classIdCache = new Map(); // cacheKey -> classId
     // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
+    // Persist debugDate across FETCH_DATA requests to ensure consistent date-based testing
+    this._persistedDebugDate = null;
   },
 
   _normalizeLegacyConfig(cfg) {
@@ -682,27 +671,27 @@ module.exports = NodeHelper.create({
                 endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '',
                 su: entry.position2
                   ? [
-                      {
-                        name: entry.position2[0].current.shortName,
-                        longname: entry.position2[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position2[0].current.shortName,
+                      longname: entry.position2[0].current.longName,
+                    },
+                  ]
                   : [],
                 te: entry.position1
                   ? [
-                      {
-                        name: entry.position1[0].current.shortName,
-                        longname: entry.position1[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position1[0].current.shortName,
+                      longname: entry.position1[0].current.longName,
+                    },
+                  ]
                   : [],
                 ro: entry.position3
                   ? [
-                      {
-                        name: entry.position3[0].current.shortName,
-                        longname: entry.position3[0].current.longName,
-                      },
-                    ]
+                    {
+                      name: entry.position3[0].current.shortName,
+                      longname: entry.position3[0].current.longName,
+                    },
+                  ]
                   : [],
                 code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
                 substText: entry.substitutionText || '',
@@ -1565,105 +1554,10 @@ module.exports = NodeHelper.create({
 
   /*
    * Small in-memory cache helpers keyed by a request signature (stringified
-   * object describing credential + request options). Each entry stores a
-   * payload and a timestamp and expires after `_cacheTTLMs` milliseconds.
-   */
-  _makeRequestSignature(student) {
-    try {
-      const credKey = this._getCredentialKey(student, this.config);
-      const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
-      const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
-      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
-      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
-      const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
-      // Use the normalized student configuration as part of the cache signature
-      // to make caching more aggressive (higher hit rate) while still keeping
-      // a stable grouping by credentials. Redact sensitive fields before
-      // stringifying to avoid storing secrets in the signature string.
-      const normalizedStudent = this._normalizeLegacyConfig(student || {});
-      // Redact sensitive values that should not contribute to the raw signature
-      if (normalizedStudent.password) normalizedStudent.password = '***REDACTED***';
-      if (normalizedStudent.qrcode) normalizedStudent.qrcode = '***REDACTED***';
-      if (normalizedStudent.qr) normalizedStudent.qr = '***REDACTED***';
 
-      const sigObj = {
-        credKey,
-        student: normalizedStudent,
-        widgets: {
-          wantsGrid: wantsGridWidget,
-          wantsLessons: wantsLessonsWidget,
-          wantsExams: wantsExamsWidget,
-          fetchHomeworks: Boolean(wantsHomeworkWidget),
-          fetchAbsences: Boolean(wantsAbsencesWidget),
-        },
-      };
 
-      return JSON.stringify(sigObj);
-    } catch {
-      return String(Date.now());
-    }
-  },
 
-  _getCachedResponse(signature) {
-    if (!this._responseCache) return null;
-    const rec = this._responseCache.get(signature);
-    if (!rec) return null;
-    const age = Date.now() - (rec.ts || 0);
-    const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
-    if (age > ttl) {
-      this._responseCache.delete(signature);
-      return null;
-    }
-    return rec.payload;
-  },
-
-  _storeCachedResponse(signature, payload) {
-    if (!this._responseCache) this._responseCache = new Map();
-    this._responseCache.set(signature, { ts: Date.now(), payload });
-  },
-
-  /* Periodic cache cleanup ------------------------------------------------
-   * Removes expired cache entries. Runs on an interval configured by
-   * `_cacheCleanupIntervalMs` and respects `_cacheTTLMs` for entry expiration.
-   */
-  _cacheCleanup() {
-    if (!this._responseCache || this._responseCache.size === 0) return;
-    const now = Date.now();
-    const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
-    for (const [sig, rec] of this._responseCache.entries()) {
-      if (!rec || !rec.ts) {
-        this._responseCache.delete(sig);
-        continue;
-      }
-      if (now - rec.ts > ttl) {
-        this._responseCache.delete(sig);
-      }
-    }
-    this._mmLog('debug', null, `Cache cleanup completed (remaining=${this._responseCache.size})`);
-  },
-
-  _startCacheCleanup() {
-    try {
-      if (this._cacheCleanupTimer) return;
-      const interval = Number(this._cacheCleanupIntervalMs || DEFAULT_CACHE_CLEANUP_INTERVAL_MS) || DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
-      this._cacheCleanupTimer = setInterval(() => this._cacheCleanup(), interval);
-      this._mmLog('debug', null, `Started cache cleanup interval ${interval}ms`);
-    } catch {
-      // non-fatal
-    }
-  },
-
-  _stopCacheCleanup() {
-    try {
-      if (this._cacheCleanupTimer) {
-        clearInterval(this._cacheCleanupTimer);
-        this._cacheCleanupTimer = null;
-      }
-    } catch {
-      // ignore
-    }
-  },
 
   /**
    * Process a credential group: login, fetch data for students and logout.
@@ -1722,33 +1616,11 @@ module.exports = NodeHelper.create({
             });
           }
 
-          // Build a signature for this student's request and consult cache
-          const sig = this._makeRequestSignature(student);
-          const cached = this._getCachedResponse(sig);
-          if (cached) {
-            // deliver cached payload to the requesting module id (preserve id)
-            try {
-              const cachedForSend = { ...cached, id: identifier };
-              this.sendSocketNotification('GOT_DATA', cachedForSend);
-              this._mmLog('debug', student, `Cache hit for ${student.title} (sig=${sig})`);
-              continue;
-            } catch (err) {
-              this._mmLog('error', student, `Failed to send cached GOT_DATA for ${student.title}: ${this._formatErr(err)}`);
-              // fall through to perform a fresh fetch
-            }
-          }
-
-          // Not cached or send failed: fetch fresh and store in cache
+          // Fetch fresh data for this student
+          this._mmLog('debug', student, `Fetching data for ${student.title}...`);
           const payload = await this.fetchData(untis, student, identifier, credKey);
-          if (payload) {
-            try {
-              // store a copy without the id (id varies per requester)
-              const storeable = { ...payload, id: undefined };
-              this._storeCachedResponse(sig, storeable);
-              this._mmLog('debug', student, `Stored payload in cache for ${student.title} (sig=${sig})`);
-            } catch (err) {
-              this._mmLog('debug', student, `Cache store skipped for ${student.title}: ${this._formatErr(err)}`);
-            }
+          if (!payload) {
+            this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           }
         } catch (err) {
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
@@ -1800,21 +1672,24 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
+    this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
+
     if (notification === 'FETCH_DATA') {
       // Assign incoming payload to module config
-      // Normalize legacy config keys server-side as a defensive measure
-      try {
-        // require can fail in browser-like environments; wrap defensively
-        const mapper = require(path.join(__dirname, 'lib', 'legacy-config-mapper.js'));
-        if (mapper && typeof mapper.normalizeConfig === 'function') {
-          this.config = mapper.normalizeConfig(payload);
-        } else {
-          this.config = payload;
-        }
-      } catch (e) {
-        // If mapping fails, fall back to raw payload
-        this._mmLog('debug', null, `legacy-config-mapper not available or failed: ${e && e.message ? e.message : e}`);
-        this.config = payload;
+      // Normalize legacy config keys server-side
+      const { normalizedConfig } = applyLegacyMappings(payload);
+      this.config = normalizedConfig;
+
+      // Persist debugDate: save it if present in current config, otherwise use the persisted one
+      if (this.config.debugDate) {
+        this._persistedDebugDate = this.config.debugDate;
+        this._mmLog('debug', null, `[FETCH_DATA] Received debugDate="${this.config.debugDate}"`);
+      } else if (this._persistedDebugDate) {
+        // No debugDate in current request, use the persisted one from previous request
+        this.config.debugDate = this._persistedDebugDate;
+        this._mmLog('debug', null, `[FETCH_DATA] Using persisted debugDate="${this._persistedDebugDate}"`);
+      } else {
+        this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
       }
 
       // Apply legacy config normalization to show warnings and formatted output
@@ -1907,10 +1782,9 @@ module.exports = NodeHelper.create({
 
         // Group students by credential. Normalize each student config for legacy key compatibility.
         const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
-        const mapper = require('./lib/legacy-config-mapper');
         for (const student of studentsList) {
           // Apply legacy config mapping to student-level config
-          const normalizedStudent = mapper && typeof mapper.normalizeConfig === 'function' ? mapper.normalizeConfig(student) : student;
+          const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
           const credKey = this._getCredentialKey(normalizedStudent, this.config);
           if (!groups.has(credKey)) groups.set(credKey, []);
           groups.get(credKey).push(normalizedStudent);
@@ -2188,10 +2062,10 @@ module.exports = NodeHelper.create({
         // Homework range can be specified per widget with homework.nextDays and homework.pastDays
         const hwDaysAhead = Number(
           student.homework?.nextDays ??
-            student.homework?.daysAhead ??
-            this.config?.homework?.nextDays ??
-            this.config?.homework?.daysAhead ??
-            28
+          student.homework?.daysAhead ??
+          this.config?.homework?.nextDays ??
+          this.config?.homework?.daysAhead ??
+          28
         );
         const hwDaysPast = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 0);
         const hwRangeStart = new Date(baseNow);
