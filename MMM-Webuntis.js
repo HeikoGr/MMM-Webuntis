@@ -285,6 +285,8 @@ Module.register('MMM-Webuntis', {
   },
 
   _computeTodayYmdValue() {
+    // If debugDate is set, always use it instead of current date
+    if (this._currentTodayYmd) return this._currentTodayYmd;
     const now = new Date();
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
   },

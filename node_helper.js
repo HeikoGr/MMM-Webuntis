@@ -12,10 +12,13 @@ const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 
 // New utility modules for refactoring
-const restClient = require('./lib/restClient');
 const { compactArray, schemas } = require('./lib/payloadCompactor');
 const { validateConfig, applyLegacyMappings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
+const webuntisApiService = require('./lib/webuntisApiService');
+const AuthService = require('./lib/authService');
+const dataTransformer = require('./lib/dataTransformer');
+const CacheManager = require('./lib/cacheManager');
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 // Create a NodeHelper module
@@ -28,12 +31,12 @@ module.exports = NodeHelper.create({
     this._mmLog('debug', null, 'Node helper started');
     // Initialize unified logger
     this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
+    // Initialize AuthService for token and authentication management
+    this.authService = new AuthService(this._mmLog.bind(this));
+    // Initialize CacheManager for class ID and other caching
+    this.cacheManager = new CacheManager(this._mmLog.bind(this));
     // expose payload compactor so linters don't flag unused imports until full refactor
     this.payloadCompactor = { compactArray };
-    // Initialize REST API cache (token + cookies) keyed by credential
-    this._restAuthCache = new Map(); // cacheKey -> { token, cookieString, expiresAt }
-    // Cache resolved class ids per credential/class name to avoid repeated filter calls
-    this._classIdCache = new Map(); // cacheKey -> classId
     // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
     // Persist debugDate across FETCH_DATA requests to ensure consistent date-based testing
@@ -42,35 +45,16 @@ module.exports = NodeHelper.create({
 
   _normalizeLegacyConfig(cfg) {
     if (!cfg || typeof cfg !== 'object') return cfg;
-    const out = { ...cfg };
 
-    const legacyUsed = [];
-    const mapLegacy = (obj, legacyKey, newKey, transform, context = 'config') => {
-      if (!obj || typeof obj !== 'object') return;
-      const hasLegacy = obj[legacyKey] !== undefined && obj[legacyKey] !== null && obj[legacyKey] !== '';
-      if (!hasLegacy) return;
-      legacyUsed.push(`${context}.${legacyKey}`);
-      const legacyVal = typeof transform === 'function' ? transform(obj[legacyKey]) : obj[legacyKey];
-      obj[newKey] = legacyVal;
-    };
+    // Use centralized legacy mapping from configValidator
+    const { normalizedConfig, legacyUsed } = applyLegacyMappings(cfg, {
+      warnCallback: (msg) => this._mmLog('warn', null, msg),
+    });
 
-    mapLegacy(out, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
-    // Map legacy `days` to the new preferred `nextDays` key
-    mapLegacy(out, 'days', 'nextDays', (v) => Number(v), 'config');
-    mapLegacy(out, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
-    mapLegacy(out, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
-
-    const dbg = out.debug ?? out.enableDebug;
-    if (typeof dbg === 'boolean') {
-      legacyUsed.push('config.debug|enableDebug');
-      out.logLevel = dbg ? 'debug' : 'none';
+    // Ensure displayMode is lowercase
+    if (typeof normalizedConfig.displayMode === 'string') {
+      normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
     }
-
-    if (out.displaymode !== undefined && out.displaymode !== null && out.displaymode !== '') {
-      legacyUsed.push('config.displaymode');
-      out.displayMode = String(out.displaymode).toLowerCase();
-    }
-    if (typeof out.displayMode === 'string') out.displayMode = out.displayMode.toLowerCase();
 
     if (legacyUsed.length > 0) {
       try {
@@ -78,14 +62,14 @@ module.exports = NodeHelper.create({
         const warningMsg = `⚠️ Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys. Look in debug output for the normalized config.`;
 
         // Attach warning to config.__warnings so it gets sent to frontend and displayed in GUI
-        out.__warnings = out.__warnings || [];
-        out.__warnings.push(warningMsg);
+        normalizedConfig.__warnings = normalizedConfig.__warnings || [];
+        normalizedConfig.__warnings.push(warningMsg);
 
         // Also log it to server logs
         this._mmLog('warn', null, warningMsg);
 
         // Log the normalized config as formatted JSON (with redacted sensitive data) for reference (server-side only)
-        const redacted = { ...out };
+        const redacted = { ...normalizedConfig };
         if (redacted.password) redacted.password = '***redacted***';
         if (redacted.qrcode) redacted.qrcode = '***redacted***';
         if (redacted.students && Array.isArray(redacted.students)) {
@@ -103,43 +87,7 @@ module.exports = NodeHelper.create({
       }
     }
 
-    return out;
-  },
-
-  /**
-   * Build REST targets for a student depending on login mode (QR vs. parent account).
-   * Returns an ordered array of targets; QR login (if present) comes first, then parent.
-   */
-  _buildRestTargets(student, moduleConfig, school, server, ownPersonId) {
-    const targets = [];
-    const useQrLogin = Boolean(student.qrcode);
-    const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
-    const studentId = hasStudentId ? Number(student.studentId) : null;
-    const hasParentCreds = Boolean(moduleConfig?.username && moduleConfig?.password);
-
-    if (useQrLogin && school && server) {
-      targets.push({
-        mode: 'qr',
-        school,
-        server,
-        username: null,
-        password: null,
-        studentId: ownPersonId || studentId || null,
-      });
-    }
-
-    if (!useQrLogin && hasParentCreds && studentId !== null) {
-      targets.push({
-        mode: 'parent',
-        school: school || moduleConfig.school,
-        server: server || moduleConfig.server || 'webuntis.com',
-        username: moduleConfig.username,
-        password: moduleConfig.password,
-        studentId,
-      });
-    }
-
-    return targets;
+    return normalizedConfig;
   },
 
   /**
@@ -188,202 +136,10 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Map REST API status to legacy JSON-RPC code format
-   * REST status values: REGULAR, CANCELLED, ADDITIONAL, CHANGED, SUBSTITUTION
-   * Legacy code values: '', 'cancelled', 'error', 'info', 'irregular'
-   * 'irregular' is used for replacement/substitution lessons
+   * Map REST API status to legacy JSON-RPC code format (delegated to dataTransformer)
    */
   _mapRestStatusToLegacyCode(status, substitutionText) {
-    if (!status) return '';
-
-    const statusUpper = String(status).toUpperCase();
-    const hasSubstitutionText = substitutionText && String(substitutionText).trim() !== '';
-
-    switch (statusUpper) {
-      case 'CANCELLED':
-      case 'CANCEL':
-        return 'cancelled'; // Display with cancelled styling
-      case 'ADDITIONAL':
-      case 'CHANGED':
-      case 'SUBSTITUTION':
-      case 'SUBSTITUTE':
-        return 'irregular'; // Use 'irregular' for replacement/substitution lessons (legacy compat)
-      case 'REGULAR':
-      case 'NORMAL':
-      case 'NORMAL_TEACHING_PERIOD':
-        // If there's substitution text, treat it as a replacement lesson
-        return hasSubstitutionText ? 'irregular' : '';
-      default:
-        return hasSubstitutionText ? 'irregular' : '';
-    }
-  },
-
-  /**
-   * REST API Authentication: Get Bearer Token and Session Cookies
-   * Returns: { token, cookieString, tenantId, schoolYearId, expiresAt }
-   */
-  async _getRestAuthTokenAndCookies(school, username, password, server, options = {}) {
-    const restCache = this._restAuthCache instanceof Map ? this._restAuthCache : new Map();
-    this._restAuthCache = restCache;
-
-    const { cacheKey, untisClient } = options || {};
-    const effectiveCacheKey = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
-
-    const cached = restCache.get(effectiveCacheKey);
-    if (cached && cached.expiresAt > Date.now() + 60000) {
-      return {
-        token: cached.token,
-        cookieString: cached.cookieString,
-        tenantId: cached.tenantId,
-        schoolYearId: cached.schoolYearId,
-        appData: cached.appData,
-      };
-    }
-
-    let appData = null;
-
-    // Prefer an already logged-in Untis client (QR or parent login) to avoid duplicate logins
-    if (untisClient && typeof untisClient._buildCookies === 'function') {
-      const cookieString = untisClient._buildCookies();
-      if (!cookieString) {
-        throw new Error('No session cookies available from existing login');
-      }
-
-      let token = null;
-      if (typeof untisClient._getJWT === 'function') {
-        try {
-          token = await untisClient._getJWT(false);
-        } catch (err) {
-          this._mmLog('debug', null, `[REST] JWT via existing session failed: ${this._formatErr(err)}`);
-        }
-      }
-
-      // Fetch app/data to get tenantId and schoolYearId
-      let tenantId = null;
-      let schoolYearId = null;
-      try {
-        const appDataResp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {
-          headers: {
-            Cookie: cookieString,
-            Accept: 'application/json',
-          },
-          validateStatus: () => true,
-          timeout: 15000,
-        });
-
-        if (appDataResp.status === 200 && appDataResp.data) {
-          appData = appDataResp.data;
-          tenantId = appDataResp.data?.tenant?.id;
-          schoolYearId = appDataResp.data?.currentSchoolYear?.id;
-        }
-      } catch (err) {
-        this._mmLog('debug', null, `[REST] Failed to fetch app/data: ${this._formatErr(err)}`);
-      }
-
-      restCache.set(effectiveCacheKey, {
-        token,
-        cookieString,
-        tenantId,
-        schoolYearId,
-        appData,
-        expiresAt: Date.now() + 14 * 60 * 1000,
-      });
-
-      return { token, cookieString, tenantId, schoolYearId, appData };
-    }
-
-    try {
-      // Step 1: Authenticate via JSON-RPC to get session cookies
-      const authResp = await axios.post(
-        `https://${server}/WebUntis/jsonrpc.do?school=${encodeURIComponent(school)}`,
-        {
-          jsonrpc: '2.0',
-          method: 'authenticate',
-          params: {
-            user: username,
-            password,
-            client: 'App',
-          },
-          id: 1,
-        },
-        { validateStatus: () => true, timeout: 10000 }
-      );
-
-      if (authResp.status !== 200) {
-        throw new Error(`JSON-RPC auth failed: ${authResp.status}`);
-      }
-
-      // Step 2: Extract cookies from Set-Cookie headers
-      const cookies = {};
-      const setCookies = authResp.headers['set-cookie'] || [];
-      setCookies.forEach((setCookie) => {
-        const [cookie] = setCookie.split(';');
-        const [key, value] = cookie.split('=');
-        if (key && value) {
-          cookies[key.trim()] = value;
-        }
-      });
-
-      const cookieString = Object.entries(cookies)
-        .map(([k, v]) => `${k}=${v}`)
-        .join('; ');
-
-      if (!cookieString) {
-        throw new Error('No session cookies received');
-      }
-
-      // Step 3: Get Bearer Token using the session cookies
-      const tokenResp = await axios.get(`https://${server}/WebUntis/api/token/new`, {
-        headers: { Cookie: cookieString },
-        validateStatus: () => true,
-        timeout: 10000,
-      });
-
-      if (tokenResp.status !== 200 || typeof tokenResp.data !== 'string') {
-        throw new Error(`Bearer token request failed: ${tokenResp.status}`);
-      }
-
-      const token = tokenResp.data;
-
-      // Fetch app/data to get tenantId and schoolYearId
-      let tenantId = null;
-      let schoolYearId = null;
-      try {
-        const appDataResp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Cookie: cookieString,
-            Accept: 'application/json',
-          },
-          validateStatus: () => true,
-          timeout: 15000,
-        });
-
-        if (appDataResp.status === 200 && appDataResp.data) {
-          appData = appDataResp.data;
-          tenantId = appDataResp.data?.tenant?.id;
-          schoolYearId = appDataResp.data?.currentSchoolYear?.id;
-        }
-      } catch (err) {
-        this._mmLog('debug', null, `[REST] Failed to fetch app/data: ${this._formatErr(err)}`);
-      }
-
-      // Cache the token (expires in 900 seconds, with buffer we cache for 14 minutes)
-      restCache.set(effectiveCacheKey, {
-        token,
-        cookieString,
-        tenantId,
-        schoolYearId,
-        appData,
-        expiresAt: Date.now() + 14 * 60 * 1000,
-      });
-
-      this._mmLog('debug', null, 'REST auth token obtained successfully');
-      return { token, cookieString, tenantId, schoolYearId, appData };
-    } catch (error) {
-      Log.error(`REST auth failed: ${error.message}`);
-      throw error;
-    }
+    return dataTransformer.mapRestStatusToLegacyCode(status, substitutionText);
   },
 
   _collectClassCandidates(data) {
@@ -435,8 +191,8 @@ module.exports = NodeHelper.create({
     // Include studentId in cache key so each student has their own class cache entry
     const studentIdPart = options.studentId ? `::student::${options.studentId}` : '';
     const cacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
-    if (this._classIdCache && this._classIdCache.has(cacheKey)) {
-      return this._classIdCache.get(cacheKey);
+    if (this.cacheManager.has('classId', cacheKey)) {
+      return this.cacheManager.get('classId', cacheKey);
     }
 
     const formatDateISO = (date) => {
@@ -452,13 +208,17 @@ module.exports = NodeHelper.create({
       return `${year}${month}${day}`;
     };
 
-    const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+    const { token, cookieString, tenantId, schoolYearId } = await this.authService.getAuth({
       school,
       username,
       password,
       server,
-      options
-    );
+      options: {
+        ...options,
+        mmLog: this._mmLog.bind(this),
+        formatErr: this._formatErr.bind(this),
+      },
+    });
 
     if (!cookieString) {
       throw new Error('Missing REST auth cookies for class resolution');
@@ -565,7 +325,7 @@ module.exports = NodeHelper.create({
       throw new Error(hint);
     }
 
-    this._classIdCache.set(cacheKey, chosen.id);
+    this.cacheManager.set('classId', cacheKey, chosen.id);
     return chosen.id;
   },
 
@@ -585,524 +345,113 @@ module.exports = NodeHelper.create({
     className = null
   ) {
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
-    this._mmLog(
-      'debug',
-      null,
-      `Fetching ${wantsClass ? 'class' : 'student'} timetable via REST API (${restClient.formatDateForAPI(
-        rangeStart
-      )} to ${restClient.formatDateForAPI(rangeEnd)})`
-    );
-    try {
-      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
+    let classId = options.classId;
+
+    // Resolve class ID if needed
+    if (wantsClass && !classId) {
+      classId = await this._resolveClassIdViaRest(
         school,
         username,
         password,
         server,
-        options
+        rangeStart,
+        rangeEnd,
+        className || options.className || null,
+        { ...options, studentId }
       );
-
-      if (!cookieString) {
-        throw new Error('Missing REST auth cookies');
-      }
-
-      let resourceType = wantsClass ? 'CLASS' : 'STUDENT';
-      let resourceId = wantsClass ? options.classId : studentId;
-
-      if (wantsClass) {
-        if (!resourceId) {
-          resourceId = await this._resolveClassIdViaRest(
-            school,
-            username,
-            password,
-            server,
-            rangeStart,
-            rangeEnd,
-            className || options.className || null,
-            { ...options, studentId }
-          );
-        }
-        if (!resourceId) {
-          throw new Error('Class timetable requested but class id could not be resolved');
-        }
-      }
-
-      if (!resourceId) {
-        throw new Error('Missing resource id for timetable request');
-      }
-
-      // ✅ Use unified REST call with restClient.callRestAPI
-      const resp = await restClient.callRestAPI({
-        server,
-        path: '/WebUntis/api/rest/view/v1/timetable/entries',
-        method: 'GET',
-        params: {
-          start: restClient.formatDateForAPI(rangeStart),
-          end: restClient.formatDateForAPI(rangeEnd),
-          resourceType,
-          resources: String(resourceId),
-          timetableType: 'STANDARD',
-        },
-        token,
-        cookies: cookieString,
-        tenantId,
-        schoolYearId,
-        timeout: 15000,
-        logger: (level, msg) => this._mmLog(level, null, msg),
-      });
-
-      // Transform REST response to JSON-RPC format
-      const lessons = [];
-      this._mmLog(
-        'debug',
-        null,
-        `Response data structure: days=${resp?.days ? 'present' : 'missing'}, hasDays=${Array.isArray(resp?.days)}`
-      );
-      if (resp && resp.days && Array.isArray(resp.days)) {
-        this._mmLog('debug', null, `Processing ${resp.days.length} days from API response`);
-        resp.days.forEach((day) => {
-          if (day.gridEntries && Array.isArray(day.gridEntries)) {
-            day.gridEntries.forEach((entry) => {
-              const lesson = {
-                id: entry.ids && entry.ids[0] ? entry.ids[0] : null,
-                date: day.date.split('T')[0],
-                startTime: entry.duration?.start ? entry.duration.start.split('T')[1] : '',
-                endTime: entry.duration?.end ? entry.duration.end.split('T')[1] : '',
-                su: entry.position2
-                  ? [
-                    {
-                      name: entry.position2[0].current.shortName,
-                      longname: entry.position2[0].current.longName,
-                    },
-                  ]
-                  : [],
-                te: entry.position1
-                  ? [
-                    {
-                      name: entry.position1[0].current.shortName,
-                      longname: entry.position1[0].current.longName,
-                    },
-                  ]
-                  : [],
-                ro: entry.position3
-                  ? [
-                    {
-                      name: entry.position3[0].current.shortName,
-                      longname: entry.position3[0].current.longName,
-                    },
-                  ]
-                  : [],
-                code: this._mapRestStatusToLegacyCode(entry.status, entry.substitutionText),
-                substText: entry.substitutionText || '',
-                lstext: entry.lessonInfo || '',
-                activityType: entry.type || 'NORMAL_TEACHING_PERIOD',
-                lessonText: entry.lessonText || '',
-                status: entry.status || 'REGULAR',
-                statusDetail: entry.statusDetail || null,
-              };
-              lessons.push(lesson);
-            });
-          }
-        });
-      }
-
-      this._mmLog('debug', null, `REST API returned ${lessons.length} lessons`);
-      return lessons;
-    } catch (error) {
-      this._mmLog('error', null, `getTimetableViaRest failed: ${error.message}`);
-      throw error;
     }
+
+    return webuntisApiService.getTimetable({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      useClassTimetable: wantsClass,
+      classId,
+      logger: this._mmLog.bind(this),
+      mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
+    });
   },
 
-  /**
-   * Fetch exams via REST API for a student (parent account or own)
-   * Returns exams in the format: [{ examDate, startTime, endTime, name, subject, teachers, text }, ...]
-   */
   async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
-    const startDate = rangeStart.toISOString().split('T')[0];
-    const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('debug', null, `Fetching exams via REST API (${startDate} to ${endDate})`);
-    try {
-      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
-        school,
-        username,
-        password,
-        server,
-        options
-      );
-
-      const formatDateYYYYMMDD = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}${month}${day}`;
-      };
-
-      const data = await restClient.callRestAPI({
-        server,
-        path: '/WebUntis/api/exams',
-        method: 'GET',
-        params: {
-          startDate: formatDateYYYYMMDD(rangeStart),
-          endDate: formatDateYYYYMMDD(rangeEnd),
-          studentId: studentId ?? -1,
-          klasseId: -1,
-          withGrades: true,
-        },
-        token,
-        cookies: cookieString,
-        tenantId,
-        schoolYearId,
-        timeout: 15000,
-        logger: (level, msg) => this._mmLog(level, null, msg),
-      });
-
-      // Transform REST response to expected format
-      const exams = [];
-      let examArr = [];
-      if (Array.isArray(data?.data?.exams)) {
-        examArr = data.data.exams;
-      } else if (Array.isArray(data?.exams)) {
-        examArr = data.exams;
-      } else if (Array.isArray(data)) {
-        examArr = data;
-      }
-
-      examArr.forEach((exam) => {
-        const isAssignedToStudent =
-          studentId && Array.isArray(exam.assignedStudents) && exam.assignedStudents.some((s) => s.id === studentId);
-
-        if (!studentId || isAssignedToStudent) {
-          exams.push({
-            examDate: this._normalizeDateToInteger(exam.examDate ?? exam.date),
-            startTime: this._normalizeTimeToMinutes(exam.startTime ?? exam.start),
-            endTime: this._normalizeTimeToMinutes(exam.endTime ?? exam.end),
-            name: this._sanitizeHtmlText(exam.name ?? exam.examType ?? exam.lessonName ?? '', false),
-            subject: this._sanitizeHtmlText(exam.subject ?? exam.lessonName ?? '', false),
-            teachers: Array.isArray(exam.teachers) ? exam.teachers : [],
-            text: this._sanitizeHtmlText(exam.text ?? exam.description ?? '', true),
-          });
-        }
-      });
-
-      this._mmLog('debug', null, `REST API returned ${exams.length} exams`);
-      return exams;
-    } catch (error) {
-      this._mmLog('error', null, `getExamsViaRest failed: ${error.message}`);
-      throw error;
-    }
+    return webuntisApiService.getExams({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+      normalizeDate: this._normalizeDateToInteger.bind(this),
+      normalizeTime: this._normalizeTimeToMinutes.bind(this),
+      sanitizeHtml: this._sanitizeHtmlText.bind(this),
+    });
   },
 
-  /**
-   * Fetch homework via REST API for a student (parent account or own)
-   * Returns homework in the format: [{ id, lid, lessonId, dueDate, completed, text, remark, su }, ...]
-   * Uses /WebUntis/api/homeworks/lessons which returns homework and lesson data in parallel arrays
-   *
-   * @param {string} school - School identifier
-   * @param {string} username - Username or email
-   * @param {string} password - Password
-   * @param {string} server - WebUntis server (e.g., "school.webuntis.com")
-   * @param {Date} rangeStart - Start date for range
-   * @param {Date} rangeEnd - End date for range
-   * @param {number} studentId - Student ID for filtering homework
-   * @param {object} options - Additional options (e.g., { logger: fn })
-   * @returns {Promise<Array>} Normalized homework array
-   */
   async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
-    const startDate = rangeStart.toISOString().split('T')[0];
-    const endDate = rangeEnd.toISOString().split('T')[0];
-    this._mmLog('debug', null, `Fetching homework via REST API (${startDate} to ${endDate})`);
-    try {
-      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
-        school,
-        username,
-        password,
-        server,
-        options
-      );
-
-      const formatDateYYYYMMDD = (date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}${month}${day}`;
-      };
-
-      // Build request for homework via lessons endpoint
-      // Endpoint: /WebUntis/api/homeworks/lessons
-      // Returns: { data: { homeworks: [...], lessons: [...], teachers: [...], records: [...] } }
-      // Build query params; include studentId when provided to allow server-side filtering
-      const hwParams = {
-        startDate: formatDateYYYYMMDD(rangeStart),
-        endDate: formatDateYYYYMMDD(rangeEnd),
-      };
-      // Do not pass studentId as a query parameter to the /homeworks/lessons
-      // endpoint — filter client-side using records/elementIds instead.
-
-      const data = await restClient.callRestAPI({
-        server,
-        path: '/WebUntis/api/homeworks/lessons',
-        method: 'GET',
-        params: hwParams,
-        token,
-        cookies: cookieString,
-        tenantId,
-        schoolYearId,
-        timeout: 15000,
-        logger: (level, msg) => this._mmLog(level, null, msg),
-      });
-
-      // Extract homework from response
-      // API returns: { data: { homeworks: [...], lessons: [...], records: [...], teachers: [...] } }
-
-      const homeworks = [];
-      const seenIds = new Set(); // Avoid duplicates
-
-      // Handle both response formats:
-      // Old (direct): { homeworks: [...], lessons: [...] }
-      // New (nested): { data: { homeworks: [...], lessons: [...], records: [...] } }
-      let hwArray = data.homeworks;
-      let lessonsArray = data.lessons;
-
-      if (!hwArray && data.data) {
-        hwArray = data.data.homeworks;
-        lessonsArray = data.data.lessons;
-      }
-
-      if (Array.isArray(hwArray)) {
-        const lessonsMap = {};
-        if (Array.isArray(lessonsArray)) {
-          lessonsArray.forEach((lesson) => {
-            if (lesson.id) {
-              lessonsMap[lesson.id] = lesson;
-            }
-          });
-        }
-
-        // Build map of homeworkId -> elementIds from records (if provided)
-        let recordsArray = data.records;
-        if (!recordsArray && data.data) recordsArray = data.data.records;
-        const recordsMap = {};
-        if (Array.isArray(recordsArray)) {
-          recordsArray.forEach((rec) => {
-            if (rec && rec.homeworkId !== undefined && rec.homeworkId !== null) {
-              recordsMap[rec.homeworkId] = Array.isArray(rec.elementIds) ? rec.elementIds.slice() : [];
-            }
-          });
-        }
-
-        hwArray.forEach((hw) => {
-          // Avoid duplicates by checking homework ID
-          const hwId = hw.id ?? `${hw.lessonId}_${hw.dueDate}`;
-          if (!seenIds.has(hwId)) {
-            seenIds.add(hwId);
-            const lesson = lessonsMap[hw.lessonId];
-
-            if (!lesson && hw.lessonId) {
-              this._mmLog(
-                'debug',
-                null,
-                `⚠️ No lesson found for homework ${hwId}. hw.lessonId=${hw.lessonId}, available lessonIds: ${Object.keys(lessonsMap).slice(0, 3).join(', ')}`
-              );
-            }
-
-            // elementIds from records (may be empty)
-            const elementIds = recordsMap[hw.id] || [];
-
-            // If a specific studentId was requested, skip homeworks that don't target that element
-            if (Number.isFinite(Number(studentId)) && Number(studentId) !== -1) {
-              const matchesByElement = Array.isArray(elementIds) && elementIds.some((e) => Number(e) === Number(studentId));
-              const matchesByField = hw.studentId && Number(hw.studentId) === Number(studentId);
-              if (!matchesByElement && !matchesByField) return; // skip
-            }
-
-            // Build homework record
-            const hwRecord = {
-              id: hw.id ?? null,
-              lessonId: hw.lessonId ?? hw.lid ?? null,
-              dueDate: hw.dueDate ?? hw.date ?? null,
-              completed: hw.completed ?? hw.isDone ?? false,
-              text: hw.text ?? hw.homework ?? hw.remark ?? '',
-              remark: hw.remark ?? '',
-              // Transform lesson data into su format { name, longname }
-              // If lesson has subject field, use it; otherwise use existing su
-              su: lesson && lesson.subject ? [{ name: lesson.subject, longname: lesson.subject }] : (lesson?.su ?? (hw.su ? hw.su : [])),
-              // Preserve elementIds so frontend can determine which students this homework targets
-              elementIds,
-              // Try to preserve an explicit studentId if present; otherwise infer from elementIds or request
-              studentId: hw.studentId ?? (elementIds && elementIds.length ? elementIds[0] : (studentId ?? null)),
-            };
-
-            homeworks.push(hwRecord);
-          }
-        });
-      }
-
-      this._mmLog('debug', null, `REST API returned ${homeworks.length} homeworks`);
-      return homeworks;
-    } catch (error) {
-      this._mmLog('error', null, `getHomeworkViaRest failed: ${error.message}`);
-      throw error;
-    }
+    return webuntisApiService.getHomework({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+    });
   },
 
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
-    try {
-      const { token, cookieString, tenantId, schoolYearId } = await this._getRestAuthTokenAndCookies(
-        school,
-        username,
-        password,
-        server,
-        options
-      );
-
-      const formatDateYYYYMMDD = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}${month}${day}`;
-      };
-
-      const data = await restClient.callRestAPI({
-        server,
-        path: '/WebUntis/api/classreg/absences/students',
-        method: 'GET',
-        params: {
-          startDate: formatDateYYYYMMDD(rangeStart),
-          endDate: formatDateYYYYMMDD(rangeEnd),
-          studentId: studentId ?? -1,
-          excuseStatusId: -1,
-        },
-        token,
-        cookies: cookieString,
-        tenantId,
-        schoolYearId,
-        timeout: 15000,
-        logger: (level, msg) => this._mmLog(level, null, msg),
-      });
-
-      const absences = [];
-      let absArr = [];
-      if (Array.isArray(data?.data?.absences)) {
-        absArr = data.data.absences;
-      } else if (Array.isArray(data?.absences)) {
-        absArr = data.absences;
-      } else if (Array.isArray(data?.absentLessons)) {
-        absArr = data.absentLessons;
-      } else if (Array.isArray(data)) {
-        absArr = data;
-      }
-
-      absArr.forEach((abs) => {
-        absences.push({
-          date: abs.date ?? abs.startDate ?? abs.absenceDate ?? abs.day ?? null,
-          startTime: abs.startTime ?? abs.start ?? null,
-          endTime: abs.endTime ?? abs.end ?? null,
-          reason: abs.reason ?? abs.reasonText ?? abs.text ?? '',
-          excused: abs.isExcused ?? abs.excused ?? null,
-          student: abs.student ?? null,
-          su: abs.su && abs.su[0] ? [{ name: abs.su[0].name, longname: abs.su[0].longname }] : [],
-          te: abs.te && abs.te[0] ? [{ name: abs.te[0].name, longname: abs.te[0].longname }] : [],
-          lessonId: abs.lessonId ?? abs.lid ?? abs.id ?? null,
-        });
-      });
-
-      this._mmLog('debug', null, `REST API returned ${absences.length} absences`);
-      return absences;
-    } catch (error) {
-      this._mmLog('error', null, `getAbsencesViaRest failed: ${error.message}`);
-      throw error;
-    }
+    return webuntisApiService.getAbsences({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+    });
   },
 
   async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
-    this._mmLog('debug', null, `Fetching messages of day via REST API for date=${date.toISOString()}`);
-    try {
-      const { token, cookieString } = await this._getRestAuthTokenAndCookies(school, username, password, server, options);
-
-      const formatDateYYYYMMDD = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}${month}${day}`;
-      };
-
-      // Build request for messages of the day
-      // Endpoint: /WebUntis/api/public/news/newsWidgetData (from WebUI)
-      const headers = {
-        Cookie: cookieString,
-        Accept: 'application/json',
-      };
-      if (token) headers.Authorization = `Bearer ${token}`;
-
-      const resp = await axios.get(`https://${server}/WebUntis/api/public/news/newsWidgetData`, {
-        params: {
-          date: formatDateYYYYMMDD(date),
-        },
-        headers,
-        validateStatus: () => true,
-        timeout: 15000,
-      });
-
-      if (resp.status !== 200) {
-        throw new Error(`REST API returned status ${resp.status} for messages of day`);
-      }
-
-      // Parse response - handles nested data.messagesOfDay structure
-      let messages = [];
-      if (Array.isArray(resp.data?.data?.messagesOfDay)) {
-        messages = resp.data.data.messagesOfDay;
-      } else if (Array.isArray(resp.data?.messagesOfDay)) {
-        messages = resp.data.messagesOfDay;
-      } else if (Array.isArray(resp.data?.messages)) {
-        messages = resp.data.messages;
-      } else if (Array.isArray(resp.data)) {
-        messages = resp.data;
-      }
-
-      this._mmLog('debug', null, `REST API returned ${messages.length} messages of the day`);
-      return messages;
-    } catch (error) {
-      this._mmLog('error', null, `getMessagesOfDayViaRest failed: ${error.message}`);
-      throw error;
-    }
-  },
-
-  _resolveSchoolAndServer(student) {
-    let school = student.school || this.config?.school || null;
-    let server = student.server || this.config?.server || null;
-
-    if ((!school || !server) && student.qrcode) {
-      try {
-        const qrUrl = new URL(student.qrcode);
-        school = school || qrUrl.searchParams.get('school');
-        server = server || qrUrl.searchParams.get('url');
-      } catch (err) {
-        this._mmLog('error', student, `Failed to parse QR code for school/server: ${this._formatErr(err)}`);
-      }
-    }
-
-    // Normalize server host if a full URL was provided
-    if (server && server.startsWith('http')) {
-      try {
-        server = new URL(server).hostname;
-      } catch {
-        // leave as-is
-      }
-    }
-
-    return { school, server };
-  },
-
-  _deriveStudentsFromAppData(appData) {
-    if (!appData || !appData.user || !Array.isArray(appData.user.students)) return [];
-    const derived = [];
-    appData.user.students.forEach((st, idx) => {
-      const sid = Number(st?.id ?? st?.studentId ?? st?.personId);
-      if (!Number.isFinite(sid)) return;
-      const title = st?.displayName || st?.name || `Student ${idx + 1}`;
-      derived.push({ title, studentId: sid, imageUrl: st?.imageUrl || null });
+    return webuntisApiService.getMessagesOfDay({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        }),
+      server,
+      date,
+      logger: this._mmLog.bind(this),
     });
-    return derived;
   },
 
   async _ensureStudentsFromAppData(moduleConfig) {
@@ -1130,13 +479,14 @@ module.exports = NodeHelper.create({
         // try to fetch auto-discovered data to fill in the missing titles
         const server = moduleConfig.server || 'webuntis.com';
         try {
-          const { appData } = await this._getRestAuthTokenAndCookies(
-            moduleConfig.school,
-            moduleConfig.username,
-            moduleConfig.password,
-            server
-          );
-          autoStudents = this._deriveStudentsFromAppData(appData);
+          const { appData } = await this.authService.getAuth({
+            school: moduleConfig.school,
+            username: moduleConfig.username,
+            password: moduleConfig.password,
+            server,
+            options: { mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          });
+          autoStudents = this.authService.deriveStudentsFromAppData(appData);
 
           if (autoStudents && autoStudents.length > 0) {
             // For each configured student try to improve the configured data:
@@ -1202,8 +552,14 @@ module.exports = NodeHelper.create({
       }
 
       const server = moduleConfig.server || 'webuntis.com';
-      const { appData } = await this._getRestAuthTokenAndCookies(moduleConfig.school, moduleConfig.username, moduleConfig.password, server);
-      autoStudents = this._deriveStudentsFromAppData(appData);
+      const { appData } = await this.authService.getAuth({
+        school: moduleConfig.school,
+        username: moduleConfig.username,
+        password: moduleConfig.password,
+        server,
+        options: { mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+      });
+      autoStudents = this.authService.deriveStudentsFromAppData(appData);
 
       if (!autoStudents || autoStudents.length === 0) {
         this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
@@ -1297,85 +653,24 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Sanitize HTML text by removing tags but preserving intentional line breaks (<br>)
-   * Converts <br>, <br/>, <br /> to newlines, then strips all remaining HTML tags
+   * Sanitize HTML text (delegated to dataTransformer)
    */
   _sanitizeHtmlText(text, preserveLineBreaks = true) {
-    if (!text) return '';
-    let result = String(text);
-
-    // Step 1: Preserve intentional line breaks by converting <br> tags to placeholders
-    if (preserveLineBreaks) {
-      result = result.replace(/<br\s*\/?>/gi, '\n');
-    }
-
-    // Step 2: Remove all remaining HTML tags
-    result = result.replace(/<[^>]*>/g, '');
-
-    // Step 3: Decode HTML entities
-    result = result
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&apos;/g, "'")
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&'); // Must be last
-
-    // Step 4: Clean up extra whitespace (but preserve intentional newlines)
-    result = result.replace(/\s+/g, ' ').trim();
-
-    return result;
+    return dataTransformer.sanitizeHtmlText(text, preserveLineBreaks);
   },
 
   /**
-   * Normalize date format from REST API (ISO string) to internal format (YYYYMMDD integer)
-   * Accepts: "2025-12-17" → 20251217
+   * Normalize date format (delegated to dataTransformer)
    */
   _normalizeDateToInteger(date) {
-    if (!date) return null;
-    // If already an integer in YYYYMMDD format, return as-is
-    if (typeof date === 'number' && date > 10000000 && date < 99991231) {
-      return date;
-    }
-    // Parse ISO string format "YYYY-MM-DD" → YYYYMMDD
-    const dateStr = String(date);
-    if (dateStr.includes('-')) {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const y = parts[0].padStart(4, '0');
-        const m = parts[1].padStart(2, '0');
-        const d = parts[2].padStart(2, '0');
-        return parseInt(`${y}${m}${d}`, 10);
-      }
-    }
-    // Try to parse as plain number
-    const num = parseInt(String(date).replace(/\D/g, ''), 10);
-    return num > 10000000 && num < 99991231 ? num : null;
+    return dataTransformer.normalizeDateToInteger(date);
   },
 
   /**
-   * Normalize time format from REST API (HH:MM string) to internal format (HHMM integer)
-   * Accepts: "07:50" → 750 or "08:45" → 845
+   * Normalize time format (delegated to dataTransformer)
    */
   _normalizeTimeToMinutes(time) {
-    if (!time && time !== 0) return null;
-    // If already an integer in HHMM format, return as-is
-    if (typeof time === 'number' && time >= 0 && time < 2400) {
-      return time;
-    }
-    // Parse HH:MM string format
-    const timeStr = String(time).trim();
-    if (timeStr.includes(':')) {
-      const parts = timeStr.split(':');
-      if (parts.length >= 2) {
-        const hh = parseInt(parts[0], 10) || 0;
-        const mm = parseInt(parts[1], 10) || 0;
-        return hh * 100 + mm;
-      }
-    }
-    // Try to parse as plain number
-    const num = parseInt(String(time).replace(/\D/g, ''), 10);
-    return num >= 0 && num < 2400 ? num : null;
+    return dataTransformer.normalizeTimeToMinutes(time);
   },
 
   _compactHolidays(rawHolidays) {
@@ -1533,10 +828,10 @@ module.exports = NodeHelper.create({
       warnings.push(`daysToShow cannot be negative (deprecated). Value: ${config.daysToShow}`);
     }
 
-    // Get exams.daysAhead (from new namespace or legacy)
-    const examsDaysAhead = config.exams?.daysAhead ?? config.examsDaysAhead ?? 0;
-    if (Number.isFinite(examsDaysAhead) && (examsDaysAhead < 0 || examsDaysAhead > 365)) {
-      warnings.push(`exams.daysAhead should be between 0 and 365. Value: ${examsDaysAhead}`);
+    // Get exams.nextDays (from new namespace or legacy)
+    const examsNextDays = config.exams?.nextDays ?? config.exams?.daysAhead ?? config.examsDaysAhead ?? 0;
+    if (Number.isFinite(examsNextDays) && (examsNextDays < 0 || examsNextDays > 365)) {
+      warnings.push(`exams.nextDays should be between 0 and 365. Value: ${examsNextDays}`);
     }
 
     // Get grid.mergeGap (from new namespace or legacy)
@@ -1904,9 +1199,9 @@ module.exports = NodeHelper.create({
     // Detect login mode
     const useQrLogin = Boolean(student.qrcode);
     const restOptions = { cacheKey: credKey, untisClient: untis };
-    const { school, server } = this._resolveSchoolAndServer(student);
+    const { school, server } = this.authService.resolveSchoolAndServer(student, this.config);
     const ownPersonId = useQrLogin && untis?.sessionInformation ? untis.sessionInformation.personId : null;
-    const restTargets = this._buildRestTargets(student, this.config, school, server, ownPersonId);
+    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
     const className = student.class || student.className || this.config?.class || null;
@@ -2039,11 +1334,17 @@ module.exports = NodeHelper.create({
 
     // Exams (raw)
     let rawExams = [];
-    const examsDaysAheadValue =
-      student.exams?.daysAhead ?? student.examsDaysAhead ?? this.config?.exams?.daysAhead ?? this.config?.examsDaysAhead ?? 0;
-    if (fetchExams && examsDaysAheadValue > 0) {
+    const examsNextDays =
+      student.exams?.nextDays ??
+      student.examsDaysAhead ??
+      student.exams?.daysAhead ??
+      this.config?.exams?.nextDays ??
+      this.config?.examsDaysAhead ??
+      this.config?.exams?.daysAhead ??
+      0;
+    if (fetchExams && examsNextDays > 0) {
       // Validate the number of days
-      let validatedDays = examsDaysAheadValue;
+      let validatedDays = examsNextDays;
       if (validatedDays < 1 || validatedDays > 360 || isNaN(validatedDays)) {
         validatedDays = 30;
       }
@@ -2071,7 +1372,7 @@ module.exports = NodeHelper.create({
         this._mmLog('error', student, `Exams failed: ${error && error.message ? error.message : error}\n`);
       }
     } else {
-      logger(`Exams: skipped (exams.daysAhead=${examsDaysAheadValue})`);
+      logger(`Exams: skipped (exams.nextDays=${examsNextDays})`);
     }
 
     // Load homework for the period – keep raw
@@ -2089,9 +1390,15 @@ module.exports = NodeHelper.create({
         allRanges.push({ pastDays: gridPastDays, futureDays: gridNextDays });
 
         // Exams range
-        if (fetchExams && examsDaysAheadValue > 0) {
-          const examsPastDays = student.pastDaysToShow ?? student.pastDays ?? this.config?.pastDays ?? 0;
-          allRanges.push({ pastDays: examsPastDays, futureDays: examsDaysAheadValue });
+        if (fetchExams && examsNextDays > 0) {
+          const examsPastDays =
+            student.exams?.pastDays ??
+            student.pastDaysToShow ??
+            student.pastDays ??
+            this.config?.exams?.pastDays ??
+            this.config?.pastDays ??
+            0;
+          allRanges.push({ pastDays: examsPastDays, futureDays: examsNextDays });
         }
 
         // Absences range
@@ -2147,10 +1454,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          999 // Default: show all if not configured
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -2175,7 +1482,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -2253,8 +1560,6 @@ module.exports = NodeHelper.create({
       logger(`Holidays: skipped`);
     }
 
-    logger(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
     const compactTimetable = compactArray(timetable, schemas.lesson);
@@ -2270,7 +1575,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
