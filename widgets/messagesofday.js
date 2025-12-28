@@ -1,10 +1,10 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function stripHtmlButKeepLineBreaks(html) {
     if (!html) return '';
@@ -62,7 +62,7 @@
         rowClasses += ' message-expanded';
       }
 
-      addTableRow(table, rowClasses, '', meta, '<b>' + ctx.translate('messagesofday') + '</b>' + '<br>' + escapeHtml(contentText));
+      addTableRow(table, rowClasses, '', meta, escapeHtml(contentText));
       addedRows++;
     }
 

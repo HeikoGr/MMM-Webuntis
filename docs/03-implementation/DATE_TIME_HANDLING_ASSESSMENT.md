@@ -50,15 +50,14 @@ Send to Frontend: { date: 20251217, startTime: 800, ... }
 ### Frontend (widgets)
 
 
-## DATE FORMATS: `dateFormats.absences`
+## DATE FORMATS: Widget-Specific `dateFormat`
 
-A new configuration key `dateFormats` was introduced to allow per-widget date format configuration in one place. The Absences widget now prefers the following lookup order for its displayed date format:
+Each widget now has its own `dateFormat` configuration in the widget namespace. The Absences widget uses the following lookup order for its displayed date format:
 
-1. `studentConfig.dateFormats.absences` (per-student override)
-2. `config.dateFormats.absences` (module-level per-widget format)
-3. `config.dateFormats.default` (module-level default)
-4. Legacy `config.dateFormat` (backwards compatibility)
-5. Fallback `'dd.MM.'`
+1. `studentConfig.absences.dateFormat` (per-student override)
+2. `config.absences.dateFormat` (module-level widget format)
+3. Legacy `config.dateFormat` (backwards compatibility, applied to all widgets)
+4. Fallback `'dd.MM.'`
 
 Example:
 
@@ -68,7 +67,7 @@ Example:
  // inside a student entry
  student: {
    title: 'Alice',
-   dateFormats: { absences: 'd.M.yyyy' }
+   absences: { dateFormat: 'd.M.yyyy' }
  }
  ```
 
@@ -76,12 +75,12 @@ Example:
 
  ```js
  // in module config
- dateFormats: {
-   absences: 'd.M.yyyy'
+ absences: {
+   dateFormat: 'd.M.yyyy'
  }
  ```
 
-This keeps backwards compatibility with existing single-value options such as `dateFormat`, while providing a clear and centralized way to control formats per widget.
+This provides a clear and widget-specific way to control date formats while maintaining backwards compatibility.
 
 
 **Data Flow:**

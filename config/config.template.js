@@ -24,35 +24,12 @@ let config = {
       position: 'top_right',
       config: {
         // === GLOBAL OPTIONS ===
-        header: 'Timetable',
-        fetchIntervalMs: 15 * 60 * 1000, // 15 minutes
-        logLevel: 'debug',
+        header: 'Timetable', // optional header text
+        logLevel: 'debug', // 'debug', 'info', 'warn', 'error'
 
         // === DISPLAY OPTIONS ===
         displayMode: 'list', // 'list', 'grid', or comma-separated: 'lessons,exams,grid'
         mode: 'verbose', // 'verbose' or 'compact'
-
-        // === TIMETABLE FETCH RANGE ===
-        // Use `nextDays` and `pastDays` (preferred). Legacy keys `daysToShow`/`pastDaysToShow` are still accepted.
-        // Set `debugDate` to a YYYY-MM-DD string to freeze "today" for debugging (null = disabled).
-        debugDate: null,
-        nextDays: 7,
-        pastDays: 0,
-
-        // === ABSENCES ===
-        // Per-widget absences options are provided in the `absences` namespace below.
-        // Structured per-widget formats
-        // Per-widget absences options are provided in the `absences` namespace below.
-        // Structured per-widget formats
-        dateFormats: {
-          // (optional) - defaults to 'dd.MM.' if not set
-          default: 'dd.MM.', // set default
-          lessons: 'EEE', // weekday only (e.g., "Mon")
-          grid: 'EEE dd.MM.', // (optional) override for grid
-          exams: 'dd.MM.', // (optional) override for exams
-          homework: 'dd.MM.', // (optional) override for homework
-          absences: 'dd.MM.', // (optional) override for absences
-        },
 
         // Per-widget namespaces (new preferred structure)
         lessons: {
@@ -100,8 +77,6 @@ let config = {
         },
 
         messagesofday: {},
-        // Minimal example: override only absences format without specifying whole object
-        // dateFormats: { absences: 'd.M.yyyy' },
 
         // === TIMETABLE SOURCE ===
         useClassTimetable: false,
