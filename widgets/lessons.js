@@ -1,23 +1,17 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
-  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => { };
 
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     let addedRows = 0;
 
-    // Normalized config from backend already has all legacy keys mapped
-    const configuredNext =
-      studentConfig?.lessons?.nextDays ??
-      studentConfig?.nextDays ??
-      studentConfig?.daysToShow ??
-      ctx.config?.nextDays ??
-      ctx.config?.daysToShow ??
-      0;
+    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
+    const configuredNext = util.getWidgetConfig(studentConfig, 'lessons', 'nextDays');
     if (!configuredNext || Number(configuredNext) <= 0) {
       log('debug', `[lessons] skipped: nextDays not configured for "${studentTitle}"`);
       return 0;
@@ -50,9 +44,9 @@
     const dateCount = Object.keys(lessonsByDate).length;
     log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
 
-    // Determine display window (align with grid behavior) - studentConfig has priority
+    // Determine display window (align with grid behavior)
     const daysToShow = Number(configuredNext) > 0 ? Math.max(1, parseInt(configuredNext, 10)) : 1;
-    const pastDays = Math.max(0, parseInt(studentConfig?.lessons?.pastDays ?? studentConfig?.pastDays ?? 0, 10));
+    const pastDays = Math.max(0, parseInt(util.getWidgetConfig(studentConfig, 'lessons', 'pastDays') ?? 0, 10));
     const startOffset = -pastDays;
     // totalDisplayDays = past + today + future
     // Example: pastDays=1, daysToShow=7 → 1 + 1 + 7 = 9 days
@@ -65,8 +59,8 @@
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
-    // Determine lessons date format (student config has priority)
-    const lessonsDateFormat = studentConfig?.lessons?.dateFormat ?? 'EEE';
+    // Determine lessons date format
+    const lessonsDateFormat = util.getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
 
     // Determine base date (supports debugDate via ctx._currentTodayYmd)
     let baseDate;
@@ -120,7 +114,7 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
-          (!(studentConfig.lessons?.showRegular ?? studentConfig?.showRegular ?? true) && (entry.code || '') === '') ||
+          (!(util.getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
           (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? 'info') !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
@@ -138,7 +132,7 @@
         const formattedStart = `${hh}:${mm}`;
         const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
         const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
-        if (studentConfig.showStartTime ?? ctx.config.showStartTime) {
+        if (util.getWidgetConfig(studentConfig, 'lessons', 'showStartTime')) {
           timeStr += formattedStart;
         } else if (startLabel !== undefined) {
           timeStr += `${startLabel}.`;

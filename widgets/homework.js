@@ -1,10 +1,10 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
 
   function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
@@ -17,9 +17,9 @@
 
     log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
-    const dateFormat = studentConfig?.homework?.dateFormat ?? 'dd.MM.';
-    const showSubject = studentConfig?.homework?.showSubject ?? true;
-    const showText = studentConfig?.homework?.showText ?? true;
+    const dateFormat = util.getWidgetConfig(studentConfig, 'homework', 'dateFormat') ?? 'dd.MM.';
+    const showSubject = util.getWidgetConfig(studentConfig, 'homework', 'showSubject') ?? true;
+    const showText = util.getWidgetConfig(studentConfig, 'homework', 'showText') ?? true;
 
     const sorted = homeworks
       .slice()

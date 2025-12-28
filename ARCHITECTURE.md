@@ -330,20 +330,84 @@ graph TD
 
 ```javascript
 {
-  // Display
-  displayMode: "lessons, exams, grid",     // which widgets to render
-  mode: "verbose",                          // "verbose" or "compact"
+  // === GLOBAL OPTIONS ===
+  header: "MMM-Webuntis",                  // module title in MagicMirror
+  fetchIntervalMs: 900000,                 // fetch interval (15 min default)
+  logLevel: "none",                        // "error", "warn", "info", "debug"
 
-  // Fetch Range
-  daysToShow: 7,                            // days to fetch
-  pastDaysToShow: 0,
+  // === DISPLAY OPTIONS ===
+  displayMode: "list",                     // "list", "grid", or comma-separated widgets:
+                                           // "lessons,exams,grid,homework,absences,messagesofday"
+  mode: "verbose",                         // "verbose" (per-student) or "compact" (combined)
 
-  // Widget Options
-  examsDaysAhead: 21,
-  absencesPastDays: 21,
-  mergeGapMinutes: 15,
+  // === TIMETABLE FETCH RANGE ===
+  // Preferred: nextDays/pastDays. Legacy: daysToShow/pastDaysToShow still supported
+  nextDays: 7,                            // upcoming days to fetch/display
+  pastDays: 0,                            // past days to include
+  debugDate: null,                        // YYYY-MM-DD to freeze "today" for testing
 
-  // Date Formatting
+  // === PARENT ACCOUNT CREDENTIALS (optional) ===
+  // Global credentials for parent account access to multiple children
+  username: "parent@example.com",         // parent WebUntis username
+  password: "password",                   // parent WebUntis password
+  school: "school_name",                  // WebUntis school identifier
+  server: "webuntis.com",                 // WebUntis server hostname
+
+  // === DEBUG OPTIONS ===
+  dumpBackendPayloads: false,             // dump API responses to debug_dumps/
+
+  // === WIDGET-SPECIFIC OPTIONS ===
+  // Per-widget namespaces (preferred modern structure)
+  lessons: {
+    dateFormat: "EEEE",                   // date display format
+    showStartTime: false,                 // show lesson start time
+    showRegular: false,                   // show regular lessons
+    useShortSubject: false,               // use short subject names
+    showTeacherMode: "full",              // "off", "initial", "full"
+    showSubstitution: false,              // show substitution text
+    nextDays: 7,                          // (optional) widget-specific days ahead
+  },
+
+  grid: {
+    dateFormat: "EEE dd.MM.",             // date display format
+    mergeGap: 15,                         // merge lessons with gap <= N minutes
+    maxLessons: 0,                        // max lessons to display (0 = unlimited)
+    showNowLine: true,                    // show current time indicator
+    nextDays: 1,                          // (optional) widget-specific days ahead
+    pastDays: 0,                          // (optional) widget-specific days past
+  },
+
+  exams: {
+    dateFormat: "dd.MM.",                 // date display format
+    daysAhead: 45,                        // days ahead to fetch exams
+    showSubject: true,                    // show exam subject
+    showTeacher: true,                    // show exam teacher
+  },
+
+  homework: {
+    dateFormat: "dd.MM.",                 // date display format
+    showSubject: true,                    // show subject name
+    showText: true,                       // show homework description
+    nextDays: 28,                         // (optional) widget-specific days ahead
+    pastDays: 1,                          // (optional) widget-specific days past
+  },
+
+  absences: {
+    dateFormat: "dd.MM.",                 // date display format
+    pastDays: 20,                         // days in past to show absences
+    futureDays: 20,                       // days in future to show absences
+    showDate: true,                       // show absence date
+    showExcused: true,                    // show excused/unexcused status
+    showReason: true,                     // show reason for absence
+    maxItems: null,                       // max entries to show (null = unlimited)
+  },
+
+  messagesofday: {
+    dateFormat: "dd.MM.",                 // date display format
+  },
+
+  // === LEGACY OPTIONS (deprecated but still supported) ===
+  // Structured dateFormats object (use widget-specific dateFormat instead)
   dateFormats: {
     default: "dd.MM.",
     lessons: "EEE",
@@ -353,24 +417,27 @@ graph TD
     absences: "dd.MM."
   },
 
-  // Credentials (parent account or global)
-  username: "email@example.com",
-  password: "password",
-  school: "school-name",
-  server: "webuntis.com",
+  // Legacy top-level options (use widget namespaces instead)
+  daysToShow: 7,                          // → nextDays
+  pastDaysToShow: 0,                      // → pastDays
+  examsDaysAhead: 21,                     // → exams.daysAhead
+  absencesPastDays: 21,                   // → absences.pastDays
+  mergeGapMinutes: 15,                    // → grid.mergeGap
 
-  // Students
+  // === STUDENTS ===
   students: [
     {
-      title: "Alice",
-      studentId: 1234,              // parent account mode
-      // OR
-      qrcode: "untis://...",        // QR login mode
-      // OR
-      username: "alice@...",        // direct student login mode
-      password: "pass",
-      school: "...",
-      server: "..."
+      title: "Student Name",              // display name
+      studentId: 1234,                    // student ID (parent account mode)
+
+      // QR Code login (alternative to credentials)
+      qrcode: "untis://setschool?url=https://...",
+
+      // OR direct student credentials
+      username: "student@example.com",
+      password: "password",
+      school: "school_name",
+      server: "webuntis.com"
     }
   ]
 }
