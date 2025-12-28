@@ -1,31 +1,23 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
+  const log = typeof util.log === 'function' ? util.log : () => { };
   const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
   const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
-  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
-
-  // Helper: Check if a date falls within a holiday period
-  function isDateInHoliday(dateYmd, holidays) {
-    if (!Array.isArray(holidays) || holidays.length === 0) return null;
-    const dateNum = Number(dateYmd);
-    for (const holiday of holidays) {
-      const start = Number(holiday.startDate);
-      const end = Number(holiday.endDate);
-      if (dateNum >= start && dateNum <= end) {
-        return holiday;
-      }
-    }
-    return null;
-  }
+  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => { };
 
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     let addedRows = 0;
 
     // Normalized config from backend already has all legacy keys mapped
-    const configuredNext = studentConfig?.lessons?.nextDays ?? studentConfig?.nextDays ?? 0;
+    const configuredNext =
+      studentConfig?.lessons?.nextDays ??
+      studentConfig?.nextDays ??
+      studentConfig?.daysToShow ??
+      ctx.config?.nextDays ??
+      ctx.config?.daysToShow ??
+      0;
     if (!configuredNext || Number(configuredNext) <= 0) {
       log('debug', `[lessons] skipped: nextDays not configured for "${studentTitle}"`);
       return 0;
@@ -101,7 +93,7 @@
 
       if (!entries || entries.length === 0) {
         // No lessons that day — check for holiday
-        const holiday = isDateInHoliday(dateYmd, holidays);
+        const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = util.formatDate(dayDate, lessonsDateFormat);
@@ -112,6 +104,8 @@
       }
 
       log('debug', `[lessons] ${dateYmd}: ${entries.length} entries`);
+
+      let renderedForDate = 0;
 
       // Render lessons for this date
       for (const entry of entries) {
@@ -134,6 +128,7 @@
         }
 
         addedRows++;
+        renderedForDate++;
 
         // Use only the lessons-specific date format as requested by configuration
         const dateLabel = util.formatDate(timeForDay, lessonsDateFormat);
@@ -196,6 +191,17 @@
         }
 
         addTableRow(table, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
+      }
+
+      // If no rows rendered for this date (all filtered), still show holiday notice if applicable
+      if (renderedForDate === 0) {
+        const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
+        if (holiday) {
+          log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
+          const holidayDateStr = util.formatDate(dayDate, lessonsDateFormat);
+          addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
+          addedRows++;
+        }
       }
     }
 
