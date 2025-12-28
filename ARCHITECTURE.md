@@ -13,7 +13,7 @@ graph TB
 
     subgraph Backend["⚙️ Backend (Node.js)"]
         NH["node_helper.js<br/>(Coordinator)"]
-        
+
         subgraph Services["🔧 Services (lib/)"]
             HttpClient["httpClient.js<br/>(Generic HTTP)"]
             Auth["authService.js<br/>(Auth & Tokens)"]
@@ -153,7 +153,7 @@ sequenceDiagram
     NH->>NH: configValidator.validateConfig()<br/>(schema validation)
     NH->>NH: configValidator.applyLegacyMappings()<br/>(25 legacy key mappings)
     NH->>NH: widgetConfigValidator.validateAllWidgets()<br/>(widget-specific validation)
-    
+
     Note over NH: Auto-Discovery (if students[] empty)
     alt students[] is empty
         NH->>Auth: getAuth() for parent account
