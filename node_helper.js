@@ -1695,22 +1695,43 @@ module.exports = NodeHelper.create({
 
       // Validate configuration and return errors to frontend if invalid
       try {
+        // First apply legacy mappings to convert old keys to new structure
+        const { normalizedConfig, legacyUsed } = applyLegacyMappings(this.config);
+
+        // Persist normalized config so the helper uses mapped keys everywhere
+        this.config = normalizedConfig;
+
+        // Log any legacy keys that were used
+        if (legacyUsed && legacyUsed.length > 0) {
+          this._mmLog(
+            'warn',
+            null,
+            `Legacy config keys detected: ${legacyUsed.join(', ')}. These are still supported but will be auto-converted.`
+          );
+        }
+
         const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
-        const { valid, errors, warnings } = validateConfig(this.config, validatorLogger);
+        const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
+
+        // Add legacy key usage to the warning list so users see a clear notice
+        const legacyWarnings = (legacyUsed || []).map(
+          (key) => `Deprecated configuration field detected: "${key}" has been mapped to the new schema.`
+        );
+        const combinedWarnings = [...(warnings || []), ...legacyWarnings];
         if (!valid) {
           this.sendSocketNotification('CONFIG_ERROR', {
             errors,
-            warnings,
+            warnings: combinedWarnings,
             severity: 'ERROR',
             message: 'Configuration validation failed',
           });
           return;
         }
-        if (warnings && warnings.length > 0) {
+        if (combinedWarnings.length > 0) {
           // Only send CONFIG_WARNING once per helper lifecycle to avoid repeated warnings
           if (!this._configWarningsSent) {
             this.sendSocketNotification('CONFIG_WARNING', {
-              warnings,
+              warnings: combinedWarnings,
               severity: 'WARN',
               message: 'Configuration has warnings (deprecated fields detected)',
             });
@@ -1925,6 +1946,7 @@ module.exports = NodeHelper.create({
 
     let rangeStart = new Date(baseNow);
     let rangeEnd = new Date(baseNow);
+    const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
     // Use per-student `pastDays` / `nextDays` (preferred). Fall back to legacy keys.
     const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? this.config?.pastDays ?? this.config?.pastDaysToShow ?? 0);
@@ -2242,6 +2264,33 @@ module.exports = NodeHelper.create({
     const compactMessagesOfDay = fetchMessagesOfDay ? compactArray(rawMessagesOfDay, schemas.message) : [];
     const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
 
+    const toYmd = (d) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    const rangeStartYmd = toYmd(rangeStart);
+    const rangeEndYmd = toYmd(rangeEnd);
+    const holidayByDate = (() => {
+      if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
+      const map = {};
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+        const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
+        if (holiday) map[ymd] = holiday;
+        // increment date
+        const year = Math.floor(ymd / 10000);
+        const month = Math.floor((ymd % 10000) / 100) - 1;
+        const day = ymd % 100;
+        const tmp = new Date(year, month, day);
+        tmp.setDate(tmp.getDate() + 1);
+        ymd = tmp.getFullYear() * 10000 + (tmp.getMonth() + 1) * 100 + tmp.getDate();
+      }
+      return map;
+    })();
+
+    const findHolidayForDate = (ymd, holidays) => {
+      if (!Array.isArray(holidays) || holidays.length === 0) return null;
+      const dateNum = Number(ymd);
+      return holidays.find((h) => Number(h.startDate) <= dateNum && dateNum <= Number(h.endDate)) || null;
+    };
+    const activeHoliday = findHolidayForDate(todayYmd, compactHolidays);
+
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
       title: student.title,
@@ -2254,6 +2303,8 @@ module.exports = NodeHelper.create({
       absences: compactAbsences,
       messagesOfDay: compactMessagesOfDay,
       holidays: compactHolidays,
+      holidayByDate,
+      currentHoliday: activeHoliday,
       // Absences are now available via REST API even for parent accounts
       absencesUnavailable: false,
     };
@@ -2285,9 +2336,17 @@ module.exports = NodeHelper.create({
       }
 
       // ===== ADD EMPTY DATA WARNINGS =====
-      if (timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
+      // Suppress the empty-lessons warning during holidays to avoid noise when no lessons are expected
+      if (!activeHoliday && timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
         const emptyWarn = this._checkEmptyDataWarning(timetable, 'lessons', student.title, true);
         addWarning(emptyWarn);
+      }
+      if (activeHoliday) {
+        this._mmLog(
+          'debug',
+          student,
+          `Skipping empty lessons warning: holiday "${activeHoliday.longName || activeHoliday.name}" (today=${todayYmd})`
+        );
       }
 
       const uniqWarnings = Array.from(new Set(warnings));

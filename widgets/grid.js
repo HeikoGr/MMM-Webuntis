@@ -90,21 +90,7 @@ function getNowLineState(ctx) {
     log('debug', '[grid] Now-line updater stopped');
   }
 
-  function isDateInHoliday(dateYmd, holidays) {
-    if (!holidays || !Array.isArray(holidays) || holidays.length === 0) return null;
-
-    const dateNum = parseInt(dateYmd, 10);
-    for (const holiday of holidays) {
-      const start = parseInt(holiday.startDate, 10);
-      const end = parseInt(holiday.endDate, 10);
-      if (dateNum >= start && dateNum <= end) {
-        return holiday;
-      }
-    }
-    return null;
-  }
-
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
+  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits) {
     // Normalized config from backend already has all legacy keys mapped
     // Default grid.nextDays to 3 to show a few days ahead (homework matching needs reasonable visibility)
     const configuredNext = studentConfig?.grid?.nextDays ?? studentConfig?.nextDays ?? 3;
@@ -474,8 +460,8 @@ function getNowLineState(ctx) {
         bothInner.classList.add('is-today');
       }
 
-      // Check for holidays
-      const holiday = isDateInHoliday(dateStr, holidays);
+      // Check for holidays using backend-prepared map
+      const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
       if (holiday) {
         const holidayNotice = document.createElement('div');
         holidayNotice.className = 'grid-holiday-notice';

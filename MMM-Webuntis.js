@@ -359,7 +359,7 @@ Module.register('MMM-Webuntis', {
     const warnings = [];
 
     // Validate displayMode
-    const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
+    const validWidgets = ['list', 'grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
     if (config.displayMode && typeof config.displayMode === 'string') {
       const widgets = config.displayMode
         .split(',')
@@ -433,14 +433,14 @@ Module.register('MMM-Webuntis', {
     return hh * 60 + mm;
   },
 
-  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
+  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams) {
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
       this._log('warn', 'grid widget script not loaded');
       return null;
     }
-    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
+    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
   },
 
   _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
@@ -508,6 +508,7 @@ Module.register('MMM-Webuntis', {
     this.absencesUnavailableByStudent = {};
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
+    this.holidayMapByStudent = {};
     this.preprocessedByStudent = {};
     this.moduleWarningsSet = new Set();
     this._domUpdateTimer = null;
@@ -680,7 +681,7 @@ Module.register('MMM-Webuntis', {
           const hasLessons = timetable.length > 0;
           const hasHolidays = holidays.length > 0;
           if (timeUnits.length > 0 && (hasLessons || hasHolidays)) {
-            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
+            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
             if (gridElem) wrapper.appendChild(gridElem);
           }
         }
@@ -755,7 +756,20 @@ Module.register('MMM-Webuntis', {
   },
 
   socketNotificationReceived(notification, payload) {
-    if (!payload || this.identifier !== payload.id) {
+    if (payload && payload.id && this.identifier !== payload.id) {
+      return;
+    }
+
+    if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
+      const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
+      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+      warnList.forEach((w) => {
+        if (!this.moduleWarningsSet.has(w)) {
+          this.moduleWarningsSet.add(w);
+          this._log('warn', `Config warning: ${w}`);
+        }
+      });
+      this.updateDom();
       return;
     }
 
@@ -837,6 +851,7 @@ Module.register('MMM-Webuntis', {
     this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
 
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
+    this.holidayMapByStudent[title] = payload.holidayByDate || {};
 
     this._scheduleDomUpdate();
   },
