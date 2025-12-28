@@ -53,31 +53,22 @@
         const nowDate = new Date(nowYear, nowMonth - 1, nowDay);
         const daysDiff = Math.floor((nowDate - absDate) / (1000 * 60 * 60 * 24));
 
-        log('debug', `  [absences] ${absenceYmd}: daysDiff=${daysDiff}, reason="${ab.reason}"`);
-
         // daysDiff > 0 = past, daysDiff < 0 = future
         // rangeStart: show up to N days in the past
         // rangeEnd: show up to N days in the future
         if (rangeStart !== null && daysDiff > rangeStart) {
-          log('debug', `    → filter: daysDiff(${daysDiff}) > rangeStart(${rangeStart})`);
           return false;
         }
         if (rangeEnd !== null && daysDiff < -rangeEnd) {
-          log('debug', `    → filter: daysDiff(${daysDiff}) < -rangeEnd(${-rangeEnd})`);
           return false;
         }
-        log('debug', `    → INCLUDE`);
         return true;
       })
       .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
 
-    log('debug', `[absences] after filter: ${sorted.length} entries`);
-
     let visibleCount = 0;
     for (const ab of sorted) {
       if (maxItems !== null && maxItems > 0 && visibleCount >= maxItems) break;
-
-      log('debug', `[absences] add: date=${ab?.date}, reason="${ab?.reason || 'none'}"`);
 
       const dateRaw = ab?.date;
       const dateFormat = studentConfig?.absences?.dateFormat ?? 'dd.MM.';
@@ -125,7 +116,6 @@
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 
-      log('debug', `[absences] Adding row: meta="${meta || ctx.translate('absences')}", data="${data.substring(0, 50)}..."`);
       addTableRow(table, 'absenceRow', studentCellTitle, meta || ctx.translate('absences'), data);
       addedRows++;
       visibleCount++;

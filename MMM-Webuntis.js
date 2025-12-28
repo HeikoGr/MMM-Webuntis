@@ -53,8 +53,8 @@ Module.register('MMM-Webuntis', {
 
     homework: {
       dateFormat: 'dd.MM.',
-      pastDays: 14,
-      nextDays: 28,
+      pastDays: 1,
+      nextDays: 7,
     },
 
     absences: {
@@ -511,6 +511,7 @@ Module.register('MMM-Webuntis', {
     this.preprocessedByStudent = {};
     this.moduleWarningsSet = new Set();
     this._domUpdateTimer = null;
+    this._lastFetchTime = 0; // Debounce rapid FETCH_DATA requests
 
     this._paused = false;
     this._startNowLineUpdater();
@@ -544,7 +545,7 @@ Module.register('MMM-Webuntis', {
     // Send a sanitized copy to the backend where each student inherits module
     // defaults and legacy keys have been mapped. The backend (node_helper)
     // expects normalized student objects in a closed system.
-    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
+    this._sendFetchData('startup');
 
     this._log('info', 'MMM-Webuntis started with config:', this.config);
   },
@@ -574,8 +575,23 @@ Module.register('MMM-Webuntis', {
     if (!interval || !Number.isFinite(interval) || interval <= 0) return;
 
     this._fetchTimer = setInterval(() => {
-      this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
+      this._sendFetchData('periodic');
     }, interval);
+  },
+
+  _sendFetchData(reason = 'manual') {
+    const now = Date.now();
+    const timeSinceLastFetch = now - this._lastFetchTime;
+    const minInterval = 5000; // Minimum 5 seconds between FETCH_DATA requests
+
+    // Debounce: skip if too soon after last fetch
+    if (timeSinceLastFetch < minInterval) {
+      this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch (${timeSinceLastFetch}ms since last)`);
+      return;
+    }
+
+    this._lastFetchTime = now;
+    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
   },
 
   _stopFetchTimer() {
@@ -607,7 +623,7 @@ Module.register('MMM-Webuntis', {
 
   resume() {
     this._paused = false;
-    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
+    this._sendFetchData('resume');
     this._startFetchTimer();
     this._startNowLineUpdater();
   },
@@ -653,6 +669,11 @@ Module.register('MMM-Webuntis', {
           const homeworks = this.homeworksByStudent?.[studentTitle] || [];
           const exams = this.examsByStudent?.[studentTitle] || [];
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
+
+          this._log('debug', `[grid-prep] homeworks for ${studentTitle}: ${homeworks.length} items`);
+          if (homeworks.length > 0) {
+            this._log('debug', `  First hw: dueDate=${homeworks[0].dueDate}, su=${JSON.stringify(homeworks[0].su)}`);
+          }
 
           // Render grid if we have timeUnits AND (lessons OR holidays)
           // This ensures the grid is shown even during holidays when there are no lessons
@@ -807,6 +828,7 @@ Module.register('MMM-Webuntis', {
     const hw = payload.homeworks;
     const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
     this.homeworksByStudent[title] = hwNorm;
+    this._log('debug', `[GOT_DATA] Assigned ${hwNorm.length} homeworks to student "${title}"`);
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
 
