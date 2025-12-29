@@ -651,6 +651,7 @@ Module.register('MMM-Webuntis', {
   },
 
   getDom() {
+    this._log('debug', `[getDom] Called - generating DOM`);
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
 
@@ -697,26 +698,44 @@ Module.register('MMM-Webuntis', {
             this._log('debug', `  First hw: dueDate=${homeworks[0].dueDate}, su=${JSON.stringify(homeworks[0].su)}`);
           }
 
-          // Render grid if we have timeUnits AND (lessons OR holidays)
-          // This ensures the grid is shown even during holidays when there are no lessons
-          const hasLessons = timetable.length > 0;
+          // Render grid if we have timeUnits OR holidays
+          // This ensures the grid is shown even during holidays when there are no lessons/timeUnits
           const hasHolidays = holidays.length > 0;
-          if (timeUnits.length > 0 && (hasLessons || hasHolidays)) {
+          this._log('debug', `[grid-check] timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays}, holidays.length=${holidays.length}`);
+          if (timeUnits.length > 0 || hasHolidays) {
+            this._log('debug', `[grid-render] Rendering grid for ${studentTitle}`);
             const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
-            if (gridElem) wrapper.appendChild(gridElem);
+            if (gridElem) {
+              this._log('debug', `[grid-append] Grid element created, appending to wrapper`);
+              wrapper.appendChild(gridElem);
+            } else {
+              this._log('debug', `[grid-skip] Grid element was null/undefined`);
+            }
+          } else {
+            this._log('debug', `[grid-skip] Condition not met (timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays})`);
           }
         }
         continue;
       }
 
       if (widget === 'lessons') {
+        this._log('debug', '[lessons-check] Rendering lessons widget');
         const lessonsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const timetable = this.timetableByStudent[studentTitle] || [];
           const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
+          this._log(
+            'debug',
+            `[lessons-check] ${studentTitle}: timetable=${timetable.length}, holidays=${holidays.length}, holidayMap=${Object.keys(this.holidayMapByStudent?.[studentTitle] || {}).length}`
+          );
           return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
         });
-        if (lessonsTable) wrapper.appendChild(lessonsTable);
+        if (lessonsTable) {
+          this._log('debug', '[lessons-check] Appending lessons table to wrapper');
+          wrapper.appendChild(lessonsTable);
+        } else {
+          this._log('debug', '[lessons-check] No lessons table returned');
+        }
         continue;
       }
 
@@ -882,6 +901,12 @@ Module.register('MMM-Webuntis', {
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
     this.holidayMapByStudent[title] = payload.holidayByDate || {};
 
+    this._log(
+      'debug',
+      `[GOT_DATA] holidays: ${this.holidaysByStudent[title].length}, holidayMap keys: ${Object.keys(this.holidayMapByStudent[title] || {}).length}`
+    );
+    this._log('debug', `[GOT_DATA] Calling _scheduleDomUpdate()`);
     this._scheduleDomUpdate();
+    this._log('debug', `[GOT_DATA] _scheduleDomUpdate() called`);
   },
 });

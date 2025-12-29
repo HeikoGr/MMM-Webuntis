@@ -8,21 +8,29 @@
   const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
 
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
+    log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
     let addedRows = 0;
 
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
     const configuredNext = util.getWidgetConfig(studentConfig, 'lessons', 'nextDays');
+    log('debug', `[LESSONS-DEBUG] ${studentTitle}: configuredNext=${configuredNext}`);
     if (!configuredNext || Number(configuredNext) <= 0) {
+      log('debug', `[LESSONS-DEBUG] ${studentTitle}: skipped - nextDays not configured`);
       log('debug', `[lessons] skipped: nextDays not configured for "${studentTitle}"`);
       return 0;
     }
 
     const timetableLength = Array.isArray(timetable) ? timetable.length : 0;
     const holidaysLength = Array.isArray(holidays) ? holidays.length : 0;
+    const holidayMapLength = ctx.holidayMapByStudent?.[studentTitle] ? Object.keys(ctx.holidayMapByStudent[studentTitle]).length : 0;
+    log(
+      'debug',
+      `[LESSONS-DEBUG] ${studentTitle}: timetable=${timetableLength}, holidays=${holidaysLength}, holidayMap=${holidayMapLength}`
+    );
     log(
       ctx,
       'debug',
-      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | days: ${studentConfig.daysToShow}`
+      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength} | days: ${studentConfig.daysToShow}`
     );
 
     // Use module's computed today value when available (supports debugDate), else local now
