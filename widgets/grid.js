@@ -518,27 +518,16 @@ function getNowLineState(ctx) {
     inner._totalHeight = totalHeight;
   }
 
-  function addHolidayNotice(inner, holiday, totalHeight, escapeHtml) {
-    const holidayNotice = document.createElement('div');
-    holidayNotice.className = 'grid-holiday-notice';
-    holidayNotice.style.position = 'absolute';
-    holidayNotice.style.top = '0';
-    holidayNotice.style.left = '0';
-    holidayNotice.style.right = '0';
-    holidayNotice.style.height = `${totalHeight}px`;
-    holidayNotice.style.display = 'flex';
-    holidayNotice.style.alignItems = 'center';
-    holidayNotice.style.justifyContent = 'center';
-    holidayNotice.style.background = 'rgba(255, 200, 0, 0.15)';
-    holidayNotice.style.zIndex = '5';
-    holidayNotice.style.pointerEvents = 'none';
-    holidayNotice.innerHTML = `
-      <div style="text-align: center; padding: 8px;">
-        <div style="font-size: 2em; margin-bottom: 4px;">🏖️</div>
-        <div style="font-weight: bold;">${escapeHtml(holiday.longName || holiday.name)}</div>
-      </div>
+  function addDayNotice(inner, totalHeight, icon, text, iconSize = '1.5em') {
+    // Unified function for both holiday and no-lessons notices
+    const notice = document.createElement('div');
+    notice.className = 'grid-lesson lesson lesson-content no-lesson';
+    notice.style.height = `${totalHeight}px`;
+    notice.innerHTML = `
+      <div style="font-size: ${iconSize}; margin-bottom: 4px;">${icon}</div>
+      <div style="font-weight: bold;">${text}</div>
     `;
-    inner.appendChild(holidayNotice);
+    inner.appendChild(notice);
   }
 
   function addMoreBadge(inner, hiddenCount, ctx) {
@@ -546,29 +535,7 @@ function getNowLineState(ctx) {
     moreBadge.className = 'grid-more-badge';
     moreBadge.innerText = ctx.translate('more');
     moreBadge.title = `${hiddenCount} weitere Stunde${hiddenCount > 1 ? 'n' : ''} ausgeblendet`;
-    moreBadge.style.position = 'absolute';
-    moreBadge.style.right = '6px';
-    moreBadge.style.bottom = '6px';
-    moreBadge.style.zIndex = 30;
-    moreBadge.style.padding = '2px 6px';
-    moreBadge.style.background = 'rgba(0,0,0,0.45)';
-    moreBadge.style.color = '#fff';
-    moreBadge.style.borderRadius = '4px';
-    moreBadge.style.fontSize = '0.85em';
-    moreBadge.style.cursor = 'default';
     inner.appendChild(moreBadge);
-  }
-
-  function addNoLessonsNotice(inner, totalHeight, ctx) {
-    const noLesson = document.createElement('div');
-    noLesson.className = 'grid-lesson lesson lesson-content no-lesson';
-    noLesson.style.position = 'absolute';
-    noLesson.style.top = '0px';
-    noLesson.style.left = '0px';
-    noLesson.style.right = '0px';
-    noLesson.style.height = `${totalHeight}px`;
-    noLesson.innerHTML = `<b>${ctx.translate('no-lessons')}</b>`;
-    inner.appendChild(noLesson);
   }
 
   // ============================================================================
@@ -578,10 +545,7 @@ function getNowLineState(ctx) {
   function createLessonCell(topPx, heightPx, dateStr, eMin) {
     const cell = document.createElement('div');
     cell.className = 'grid-lesson lesson';
-    cell.style.position = 'absolute';
     cell.style.top = `${topPx}px`;
-    cell.style.left = '0px';
-    cell.style.right = '0px';
     cell.style.height = `${heightPx}px`;
     cell.setAttribute('data-date', dateStr);
     cell.setAttribute('data-end-min', String(eMin));
@@ -707,11 +671,13 @@ function getNowLineState(ctx) {
     // 2. Calculate time range
     const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
+    const fullDayEnd = allEnd; // Store original end time for holiday overlays
     allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits, studentTitle, ctx);
 
     const totalMinutes = allEnd - allStart;
     const pxPerMinute = 0.75;
     const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
+    const fullDayHeight = Math.max(120, Math.round((fullDayEnd - allStart) * pxPerMinute));
 
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
@@ -786,10 +752,10 @@ function getNowLineState(ctx) {
       if (isToday) bothInner.classList.add('is-today');
       bothWrap.appendChild(bothInner);
 
-      // Add holiday notice if applicable
+      // Add holiday notice if applicable - use full day height
       const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
       if (holiday) {
-        addHolidayNotice(bothInner, holiday, totalHeight, escapeHtml);
+        addDayNotice(bothInner, fullDayHeight, '🏖️', escapeHtml(holiday.longName || holiday.name), '2em');
       }
 
       // Add to grid
@@ -815,9 +781,12 @@ function getNowLineState(ctx) {
         );
       }
 
-      // Add "no lessons" notice if empty
+      // Add "no lessons" notice if empty and not a holiday
       if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-        addNoLessonsNotice(bothInner, totalHeight, ctx);
+        // Don't show "no lessons" if there's a holiday notice
+        if (!holiday) {
+          addDayNotice(bothInner, totalHeight, '📅', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
+        }
       } else {
         // Render lesson cells
         renderLessonCells(

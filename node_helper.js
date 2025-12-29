@@ -623,6 +623,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
         mode: 'qr',
       };
     }
@@ -647,6 +648,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
         mode: 'parent',
       };
     }
@@ -669,6 +671,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
         mode: 'direct',
       };
     }
@@ -736,13 +739,29 @@ module.exports = NodeHelper.create({
 
   _compactHolidays(rawHolidays) {
     if (!Array.isArray(rawHolidays)) return [];
-    return rawHolidays.map((h) => ({
-      id: h.id ?? null,
-      name: h.name ?? h.longName ?? '',
-      longName: h.longName ?? h.name ?? '',
-      startDate: h.startDate ?? null,
-      endDate: h.endDate ?? null,
-    }));
+    return rawHolidays.map((h) => {
+      // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
+      let startDate = h.startDate;
+      let endDate = h.endDate;
+
+      // Convert ISO timestamp to YYYYMMDD if needed
+      if (h.start && !h.startDate) {
+        const startDateObj = new Date(h.start);
+        startDate = startDateObj.getFullYear() * 10000 + (startDateObj.getMonth() + 1) * 100 + startDateObj.getDate();
+      }
+      if (h.end && !h.endDate) {
+        const endDateObj = new Date(h.end);
+        endDate = endDateObj.getFullYear() * 10000 + (endDateObj.getMonth() + 1) * 100 + endDateObj.getDate();
+      }
+
+      return {
+        id: h.id ?? null,
+        name: h.name ?? h.longName ?? '',
+        longName: h.longName ?? h.name ?? '',
+        startDate: startDate ?? null,
+        endDate: endDate ?? null,
+      };
+    });
   },
 
   _wantsWidget(widgetName, displayMode) {
@@ -1266,9 +1285,22 @@ module.exports = NodeHelper.create({
     const absencesRangeEnd = new Date(baseNow);
     absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
-    // Get Timegrid (raw) - extract from timetable data (REST API doesn't have separate timegrid endpoint)
-    // We'll extract time slots after fetching timetable data
+    // Get Timegrid - prefer appData.currentSchoolYear.timeGrid.units, fallback to extraction from timetable
+    // This ensures we have timeUnits even during holidays when no lessons are scheduled
     let grid = [];
+
+    // Try to extract timeGrid from appData first
+    if (authSession?.appData?.currentSchoolYear?.timeGrid?.units) {
+      const units = authSession.appData.currentSchoolYear.timeGrid.units;
+      if (Array.isArray(units) && units.length > 0) {
+        grid = units.map((u) => ({
+          name: String(u.unitOfDay || u.period || ''),
+          startTime: u.startTime || 0,
+          endTime: u.endTime || 0,
+        }));
+        logger(`✓ Timegrid: extracted ${grid.length} time slots from appData.currentSchoolYear.timeGrid\n`);
+      }
+    }
 
     // Prepare raw timetable containers
     let timetable = [];
@@ -1310,10 +1342,10 @@ module.exports = NodeHelper.create({
     // Exams (raw)
     let rawExams = [];
 
-    // Extract timegrid from timetable data if needed for grid widget
-    if (fetchTimegrid && timetable.length > 0) {
+    // Extract timegrid from timetable data only if not already available from appData
+    if (fetchTimegrid && grid.length === 0 && timetable.length > 0) {
       grid = this._extractTimegridFromTimetable(timetable);
-      logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable\n`);
+      logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable (fallback)\n`);
     }
     const examsNextDays =
       student.exams?.nextDays ??
@@ -1528,10 +1560,25 @@ module.exports = NodeHelper.create({
       logger(`Holidays: extracting from app/data...`);
       try {
         // Holidays are included in the app/data response (authSession.appData)
-        // For now, return empty array - holidays can be added later via REST API
-        // TODO: Implement holiday extraction from app/data or separate REST endpoint
-        rawHolidays = [];
-        logger(`Holidays: ${rawHolidays.length} periods (REST API holiday support pending)\n`);
+        // Log appData structure for debugging
+        this._mmLog('debug', student, `appData available: ${Boolean(authSession && authSession.appData)}`);
+        if (authSession && authSession.appData) {
+          this._mmLog('debug', student, `appData keys: ${Object.keys(authSession.appData).join(', ')}`);
+          // Check if holidays are directly in appData or nested
+          if (Array.isArray(authSession.appData.holidays)) {
+            rawHolidays = authSession.appData.holidays;
+            logger(`Holidays: ${rawHolidays.length} periods extracted from appData.holidays\n`);
+          } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
+            rawHolidays = authSession.appData.data.holidays;
+            logger(`Holidays: ${rawHolidays.length} periods extracted from appData.data.holidays\n`);
+          } else {
+            rawHolidays = [];
+            logger(`Holidays: no holidays array found in appData\n`);
+          }
+        } else {
+          rawHolidays = [];
+          logger(`Holidays: no appData available\n`);
+        }
       } catch (error) {
         this._mmLog('error', student, `Holidays extraction failed: ${error && error.message ? error.message : error}\n`);
       }
