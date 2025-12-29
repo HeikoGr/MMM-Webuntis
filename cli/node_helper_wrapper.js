@@ -451,8 +451,14 @@ async function cmdFetch(flags) {
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
     let moduleConfig = getModuleConfig(config);
-    // Merge with module defaults to ensure all options have values
+
+    // Apply legacy config normalization FIRST to detect deprecated keys and show warnings
+    // This must happen before merging defaults, otherwise legacy values won't be mapped
+    moduleConfig = nodeHelper._normalizeLegacyConfig(moduleConfig);
+
+    // Then merge with module defaults to ensure all options have values
     moduleConfig = mergeWithModuleDefaults(moduleConfig);
+
     await nodeHelper._ensureStudentsFromAppData(moduleConfig);
     // Emulate MagicMirror socket payload: set id, config and per-student fallbacks
     moduleConfig.id = moduleConfig.id || 'wrapper-cli';
