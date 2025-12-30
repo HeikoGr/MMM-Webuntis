@@ -12,7 +12,28 @@
 
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
-## BREAKING CHANGES in 0.4.0
+## Recent Updates
+
+### Version 0.5.0 - REST API Migration & Major Features 🚀
+
+**BREAKING CHANGE**: This release migrates from the deprecated JSON-RPC API to the modern REST API.
+
+**Major Changes**:
+- ✨ **REST API Integration**: All data operations now use REST endpoints (timetable, exams, homework, absences, messages of day)
+- 🔐 **QR Code Login**: Support for direct student authentication via WebUntisQR codes
+- 👨‍👩‍👧‍👦 **Parent Account Mode**: Configure once with parent credentials, automatically discover all children
+- 🎯 **Auto-Discovery**: Students automatically detected from WebUntis `app/data` endpoint
+- 📅 **Holiday Support**: Full holiday integration in grid and lessons widgets
+- 📢 **Messages Widget**: New widget for school announcements
+- 🔧 **Enhanced Configuration**: Widget-specific settings, improved validation, better error messages
+
+**Upgrade Notes**: Existing QR code and username/password configurations remain compatible. Parent account mode is optional. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+### Version 0.4.x - Configuration & Display
+
+See migration notes below for breaking changes introduced in 0.4.0.
+
+## BREAKING CHANGES in 0.4.0 (Historical)
 
 This release consolidates several configuration keys and changes how the module handles config compatibility.
 
