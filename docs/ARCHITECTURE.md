@@ -285,29 +285,32 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant FD as fetchData()
-    participant TG as _getTimetableViaRest<br/>_getExamsViaRest<br/>_getHomeworkViaRest<br/>_getAbsencesViaRest
-    participant RC as _getRestAuthTokenAndCookies<br/>(cached)
+    participant API as webuntisApiService<br/>(getTimetable/getExams/<br/>getHomework/getAbsences)
+    participant Auth as authService<br/>(cached)
     participant REST as WebUntis API
 
-    FD->>FD: _buildRestTargets()<br/>(QR | parent account)
-    FD->>RC: request auth token + cookies
+    FD->>FD: Prepare getAuth callback<br/>(QR code or credentials)
+    FD->>API: callWebUntisAPI({ dataType, getAuth, ... })
 
+    API->>Auth: getAuth()
     alt Token in cache & valid
-        RC-->>FD: return cached token
+        Auth-->>API: return cached token + metadata
     else Token expired or missing
-        RC->>REST: POST /jsonrpc.do?method=authenticate
-        REST-->>RC: cookies (Set-Cookie header)
-        RC->>REST: GET /api/token/new
-        REST-->>RC: bearer token
-        RC->>RC: _getRestAuthTokenAndCookies()<br/>cache 14min
-        RC-->>FD: return token + cookies
+        Auth->>REST: POST /jsonrpc.do (authenticate)
+        REST-->>Auth: cookies (Set-Cookie header)
+        Auth->>REST: GET /api/token/new
+        REST-->>Auth: bearer token
+        Auth->>REST: GET /app/data (fetch metadata)
+        REST-->>Auth: tenantId, schoolYearId, appData
+        Auth->>Auth: Cache 14min
+        Auth-->>API: return token + metadata
     end
 
-    FD->>TG: call with (target, dateRange, studentId, options)
-    TG->>REST: GET /api/rest/v1/timetable/students/{id}
+    API->>REST: GET /WebUntis/api/rest/... (endpoint)
     Note over REST: headers:<br/>Authorization: Bearer {token}<br/>Cookie: session_cookies<br/>Tenant-Id, X-Webuntis-Api-School-Year-Id
-    REST-->>TG: JSON response (timetable[])
-    TG->>TG: normalize & transform
+    REST-->>API: JSON response (data[])
+    API->>API: dataTransformer.transform*Data()
+    API-->>FD: return normalized data[]
     TG-->>FD: return data[]
 ```
 
@@ -395,19 +398,15 @@ graph TD
 
 | Function | Purpose | Called by | Calls |
 |----------|---------|-----------|-------|
-| `start()` | Initialize caches & timers | MagicMirror | `_startCacheCleanup()` |
-| `socketNotificationReceived()` | Entry point for FETCH_DATA | Frontend | `_ensureStudentsFromAppData()`, `processGroup()` |
-| `_ensureStudentsFromAppData()` | Auto-discover students if empty | `socketNotificationReceived()` | `_getRestAuthTokenAndCookies()`, `_deriveStudentsFromAppData()`, `_normalizeLegacyConfig()` |
-| `_normalizeLegacyConfig()` | Map old config keys → new | `_ensureStudentsFromAppData()`, `processGroup()` | — |
-| `processGroup()` | Process credential group | `socketNotificationReceived()` | `_createUntisClient()`, `fetchData()` |
-| `fetchData()` | Main data fetch orchestration | `processGroup()` | `_getTimetableViaRest()`, `_getExamsViaRest()`, etc. |
-| `_getTimetableViaRest()` | Fetch timetable via REST | `fetchData()` | `_callRest()`, `_normalizeDateToInteger()` |
-| `_getExamsViaRest()` | Fetch exams | `fetchData()` | `_callRest()`, `_compactExams()` |
-| `_getHomeworkViaRest()` | Fetch homework | `fetchData()` | `_callRest()` |
-| `_getAbsencesViaRest()` | Fetch absences | `fetchData()` | `_callRest()` |
-| `_getRestAuthTokenAndCookies()` | Obtain & cache auth token | Data fetch functions | REST (via axios) |
-| `_createUntisClient()` | Create WebUntis client | `processGroup()` | — |
-| `_compact*()` | Reduce payload size | `fetchData()` | — |
+| `start()` | Initialize services & caches | MagicMirror | AuthService, CacheManager |
+| `socketNotificationReceived()` | Entry point for FETCH_DATA | Frontend | `_ensureStudentsFromAppData()`, `fetchData()` |
+| `_ensureStudentsFromAppData()` | Auto-discover students if empty | `socketNotificationReceived()` | `authService.getAuth()`, `_deriveStudentsFromAppData()`, `_normalizeLegacyConfig()` |
+| `_normalizeLegacyConfig()` | Map old config keys → new | `_ensureStudentsFromAppData()`, `socketNotificationReceived()` | `configValidator.applyLegacyMappings()` |
+| `fetchData()` | Main data fetch orchestration | `socketNotificationReceived()` | `webuntisApiService.*()`, `payloadCompactor.compactArray()` |
+| `_callRest()` | Generic REST call wrapper | `fetchData()` | Passed to webuntisApiService |
+| `_normalizeDateToInteger()` | Date format helper | `fetchData()` | `dataTransformer.normalizeDateToInteger()` |
+| `_deriveStudentsFromAppData()` | Extract student list from app/data | `_ensureStudentsFromAppData()` | — |
+| `_mmLog()` | Backend logging wrapper | All functions | `logger` |
 
 ### **Frontend (`MMM-Webuntis.js`)**
 
@@ -609,21 +608,23 @@ graph TD
 
 ## Performance Optimizations
 
-1. **Response Caching** (30s TTL): Avoid duplicate REST calls within 30 seconds
-2. **Auth Token Caching** (14min TTL): Reuse bearer tokens; refresh only when expired
-3. **Class ID Cache**: Cache resolved class IDs per credential+class combination
-4. **Payload Compaction**: Reduce socket message size via `_compact*()` functions
-5. **Debounced DOM Updates**: Coalesce multiple `GOT_DATA` into single DOM render
-6. **Credential Grouping**: Batch students by shared credentials to minimize login/logout cycles
+1. **Auth Token Caching** (14min TTL): AuthService caches bearer tokens and metadata; refresh only when expired
+2. **Class ID Cache**: CacheManager caches resolved class IDs per credential+class combination
+3. **Payload Compaction**: Reduce socket message size via `payloadCompactor.compactArray()` with schemas
+4. **Debounced DOM Updates**: Coalesce multiple `GOT_DATA` into single DOM render
+5. **Modular Services**: Specialized lib/ modules reduce coupling and enable easier testing/optimization
 
 ## Testing & Debugging
 
 ```bash
-# Interactive CLI (test config + fetch)
-node cli/cli.js
-
-# Debug script (single fetch cycle)
+# CLI tool (test config + fetch data)
 npm run debug
+
+# CLI with specific student
+npm run debug -- --student 1
+
+# CLI with verbose output
+npm run debug -- --verbose
 
 # Check linting
 node --run lint

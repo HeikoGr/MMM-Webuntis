@@ -588,18 +588,24 @@ Additional grid rendering notes:
 
 ## CLI tool (config check)
 
-This module includes an interactive CLI tool that reads your MagicMirror config, lists configured students, and lets you query a selected student's timetable, exams, homework, and absences.
+This module includes a CLI tool that reads your MagicMirror config and fetches timetable, exams, homework, and absences for configured students.
 
 Run from the module directory:
 
 ```bash
-node cli/cli.js
+npm run debug
 ```
 
-If your config is not in a standard location, pass it explicitly:
+For more options:
 
 ```bash
-node cli/cli.js --config /path/to/config.js
+npm run debug -- --help
+```
+
+Use a custom config file:
+
+```bash
+npm run debug -- --config /path/to/config.js
 ```
 
 ## Dependencies

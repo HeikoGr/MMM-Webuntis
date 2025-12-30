@@ -1011,7 +1011,7 @@ async fetchData(untis, restClient, apiMode, student, identifier, credKey) {
 
 ### 3.3 CLI Testing Tool Enhancement
 
-**File:** `cli/cli.js`
+**File:** `cli/node_helper_wrapper.js`
 
 **Add option:**
 ```javascript
@@ -1397,16 +1397,16 @@ if (apiMode === 'jsonrpc' && !WEBUNTIS_AVAILABLE) {
 **New Commands:**
 ```bash
 # Test specific API mode
-node cli/cli.js --api-mode rest
+npm run debug -- --api-mode rest
 
-# Compare REST vs JSON-RPC results
-node cli/cli.js --compare-apis
+# Compare REST vs JSON-RPC results (future enhancement)
+npm run debug -- --compare-apis
 
-# Benchmark API performance
-node cli/cli.js --benchmark
+# Benchmark API performance (future enhancement)
+npm run debug -- --benchmark
 
 # Validate configuration for REST API
-node cli/cli.js --validate-rest-config
+npm run debug -- --validate-rest-config
 ```
 
 ---
@@ -1416,18 +1416,17 @@ node cli/cli.js --validate-rest-config
 ```
 MMM-Webuntis/
 ├── lib/
-│   └── webuntis-rest-client.js     ← NEW: REST API client
+│   └── webuntisApiService.js        ← EXISTS: REST API service (already implemented)
 ├── cli/
-│   ├── cli.js                       ← UPDATED: Add API mode selection
-│   └── test-webuntis-rest-api.js   ← UPDATED: Add comparison tests
+│   └── node_helper_wrapper.js      ← EXISTS: CLI tool (can be enhanced with API mode selection)
 ├── docs/
 │   ├── 01-getting-started/
-│   │   └── MIGRATION_GUIDE.md      ← NEW: Migration documentation
+│   │   └── MIGRATION_GUIDE.md      ← NEW: Migration documentation (if needed)
 │   └── 03-implementation/
 │       └── DETAILED_MIGRATION_PLAN.md  ← THIS FILE
-├── test/                            ← NEW: Test directory
+├── test/                            ← NEW: Test directory (future)
 │   └── webuntis-rest-client.test.js
-├── MMM-Webuntis.js                  ← UPDATED: Add apiMode to defaults
+├── MMM-Webuntis.js                  ← UPDATED: Add apiMode to defaults (future)
 ├── node_helper.js                   ← UPDATED: Major refactoring
 └── package.json                     ← UPDATED: Eventually remove webuntis dep
 ```

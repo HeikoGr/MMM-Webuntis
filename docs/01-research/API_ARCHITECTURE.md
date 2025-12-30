@@ -1,6 +1,6 @@
 # WebUntis API Architecture Summary
 
-**Last Updated:** December 18, 2025  
+**Last Updated:** December 18, 2025
 **Status:** Complete API ecosystem mapped and documented
 
 ## Quick Reference
@@ -210,7 +210,7 @@
    - Endpoint scanning
    - Usage: `node cli/api-discover.js config/config.js [mode]`
 
-3. **cli.js** - Interactive configuration tester
+3. **node_helper_wrapper.js** - CLI tool for testing configuration and data fetching
    - Test credentials
    - List students
    - Validate setup

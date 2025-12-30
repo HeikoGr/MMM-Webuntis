@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 /**
  * Node Helper CLI Wrapper - Tests the real node_helper.js
  *
@@ -39,10 +37,9 @@ const Log = {
   wrapper_info: (...args) => console.log(`${ANSI.reset}[INFO] `, ...args),
 };
 
-let logLevel = 'info';
-
-function setLogLevel(level) {
-  logLevel = level;
+function setLogLevel(_level) {
+  // Log level is controlled by node_helper logger, not by this wrapper
+  // Keep function for API compatibility
 }
 
 const NodeHelper = {
@@ -79,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -141,20 +138,6 @@ function parseArgs(argv) {
   }
 
   return result;
-}
-
-function parseDate(dateStr) {
-  if (!dateStr) return new Date();
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) throw new Error(`Invalid date: ${dateStr}`);
-  return d;
-}
-
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -225,7 +208,7 @@ function loadModuleDefaults() {
     const defaultsStr = `({${match[1]}\n})`;
 
     // Evaluate to get the object (safe because we control the file)
-    const defaults = eval(defaultsStr); // eslint-disable-line no-eval
+    const defaults = eval(defaultsStr);
 
     return defaults;
   } catch (err) {
@@ -275,89 +258,19 @@ function mergeWithModuleDefaults(moduleConfig) {
     cachedDefaults = loadModuleDefaults();
   }
 
-  // Merge: defaults first, then override with config values
+  // Deep merge: defaults first, then override with config values
+  // Widget namespaces need deep merge, not shallow merge
   const merged = { ...cachedDefaults, ...moduleConfig };
+
+  // Deep merge widget namespaces
+  const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+  widgetNamespaces.forEach((widget) => {
+    if (cachedDefaults[widget] || moduleConfig[widget]) {
+      merged[widget] = { ...cachedDefaults[widget], ...moduleConfig[widget] };
+    }
+  });
+
   return merged;
-}
-
-/**
- * Get student credentials from config
- * Supports both direct credentials and parent account mode
- */
-function getStudentCredentials(config, studentIndex) {
-  const moduleConfig = getModuleConfig(config);
-  // Merge with defaults to ensure all values are present
-  const mergedConfig = mergeWithModuleDefaults(moduleConfig);
-  const students = mergedConfig.students || [];
-
-  if (!students.length) {
-    throw new Error('No students configured in config file');
-  }
-
-  if (studentIndex < 0 || studentIndex >= students.length) {
-    throw new Error(`Student index ${studentIndex} out of range (0-${students.length - 1})`);
-  }
-
-  const student = students[studentIndex];
-
-  const qrcode = student.qrcode;
-
-  // Try direct credentials first, then fall back to parent account
-  let username = student.username || mergedConfig.username;
-  let password = student.password || mergedConfig.password;
-
-  // Parent account fallback
-  if (!username) {
-    username = student.username || mergedConfig.username;
-  }
-  if (!password) {
-    password = student.password || mergedConfig.password;
-  }
-
-  let school = student.school || mergedConfig.school;
-  let server = student.server || mergedConfig.server;
-
-  // Derive school/server from QR code if present
-  if ((!school || !server) && qrcode && qrcode.startsWith('untis://')) {
-    try {
-      const qrUrl = new URL(qrcode);
-      school = school || qrUrl.searchParams.get('school');
-      server = server || qrUrl.searchParams.get('url');
-      if (server && server.startsWith('http')) {
-        server = new URL(server).hostname;
-      }
-    } catch (err) {
-      throw new Error(`QR code parsing failed for student ${studentIndex}: ${err.message}`);
-    }
-  }
-
-  if (!qrcode) {
-    if (!school || !username || !password || !server) {
-      throw new Error(
-        `Missing credentials for student ${studentIndex}. ` +
-          `Found: school=${school ? 'yes' : 'no'}, ` +
-          `username=${username ? 'yes' : 'no'}, ` +
-          `password=${password ? 'yes' : 'no'}, ` +
-          `server=${server ? 'yes' : 'no'}`
-      );
-    }
-  } else {
-    if (!school || !server) {
-      throw new Error(`Missing school/server for QR student ${studentIndex}`);
-    }
-  }
-
-  return {
-    qrcode,
-    school,
-    username,
-    password,
-    server,
-    studentId: student.studentId,
-    daysToShow: student.daysToShow || mergedConfig.daysToShow || 7,
-    examsDaysAhead:
-      student.exams?.daysAhead || student.examsDaysAhead || mergedConfig.exams?.daysAhead || mergedConfig.examsDaysAhead || 21,
-  };
 }
 
 /**
@@ -374,13 +287,6 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
   const student = students[studentIndex];
   const qrcode = student.qrcode;
   const school = student.school || mergedConfig.school;
-  const server = student.server || mergedConfig.server || 'webuntis.com';
-  const username = student.username || mergedConfig.username;
-  const password = student.password || mergedConfig.password;
-  const daysToShow = student.daysToShow || mergedConfig.daysToShow || 7;
-  const examsDaysAhead =
-    student.exams?.daysAhead || student.examsDaysAhead || mergedConfig.exams?.daysAhead || mergedConfig.examsDaysAhead || 21;
-  const studentId = student.studentId;
   const title = student.title || `Student ${studentIndex}`;
 
   Log.wrapper_info(`\n📚 Student ${studentIndex}: "${title}"`);
@@ -403,6 +309,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
       exams: payload?.exams?.length || 0,
       homework: payload?.homeworks?.length || 0,
       absences: payload?.absences?.length || 0,
+      messagesofday: payload?.messagesOfDay?.length || 0,
     };
 
     if (action === 'auth') {
@@ -412,6 +319,27 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
       Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
       Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
       Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
+      Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
+
+      // Show messages of day content if present
+      if (payload?.messagesOfDay?.length > 0) {
+        Log.wrapper_info('\n  📢 Messages of Day:');
+        payload.messagesOfDay.forEach((msg, idx) => {
+          const subject = msg.subject ? `[${msg.subject}]` : '';
+          const text = (msg.text || '').trim();
+
+          // Text comes pre-sanitized from backend with \n from <br> tags
+          const lines = text.split('\n').filter((l) => l.trim());
+
+          if (lines.length > 0) {
+            const title = subject || `Message ${idx + 1}`;
+            Log.wrapper_info(`     ${title}`);
+            lines.forEach((line) => {
+              Log.wrapper_info(`       ${line.trim()}`);
+            });
+          }
+        });
+      }
     } else {
       Log.wrapper_info(`  ✓ ${action.charAt(0).toUpperCase() + action.slice(1)}: ${results[action] || 0}`);
     }
@@ -424,7 +352,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
         if (recentDumps.length > 0) {
           Log.wrapper_info(`  📄 Dump: debug_dumps/${recentDumps[0]}`);
         }
-      } catch (e) {
+      } catch (_e) {
         // ignore if can't find dumps dir
       }
     }
@@ -476,9 +404,16 @@ async function cmdFetch(flags) {
       'showTeacher',
       'logLevel',
     ];
+    const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
     moduleConfig.students.forEach((stu) => {
       defaultProps.forEach((prop) => {
         if (stu[prop] === undefined) stu[prop] = moduleConfig[prop];
+      });
+      // Copy widget namespace configs from module to student if not already set
+      widgetNamespaces.forEach((widget) => {
+        if (!stu[widget] && moduleConfig[widget]) {
+          stu[widget] = { ...moduleConfig[widget] };
+        }
       });
       if (stu.daysToShow < 0 || stu.daysToShow > 10 || isNaN(stu.daysToShow)) {
         stu.daysToShow = 1;
@@ -516,19 +451,19 @@ async function cmdFetch(flags) {
       try {
         await fetchStudentData(moduleConfig, idx, action, shouldDump, verbose);
         successCount++;
-      } catch (err) {
+      } catch (_err) {
         failureCount++;
       }
     }
 
     Log.wrapper_info(`\n✓ Completed: ${successCount} successful, ${failureCount} failed`);
     if (failureCount > 0) {
-      process.exit(1);
+      throw new Error(`${failureCount} student(s) failed`);
     }
   } catch (err) {
     Log.error(`✗ Command failed: ${err.message}`);
     if (verbose) console.error(err.stack);
-    process.exit(1);
+    throw err;
   }
 }
 

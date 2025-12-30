@@ -5,12 +5,12 @@ import pluginN from 'eslint-plugin-n';
 
 export default defineConfig([
   {
-    ignores: ['**/node_modules/**', '**/*.png', '**/*.md', 'cli/**'],
+    ignores: ['**/node_modules/**', '**/*.png', '**/*.md'],
   },
   js.configs.recommended,
   {
     files: ['**/*.js'],
-    ignores: ['MMM-Webuntis.js', 'cli/**'],
+    ignores: ['MMM-Webuntis.js', 'cli/**', 'widgets/**'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'commonjs',
@@ -23,6 +23,24 @@ export default defineConfig([
     },
     rules: {
       ...pluginN.configs.recommended.rules,
+    },
+  },
+  {
+    files: ['cli/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    plugins: {
+      n: pluginN,
+    },
+    rules: {
+      ...pluginN.configs.recommended.rules,
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      'n/no-process-exit': 'off', // CLI tool needs process.exit
     },
   },
   {

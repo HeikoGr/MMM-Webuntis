@@ -19,12 +19,12 @@ Module.register('MMM-Webuntis', {
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
-    updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 15 minutes)
+    updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
 
     // === DEBUG OPTIONS ===
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
     debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
-    dumpBackendPayloads: true, // dump raw payloads from backend in ./debug_dumps/ folder
+    dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
@@ -56,7 +56,7 @@ Module.register('MMM-Webuntis', {
 
     exams: {
       dateFormat: 'dd.MM.', // format for exam dates
-      daysAhead: 21, // widget-specific days ahead
+      nextDays: 61, // widget-specific days ahead
       showSubject: true, // show subject name with exam
       showTeacher: true, // show teacher name with exam
     },
@@ -409,10 +409,6 @@ Module.register('MMM-Webuntis', {
     }
     if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
       warnings.push(`daysToShow cannot be negative (deprecated key). Value: ${config.daysToShow}`);
-    }
-
-    if (Number.isFinite(config.exams?.daysAhead) && (config.exams.daysAhead < 0 || config.exams.daysAhead > 365)) {
-      warnings.push(`exams.daysAhead should be between 0 and 365. Value: ${config.exams.daysAhead}`);
     }
 
     if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {

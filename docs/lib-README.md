@@ -22,7 +22,7 @@ lib/logger.js
 - Exports: `createBackendLogger(mmLogFn, moduleName)` and `createFrontendLogger(moduleName)`.
 
 Compatibility notes
-- Legacy config keys are mapped by `lib/legacy-config-mapper.js` and further normalized by `node_helper._normalizeLegacyConfig()`.
+- Legacy config keys are mapped by `lib/configValidator.js` (`applyLegacyMappings()`) and further normalized by `node_helper._normalizeLegacyConfig()`.
 - The backend now deduplicates per-fetch warnings and suppresses repeated `CONFIG_WARNING` notifications across fetches.
 
 If you want a more detailed developer guide or API examples, I can expand this file with code snippets and usage examples.

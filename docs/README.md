@@ -20,14 +20,14 @@ For exhaustive research notes and discovery logs, start at: [04-research/README.
 ## Useful Commands
 
 ```bash
-# Run the REST API smoke test
-node cli/test-webuntis-rest-api.js
+# Test configuration and fetch data
+npm run debug
 
 # Lint
 node --run lint
 
-# Interactive config check / helper
-node cli/cli.js
+# Spell check
+node --run test:spelling
 ```
 
 ## CLI
