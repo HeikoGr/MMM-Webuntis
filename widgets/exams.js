@@ -1,12 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-
-  const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
-  const dom = root.dom || {};
-  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const { log, escapeHtml, addTableRow, addTableHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
   function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
     try {
@@ -26,7 +20,7 @@
       if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
       // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-      const rangeEnd = Number(util.getWidgetConfig(studentConfig, 'exams', 'nextDays') ?? 7);
+      const rangeEnd = Number(getWidgetConfig(studentConfig, 'exams', 'nextDays') ?? 7);
 
       if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;
@@ -58,7 +52,7 @@
           const examDateFormat = studentConfig?.exams?.dateFormat ?? 'dd.MM.';
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
-          const formattedDate = util?.formatDate ? util.formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
+          const formattedDate = formatDate ? formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
           const dateTimeCell = formattedDate ? `${formattedDate}` : '';
 
           let nameCell = escapeHtml(exam.name);

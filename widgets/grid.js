@@ -9,9 +9,7 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
+  const { log, escapeHtml, getWidgetConfig, formatDate, formatTime, toMinutes } = root.util?.initWidget?.(root) || {};
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -96,14 +94,14 @@ function getNowLineState(ctx) {
 
   function validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks) {
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const configuredNext = util.getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
-    const configuredPast = util.getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
+    const configuredNext = getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
+    const configuredPast = getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
     const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
     const pastDays = Math.max(0, parseInt(configuredPast, 10));
     const startOffset = -pastDays;
     const totalDisplayDays = pastDays + 1 + daysToShow;
-    const gridDateFormat = util.getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
-    const maxGridLessons = Math.max(0, Math.floor(Number(util.getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
+    const gridDateFormat = getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
+    const maxGridLessons = Math.max(0, Math.floor(Number(getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
 
     log(
       ctx,
@@ -216,7 +214,7 @@ function getNowLineState(ctx) {
   // DOM CREATION - HEADER & TIME AXIS
   // ============================================================================
 
-  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, util) {
+  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
 
@@ -237,8 +235,8 @@ function getNowLineState(ctx) {
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
 
-      const dayLabelText = util?.formatDate
-        ? util.formatDate(dayDate, gridDateFormat)
+      const dayLabelText = formatDate
+        ? formatDate(dayDate, gridDateFormat)
         : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
 
       dayLabel.innerText = dayLabelText;
@@ -698,7 +696,7 @@ function getNowLineState(ctx) {
       config.startOffset,
       config.gridDateFormat,
       ctx,
-      util
+      { formatDate, formatTime, toMinutes }
     );
 
     const wrapper = document.createElement('div');

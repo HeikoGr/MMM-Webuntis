@@ -1,10 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => { };
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
-  const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => { };
+  const { log, escapeHtml, addTableRow } = root.util?.initWidget?.(root) || {};
 
   function renderMessagesOfDayForStudent(ctx, table, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;

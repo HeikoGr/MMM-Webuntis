@@ -192,6 +192,29 @@
     return studentConfig?.[widgetName]?.[configKey];
   }
 
+  /**
+   * Initialize widget utilities and DOM helpers.
+   * Returns an object with all common widget utilities to reduce boilerplate.
+   * @param {Object} root - The MMMWebuntisWidgets root object
+   * @returns {Object} Object containing util and dom helpers
+   */
+  function initWidget(widgetRoot) {
+    const util = widgetRoot.util || {};
+    const dom = widgetRoot.dom || {};
+    return {
+      log: typeof util.log === 'function' ? util.log : () => {},
+      escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
+      formatDate: typeof util.formatDate === 'function' ? util.formatDate : () => '',
+      formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
+      toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
+      getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
+      addTableRow: typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {},
+      addTableHeader: typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {},
+      createElement: typeof dom.createElement === 'function' ? dom.createElement : () => document.createElement('div'),
+      createTable: typeof dom.createTable === 'function' ? dom.createTable : () => document.createElement('table'),
+    };
+  }
+
   root.util = {
     formatYmd,
     formatTime,
@@ -205,6 +228,7 @@
     log,
     _log: log, // backward compatibility alias
     getWidgetConfig,
+    initWidget,
   };
 
   root.dom = {
