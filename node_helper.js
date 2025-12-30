@@ -984,13 +984,17 @@ module.exports = NodeHelper.create({
         this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
       }
 
-      // Apply legacy config normalization to show warnings and formatted output
-      this.config = this._normalizeLegacyConfig(this.config);
-
       // Validate configuration and return errors to frontend if invalid
       try {
-        // First apply legacy mappings to convert old keys to new structure
-        const { normalizedConfig, legacyUsed } = applyLegacyMappings(this.config);
+        // Apply legacy mappings to convert old keys to new structure (includes normalization)
+        const { normalizedConfig, legacyUsed } = applyLegacyMappings(this.config, {
+          warnCallback: (msg) => this._mmLog('warn', null, msg),
+        });
+
+        // Ensure displayMode is lowercase (part of normalization)
+        if (typeof normalizedConfig.displayMode === 'string') {
+          normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
+        }
 
         // Persist normalized config so the helper uses mapped keys everywhere
         this.config = normalizedConfig;
