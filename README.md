@@ -183,10 +183,10 @@ Note: Legacy keys `daysToShow` and `pastDaysToShow` are still supported but depr
 ## Widget-Specific Options
 
 > **Important:** All widget options below (**lessons**, **grid**, **exams**, **homework**, **absences**, **messagesofday**) **must be configured as nested objects**, not with dot notation.
-> 
-> ✅ Correct: `lessons: { dateFormat: 'EEEE' }`, `grid: { maxLessons: 8 }`, `exams: { daysAhead: 21 }`  
+>
+> ✅ Correct: `lessons: { dateFormat: 'EEEE' }`, `grid: { maxLessons: 8 }`, `exams: { daysAhead: 21 }`
 > ❌ Wrong: `lessons.dateFormat: 'EEEE'` (this is not valid JavaScript object syntax)
-> 
+>
 > The dot notation in the tables below (e.g. `lessons.dateFormat`) is only used for **documentation purposes** to show which namespace each option belongs to.
 
 ### Lessons Widget Options
