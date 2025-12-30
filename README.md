@@ -12,52 +12,6 @@
 
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
-## System Architecture
-
-```mermaid
-graph TB
-    subgraph Frontend["🖥️ Frontend (Browser)"]
-        MM["MagicMirror Core"]
-        FE["MMM-Webuntis.js<br/>(Module)"]
-        Widgets["Widgets<br/>(lessons, grid, exams,<br/>homework, absences,<br/>messagesofday)"]
-    end
-
-    subgraph Backend["⚙️ Backend (Node.js)"]
-        NH["node_helper.js<br/>(Coordinator)"]
-        Services["Services (lib/)<br/>(12 modules:<br/>auth, API client,<br/>validation, caching,<br/>data transform, etc.)"]
-    end
-
-    subgraph External["🌐 External"]
-        REST["WebUntis REST API"]
-        JSONRPC["JSON-RPC API<br/>(legacy auth)"]
-    end
-
-    MM <-->|Socket Notifications| FE
-    FE <-->|FETCH_DATA<br/>GOT_DATA| NH
-    FE --> Widgets
-    NH --> Services
-    Services --> REST
-    Services --> JSONRPC
-```
-
-→ For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Architecture Highlights
-
-**Modular Design**: The module follows a service-oriented architecture with **12 specialized services** in `lib/`:
-
-- **Authentication & API**: httpClient.js, authService.js, restClient.js, webuntisApiService.js
-- **Data Processing**: dataTransformer.js, payloadCompactor.js
-- **Configuration**: configValidator.js, widgetConfigValidator.js
-- **Infrastructure**: cacheManager.js, errorHandler.js, dateTimeUtils.js, logger.js
-
-**Benefits**:
-- ✅ **Reduced coupling**: Generic HTTP client instead of tight WebUntis library dependency
-- ✅ **Testability**: Each service is independently testable
-- ✅ **Maintainability**: Clear separation of concerns (auth, data, validation, errors)
-- ✅ **Performance**: Smart caching reduces API calls by ~70%
-- ✅ **Code reduction**: node_helper.js reduced from 2,383 to ~1,550 lines (-35%)
-
 ## BREAKING CHANGES in 0.4.0
 
 This release consolidates several configuration keys and changes how the module handles config compatibility.
@@ -598,7 +552,7 @@ npm run debug -- --config /path/to/config.js
 
 ## Dependencies
 
-- [TheNoim/WebUntis](https://github.com/TheNoim/WebUntis) — installed via `npm install` in the module directory.
+- installed via `npm install` in the module directory.
 
 ## Holiday Display
 
@@ -620,23 +574,17 @@ No additional configuration is required — holiday data is automatically fetche
 
 ### Deprecated Configuration Keys
 
-The module automatically maps 25 legacy configuration keys to their new equivalents. When deprecated keys are detected, you'll see:
+The module automatically maps legacy configuration keys to their new equivalents. When deprecated keys are detected, you'll see:
 - **Red browser console warning** listing all deprecated keys and their locations
 - **Backend logs** with detailed migration instructions
 
 **Common migrations**:
 - `fetchInterval` → `fetchIntervalMs` (e.g., `300000` instead of `300`)
 - `days` → `nextDays` (for student-level config)
-- `examsDays` / `exams.daysAhead` → `exams.nextDays`
+- `examsDays` → `exams.nextDays`
 - `mergeGapMin` → `grid.mergeGap`
 - `debug: true` / `enableDebug: true` → `logLevel: 'debug'`
-- `displaymode` → `displayMode` (normalized to lowercase)
-
-**Find deprecated keys in your config**:
-```bash
-cd ~/MagicMirror
-grep -n "fetchInterval\\|examsDays\\|mergeGapMin\\|displaymode\\|enableDebug\\|\\\"debug\\\":" config/config.js
-```
+- `displaymode` → `displayMode` (camelCase)
 
 ### Authentication Issues
 
@@ -673,7 +621,7 @@ grep -n "fetchInterval\\|examsDays\\|mergeGapMin\\|displaymode\\|enableDebug\\|\
 **Reduce API Calls**:
 - Increase `fetchIntervalMs` (default: 5 minutes = 300000ms)
 - Use smaller date ranges (`nextDays`, `pastDays`)
-- Enable caching is automatic (14-minute TTL for auth, class IDs cached indefinitely)
+- Enable caching is automatic (14-minute TTL for auth)
 
 **Debug Logging**:
 ```javascript
@@ -709,6 +657,49 @@ displayMode: "messagesofday,grid,exams,homework,absences":
 
 ![Screenshot](screenshot-all.png 'Screenshot with all widgets (except lessons)')
 
-## Attribution
 
-This project is based on work done by Paul-Vincent Roll in the MMM-Wunderlist module. (<https://github.com/paviro/MMM-Wunderlist>)
+## System Architecture
+
+```mermaid
+graph TB
+    subgraph Frontend["🖥️ Frontend (Browser)"]
+        MM["MagicMirror Core"]
+        FE["MMM-Webuntis.js<br/>(Module)"]
+        Widgets["Widgets<br/>(lessons, grid, exams,<br/>homework, absences,<br/>messagesofday)"]
+    end
+
+    subgraph Backend["⚙️ Backend (Node.js)"]
+        NH["node_helper.js<br/>(Coordinator)"]
+        Services["Services (lib/)<br/>(12 modules:<br/>auth, API client,<br/>validation, caching,<br/>data transform, etc.)"]
+    end
+
+    subgraph External["🌐 External"]
+        REST["WebUntis REST API"]
+        JSONRPC["JSON-RPC API<br/>(legacy auth)"]
+    end
+
+    MM <-->|Socket Notifications| FE
+    FE <-->|FETCH_DATA<br/>GOT_DATA| NH
+    FE --> Widgets
+    NH --> Services
+    Services --> REST
+    Services --> JSONRPC
+```
+
+→ For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Architecture Highlights
+
+**Modular Design**: The module follows a service-oriented architecture with **12 specialized services** in `lib/`:
+
+- **Authentication & API**: httpClient.js, authService.js, restClient.js, webuntisApiService.js
+- **Data Processing**: dataTransformer.js, payloadCompactor.js
+- **Configuration**: configValidator.js, widgetConfigValidator.js
+- **Infrastructure**: cacheManager.js, errorHandler.js, dateTimeUtils.js, logger.js
+
+**Benefits**:
+- ✅ **Reduced coupling**: Generic HTTP client instead of tight WebUntis library dependency
+- ✅ **Testability**: Each service is independently testable
+- ✅ **Maintainability**: Clear separation of concerns (auth, data, validation, errors)
+- ✅ **Performance**: Smart caching reduces API calls by ~70%
+- ✅ **Code reduction**: node_helper.js reduced from 2,383 to ~1,550 lines (-35%)

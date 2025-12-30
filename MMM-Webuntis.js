@@ -56,7 +56,7 @@ Module.register('MMM-Webuntis', {
 
     exams: {
       dateFormat: 'dd.MM.', // format for exam dates
-      nextDays: 61, // widget-specific days ahead
+      nextDays: 21, // widget-specific days ahead
       showSubject: true, // show subject name with exam
       showTeacher: true, // show teacher name with exam
     },
