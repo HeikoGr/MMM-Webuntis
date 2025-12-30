@@ -144,6 +144,17 @@ module.exports = NodeHelper.create({
     return dataTransformer.mapRestStatusToLegacyCode(status, substitutionText);
   },
 
+  /**
+   * Create standard options object for authService calls (with logging and error handlers)
+   */
+  _getStandardAuthOptions(additionalOptions = {}) {
+    return {
+      ...additionalOptions,
+      mmLog: this._mmLog.bind(this),
+      formatErr: this._formatErr.bind(this),
+    };
+  },
+
   _collectClassCandidates(data) {
     const candidates = new Map(); // id -> candidate
 
@@ -370,7 +381,7 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          options: this._getStandardAuthOptions(options),
         }),
       server,
       rangeStart,
@@ -391,7 +402,7 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          options: this._getStandardAuthOptions(options),
         }),
       server,
       rangeStart,
@@ -412,7 +423,7 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          options: this._getStandardAuthOptions(options),
         }),
       server,
       rangeStart,
@@ -430,7 +441,7 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          options: this._getStandardAuthOptions(options),
         }),
       server,
       rangeStart,
@@ -448,7 +459,7 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: { ...options, mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+          options: this._getStandardAuthOptions(options),
         }),
       server,
       date,
@@ -486,7 +497,7 @@ module.exports = NodeHelper.create({
             username: moduleConfig.username,
             password: moduleConfig.password,
             server,
-            options: { mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+            options: this._getStandardAuthOptions(),
           });
           autoStudents = this.authService.deriveStudentsFromAppData(appData);
 
@@ -559,7 +570,7 @@ module.exports = NodeHelper.create({
         username: moduleConfig.username,
         password: moduleConfig.password,
         server,
-        options: { mmLog: this._mmLog.bind(this), formatErr: this._formatErr.bind(this) },
+        options: this._getStandardAuthOptions(),
       });
       autoStudents = this.authService.deriveStudentsFromAppData(appData);
 
@@ -578,7 +589,11 @@ module.exports = NodeHelper.create({
         delete defNoStudents.students;
         const normalizedAutoStudents = autoStudents.map((s) => {
           const merged = { ...defNoStudents, ...(s || {}) };
-          return this._normalizeLegacyConfig(merged, this.defaults);
+          // Ensure displayMode is lowercase
+          if (typeof merged.displayMode === 'string') {
+            merged.displayMode = merged.displayMode.toLowerCase();
+          }
+          return merged;
         });
 
         moduleConfig.students = normalizedAutoStudents;
@@ -764,6 +779,40 @@ module.exports = NodeHelper.create({
     });
   },
 
+  /**
+   * Extract and compact holidays from authSession.appData.
+   * This is called once per credential group to avoid redundant processing.
+   * @param {Object} authSession - Authenticated session with appData
+   * @param {boolean} shouldFetch - Whether holidays should be fetched
+   * @returns {Array} Compacted holidays array
+   */
+  _extractAndCompactHolidays(authSession, shouldFetch) {
+    if (!shouldFetch) return [];
+
+    let rawHolidays = [];
+    try {
+      // Holidays are included in the app/data response (authSession.appData)
+      if (authSession && authSession.appData) {
+        // Check if holidays are directly in appData or nested
+        if (Array.isArray(authSession.appData.holidays)) {
+          rawHolidays = authSession.appData.holidays;
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.holidays`);
+        } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
+          rawHolidays = authSession.appData.data.holidays;
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.data.holidays`);
+        } else {
+          this._mmLog('debug', null, 'Holidays: no holidays array found in appData');
+        }
+      } else {
+        this._mmLog('debug', null, 'Holidays: no appData available');
+      }
+    } catch (error) {
+      this._mmLog('error', null, `Holidays extraction failed: ${error && error.message ? error.message : error}`);
+    }
+
+    return this._compactHolidays(rawHolidays);
+  },
+
   _wantsWidget(widgetName, displayMode) {
     const w = String(widgetName || '').toLowerCase();
     const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase();
@@ -897,6 +946,21 @@ module.exports = NodeHelper.create({
         return;
       }
 
+      // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
+      // Holidays are shared across all students in the same school/group.
+      // Extract and compact them once before processing students to avoid redundant work.
+      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
+      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
+      const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
+      const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
+      if (shouldFetchHolidays) {
+        this._mmLog(
+          'debug',
+          null,
+          `Holidays extracted for group: ${sharedCompactHolidays.length} periods (shared across ${students.length} students)`
+        );
+      }
+
       // Authentication complete via authService (no login() needed)
       for (const student of students) {
         try {
@@ -914,7 +978,7 @@ module.exports = NodeHelper.create({
 
           // Fetch fresh data for this student
           this._mmLog('debug', student, `Fetching data for ${student.title}...`);
-          const payload = await this.fetchData(authSession, student, identifier, credKey);
+          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           }
@@ -1065,9 +1129,14 @@ module.exports = NodeHelper.create({
                 if (!this.config._autoStudentsAssigned) {
                   const defNoStudents = { ...(this.config || {}) };
                   delete defNoStudents.students;
-                  const normalized = autoStudents.map((s) =>
-                    this._normalizeLegacyConfig({ ...defNoStudents, ...(s || {}) }, this.defaults)
-                  );
+                  const normalized = autoStudents.map((s) => {
+                    const merged = { ...defNoStudents, ...(s || {}) };
+                    // Ensure displayMode is lowercase
+                    if (typeof merged.displayMode === 'string') {
+                      merged.displayMode = merged.displayMode.toLowerCase();
+                    }
+                    return merged;
+                  });
                   this.config.students = normalized;
                   this.config._autoStudentsAssigned = true;
                   const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
@@ -1195,8 +1264,9 @@ module.exports = NodeHelper.create({
    * @param {Object} student - Student config object
    * @param {string} identifier - Module instance identifier
    * @param {string} credKey - Credential grouping key
+   * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
    */
-  async fetchData(authSession, student, identifier, credKey) {
+  async fetchData(authSession, student, identifier, credKey, compactHolidays = []) {
     const logger = (msg) => {
       this._mmLog('debug', student, msg);
     };
@@ -1558,34 +1628,12 @@ module.exports = NodeHelper.create({
       logger(`MessagesOfDay: skipped`);
     }
 
-    // Holidays (raw) - REST API provides holidays in app/data, extract from authSession if available
-    let rawHolidays = [];
-    if (fetchHolidays) {
-      logger(`Holidays: extracting from app/data...`);
-      try {
-        // Holidays are included in the app/data response (authSession.appData)
-        // Log appData structure for debugging
-        this._mmLog('debug', student, `appData available: ${Boolean(authSession && authSession.appData)}`);
-        if (authSession && authSession.appData) {
-          this._mmLog('debug', student, `appData keys: ${Object.keys(authSession.appData).join(', ')}`);
-          // Check if holidays are directly in appData or nested
-          if (Array.isArray(authSession.appData.holidays)) {
-            rawHolidays = authSession.appData.holidays;
-            logger(`Holidays: ${rawHolidays.length} periods extracted from appData.holidays\n`);
-          } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
-            rawHolidays = authSession.appData.data.holidays;
-            logger(`Holidays: ${rawHolidays.length} periods extracted from appData.data.holidays\n`);
-          } else {
-            rawHolidays = [];
-            logger(`Holidays: no holidays array found in appData\n`);
-          }
-        } else {
-          rawHolidays = [];
-          logger(`Holidays: no appData available\n`);
-        }
-      } catch (error) {
-        this._mmLog('error', student, `Holidays extraction failed: ${error && error.message ? error.message : error}\n`);
-      }
+    // Holidays are now pre-extracted in processGroup() and passed as parameter.
+    // This avoids redundant extraction for each student in the same group.
+    if (fetchHolidays && compactHolidays.length > 0) {
+      logger(`Holidays: using ${compactHolidays.length} pre-extracted periods`);
+    } else if (fetchHolidays) {
+      logger(`Holidays: no data available`);
     } else {
       logger(`Holidays: skipped`);
     }
@@ -1597,7 +1645,6 @@ module.exports = NodeHelper.create({
     const compactHomeworks = fetchHomeworks ? compactArray(hwResult, schemas.homework) : [];
     const compactAbsences = fetchAbsences ? compactArray(rawAbsences, schemas.absence) : [];
     const compactMessagesOfDay = fetchMessagesOfDay ? compactArray(rawMessagesOfDay, schemas.message) : [];
-    const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
 
     const toYmd = (d) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
     const rangeStartYmd = toYmd(rangeStart);

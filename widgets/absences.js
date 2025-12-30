@@ -1,10 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
-  const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const { log, escapeHtml, addTableRow, getWidgetConfig, formatDate, formatTime } = root.util?.initWidget?.(root) || {};
 
   function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
@@ -18,17 +14,17 @@
     log('debug', `[absences] render start | entries: ${absences.length}`);
 
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const maxItems = util.getWidgetConfig(studentConfig, 'absences', 'maxItems') ?? null;
-    const showDate = util.getWidgetConfig(studentConfig, 'absences', 'showDate') ?? true;
-    const showExcused = util.getWidgetConfig(studentConfig, 'absences', 'showExcused') ?? true;
-    const showReason = util.getWidgetConfig(studentConfig, 'absences', 'showReason') ?? true;
+    const maxItems = getWidgetConfig(studentConfig, 'absences', 'maxItems') ?? null;
+    const showDate = getWidgetConfig(studentConfig, 'absences', 'showDate') ?? true;
+    const showExcused = getWidgetConfig(studentConfig, 'absences', 'showExcused') ?? true;
+    const showReason = getWidgetConfig(studentConfig, 'absences', 'showReason') ?? true;
     const now = new Date();
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
     // Absence range options
-    const rangeStart = util.getWidgetConfig(studentConfig, 'absences', 'pastDays') ?? 30;
-    const rangeEnd = util.getWidgetConfig(studentConfig, 'absences', 'futureDays') ?? 7;
-    const dateFormat = util.getWidgetConfig(studentConfig, 'absences', 'dateFormat') ?? 'dd.MM.';
+    const rangeStart = getWidgetConfig(studentConfig, 'absences', 'pastDays') ?? 30;
+    const rangeEnd = getWidgetConfig(studentConfig, 'absences', 'futureDays') ?? 7;
+    const dateFormat = getWidgetConfig(studentConfig, 'absences', 'dateFormat') ?? 'dd.MM.';
 
     log(
       ctx,
@@ -72,9 +68,9 @@
       if (maxItems !== null && maxItems > 0 && visibleCount >= maxItems) break;
 
       const dateRaw = ab?.date;
-      const dateStr = dateRaw ? (util?.formatDate ? util.formatDate(dateRaw, dateFormat) : util.formatYmd(dateRaw)) : '';
-      const st = util.formatTime(ab?.startTime);
-      const et = util.formatTime(ab?.endTime);
+      const dateStr = dateRaw ? (formatDate ? formatDate(dateRaw, dateFormat) : '') : '';
+      const st = formatTime(ab?.startTime);
+      const et = formatTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
       const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';

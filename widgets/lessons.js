@@ -1,18 +1,13 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const log = typeof util.log === 'function' ? util.log : () => {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
-  const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
-  const addTableHeader = typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {};
+  const { log, escapeHtml, addTableRow, addTableHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
   function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
     let addedRows = 0;
 
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const configuredNext = util.getWidgetConfig(studentConfig, 'lessons', 'nextDays');
+    const configuredNext = getWidgetConfig(studentConfig, 'lessons', 'nextDays');
     log('debug', `[LESSONS-DEBUG] ${studentTitle}: configuredNext=${configuredNext}`);
     if (!configuredNext || Number(configuredNext) <= 0) {
       log('debug', `[LESSONS-DEBUG] ${studentTitle}: skipped - nextDays not configured`);
@@ -54,7 +49,7 @@
 
     // Determine display window (align with grid behavior)
     const daysToShow = Number(configuredNext) > 0 ? Math.max(1, parseInt(configuredNext, 10)) : 1;
-    const pastDays = Math.max(0, parseInt(util.getWidgetConfig(studentConfig, 'lessons', 'pastDays') ?? 0, 10));
+    const pastDays = Math.max(0, parseInt(getWidgetConfig(studentConfig, 'lessons', 'pastDays') ?? 0, 10));
     const startOffset = -pastDays;
     // totalDisplayDays = past + today + future
     // Example: pastDays=1, daysToShow=7 → 1 + 1 + 7 = 9 days
@@ -68,7 +63,7 @@
     if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
     // Determine lessons date format
-    const lessonsDateFormat = util.getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
+    const lessonsDateFormat = getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
 
     // Determine base date (supports debugDate via ctx._currentTodayYmd)
     let baseDate;
@@ -98,7 +93,7 @@
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
-          const holidayDateStr = util.formatDate(dayDate, lessonsDateFormat);
+          const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
           addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
@@ -122,7 +117,7 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
-          (!(util.getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
+          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
           (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? 'info') !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
@@ -133,14 +128,14 @@
         renderedForDate++;
 
         // Use only the lessons-specific date format as requested by configuration
-        const dateLabel = util.formatDate(timeForDay, lessonsDateFormat);
+        const dateLabel = formatDate(timeForDay, lessonsDateFormat);
         let timeStr = `${dateLabel}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
         const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
         const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
-        if (util.getWidgetConfig(studentConfig, 'lessons', 'showStartTime')) {
+        if (getWidgetConfig(studentConfig, 'lessons', 'showStartTime')) {
           timeStr += formattedStart;
         } else if (startLabel !== undefined) {
           timeStr += `${startLabel}.`;
@@ -200,7 +195,7 @@
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
-          const holidayDateStr = util.formatDate(dayDate, lessonsDateFormat);
+          const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
           addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }

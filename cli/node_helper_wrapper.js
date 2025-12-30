@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => { };
+    nodeHelper.sendSocketNotification = () => {};
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -302,7 +302,13 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
       mergedConfig.dumpBackendPayloads = true;
     }
 
-    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey);
+    // Extract holidays once (matches processGroup behavior)
+    const wantsGridWidget = nodeHelper._wantsWidget('grid', mergedConfig?.displayMode);
+    const wantsLessonsWidget = nodeHelper._wantsWidget('lessons', mergedConfig?.displayMode);
+    const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
+    const compactHolidays = nodeHelper._extractAndCompactHolidays(authSession, shouldFetchHolidays);
+
+    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey, compactHolidays);
 
     const results = {
       timetable: payload?.timetableRange?.length || 0,
