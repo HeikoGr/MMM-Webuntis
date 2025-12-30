@@ -131,7 +131,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `header` | string | `'MMM-Webuntis'` | Title displayed by MagicMirror for this module. |
-| `fetchIntervalMs` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
+| `updateInterval` | int | `15 * 60 * 1000` | Fetch interval in milliseconds (default 15 minutes). |
 | `logLevel` | string | `'none'` | Log verbosity: `'debug'`, `'info'`, `'warn'`, `'error'`, or `'none'`. |
 
 ### Display Options
