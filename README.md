@@ -686,7 +686,7 @@ graph TB
     Services --> JSONRPC
 ```
 
-→ For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+→ For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Architecture Highlights
 
