@@ -4,9 +4,11 @@ logs
 npm-debug.log*
 # Dependency directory
 node_modules
-
+debug_dumps/*
 
 # Local MagicMirror overrides (generate from *.template files)
 config/.env
 config/config.js
 config/custom.css
+
+temp/*

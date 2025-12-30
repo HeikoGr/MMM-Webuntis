@@ -9,8 +9,7 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
+  const { log, escapeHtml, getWidgetConfig, formatDate, formatTime, toMinutes } = root.util?.initWidget?.(root) || {};
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -18,23 +17,35 @@ function getNowLineState(ctx) {
     const state = getNowLineState(ctx);
     if (state.timer || state.initialTimeout) return;
 
+    log('debug', '[grid] Starting now-line updater');
+
     const tick = () => {
       try {
         const nowLocal = new Date();
         const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
-        if (nowYmd !== ctx._currentTodayYmd) {
-          try {
-            ctx.sendSocketNotification('FETCH_DATA', ctx.config);
-          } catch {
-            // ignore
+        // Only refresh data if debugDate is NOT set (i.e., using real time) and the day has changed
+        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
+        if (!isDebugMode) {
+          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
+          if (nowYmd !== ctx._currentTodayYmd) {
+            log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
+            try {
+              // Use the debounced _sendFetchData if available, otherwise direct socket call
+              if (typeof ctx._sendFetchData === 'function') {
+                ctx._sendFetchData('date-change');
+              } else {
+                ctx.sendSocketNotification('FETCH_DATA', ctx.config);
+              }
+            } catch {
+              // ignore
+            }
+            try {
+              ctx.updateDom();
+            } catch {
+              // ignore
+            }
+            ctx._currentTodayYmd = nowYmd;
           }
-          try {
-            ctx.updateDom();
-          } catch {
-            // ignore
-          }
-          ctx._currentTodayYmd = nowYmd;
         }
 
         const gridWidget = ctx._getWidgetApi()?.grid;
@@ -43,7 +54,7 @@ function getNowLineState(ctx) {
           if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx);
         }
       } catch (err) {
-        ctx._log('warn', 'minute tick update failed', err);
+        log('debug', 'minute tick update failed', err);
       }
     };
 
@@ -55,6 +66,7 @@ function getNowLineState(ctx) {
         tick();
         state.timer = setInterval(tick, 60 * 1000);
         state.initialTimeout = null;
+        log('debug', '[grid] Now-line updater initialized');
       },
       Math.max(0, msToNextMinute)
     );
@@ -73,66 +85,48 @@ function getNowLineState(ctx) {
       clearTimeout(state.initialTimeout);
       state.initialTimeout = null;
     }
+    log('debug', '[grid] Now-line updater stopped');
   }
 
-  function isDateInHoliday(dateYmd, holidays) {
-    if (!holidays || !Array.isArray(holidays) || holidays.length === 0) return null;
+  // ============================================================================
+  // CONFIGURATION & VALIDATION
+  // ============================================================================
 
-    const dateNum = parseInt(dateYmd, 10);
-    for (const holiday of holidays) {
-      const start = parseInt(holiday.startDate, 10);
-      const end = parseInt(holiday.endDate, 10);
-      if (dateNum >= start && dateNum <= end) {
-        return holiday;
-      }
-    }
-    return null;
-  }
-
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
-    const daysToShow = studentConfig.daysToShow && studentConfig.daysToShow > 0 ? parseInt(studentConfig.daysToShow) : 1;
-    const pastDays = Math.max(0, parseInt(studentConfig.pastDaysToShow ?? ctx.config.pastDaysToShow ?? 0));
+  function validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks) {
+    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
+    const configuredNext = getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
+    const configuredPast = getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
+    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
+    const pastDays = Math.max(0, parseInt(configuredPast, 10));
     const startOffset = -pastDays;
-    const totalDisplayDays = daysToShow;
+    const totalDisplayDays = pastDays + 1 + daysToShow;
+    const gridDateFormat = getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
+    const maxGridLessons = Math.max(0, Math.floor(Number(getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
 
-    const header = document.createElement('div');
-    header.className = 'grid-days-header';
+    log(
+      ctx,
+      'debug',
+      `[grid] render start | student: "${studentTitle}" | entries: ${Array.isArray(timetable) ? timetable.length : 0} | days: ${totalDisplayDays}/${pastDays} | homeworks: ${Array.isArray(homeworks) ? homeworks.length : 0}`
+    );
 
-    const cols = ['minmax(80px,auto)'];
-    for (let d = 0; d < totalDisplayDays; d++) {
-      cols.push('1fr');
-      cols.push('1fr');
-    }
-    header.style.gridTemplateColumns = cols.join(' ');
+    return {
+      daysToShow,
+      pastDays,
+      startOffset,
+      totalDisplayDays,
+      gridDateFormat,
+      maxGridLessons,
+    };
+  }
 
-    const emptyHeader = document.createElement('div');
-    emptyHeader.className = 'grid-days-header-empty';
-    header.appendChild(emptyHeader);
+  // ============================================================================
+  // TIME AXIS CALCULATION
+  // ============================================================================
 
-    const today = new Date();
-    const todayDateStr = `${today.getFullYear()}${('0' + (today.getMonth() + 1)).slice(-2)}${('0' + today.getDate()).slice(-2)}`;
-
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
-      const dayLabel = document.createElement('div');
-      dayLabel.className = 'grid-daylabel';
-      dayLabel.innerText = `${dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' })}`;
-      const startCol = 2 + d * 2;
-      const endCol = startCol + 2;
-      dayLabel.style.gridColumn = `${startCol} / ${endCol}`;
-      header.appendChild(dayLabel);
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.appendChild(header);
-
-    const grid = document.createElement('div');
-    grid.className = 'grid-combined';
-    grid.style.gridTemplateColumns = cols.join(' ');
-
+  function calculateTimeRange(timetable, timeUnits, ctx) {
     let allStart = Infinity;
     let allEnd = -Infinity;
+
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
       timeUnits.forEach((u) => {
         if (u.startMin !== undefined && u.startMin !== null) allStart = Math.min(allStart, u.startMin);
@@ -158,60 +152,104 @@ function getNowLineState(ctx) {
       allEnd = 17 * 60;
     }
 
-    const maxGridLessonsCfg_before = Number(studentConfig.maxGridLessons ?? ctx.config.maxGridLessons ?? 0);
-    const maxGridLessons_before = Number.isFinite(maxGridLessonsCfg_before) ? Math.max(0, Math.floor(maxGridLessonsCfg_before)) : 0;
-    if (maxGridLessons_before >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
-      const tu = timeUnits;
-      const targetIndex = Math.min(tu.length - 1, maxGridLessons_before - 1);
-      let cutoff = tu[targetIndex].endMin;
+    return { allStart, allEnd };
+  }
+
+  function applyMaxLessonsLimit(allStart, allEnd, maxGridLessons, timeUnits, studentTitle, ctx) {
+    if (maxGridLessons >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
+      const targetIndex = Math.min(timeUnits.length - 1, maxGridLessons - 1);
+      let cutoff = timeUnits[targetIndex].endMin;
+
       if (cutoff === undefined || cutoff === null) {
-        if (
-          targetIndex + 1 < tu.length &&
-          tu[targetIndex + 1] &&
-          tu[targetIndex + 1].startMin !== undefined &&
-          tu[targetIndex + 1].startMin !== null
-        ) {
-          cutoff = tu[targetIndex + 1].startMin;
-        } else if (tu[targetIndex].startMin !== undefined && tu[targetIndex].startMin !== null) {
-          cutoff = tu[targetIndex].startMin + 60;
+        if (targetIndex + 1 < timeUnits.length && timeUnits[targetIndex + 1]?.startMin !== undefined) {
+          cutoff = timeUnits[targetIndex + 1].startMin;
+        } else if (timeUnits[targetIndex].startMin !== undefined) {
+          cutoff = timeUnits[targetIndex].startMin + 60;
         }
       }
-      if (cutoff !== undefined && cutoff !== null && cutoff > allStart) {
-        if (cutoff < allEnd) {
-          ctx._log(
-            'debug',
-            `Grid: vertical range limited to first ${maxGridLessons_before} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`
-          );
-          allEnd = cutoff;
-        }
+
+      // Make sure cutoff includes the full timeUnit (go to the next unit's start if available)
+      if (
+        cutoff !== undefined &&
+        cutoff !== null &&
+        targetIndex + 1 < timeUnits.length &&
+        timeUnits[targetIndex + 1]?.startMin !== undefined
+      ) {
+        cutoff = timeUnits[targetIndex + 1].startMin;
+      }
+
+      if (cutoff !== undefined && cutoff !== null && cutoff > allStart && cutoff < allEnd) {
+        log(
+          ctx,
+          'debug',
+          `Grid: vertical range limited to first ${maxGridLessons} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`
+        );
+        return cutoff;
       }
     }
+    return allEnd;
+  }
 
-    const getUnitBounds = (ui) => {
-      if (!Array.isArray(timeUnits) || ui < 0 || ui >= timeUnits.length) return { startMin: null, lineMin: null };
-      const u = timeUnits[ui];
-      const startMin = u && u.startMin !== undefined && u.startMin !== null ? u.startMin : null;
-      let lineMin = null;
-      if (
-        Array.isArray(timeUnits) &&
-        ui + 1 < timeUnits.length &&
-        timeUnits[ui + 1] &&
-        timeUnits[ui + 1].startMin !== undefined &&
-        timeUnits[ui + 1].startMin !== null
-      ) {
-        lineMin = timeUnits[ui + 1].startMin;
-      } else if (u && u.endMin !== undefined && u.endMin !== null) {
-        lineMin = u.endMin;
-      } else if (startMin !== null) {
-        lineMin = startMin + 60;
-      }
-      return { startMin, lineMin };
-    };
+  function getTimeUnitBounds(timeUnits, ui) {
+    if (!Array.isArray(timeUnits) || ui < 0 || ui >= timeUnits.length) {
+      return { startMin: null, lineMin: null };
+    }
 
-    const totalMinutes = allEnd - allStart;
-    const pxPerMinute = 0.75;
-    const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
+    const u = timeUnits[ui];
+    const startMin = u?.startMin ?? null;
+    let lineMin = null;
 
+    if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
+      lineMin = timeUnits[ui + 1].startMin;
+    } else if (u?.endMin !== undefined) {
+      lineMin = u.endMin;
+    } else if (startMin !== null) {
+      lineMin = startMin + 60;
+    }
+
+    return { startMin, lineMin };
+  }
+
+  // ============================================================================
+  // DOM CREATION - HEADER & TIME AXIS
+  // ============================================================================
+
+  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDate }) {
+    const header = document.createElement('div');
+    header.className = 'grid-days-header';
+
+    const cols = ['minmax(80px,auto)'];
+    for (let d = 0; d < totalDisplayDays; d++) {
+      cols.push('1fr');
+      cols.push('1fr');
+    }
+    header.style.gridTemplateColumns = cols.join(' ');
+
+    const emptyHeader = document.createElement('div');
+    emptyHeader.className = 'grid-days-header-empty';
+    header.appendChild(emptyHeader);
+
+    for (let d = 0; d < totalDisplayDays; d++) {
+      const dayIndex = startOffset + d;
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
+      const dayLabel = document.createElement('div');
+      dayLabel.className = 'grid-daylabel';
+
+      const dayLabelText = formatDate
+        ? formatDate(dayDate, gridDateFormat)
+        : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
+
+      dayLabel.innerText = dayLabelText;
+      const startCol = 2 + d * 2;
+      const endCol = startCol + 2;
+      dayLabel.style.gridColumn = `${startCol} / ${endCol}`;
+      header.appendChild(dayLabel);
+    }
+
+    return { header, gridTemplateColumns: cols.join(' ') };
+  }
+
+  function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
     const timeAxis = document.createElement('div');
     timeAxis.className = 'grid-timecell';
     const timeInner = document.createElement('div');
@@ -222,8 +260,9 @@ function getNowLineState(ctx) {
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
       for (let ui = 0; ui < timeUnits.length; ui++) {
         const u = timeUnits[ui];
-        const { startMin, lineMin } = getUnitBounds(ui);
+        const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
         if (startMin === null) continue;
+
         const top = Math.round(((startMin - allStart) / totalMinutes) * totalHeight);
         const lab = document.createElement('div');
         lab.style.position = 'absolute';
@@ -233,12 +272,14 @@ function getNowLineState(ctx) {
         lab.style.fontSize = '0.85em';
         lab.style.color = '#666';
         lab.style.textAlign = 'left';
+
         const periodLabel = ctx.translate('period') || '';
         const periodSuffix = periodLabel ? `${periodLabel}` : '';
         lab.innerText = `${u.name}.${periodSuffix}\n${String(u.startTime)
           .padStart(4, '0')
           .replace(/(\d{2})(\d{2})/, '$1:$2')}`;
         timeInner.appendChild(lab);
+
         if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
           const lineTop = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
           const tline = document.createElement('div');
@@ -261,6 +302,7 @@ function getNowLineState(ctx) {
         const mm = String(m % 60).padStart(2, '0');
         lab.innerText = `${hh}:${mm}`;
         timeInner.appendChild(lab);
+
         const tline = document.createElement('div');
         tline.className = 'grid-hourline';
         tline.style.top = `${top}px`;
@@ -270,211 +312,433 @@ function getNowLineState(ctx) {
 
     timeAxis.appendChild(timeInner);
     timeAxis.style.gridColumn = '1';
-    grid.appendChild(timeAxis);
 
-    const examsByDate = {};
-    try {
-      (Array.isArray(exams) ? exams : []).forEach((ex) => {
-        const key = ex && ex.examDate != null ? String(ex.examDate) : null;
-        if (!key) return;
-        if (!examsByDate[key]) examsByDate[key] = [];
-        examsByDate[key].push(ex);
-      });
-    } catch {
-      // ignore
+    return timeAxis;
+  }
+
+  // ============================================================================
+  // LESSON PROCESSING & FILTERING
+  // ============================================================================
+
+  function extractDayLessons(sourceForDay, ctx) {
+    return sourceForDay.map((el) => ({
+      dateStr: String(el.date),
+      startMin: ctx._toMinutes(el.startTime),
+      endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
+      startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
+      endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
+      subjectShort: el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
+      subject: el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
+      teacherInitial: el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
+      teacher: el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
+      code: el.code || '',
+      substText: el.substText || '',
+      text: el.lstext || '',
+      type: el.type || null,
+      lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+      su: el.su || [],
+      date: el.date,
+    }));
+  }
+
+  function validateAndNormalizeLessons(dayLessons, log) {
+    for (const curr of dayLessons) {
+      curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
+
+      if (curr.startMin === undefined || curr.startMin === null) {
+        log(
+          'debug',
+          'Lesson missing startMin; backend should provide numeric startMin/endMin',
+          curr.lessonId ? { lessonId: curr.lessonId } : curr
+        );
+      }
+
+      if (curr.endMin === undefined || curr.endMin === null) {
+        if (curr.startMin !== undefined && curr.startMin !== null) {
+          curr.endMin = curr.startMin + 45;
+        }
+      }
+    }
+    return dayLessons;
+  }
+
+  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
+    if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
+      // If no maxGridLessons limit, still filter by allEnd cutoff if provided
+      if (allEnd !== null && allEnd !== undefined) {
+        return dayLessons.filter((lesson) => {
+          // Always keep cancelled and irregular lessons
+          if (
+            lesson.code === 'cancelled' ||
+            lesson.status === 'CANCELLED' ||
+            lesson.code === 'irregular' ||
+            lesson.status === 'SUBSTITUTION'
+          ) {
+            return true;
+          }
+          const s = lesson.startMin;
+          return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+        });
+      }
+      return dayLessons;
     }
 
-    const lessonHasExam = (lesson, dateStrLocal) => {
-      const list = examsByDate[dateStrLocal];
-      if (!Array.isArray(list) || list.length === 0) return false;
+    const filtered = dayLessons.filter((lesson) => {
+      const s = lesson.startMin;
+      if (s === undefined || s === null || Number.isNaN(s)) {
+        return true;
+      }
 
-      const lStart = lesson?.startMin;
-      const lEnd = lesson?.endMin;
-      const lSubjShort = String(lesson?.subjectShort || '').toLowerCase();
-      const lSubjLong = String(lesson?.subject || '').toLowerCase();
+      // If maxGridLessons is set, filter ALL lessons (including cancelled/irregular) by period
+      if (maxGridLessons >= 1) {
+        // Check if the lesson's period index is within maxGridLessons
+        let matchedIndex = -1;
+        for (let ui = 0; ui < timeUnits.length; ui++) {
+          const u = timeUnits[ui];
+          const uStart = u.startMin;
+          let uEnd = u.endMin;
 
-      for (const ex of list) {
-        try {
-          const exSubj = String(ex?.subject || '').toLowerCase();
-          const exStart = ex?.startTime !== undefined && ex?.startTime !== null ? ctx._toMinutes(ex.startTime) : NaN;
-          const exEnd = ex?.endTime !== undefined && ex?.endTime !== null ? ctx._toMinutes(ex.endTime) : NaN;
-
-          const subjectMatch = exSubj && (exSubj === lSubjShort || exSubj === lSubjLong);
-
-          if (Number.isFinite(exStart) && Number.isFinite(lStart)) {
-            if (Number.isFinite(exEnd) && Number.isFinite(lEnd)) {
-              const overlap = exStart < lEnd && exEnd > lStart;
-              if (overlap) return true;
+          if (uEnd === undefined || uEnd === null) {
+            if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
+              uEnd = timeUnits[ui + 1].startMin;
             } else {
-              if (Math.abs(exStart - lStart) <= 1) return true;
+              uEnd = uStart + 60;
             }
           }
 
-          if (subjectMatch) return true;
-        } catch {
-          // ignore broken exam record
+          if (s >= uStart && s < uEnd) {
+            matchedIndex = ui;
+            break;
+          }
         }
+
+        if (matchedIndex === -1 && timeUnits.length > 0 && s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) {
+          matchedIndex = timeUnits.length - 1;
+        }
+
+        // Only keep lessons in the first maxGridLessons periods
+        return matchedIndex !== -1 && matchedIndex < maxGridLessons;
       }
 
-      return false;
-    };
+      // Otherwise (no maxGridLessons limit), use allEnd cutoff if provided
+      if (allEnd !== null && allEnd !== undefined && s >= allEnd) {
+        return false;
+      }
 
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const targetDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayIndex);
+      return true;
+    });
+
+    if (filtered.length < dayLessons.length) {
+      const hidden = dayLessons.length - filtered.length;
+      log(
+        ctx,
+        'debug',
+        `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
+          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+      );
+    }
+
+    return filtered;
+  }
+
+  function lessonHasExam(lesson) {
+    // Primary check: REST API provides `type: 'EXAM'` (uppercase) directly on lessons that are exams
+    if (lesson?.type && String(lesson.type).toUpperCase() === 'EXAM') return true;
+
+    // Fallback: Check if lesson text contains exam keywords
+    const lText = String(lesson?.text || lesson?.lstext || '').toLowerCase();
+    if (lText.includes('klassenarbeit') || lText.includes('klausur') || lText.includes('arbeit')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  // ============================================================================
+  // DOM CREATION - DAY COLUMNS
+  // ============================================================================
+
+  function createDayColumn(colIndex, totalHeight, isToday) {
+    const wrap = document.createElement('div');
+    wrap.style.gridColumn = `${colIndex}`;
+    wrap.style.gridRow = '1';
+
+    const inner = document.createElement('div');
+    inner.className = 'day-column-inner';
+    inner.style.height = `${totalHeight}px`;
+    inner.style.position = 'relative';
+
+    if (isToday) {
+      inner.classList.add('is-today');
+    }
+
+    wrap.appendChild(inner);
+    return { wrap, inner };
+  }
+
+  function addHourLinesToColumn(inner, timeUnits, allStart, allEnd, totalMinutes, totalHeight) {
+    try {
+      if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+        for (let ui = 0; ui < timeUnits.length; ui++) {
+          const { lineMin } = getTimeUnitBounds(timeUnits, ui);
+          if (lineMin === undefined || lineMin === null) continue;
+          if (lineMin < allStart || lineMin > allEnd) continue;
+
+          const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
+          const line = document.createElement('div');
+          line.className = 'grid-hourline';
+          line.style.top = `${top - 2}px`;
+          inner.appendChild(line);
+        }
+      } else {
+        for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
+          const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
+          const line = document.createElement('div');
+          line.className = 'grid-hourline';
+          line.style.top = `${top}px`;
+          inner.appendChild(line);
+        }
+      }
+    } catch (e) {
+      log('debug', 'failed to draw hour lines', e);
+    }
+  }
+
+  function addNowLineToColumn(inner, allStart, allEnd, totalHeight) {
+    const nowLine = document.createElement('div');
+    nowLine.className = 'grid-nowline';
+    nowLine.style.display = 'none';
+    inner.appendChild(nowLine);
+
+    inner._nowLine = nowLine;
+    inner._allStart = allStart;
+    inner._allEnd = allEnd;
+    inner._totalHeight = totalHeight;
+  }
+
+  function addDayNotice(inner, totalHeight, icon, text, iconSize = '1.5em') {
+    // Unified function for both holiday and no-lessons notices
+    const notice = document.createElement('div');
+    notice.className = 'grid-lesson lesson lesson-content no-lesson';
+    notice.style.height = `${totalHeight}px`;
+    notice.innerHTML = `
+      <div style="font-size: ${iconSize}; margin-bottom: 4px;">${icon}</div>
+      <div style="font-weight: bold;">${text}</div>
+    `;
+    inner.appendChild(notice);
+  }
+
+  function addMoreBadge(inner, hiddenCount, ctx) {
+    const moreBadge = document.createElement('div');
+    moreBadge.className = 'grid-more-badge';
+    moreBadge.innerText = ctx.translate('more');
+    moreBadge.title = `${hiddenCount} weitere Stunde${hiddenCount > 1 ? 'n' : ''} ausgeblendet`;
+    inner.appendChild(moreBadge);
+  }
+
+  // ============================================================================
+  // LESSON CELL RENDERING
+  // ============================================================================
+
+  function createLessonCell(topPx, heightPx, dateStr, eMin) {
+    const cell = document.createElement('div');
+    cell.className = 'grid-lesson lesson';
+    cell.style.top = `${topPx}px`;
+    cell.style.height = `${heightPx}px`;
+    cell.setAttribute('data-date', dateStr);
+    cell.setAttribute('data-end-min', String(eMin));
+    return cell;
+  }
+
+  function makeLessonInnerHTML(lesson, escapeHtml) {
+    const base = `<b>${escapeHtml(lesson.subjectShort || lesson.subject)}</b><br>${escapeHtml(lesson.teacherInitial || lesson.teacher)}`;
+    const subst = lesson.substText ? `<br><span class='xsmall dimmed'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>` : '';
+    const txt = lesson.text ? `<br><span class='xsmall dimmed'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+    return `<div class='lesson-content'>${base + subst + txt}</div>`;
+  }
+
+  function checkHomeworkMatch(lesson, homeworks) {
+    if (!homeworks || !Array.isArray(homeworks) || homeworks.length === 0) {
+      return false;
+    }
+
+    const lessonDate = Number(lesson.date);
+    const lessonNames = Array.isArray(lesson.su) ? lesson.su.flatMap((su) => [su.name, su.longname].filter(Boolean)) : [];
+
+    return homeworks.some((hw) => {
+      const hwDueDate = Number(hw.dueDate);
+      const hwSuArr = Array.isArray(hw.su) ? hw.su : hw.su ? [hw.su] : [];
+      const hwNames = hwSuArr.flatMap((su) => [su.name, su.longname].filter(Boolean));
+      const subjectMatch = lessonNames.some((ln) => hwNames.includes(ln));
+      return hwDueDate === lessonDate && subjectMatch;
+    });
+  }
+
+  function addHomeworkIcon(cell) {
+    const icon = document.createElement('span');
+    icon.className = 'homework-icon';
+    icon.innerHTML = '📘';
+    if (cell && cell.innerHTML) {
+      cell.appendChild(icon.cloneNode(true));
+    }
+  }
+
+  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
+    const { leftInner, rightInner, bothInner } = containers;
+
+    for (const lesson of lessonsToRender) {
+      const hasExam = lessonHasExam(lesson);
+
+      let sMin = lesson.startMin;
+      let eMin = lesson.endMin;
+      sMin = Math.max(sMin, allStart);
+      eMin = Math.min(eMin, allEnd);
+      if (eMin <= sMin) continue;
+
+      const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
+      const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
+
+      let nowYmd = ctx._currentTodayYmd;
+      if (nowYmd === undefined || nowYmd === null) {
+        const now = new Date();
+        nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+      }
+
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const lessonYmd = Number(lesson.dateStr) || 0;
+
+      let isPast = false;
+      if (lessonYmd < nowYmd) {
+        isPast = true;
+      } else if (lessonYmd === nowYmd) {
+        if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
+      }
+
+      const leftCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+      const rightCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+      const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+
+      const innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+
+      if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
+        leftCell.classList.add('lesson-replacement');
+        if (hasExam) leftCell.classList.add('has-exam');
+        if (isPast) leftCell.classList.add('past');
+        leftCell.innerHTML = innerHTML;
+
+        if (checkHomeworkMatch(lesson, homeworks)) {
+          addHomeworkIcon(leftCell);
+        }
+
+        leftInner.appendChild(leftCell);
+      } else if (lesson.code === 'cancelled' || lesson.status === 'CANCELLED') {
+        rightCell.classList.add('lesson-cancelled-split');
+        if (hasExam) rightCell.classList.add('has-exam');
+        if (isPast) rightCell.classList.add('past');
+        rightCell.innerHTML = innerHTML;
+
+        if (checkHomeworkMatch(lesson, homeworks)) {
+          addHomeworkIcon(rightCell);
+        }
+
+        rightInner.appendChild(rightCell);
+      } else {
+        bothCell.classList.add('lesson-regular');
+        if (hasExam) bothCell.classList.add('has-exam');
+        if (isPast) bothCell.classList.add('past');
+        bothCell.innerHTML = innerHTML;
+
+        if (checkHomeworkMatch(lesson, homeworks)) {
+          addHomeworkIcon(bothCell);
+        }
+
+        bothInner.appendChild(bothCell);
+      }
+    }
+  }
+
+  // ============================================================================
+  // MAIN ORCHESTRATION FUNCTION
+  // ============================================================================
+
+  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits) {
+    // 1. Validate and extract configuration
+    const config = validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks);
+
+    // 2. Calculate time range
+    const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
+    let { allStart, allEnd } = timeRange;
+    const fullDayEnd = allEnd; // Store original end time for holiday overlays
+    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits, studentTitle, ctx);
+
+    const totalMinutes = allEnd - allStart;
+    const pxPerMinute = 0.75;
+    const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
+    const fullDayHeight = Math.max(120, Math.round((fullDayEnd - allStart) * pxPerMinute));
+
+    // 3. Determine base date
+    const baseDate = ctx._currentTodayYmd
+      ? (() => {
+          const s = String(ctx._currentTodayYmd);
+          const by = parseInt(s.substring(0, 4), 10);
+          const bm = parseInt(s.substring(4, 6), 10) - 1;
+          const bd = parseInt(s.substring(6, 8), 10);
+          return new Date(by, bm, bd);
+        })()
+      : new Date();
+    const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
+
+    // 4. Create header and grid container
+    const { header, gridTemplateColumns } = createGridHeader(
+      config.totalDisplayDays,
+      baseDate,
+      config.startOffset,
+      config.gridDateFormat,
+      ctx,
+      { formatDate, formatTime, toMinutes }
+    );
+
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'grid-combined';
+    grid.style.gridTemplateColumns = gridTemplateColumns;
+
+    // 5. Create time axis
+    const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
+    grid.appendChild(timeAxis);
+
+    // 6. Render each day column
+    for (let d = 0; d < config.totalDisplayDays; d++) {
+      const dayIndex = config.startOffset + d;
+      const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
 
-      const groupedRaw =
-        ctx.preprocessedByStudent && ctx.preprocessedByStudent[studentTitle] && ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
-          ? ctx.preprocessedByStudent[studentTitle].rawGroupedByDate
-          : null;
-
+      const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
       const sourceForDay =
-        groupedRaw && groupedRaw[dateStr]
-          ? groupedRaw[dateStr]
-          : (Array.isArray(timetable) ? timetable : [])
-              .filter((el) => String(el.date) === dateStr)
-              .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+        groupedRaw?.[dateStr] ??
+        (Array.isArray(timetable) ? timetable : [])
+          .filter((el) => String(el.date) === dateStr)
+          .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
-      let dayLessons = sourceForDay.map((el) => ({
-        dateStr: String(el.date),
-        startMin: ctx._toMinutes(el.startTime),
-        endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
-        startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
-        endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        subjectShort: el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
-        subject: el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
-        teacherInitial: el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
-        teacher: el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
-        code: el.code || '',
-        substText: el.substText || '',
-        text: el.lstext || '',
-        lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
-      }));
+      log('debug', `[grid] Day ${dateStr}: found ${sourceForDay.length} lessons`);
 
-      const mergedLessons = [];
-      for (let i = 0; i < dayLessons.length; i++) {
-        let curr = { ...dayLessons[i] };
-        curr.lessonIds = [];
-        const firstId = curr.lessonId ?? curr.id ?? curr.lid ?? null;
-        if (firstId !== null && firstId !== undefined) curr.lessonIds.push(String(firstId));
-        curr.substText = curr.substText || '';
-        curr.text = curr.text || '';
-        let j = i + 1;
+      // Extract and normalize lessons
+      let dayLessons = extractDayLessons(sourceForDay, ctx);
+      dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-        while (j < dayLessons.length) {
-          const cand = dayLessons[j];
-          const currEndMin = curr.endMin !== undefined && curr.endMin !== null ? curr.endMin : null;
-          const candStartMin = cand.startMin !== undefined && cand.startMin !== null ? cand.startMin : null;
-          const candEndMin = cand.endMin !== undefined && cand.endMin !== null ? cand.endMin : null;
-          const gapMin = candStartMin - currEndMin;
-          const allowedGap = Number(ctx.config.mergeGapMinutes ?? 15);
-          const sameContent =
-            cand.subjectShort === curr.subjectShort && cand.teacherInitial === curr.teacherInitial && cand.code === curr.code;
+      // Filter by max periods and time cutoff
+      const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
 
-          if (currEndMin === null || candStartMin === null) break;
-          if (!(candStartMin >= currEndMin && gapMin <= allowedGap && sameContent)) break;
-
-          curr.endTime = cand.endTime;
-          curr.endMin = candEndMin !== null ? candEndMin : candStartMin + 45;
-          curr.substText = curr.substText || '';
-          curr.text = curr.text || '';
-          if (cand.substText && !curr.substText.includes(cand.substText)) curr.substText += `\n${cand.substText}`;
-          if (cand.text && !curr.text.includes(cand.text)) curr.text += `\n${cand.text}`;
-          const addId = cand.lessonId ?? cand.id ?? cand.lid ?? null;
-          if (addId !== null && addId !== undefined) curr.lessonIds.push(String(addId));
-          j++;
-        }
-
-        if ((!curr.lessonId || curr.lessonId === null) && curr.lessonIds && curr.lessonIds.length > 0) curr.lessonId = curr.lessonIds[0];
-        if (curr.startMin === undefined || curr.startMin === null) {
-          ctx._log(
-            'warn',
-            'Merged lesson missing startMin; backend should provide numeric startMin/endMin',
-            curr.lessonId ? { lessonId: curr.lessonId } : curr
-          );
-        }
-        if (curr.endMin === undefined || curr.endMin === null) {
-          if (curr.startMin !== undefined && curr.startMin !== null) curr.endMin = curr.startMin + 45;
-        }
-        mergedLessons.push(curr);
-        i = j - 1;
-      }
-
-      const maxGridLessonsCfg = Number(studentConfig.maxGridLessons ?? ctx.config.maxGridLessons ?? 0);
-      const maxGridLessons = Number.isFinite(maxGridLessonsCfg) ? Math.max(0, Math.floor(maxGridLessonsCfg)) : 0;
-      let lessonsToRender = mergedLessons;
-
-      if (maxGridLessons >= 1) {
-        if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-          const tu = timeUnits;
-          const filtered = mergedLessons.filter((lesson) => {
-            const s = lesson.startMin;
-            if (s === undefined || s === null || Number.isNaN(s)) return true;
-
-            let matchedIndex = -1;
-            for (let ui = 0; ui < tu.length; ui++) {
-              const u = tu[ui];
-              const uStart = u.startMin;
-              let uEnd = u.endMin;
-              if (uEnd === undefined || uEnd === null) {
-                if (ui + 1 < tu.length && tu[ui + 1] && tu[ui + 1].startMin !== undefined && tu[ui + 1].startMin !== null) {
-                  uEnd = tu[ui + 1].startMin;
-                } else {
-                  uEnd = uStart + 60;
-                }
-              }
-              if (s >= uStart && s < uEnd) {
-                matchedIndex = ui;
-                break;
-              }
-            }
-            if (matchedIndex === -1 && tu.length > 0 && s >= (tu[tu.length - 1].startMin ?? Number.NEGATIVE_INFINITY))
-              matchedIndex = tu.length - 1;
-            return matchedIndex === -1 ? true : matchedIndex < maxGridLessons;
-          });
-
-          if (Array.isArray(filtered) && filtered.length < mergedLessons.length) {
-            const hidden = mergedLessons.length - filtered.length;
-            ctx._log(
-              'debug',
-              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (timeUnits-based). Showing first ${maxGridLessons} period(s).`
-            );
-          }
-          lessonsToRender = filtered;
-        } else {
-          if (Array.isArray(mergedLessons) && mergedLessons.length > maxGridLessons) {
-            const sliced = mergedLessons.slice(0, maxGridLessons);
-            const hidden = mergedLessons.length - sliced.length;
-            ctx._log(
-              'debug',
-              `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to maxGridLessons=${maxGridLessons} (count-based fallback).`
-            );
-            lessonsToRender = sliced;
-          }
-        }
-      }
-
+      // Create day columns
       const colLeft = 2 + d * 2;
       const colRight = colLeft + 1;
+      const isToday = dateStr === todayDateStr;
 
-      const leftWrap = document.createElement('div');
-      leftWrap.style.gridColumn = `${colLeft}`;
-      leftWrap.style.gridRow = '1';
-      const leftInner = document.createElement('div');
-      leftInner.className = 'day-column-inner';
-      leftInner.style.height = `${totalHeight}px`;
-      leftInner.style.position = 'relative';
-      leftWrap.appendChild(leftInner);
-
-      const rightWrap = document.createElement('div');
-      rightWrap.style.gridColumn = `${colRight}`;
-      rightWrap.style.gridRow = '1';
-      const rightInner = document.createElement('div');
-      rightInner.className = 'day-column-inner';
-      rightInner.style.height = `${totalHeight}px`;
-      rightInner.style.position = 'relative';
-      rightWrap.appendChild(rightInner);
+      const { wrap: leftWrap, inner: leftInner } = createDayColumn(colLeft, totalHeight, isToday);
+      const { wrap: rightWrap, inner: rightInner } = createDayColumn(colRight, totalHeight, isToday);
 
       const bothWrap = document.createElement('div');
       bothWrap.style.gridColumn = `${colLeft} / ${colRight + 1}`;
@@ -483,223 +747,63 @@ function getNowLineState(ctx) {
       bothInner.className = 'day-column-inner';
       bothInner.style.height = `${totalHeight}px`;
       bothInner.style.position = 'relative';
+      if (isToday) bothInner.classList.add('is-today');
       bothWrap.appendChild(bothInner);
 
-      if (dateStr === todayDateStr) {
-        leftInner.classList.add('is-today');
-        rightInner.classList.add('is-today');
-        bothInner.classList.add('is-today');
-      }
-
-      // Check for holidays
-      const holiday = isDateInHoliday(dateStr, holidays);
+      // Add holiday notice if applicable - use full day height
+      const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
       if (holiday) {
-        const holidayNotice = document.createElement('div');
-        holidayNotice.className = 'grid-holiday-notice';
-        holidayNotice.style.position = 'absolute';
-        holidayNotice.style.top = '0';
-        holidayNotice.style.left = '0';
-        holidayNotice.style.right = '0';
-        holidayNotice.style.height = `${totalHeight}px`;
-        holidayNotice.style.display = 'flex';
-        holidayNotice.style.alignItems = 'center';
-        holidayNotice.style.justifyContent = 'center';
-        holidayNotice.style.background = 'rgba(255, 200, 0, 0.15)';
-        holidayNotice.style.zIndex = '5';
-        holidayNotice.style.pointerEvents = 'none';
-        holidayNotice.innerHTML = `
-                    <div style="text-align: center; padding: 8px;">
-                        <div style="font-size: 2em; margin-bottom: 4px;">🏖️</div>
-                        <div style="font-weight: bold;">${escapeHtml(holiday.longName || holiday.name)}</div>
-                    </div>
-                `;
-        bothInner.appendChild(holidayNotice);
+        addDayNotice(bothInner, fullDayHeight, '🏖️', escapeHtml(holiday.longName || holiday.name), '2em');
       }
 
+      // Add to grid
       grid.appendChild(bothWrap);
       grid.appendChild(leftWrap);
       grid.appendChild(rightWrap);
 
-      try {
-        if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-          for (let ui = 0; ui < timeUnits.length; ui++) {
-            const { lineMin } = getUnitBounds(ui);
-            if (lineMin === undefined || lineMin === null) continue;
-            if (lineMin < allStart || lineMin > allEnd) continue;
-            const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
-            const line = document.createElement('div');
-            line.className = 'grid-hourline';
-            line.style.top = `${top - 2}px`;
-            bothInner.appendChild(line);
-          }
-        } else {
-          for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
-            const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-            const line = document.createElement('div');
-            line.className = 'grid-hourline';
-            line.style.top = `${top}px`;
-            bothInner.appendChild(line);
-          }
-        }
-      } catch (e) {
-        ctx._log('warn', 'failed to draw hour lines', e);
-      }
+      // Add hour lines
+      addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
 
-      const nowLine = document.createElement('div');
-      nowLine.className = 'grid-nowline';
-      nowLine.style.display = 'none';
-      bothInner.appendChild(nowLine);
-      bothInner._nowLine = nowLine;
-      bothInner._allStart = allStart;
-      bothInner._allEnd = allEnd;
-      bothInner._totalHeight = totalHeight;
+      // Add now line
+      addNowLineToColumn(bothInner, allStart, allEnd, totalHeight);
 
-      const hiddenCount = Array.isArray(mergedLessons)
-        ? Math.max(0, mergedLessons.length - (Array.isArray(lessonsToRender) ? lessonsToRender.length : 0))
-        : 0;
+      // Add "more" badge if lessons were hidden
+      const hiddenCount = dayLessons.length - lessonsToRender.length;
       if (hiddenCount > 0) {
-        const moreBadge = document.createElement('div');
-        moreBadge.className = 'grid-more-badge';
-        moreBadge.innerText = ctx.translate('more');
-        moreBadge.title = `${hiddenCount} weitere Stunde${hiddenCount > 1 ? 'n' : ''} ausgeblendet`;
-        moreBadge.style.position = 'absolute';
-        moreBadge.style.right = '6px';
-        moreBadge.style.bottom = '6px';
-        moreBadge.style.zIndex = 30;
-        moreBadge.style.padding = '2px 6px';
-        moreBadge.style.background = 'rgba(0,0,0,0.45)';
-        moreBadge.style.color = '#fff';
-        moreBadge.style.borderRadius = '4px';
-        moreBadge.style.fontSize = '0.85em';
-        moreBadge.style.cursor = 'default';
-        bothInner.appendChild(moreBadge);
+        log('debug', `[grid] Day ${dateStr}: ${hiddenCount} lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown)`);
+        addMoreBadge(bothInner, hiddenCount, ctx);
+      } else if (config.maxGridLessons && dayLessons.length > 0) {
+        log(
+          'debug',
+          `[grid] Day ${dateStr}: no lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown, maxLessons=${config.maxGridLessons})`
+        );
       }
 
+      // Add "no lessons" notice if empty and not a holiday
       if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-        const noLesson = document.createElement('div');
-        noLesson.className = 'grid-lesson lesson lesson-content no-lesson';
-        noLesson.style.position = 'absolute';
-        noLesson.style.top = '0px';
-        noLesson.style.left = '0px';
-        noLesson.style.right = '0px';
-        noLesson.style.height = `${totalHeight}px`;
-        noLesson.innerHTML = `<b>${ctx.translate('no-lessons')}</b>`;
-
-        bothInner.appendChild(noLesson);
-      }
-
-      for (let idx = 0; idx < lessonsToRender.length; idx++) {
-        const lesson = lessonsToRender[idx];
-
-        const hasExam = lessonHasExam(lesson, dateStr);
-
-        let sMin = lesson.startMin;
-        let eMin = lesson.endMin;
-        sMin = Math.max(sMin, allStart);
-        eMin = Math.min(eMin, allEnd);
-        if (eMin <= sMin) continue;
-        const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
-        const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
-
-        const now = new Date();
-        const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-        const nowMin = now.getHours() * 60 + now.getMinutes();
-        const lessonYmd = Number(dateStr) || 0;
-        let isPast = false;
-        if (lessonYmd < nowYmd) {
-          isPast = true;
-        } else if (lessonYmd === nowYmd) {
-          if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
-        } else {
-          isPast = false;
+        // Don't show "no lessons" if there's a holiday notice
+        if (!holiday) {
+          addDayNotice(bothInner, totalHeight, '📅', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
         }
-
-        const leftCell = document.createElement('div');
-        leftCell.className = 'grid-lesson lesson';
-        leftCell.style.position = 'absolute';
-        leftCell.style.top = `${topPx}px`;
-        leftCell.style.left = '0px';
-        leftCell.style.right = '0px';
-        leftCell.style.height = `${heightPx}px`;
-        leftCell.setAttribute('data-date', dateStr);
-        leftCell.setAttribute('data-end-min', String(eMin));
-
-        const rightCell = document.createElement('div');
-        rightCell.className = 'grid-lesson lesson';
-        rightCell.style.position = 'absolute';
-        rightCell.style.top = `${topPx}px`;
-        rightCell.style.left = '0px';
-        rightCell.style.right = '0px';
-        rightCell.style.height = `${heightPx}px`;
-        rightCell.setAttribute('data-date', dateStr);
-        rightCell.setAttribute('data-end-min', String(eMin));
-
-        const bothCell = document.createElement('div');
-        bothCell.className = 'grid-lesson lesson';
-        bothCell.style.position = 'absolute';
-        bothCell.style.top = `${topPx}px`;
-        bothCell.style.left = '0px';
-        bothCell.style.right = '0px';
-        bothCell.style.height = `${heightPx}px`;
-        bothCell.setAttribute('data-date', dateStr);
-        bothCell.setAttribute('data-end-min', String(eMin));
-
-        const makeInner = (lsn) => {
-          const base = `<b>${escapeHtml(lsn.subjectShort || lsn.subject)}</b><br>${escapeHtml(lsn.teacherInitial || lsn.teacher)}`;
-          const subst = lsn.substText ? `<br><span class='xsmall dimmed'>${escapeHtml(lsn.substText).replace(/\n/g, '<br>')}</span>` : '';
-          const txt = lsn.text ? `<br><span class='xsmall dimmed'>${escapeHtml(lsn.text).replace(/\n/g, '<br>')}</span>` : '';
-          return `<div class='lesson-content'>${base + subst + txt}</div>`;
-        };
-
-        if (lesson.code === 'irregular') {
-          leftCell.classList.add('lesson-replacement');
-          if (hasExam) leftCell.classList.add('has-exam');
-          if (isPast) leftCell.classList.add('past');
-          leftCell.innerHTML = makeInner(lesson);
-        } else if (lesson.code === 'cancelled') {
-          rightCell.classList.add('lesson-cancelled-split');
-          if (hasExam) rightCell.classList.add('has-exam');
-          if (isPast) rightCell.classList.add('past');
-          rightCell.innerHTML = makeInner(lesson);
-        } else {
-          bothCell.classList.add('lesson-regular');
-          if (hasExam) bothCell.classList.add('has-exam');
-          if (isPast) bothCell.classList.add('past');
-          bothCell.innerHTML = makeInner(lesson);
-        }
-
-        if (homeworks && Array.isArray(homeworks)) {
-          const hwMatch = homeworks.some((hw) => {
-            const hwLessonId = hw.lessonId ?? hw.lid ?? hw.id ?? null;
-            const lessonIds =
-              lesson.lessonIds && Array.isArray(lesson.lessonIds) ? lesson.lessonIds : lesson.lessonId ? [String(lesson.lessonId)] : [];
-            const lessonIdMatch = hwLessonId && lessonIds.length > 0 ? lessonIds.includes(String(hwLessonId)) : false;
-            const subjectMatch = hw.su && (hw.su.name === lesson.subjectShort || hw.su.longname === lesson.subject);
-            return lessonIdMatch || subjectMatch;
-          });
-          if (hwMatch) {
-            const icon = document.createElement('span');
-            icon.className = 'homework-icon';
-            icon.innerHTML = '📘';
-            if (leftCell && leftCell.innerHTML) leftCell.appendChild(icon.cloneNode(true));
-            else if (rightCell && rightCell.innerHTML) rightCell.appendChild(icon);
-          }
-        }
-
-        if (lesson.code === 'irregular') {
-          leftInner.appendChild(leftCell);
-        } else if (lesson.code === 'cancelled') {
-          rightInner.appendChild(rightCell);
-        } else {
-          bothInner.appendChild(bothCell);
-        }
+      } else {
+        // Render lesson cells
+        renderLessonCells(
+          lessonsToRender,
+          { leftInner, rightInner, bothInner },
+          allStart,
+          allEnd,
+          totalMinutes,
+          totalHeight,
+          homeworks,
+          ctx,
+          escapeHtml
+        );
       }
     }
 
     wrapper.appendChild(grid);
 
-    // Draw nowLine immediately on first render (no need to wait for the next minute tick).
-    // Use the local wrapper scope so this works even before MagicMirror inserts the DOM.
+    // Draw nowLine immediately on first render
     try {
       const gridWidget = ctx?._getWidgetApi?.()?.grid;
       if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
@@ -718,9 +822,12 @@ function getNowLineState(ctx) {
   function refreshPastMasks(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      const now = new Date();
-      const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowLocal = new Date();
+      const todayYmd =
+        typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd
+          ? ctx._currentTodayYmd
+          : nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
       lessons.forEach((ln) => {
@@ -739,19 +846,36 @@ function getNowLineState(ctx) {
         else ln.classList.remove('past');
       });
     } catch (e) {
-      ctx?._log?.('warn', 'failed to refresh past masks', e);
+      log('warn', 'failed to refresh past masks', e);
     }
   }
 
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
+      // Respect the showNowLine config option (from current displayed student config)
+      if (ctx.studentConfig?.showNowLine === false) {
+        // Hide all now lines if disabled
+        const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+        const inners = scope.querySelectorAll('.day-column-inner');
+        inners.forEach((inner) => {
+          const nl = inner._nowLine;
+          if (nl) nl.style.display = 'none';
+        });
+        return 0;
+      }
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const inners = scope.querySelectorAll('.day-column-inner');
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowLocal = new Date();
+      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {
+        // Only show the now-line for the column explicitly marked as "is-today".
+        if (!inner.classList || !inner.classList.contains('is-today')) {
+          const nl = inner._nowLine;
+          if (nl) nl.style.display = 'none';
+          return;
+        }
         const nl = inner._nowLine;
         const allS = inner._allStart;
         const allE = inner._allEnd;
@@ -768,7 +892,7 @@ function getNowLineState(ctx) {
       });
       return updated;
     } catch (e) {
-      ctx?._log?.('warn', 'updateNowLinesAll failed', e);
+      log('warn', 'updateNowLinesAll failed', e);
       return 0;
     }
   }

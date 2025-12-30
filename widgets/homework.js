@@ -1,19 +1,21 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const util = root.util || {};
-  const escapeHtml = typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || '');
-  const dom = root.dom || {};
-  const addTableRow = typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {};
+  const { log, escapeHtml, addTableRow, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
   function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
+      log('debug', `[homework] no data`);
       addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
       return 1;
     }
 
-    const dateFormat = studentConfig.homeworkDateFormat ?? ctx.config.homeworkDateFormat ?? ctx.config.dateFormat ?? 'dd.MM.yyyy';
+    log('debug', `[homework] render start | entries: ${homeworks.length}`);
+
+    const dateFormat = getWidgetConfig(studentConfig, 'homework', 'dateFormat') ?? 'dd.MM.';
+    const showSubject = getWidgetConfig(studentConfig, 'homework', 'showSubject') ?? true;
+    const showText = getWidgetConfig(studentConfig, 'homework', 'showText') ?? true;
 
     const sorted = homeworks
       .slice()
@@ -22,20 +24,21 @@
       );
 
     for (const hw of sorted) {
-      const due = hw?.dueDate ? util.formatDate(hw.dueDate, dateFormat) : '';
-      const subj = hw?.su?.longname || hw?.su?.name || '';
-      const text = String(hw?.text || hw?.remark || '').trim();
+      const due = hw?.dueDate ? formatDate(hw.dueDate, dateFormat) : '';
+      const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
+      const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
       const left = due ? `${due}` : ctx.translate('homework');
       const rightParts = [];
       if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);
       if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
-      const right = rightParts.length > 0 ? rightParts.join('<br>') : ctx.translate('homework');
+      const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
 
-      addTableRow(table, 'lessonRow', studentCellTitle, left, right);
+      addTableRow(table, 'homeworkRow', studentCellTitle, left, right);
       addedRows++;
     }
 
+    log('debug', `[homework] render complete | rows: ${addedRows}`);
     return addedRows;
   }
 

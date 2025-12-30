@@ -1,22 +1,25 @@
-// Import required modules
 /* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
 /* eslint-enable n/no-missing-require */
-const { WebUntis } = require('webuntis');
-const { WebUntisQR } = require('webuntis');
-const { URL } = require('url');
-const Authenticator = require('otplib').authenticator;
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
 /* eslint-disable n/no-missing-require */
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 
-// Default cache TTL for per-request responses (ms). Small to favor freshness.
-const DEFAULT_CACHE_TTL_MS = 30 * 1000;
-// Default interval for periodic cache cleanup (ms)
-const DEFAULT_CACHE_CLEANUP_INTERVAL_MS = 30 * 1000;
+// New utility modules for refactoring
+const { compactArray, schemas } = require('./lib/payloadCompactor');
+const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
+const { createBackendLogger } = require('./lib/logger');
+const webuntisApiService = require('./lib/webuntisApiService');
+const AuthService = require('./lib/authService');
+const dataTransformer = require('./lib/dataTransformer');
+const CacheManager = require('./lib/cacheManager');
+const errorHandler = require('./lib/errorHandler');
+const widgetConfigValidator = require('./lib/widgetConfigValidator');
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
-
 // Create a NodeHelper module
 module.exports = NodeHelper.create({
   /**
@@ -24,144 +27,790 @@ module.exports = NodeHelper.create({
    * Use this hook to perform startup initialization.
    */
   start() {
-    Log.info('[MMM-Webuntis] Node helper started');
-    // node helper ready
-    // initialize a tiny in-memory response cache
-    this._responseCache = new Map(); // signature -> { ts, payload }
-    this._cacheTTLMs = DEFAULT_CACHE_TTL_MS;
-    // cache cleanup timer id
-    this._cacheCleanupTimer = null;
-    this._cacheCleanupIntervalMs = DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
-    // start periodic cache cleanup
-    this._startCacheCleanup();
+    this._mmLog('debug', null, 'Node helper started');
+    // Initialize unified logger
+    this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
+    // Initialize AuthService for token and authentication management
+    this.authService = new AuthService(this._mmLog.bind(this));
+    // Initialize CacheManager for class ID and other caching
+    this.cacheManager = new CacheManager(this._mmLog.bind(this));
+    // expose payload compactor so linters don't flag unused imports until full refactor
+    this.payloadCompactor = { compactArray };
+    // Track whether config warnings have been emitted to frontend to avoid repeat spam
+    this._configWarningsSent = false;
+    // Persist debugDate across FETCH_DATA requests to ensure consistent date-based testing
+    this._persistedDebugDate = null;
   },
 
-  /*
-   * Create an authenticated WebUntis client from a student sample config.
-   * Returns a client instance or throws an Error if credentials missing.
+  _normalizeLegacyConfig(cfg) {
+    if (!cfg || typeof cfg !== 'object') return cfg;
+
+    // Use centralized legacy mapping from configValidator
+    const { normalizedConfig, legacyUsed } = applyLegacyMappings(cfg, {
+      warnCallback: (msg) => this._mmLog('warn', null, msg),
+    });
+
+    // Ensure displayMode is lowercase
+    if (typeof normalizedConfig.displayMode === 'string') {
+      normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
+    }
+
+    if (legacyUsed.length > 0) {
+      try {
+        const uniq = Array.from(new Set(legacyUsed));
+
+        // Generate detailed deprecation warnings
+        const detailedWarnings = generateDeprecationWarnings(uniq);
+
+        // Attach warnings to config.__warnings so they get sent to frontend and displayed in GUI
+        normalizedConfig.__warnings = normalizedConfig.__warnings || [];
+        normalizedConfig.__warnings.push(...detailedWarnings);
+
+        // Also log them to server logs (only detailed warnings, not the generic summary)
+        detailedWarnings.forEach((warning) => {
+          this._mmLog('warn', null, warning);
+        });
+
+        // Log the normalized config as formatted JSON (with redacted sensitive data) for reference (server-side only)
+        const redacted = { ...normalizedConfig };
+        if (redacted.password) redacted.password = '***redacted***';
+        if (redacted.qrcode) redacted.qrcode = '***redacted***';
+        if (redacted.students && Array.isArray(redacted.students)) {
+          redacted.students = redacted.students.map((s) => {
+            const student = { ...s };
+            if (student.password) student.password = '***redacted***';
+            if (student.qrcode) student.qrcode = '***redacted***';
+            return student;
+          });
+        }
+        const formattedJson = JSON.stringify(redacted, null, 2);
+        this._mmLog('info', null, `Normalized config:\n${formattedJson}`);
+      } catch (e) {
+        this._mmLog('debug', null, `Failed to process legacy config: ${e && e.message ? e.message : e}`);
+      }
+    }
+
+    return normalizedConfig;
+  },
+
+  /**
+   * Invoke a REST helper with a target descriptor (school/server + credentials).
+   * Keeps call sites concise and consistent.
    */
-  _createUntisClient(sample) {
-    if (sample.qrcode) {
-      return new WebUntisQR(sample.qrcode, 'custom-identity', Authenticator, URL);
-    }
-    if (sample.username) {
-      return new WebUntis(sample.school, sample.username, sample.password, sample.server);
-    }
-    throw new Error('No credentials provided');
+  async _callRest(fn, target, ...args) {
+    return fn.call(this, target.school, target.username, target.password, target.server, ...args);
   },
 
-  // Format errors consistently for logs
+  // ---------------------------------------------------------------------------
+  // Logging and error helpers
+  // ---------------------------------------------------------------------------
+
+  _mmLog(level, student, message) {
+    const moduleTag = '[MMM-Webuntis]';
+    const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
+    const formatted = `${moduleTag}${studentTag} ${message}`;
+
+    // Always forward debug messages to the underlying MagicMirror logger.
+    // The MagicMirror logging subsystem (or the environment) decides which
+    // levels to actually emit. Avoid double-filtering here to ensure debug
+    // output is visible when the system is configured for debug logging.
+    if (level === 'debug') {
+      Log.debug(formatted);
+      return;
+    }
+
+    if (level === 'error') {
+      Log.error(formatted);
+      return;
+    }
+
+    if (level === 'warn') {
+      Log.warn(formatted);
+      return;
+    }
+
+    // default/info
+    Log.info(formatted);
+  },
+
   _formatErr(err) {
-    if (!err) return '(no error)';
-    return err && err.message ? err.message : String(err);
+    return errorHandler.formatError(err);
+  },
+
+  /**
+   * Map REST API status to legacy JSON-RPC code format (delegated to dataTransformer)
+   */
+  _mapRestStatusToLegacyCode(status, substitutionText) {
+    return dataTransformer.mapRestStatusToLegacyCode(status, substitutionText);
+  },
+
+  /**
+   * Create standard options object for authService calls (with logging and error handlers)
+   */
+  _getStandardAuthOptions(additionalOptions = {}) {
+    return {
+      ...additionalOptions,
+      mmLog: this._mmLog.bind(this),
+      formatErr: this._formatErr.bind(this),
+    };
+  },
+
+  _collectClassCandidates(data) {
+    const candidates = new Map(); // id -> candidate
+
+    const addCandidate = (item) => {
+      if (!item || typeof item !== 'object') return;
+      const type = (item.resourceType || item.elementType || item.type || item.category || '').toString().toUpperCase();
+      // Accept only class-typed or untyped entries to avoid pulling in rooms/teachers
+      if (type && type !== 'CLASS') return;
+
+      const name =
+        item.name ||
+        item.shortName ||
+        item.longName ||
+        item.displayName ||
+        (item.current && (item.current.shortName || item.current.name || item.current.longName));
+      if (!item.id || !name) return;
+
+      if (!candidates.has(item.id)) {
+        candidates.set(item.id, {
+          id: item.id,
+          name: name,
+          shortName: item.shortName || (item.current && item.current.shortName) || name,
+          longName: item.longName || (item.current && item.current.longName) || name,
+        });
+      }
+    };
+
+    const walk = (node) => {
+      if (!node) return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (typeof node !== 'object') return;
+
+      addCandidate(node);
+      Object.values(node).forEach((v) => walk(v));
+    };
+
+    walk(data);
+    return Array.from(candidates.values());
+  },
+
+  async _resolveClassIdViaRest(school, username, password, server, rangeStart, rangeEnd, className, options = {}) {
+    const desiredName = className && String(className).trim();
+    const cacheKeyBase = options.cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
+    // Include studentId in cache key so each student has their own class cache entry
+    const studentIdPart = options.studentId ? `::student::${options.studentId}` : '';
+    const cacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
+    if (this.cacheManager.has('classId', cacheKey)) {
+      return this.cacheManager.get('classId', cacheKey);
+    }
+
+    const formatDateISO = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    const formatDateYYYYMMDD = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}${month}${day}`;
+    };
+
+    const { token, cookieString, tenantId, schoolYearId } = await this.authService.getAuth({
+      school,
+      username,
+      password,
+      server,
+      options: {
+        ...options,
+        mmLog: this._mmLog.bind(this),
+        formatErr: this._formatErr.bind(this),
+      },
+    });
+
+    if (!cookieString) {
+      throw new Error('Missing REST auth cookies for class resolution');
+    }
+
+    const headers = {
+      Cookie: cookieString,
+      Accept: 'application/json',
+    };
+    if (tenantId) headers['Tenant-Id'] = String(tenantId);
+    if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    let candidates = [];
+
+    let mappedClassId = null;
+
+    // Aggressive path: if we have a studentId, try classservices first (closest to "what this student sees")
+    if (options.studentId) {
+      try {
+        const resp = await axios.get(`https://${server}/WebUntis/api/classreg/classservices`, {
+          params: {
+            startDate: formatDateYYYYMMDD(rangeStart),
+            endDate: formatDateYYYYMMDD(rangeEnd),
+            elementId: options.studentId,
+          },
+          headers,
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (resp.status === 200 && resp.data) {
+          candidates = this._collectClassCandidates(resp.data);
+          // Prefer explicit mapping from personKlasseMap when present
+          const map = resp.data?.data?.personKlasseMap;
+          if (map && Object.prototype.hasOwnProperty.call(map, options.studentId)) {
+            const mapped = map[options.studentId];
+            if (Number.isFinite(Number(mapped))) mappedClassId = Number(mapped);
+          }
+          this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
+        } else {
+          this._mmLog('debug', null, `[REST] classservices failed with status ${resp.status}`);
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
+      }
+    }
+
+    // Secondary path: timetable/filter (broader) if nothing found yet
+    if (!candidates || candidates.length === 0) {
+      try {
+        const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`, {
+          params: {
+            resourceType: 'CLASS',
+            timetableType: 'STANDARD',
+            start: formatDateISO(rangeStart),
+            end: formatDateISO(rangeEnd),
+          },
+          headers,
+          validateStatus: () => true,
+          timeout: 15000,
+        });
+
+        if (resp.status === 200 && resp.data) {
+          candidates = this._collectClassCandidates(resp.data);
+          this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
+        } else {
+          this._mmLog('debug', null, `[REST] timetable/filter failed with status ${resp.status}`);
+        }
+      } catch (err) {
+        this._mmLog('debug', null, `[REST] timetable/filter error: ${this._formatErr(err)}`);
+      }
+    }
+
+    if (!candidates || candidates.length === 0) {
+      throw new Error('No accessible classes returned by REST API');
+    }
+
+    let chosen = null;
+    // If classservices told us the class id for this student, pick it first
+    if (mappedClassId && candidates.some((c) => Number(c.id) === Number(mappedClassId))) {
+      chosen = candidates.find((c) => Number(c.id) === Number(mappedClassId));
+      this._mmLog('debug', null, `[REST] personKlasseMap selected classId=${mappedClassId}`);
+    }
+
+    if (desiredName) {
+      const desiredLower = desiredName.toLowerCase();
+      chosen = candidates.find((c) =>
+        [c.name, c.shortName, c.longName].filter(Boolean).some((n) => String(n).toLowerCase() === desiredLower)
+      );
+    }
+
+    if (!chosen && !desiredName && candidates.length === 1) {
+      chosen = candidates[0];
+      this._mmLog('debug', null, `[REST] No class name configured; using sole available class ${chosen.name} (${chosen.id})`);
+    }
+
+    if (!chosen) {
+      const available = candidates
+        .map((c) => `${c.name || c.shortName || c.longName || c.id}`)
+        .filter(Boolean)
+        .join(', ');
+      const hint = desiredName ? `Class "${desiredName}" not found. Available: ${available}` : `Multiple classes available: ${available}`;
+      throw new Error(hint);
+    }
+
+    this.cacheManager.set('classId', cacheKey, chosen.id);
+    return chosen.id;
+  },
+
+  /**
+   * Get timetable via REST API using unified restClient
+   */
+  async _getTimetableViaRest(
+    school,
+    username,
+    password,
+    server,
+    rangeStart,
+    rangeEnd,
+    studentId,
+    options = {},
+    useClassTimetable = false,
+    className = null
+  ) {
+    const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
+    let classId = options.classId;
+
+    // Resolve class ID if needed
+    if (wantsClass && !classId) {
+      classId = await this._resolveClassIdViaRest(
+        school,
+        username,
+        password,
+        server,
+        rangeStart,
+        rangeEnd,
+        className || options.className || null,
+        { ...options, studentId }
+      );
+    }
+
+    return webuntisApiService.getTimetable({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: this._getStandardAuthOptions(options),
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      useClassTimetable: wantsClass,
+      classId,
+      logger: this._mmLog.bind(this),
+      mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
+    });
+  },
+
+  async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    return webuntisApiService.getExams({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: this._getStandardAuthOptions(options),
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+      normalizeDate: this._normalizeDateToInteger.bind(this),
+      normalizeTime: this._normalizeTimeToMinutes.bind(this),
+      sanitizeHtml: this._sanitizeHtmlText.bind(this),
+    });
+  },
+
+  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    return webuntisApiService.getHomework({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: this._getStandardAuthOptions(options),
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+    });
+  },
+
+  async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    return webuntisApiService.getAbsences({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: this._getStandardAuthOptions(options),
+        }),
+      server,
+      rangeStart,
+      rangeEnd,
+      studentId,
+      logger: this._mmLog.bind(this),
+    });
+  },
+
+  async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
+    return webuntisApiService.getMessagesOfDay({
+      getAuth: () =>
+        this.authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: this._getStandardAuthOptions(options),
+        }),
+      server,
+      date,
+      logger: this._mmLog.bind(this),
+    });
+  },
+
+  async _ensureStudentsFromAppData(moduleConfig) {
+    try {
+      if (!moduleConfig || typeof moduleConfig !== 'object') return;
+
+      const configuredStudentsRaw = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
+      // Treat students array as "not configured" when it contains no real credentials
+      const configuredStudents = configuredStudentsRaw.filter((s) => {
+        if (!s || typeof s !== 'object') return false;
+        const hasStudentId = s.studentId !== undefined && s.studentId !== null && String(s.studentId).trim() !== '';
+        const hasQr = Boolean(s.qrcode);
+        const hasCreds = Boolean(s.username && s.password);
+        return hasStudentId || hasQr || hasCreds;
+      });
+      let autoStudents = null;
+
+      const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
+      if (!hasParentCreds) return;
+
+      // Only auto-discover if NO students with real credentials are configured at all
+      // If user explicitly configured ANY real students, respect that choice
+      if (configuredStudents.length > 0) {
+        // However, if any student is missing a title but has a studentId,
+        // try to fetch auto-discovered data to fill in the missing titles
+        const server = moduleConfig.server || 'webuntis.com';
+        try {
+          const { appData } = await this.authService.getAuth({
+            school: moduleConfig.school,
+            username: moduleConfig.username,
+            password: moduleConfig.password,
+            server,
+            options: this._getStandardAuthOptions(),
+          });
+          autoStudents = this.authService.deriveStudentsFromAppData(appData);
+
+          if (autoStudents && autoStudents.length > 0) {
+            // For each configured student try to improve the configured data:
+            // - If studentId exists but title is missing, fill title from auto-discovered list
+            // - If title exists but no studentId, compute candidate ids (prefer title matches)
+            configuredStudents.forEach((configStudent) => {
+              if (!configStudent || typeof configStudent !== 'object') return;
+
+              // Fill missing title when we have an id
+              if (configStudent.studentId && !configStudent.title) {
+                const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
+                if (autoStudent) {
+                  configStudent.title = autoStudent.title;
+                  this._mmLog(
+                    'debug',
+                    configStudent,
+                    `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
+                  );
+                  return;
+                }
+              }
+
+              // If title is present but no studentId, suggest candidate ids based on title match
+              if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
+                const titleLower = String(configStudent.title).toLowerCase();
+                const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
+                const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
+                const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
+                configStudent.__warnings = configStudent.__warnings || [];
+                configStudent.__warnings.push(msg);
+                this._mmLog('warn', configStudent, msg);
+                return;
+              }
+            });
+          }
+        } catch (err) {
+          this._mmLog('warn', null, `Could not fetch auto-discovered names for title fallback: ${this._formatErr(err)}`);
+        }
+        // Additionally validate configured studentIds against discovered students
+        try {
+          if (autoStudents && autoStudents.length > 0) {
+            configuredStudents.forEach((configStudent) => {
+              if (!configStudent || !configStudent.studentId) return;
+              const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
+              if (!match) {
+                // Prefer candidates that match by title; otherwise include all ids
+                const candidateMatches = configStudent.title
+                  ? autoStudents.filter((a) => (a.title || '').toLowerCase().includes(String(configStudent.title).toLowerCase()))
+                  : [];
+                const candidateIds = (candidateMatches.length > 0 ? candidateMatches : autoStudents).map((s) => Number(s.studentId));
+                const msg = `Configured studentId ${configStudent.studentId} for title "${configStudent.title || ''}" was not found in auto-discovered students. Possible studentIds: ${candidateIds.join(', ')}.`;
+                configStudent.__warnings = configStudent.__warnings || [];
+                configStudent.__warnings.push(msg);
+                this._mmLog('warn', configStudent, msg);
+              }
+            });
+          }
+        } catch {
+          // ignore validation errors
+        }
+
+        return;
+      }
+
+      const server = moduleConfig.server || 'webuntis.com';
+      const { appData } = await this.authService.getAuth({
+        school: moduleConfig.school,
+        username: moduleConfig.username,
+        password: moduleConfig.password,
+        server,
+        options: this._getStandardAuthOptions(),
+      });
+      autoStudents = this.authService.deriveStudentsFromAppData(appData);
+
+      if (!autoStudents || autoStudents.length === 0) {
+        this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
+        return;
+      }
+
+      // Merge module-level defaults into each discovered student so downstream
+      // fetch logic has the expected fields (nextDays, etc.)
+      // Only assign discovered students once to avoid repeated re-assignment
+      // during periodic fetches which can lead to duplicate or inconsistent
+      // entries being appended to the runtime config.
+      if (!moduleConfig._autoStudentsAssigned) {
+        const defNoStudents = { ...(moduleConfig || {}) };
+        delete defNoStudents.students;
+        const normalizedAutoStudents = autoStudents.map((s) => {
+          const merged = { ...defNoStudents, ...(s || {}) };
+          // Ensure displayMode is lowercase
+          if (typeof merged.displayMode === 'string') {
+            merged.displayMode = merged.displayMode.toLowerCase();
+          }
+          return merged;
+        });
+
+        moduleConfig.students = normalizedAutoStudents;
+        moduleConfig._autoStudentsAssigned = true;
+
+        // Log all discovered students with their IDs in a prominent way
+        const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+        this._mmLog('info', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
+      } else {
+        this._mmLog('debug', null, 'Auto-discovered students already assigned; skipping reassignment');
+      }
+    } catch (err) {
+      this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
+    }
+  },
+
+  /**
+   * Create an authenticated session for a student
+   * Returns a session object with authentication data or throws an Error if credentials missing.
+   *
+   * @param {Object} sample - Student configuration sample
+   * @param {Object} moduleConfig - Module configuration
+   * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
+   */
+  async _createAuthSession(sample, moduleConfig) {
+    const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
+    const useQrLogin = Boolean(sample.qrcode);
+    const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
+    const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin;
+
+    // Mode 0: QR Code Login (student)
+    if (useQrLogin) {
+      this._mmLog('debug', sample, 'Authenticating with QR code');
+      const authResult = await this.authService.getAuthFromQRCode(sample.qrcode, {
+        cacheKey: `qr:${sample.qrcode}`,
+      });
+      return {
+        school: authResult.school,
+        server: authResult.server,
+        personId: authResult.personId,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
+        mode: 'qr',
+      };
+    }
+
+    // Mode 1: Parent Account (studentId + parent credentials from moduleConfig)
+    if (isParentMode && moduleConfig && moduleConfig.username && moduleConfig.password) {
+      const school = sample.school || moduleConfig.school;
+      const server = sample.server || moduleConfig.server || 'webuntis.com';
+      this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
+      const authResult = await this.authService.getAuth({
+        school,
+        username: moduleConfig.username,
+        password: moduleConfig.password,
+        server,
+        options: { cacheKey: `parent:${moduleConfig.username}@${server}` },
+      });
+      return {
+        school,
+        server,
+        personId: null,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
+        mode: 'parent',
+      };
+    }
+
+    // Mode 2: Direct Student Login (own credentials)
+    if (hasOwnCredentials) {
+      this._mmLog('debug', sample, `Authenticating with direct login (school=${sample.school}, server=${sample.server})`);
+      const authResult = await this.authService.getAuth({
+        school: sample.school,
+        username: sample.username,
+        password: sample.password,
+        server: sample.server,
+        options: { cacheKey: `direct:${sample.username}@${sample.server}` },
+      });
+      return {
+        school: sample.school,
+        server: sample.server,
+        personId: null,
+        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        token: authResult.token,
+        tenantId: authResult.tenantId,
+        schoolYearId: authResult.schoolYearId,
+        appData: authResult.appData,
+        mode: 'direct',
+      };
+    }
+
+    // No valid credentials found
+    let errorMsg = '\nCredentials missing! need either:';
+    errorMsg += '\n  (1) studentId + username/password in module config, or';
+    errorMsg += '\n  (2) username/password/school/server in student config, or';
+    errorMsg += '\n  (3) qrcode in student config for QR code login\n';
+
+    this._mmLog('error', sample, errorMsg);
+    throw new Error(errorMsg);
   },
 
   // Reduce memory by keeping only the fields the frontend uses
+  // Returns timeUnits array directly instead of wrapping in an object,
+  // since timeUnits (lesson slots) are the same for all days.
   _compactTimegrid(rawGrid) {
-    if (!Array.isArray(rawGrid)) return [];
-    return rawGrid.map((row) => ({
-      timeUnits: Array.isArray(row?.timeUnits)
-        ? row.timeUnits.map((u) => ({
-            startTime: u.startTime,
-            endTime: u.endTime,
-            name: u.name,
-          }))
-        : [],
-    }));
+    if (!Array.isArray(rawGrid) || rawGrid.length === 0) return [];
+
+    // Check if this is the old format (array of rows with timeUnits)
+    // or new format (direct array of time slots)
+    const firstRow = rawGrid[0];
+    if (firstRow && Array.isArray(firstRow.timeUnits)) {
+      // Old format: array of rows with timeUnits
+      return firstRow.timeUnits.map((u) => ({
+        startTime: u.startTime,
+        endTime: u.endTime,
+        name: u.name,
+      }));
+    }
+
+    // New format: direct array of time slots from _extractTimegridFromTimetable
+    if (firstRow && firstRow.startTime && firstRow.endTime) {
+      return rawGrid.map((u) => ({
+        startTime: u.startTime,
+        endTime: u.endTime,
+        name: u.name || '',
+      }));
+    }
+
+    return [];
   },
 
-  _compactLessons(rawLessons) {
-    if (!Array.isArray(rawLessons)) return [];
-    return rawLessons.map((el) => ({
-      date: el.date,
-      startTime: el.startTime,
-      endTime: el.endTime,
-      su: el.su && el.su[0] ? [{ name: el.su[0].name, longname: el.su[0].longname }] : [],
-      te: el.te && el.te[0] ? [{ name: el.te[0].name, longname: el.te[0].longname }] : [],
-      code: el.code || '',
-      substText: el.substText || '',
-      lstext: el.lstext || '',
-      id: el.id ?? null,
-      lid: el.lid ?? null,
-      lessonId: el.lessonId ?? null,
-    }));
+  /**
+   * Sanitize HTML text (delegated to dataTransformer)
+   */
+  _sanitizeHtmlText(text, preserveLineBreaks = true) {
+    return dataTransformer.sanitizeHtmlText(text, preserveLineBreaks);
   },
 
-  _compactExams(rawExams) {
-    if (!Array.isArray(rawExams)) return [];
-    return rawExams.map((ex) => ({
-      examDate: ex.examDate,
-      startTime: ex.startTime,
-      endTime: ex.endTime ?? null,
-      name: ex.name,
-      subject: ex.subject,
-      teachers: Array.isArray(ex.teachers) ? ex.teachers.slice(0, 2) : [],
-      text: ex.text || '',
-    }));
+  /**
+   * Normalize date format (delegated to dataTransformer)
+   */
+  _normalizeDateToInteger(date) {
+    return dataTransformer.normalizeDateToInteger(date);
   },
 
-  _compactHomeworks(rawHw) {
-    if (!rawHw) return [];
-    const hwArr = Array.isArray(rawHw)
-      ? rawHw
-      : Array.isArray(rawHw.homeworks)
-        ? rawHw.homeworks
-        : Array.isArray(rawHw.homework)
-          ? rawHw.homework
-          : [];
-    return hwArr.map((hw) => ({
-      id: hw.id ?? null,
-      lid: hw.lid ?? null,
-      lessonId: hw.lessonId ?? null,
-      dueDate: hw.dueDate ?? hw.date ?? null,
-      completed: hw.completed ?? null,
-      text: hw.text ?? hw.description ?? hw.remark ?? '',
-      remark: hw.remark ?? '',
-      su:
-        hw.su && typeof hw.su === 'object'
-          ? { name: hw.su.name, longname: hw.su.longname }
-          : hw.su && hw.su[0]
-            ? { name: hw.su[0].name, longname: hw.su[0].longname }
-            : null,
-    }));
-  },
-
-  _compactAbsences(rawAbsences) {
-    if (!Array.isArray(rawAbsences)) return [];
-    return rawAbsences.map((a) => ({
-      // Accept several common date field names returned by different
-      // webuntis versions/providers (startDate, date, absenceDate, day)
-      date: a.date ?? a.startDate ?? a.absenceDate ?? a.day ?? null,
-      startTime: a.startTime ?? a.start ?? null,
-      endTime: a.endTime ?? a.end ?? null,
-      reason: a.reason ?? a.reasonText ?? a.text ?? '',
-      excused: a.excused ?? a.isExcused ?? null,
-      student: a.student ?? null,
-      su: a.su && a.su[0] ? [{ name: a.su[0].name, longname: a.su[0].longname }] : [],
-      te: a.te && a.te[0] ? [{ name: a.te[0].name, longname: a.te[0].longname }] : [],
-      lessonId: a.lessonId ?? a.lid ?? a.id ?? null,
-    }));
-  },
-
-  _compactMessagesOfDay(rawMessages) {
-    if (!Array.isArray(rawMessages)) return [];
-    return rawMessages.map((m) => ({
-      id: m.id ?? null,
-      subject: m.subject ?? '',
-      text: m.text ?? '',
-      isExpanded: m.isExpanded ?? false,
-    }));
+  /**
+   * Normalize time format (delegated to dataTransformer)
+   */
+  _normalizeTimeToMinutes(time) {
+    return dataTransformer.normalizeTimeToMinutes(time);
   },
 
   _compactHolidays(rawHolidays) {
     if (!Array.isArray(rawHolidays)) return [];
-    return rawHolidays.map((h) => ({
-      id: h.id ?? null,
-      name: h.name ?? h.longName ?? '',
-      longName: h.longName ?? h.name ?? '',
-      startDate: h.startDate ?? null,
-      endDate: h.endDate ?? null,
-    }));
+    return rawHolidays.map((h) => {
+      // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
+      let startDate = h.startDate;
+      let endDate = h.endDate;
+
+      // Convert ISO timestamp to YYYYMMDD if needed
+      if (h.start && !h.startDate) {
+        const startDateObj = new Date(h.start);
+        startDate = startDateObj.getFullYear() * 10000 + (startDateObj.getMonth() + 1) * 100 + startDateObj.getDate();
+      }
+      if (h.end && !h.endDate) {
+        const endDateObj = new Date(h.end);
+        endDate = endDateObj.getFullYear() * 10000 + (endDateObj.getMonth() + 1) * 100 + endDateObj.getDate();
+      }
+
+      return {
+        id: h.id ?? null,
+        name: h.name ?? h.longName ?? '',
+        longName: h.longName ?? h.name ?? '',
+        startDate: startDate ?? null,
+        endDate: endDate ?? null,
+      };
+    });
+  },
+
+  /**
+   * Extract and compact holidays from authSession.appData.
+   * This is called once per credential group to avoid redundant processing.
+   * @param {Object} authSession - Authenticated session with appData
+   * @param {boolean} shouldFetch - Whether holidays should be fetched
+   * @returns {Array} Compacted holidays array
+   */
+  _extractAndCompactHolidays(authSession, shouldFetch) {
+    if (!shouldFetch) return [];
+
+    let rawHolidays = [];
+    try {
+      // Holidays are included in the app/data response (authSession.appData)
+      if (authSession && authSession.appData) {
+        // Check if holidays are directly in appData or nested
+        if (Array.isArray(authSession.appData.holidays)) {
+          rawHolidays = authSession.appData.holidays;
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.holidays`);
+        } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
+          rawHolidays = authSession.appData.data.holidays;
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.data.holidays`);
+        } else {
+          this._mmLog('debug', null, 'Holidays: no holidays array found in appData');
+        }
+      } else {
+        this._mmLog('debug', null, 'Holidays: no appData available');
+      }
+    } catch (error) {
+      this._mmLog('error', null, `Holidays extraction failed: ${error && error.message ? error.message : error}`);
+    }
+
+    return this._compactHolidays(rawHolidays);
   },
 
   _wantsWidget(widgetName, displayMode) {
@@ -185,112 +834,75 @@ module.exports = NodeHelper.create({
       });
   },
 
+  // ===== WARNING VALIDATION FUNCTIONS =====
+
+  /**
+   * Validate student credentials and configuration before attempting fetch
+   */
+  _validateStudentConfig(student) {
+    // Validate credentials
+    const credentialWarnings = widgetConfigValidator.validateStudentCredentials(student);
+
+    // Validate widget-specific configurations
+    const widgetWarnings = widgetConfigValidator.validateStudentWidgets(student);
+
+    return [...credentialWarnings, ...widgetWarnings];
+  },
+
+  /**
+   * Convert REST API errors to user-friendly warning messages
+   */
+  _convertRestErrorToWarning(error, context = {}) {
+    return errorHandler.convertRestErrorToWarning(error, context);
+  },
+
+  /**
+   * Check if empty data array should trigger a warning
+   */
+  _checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData = true) {
+    return errorHandler.checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData);
+  },
+
+  /**
+   * Validate module configuration for common issues
+   */
+  _validateModuleConfig(config) {
+    const warnings = [];
+
+    // Validate displayMode
+    const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
+    if (config.displayMode && typeof config.displayMode === 'string') {
+      const widgets = config.displayMode
+        .split(',')
+        .map((w) => w.trim())
+        .filter(Boolean);
+      const invalid = widgets.filter((w) => !validWidgets.includes(w.toLowerCase()));
+      if (invalid.length > 0) {
+        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
+      }
+    }
+
+    // Validate logLevel
+    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
+    if (config.logLevel && !validLogLevels.includes(config.logLevel.toLowerCase())) {
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
+    }
+
+    // Validate widget-specific configurations
+    const widgetWarnings = widgetConfigValidator.validateAllWidgets(config);
+    warnings.push(...widgetWarnings);
+
+    return warnings;
+  },
+
   // Backend performs API calls only; no data normalization here.
 
   /*
    * Small in-memory cache helpers keyed by a request signature (stringified
-   * object describing credential + request options). Each entry stores a
-   * payload and a timestamp and expires after `_cacheTTLMs` milliseconds.
-   */
-  _makeRequestSignature(student) {
-    try {
-      const credKey = this._getCredentialKey(student);
-      const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
-      const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
-      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
-      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
-      const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
 
-      // Data fetching is driven by widgets; legacy per-student flags can only disable.
-      const fetchHomeworksEffective = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
-      const fetchAbsencesEffective = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
-      // include the most relevant options that affect the backend fetch
-      const sig = {
-        credKey,
-        daysToShow: Number(student.daysToShow || 0),
-        pastDaysToShow: Number(student.pastDaysToShow || 0),
-        useClassTimetable: Boolean(student.useClassTimetable),
-        examsDaysAhead: Number(student.examsDaysAhead || 0),
-        wantsGrid: wantsGridWidget,
-        wantsLessons: wantsLessonsWidget,
-        wantsExams: wantsExamsWidget,
-        fetchHomeworks: fetchHomeworksEffective,
-        fetchAbsences: fetchAbsencesEffective,
-      };
-      return JSON.stringify(sig);
-    } catch {
-      return String(Date.now());
-    }
-  },
 
-  _getCachedResponse(signature) {
-    if (!this._responseCache) return null;
-    const rec = this._responseCache.get(signature);
-    if (!rec) return null;
-    const age = Date.now() - (rec.ts || 0);
-    const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
-    if (age > ttl) {
-      this._responseCache.delete(signature);
-      return null;
-    }
-    return rec.payload;
-  },
 
-  _storeCachedResponse(signature, payload) {
-    if (!this._responseCache) this._responseCache = new Map();
-    try {
-      this._responseCache.set(signature, { ts: Date.now(), payload });
-    } catch (e) {
-      // if cache insert fails, don't block operation
-      this._mmLog('debug', null, `Cache store failed for ${signature}: ${e && e.message ? e.message : e}`);
-    }
-  },
 
-  /* Periodic cache cleanup ------------------------------------------------
-   * Removes expired cache entries. Runs on an interval configured by
-   * `_cacheCleanupIntervalMs` and respects `_cacheTTLMs` for entry expiration.
-   */
-  _cacheCleanup() {
-    try {
-      if (!this._responseCache || this._responseCache.size === 0) return;
-      const now = Date.now();
-      const ttl = Number(this._cacheTTLMs || DEFAULT_CACHE_TTL_MS);
-      for (const [sig, rec] of this._responseCache.entries()) {
-        if (!rec || !rec.ts) {
-          this._responseCache.delete(sig);
-          continue;
-        }
-        if (now - rec.ts > ttl) {
-          this._responseCache.delete(sig);
-        }
-      }
-      this._mmLog('debug', null, `Cache cleanup completed (remaining=${this._responseCache.size})`);
-    } catch (err) {
-      this._mmLog('debug', null, `Cache cleanup error: ${this._formatErr(err)}`);
-    }
-  },
-
-  _startCacheCleanup() {
-    try {
-      if (this._cacheCleanupTimer) return;
-      const interval = Number(this._cacheCleanupIntervalMs || DEFAULT_CACHE_CLEANUP_INTERVAL_MS) || DEFAULT_CACHE_CLEANUP_INTERVAL_MS;
-      this._cacheCleanupTimer = setInterval(() => this._cacheCleanup(), interval);
-      this._mmLog('debug', null, `Started cache cleanup interval ${interval}ms`);
-    } catch {
-      // non-fatal
-    }
-  },
-
-  _stopCacheCleanup() {
-    try {
-      if (this._cacheCleanupTimer) {
-        clearInterval(this._cacheCleanupTimer);
-        this._cacheCleanupTimer = null;
-      }
-    } catch {
-      // ignore
-    }
-  },
 
   /**
    * Process a credential group: login, fetch data for students and logout.
@@ -299,91 +911,112 @@ module.exports = NodeHelper.create({
    */
   async processGroup(credKey, students, identifier) {
     // Single-run processing: authenticate, fetch data for each student, and logout.
-    let untis = null;
+    let authSession = null;
     const sample = students[0];
+    const groupWarnings = [];
+    // Per-fetch-cycle warning deduplication set. Ensures identical warnings
+    // are reported only once per processing run (prevents spam across students).
+    this._currentFetchWarnings = new Set();
+
     try {
       try {
-        untis = this._createUntisClient(sample);
-      } catch {
-        this._mmLog('error', null, `No credentials for group ${credKey}`);
+        authSession = await this._createAuthSession(sample, this.config);
+      } catch (err) {
+        const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
+        this._mmLog('error', null, msg);
+        // Record and mark this warning for the current fetch cycle
+        if (!this._currentFetchWarnings.has(msg)) {
+          groupWarnings.push(msg);
+          this._currentFetchWarnings.add(msg);
+        }
+        // Send error payload to frontend with warnings
+        for (const student of students) {
+          this.sendSocketNotification('GOT_DATA', {
+            title: student.title,
+            id: identifier,
+            config: student,
+            warnings: groupWarnings,
+            timeUnits: [],
+            timetableRange: [],
+            exams: [],
+            homeworks: [],
+            absences: [],
+          });
+        }
         return;
       }
 
-      await untis.login();
+      // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
+      // Holidays are shared across all students in the same school/group.
+      // Extract and compact them once before processing students to avoid redundant work.
+      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
+      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
+      const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
+      const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
+      if (shouldFetchHolidays) {
+        this._mmLog(
+          'debug',
+          null,
+          `Holidays extracted for group: ${sharedCompactHolidays.length} periods (shared across ${students.length} students)`
+        );
+      }
+
+      // Authentication complete via authService (no login() needed)
       for (const student of students) {
         try {
-          // Build a signature for this student's request and consult cache
-          const sig = this._makeRequestSignature(student);
-          const cached = this._getCachedResponse(sig);
-          if (cached) {
-            // deliver cached payload to the requesting module id (preserve id)
-            try {
-              const cachedForSend = { ...cached, id: identifier };
-              this.sendSocketNotification('GOT_DATA', cachedForSend);
-              this._mmLog('debug', student, `Cache hit for ${student.title} (sig=${sig})`);
-              continue;
-            } catch (err) {
-              this._mmLog('error', student, `Failed to send cached GOT_DATA for ${student.title}: ${this._formatErr(err)}`);
-              // fall through to perform a fresh fetch
-            }
+          // ===== VALIDATE STUDENT CONFIG =====
+          const studentValidationWarnings = this._validateStudentConfig(student);
+          if (studentValidationWarnings.length > 0) {
+            studentValidationWarnings.forEach((w) => {
+              this._mmLog('warn', student, w);
+              if (!this._currentFetchWarnings.has(w)) {
+                groupWarnings.push(w);
+                this._currentFetchWarnings.add(w);
+              }
+            });
           }
 
-          // Not cached or send failed: fetch fresh and store in cache
-          const payload = await this.fetchData(untis, student, identifier, credKey);
-          if (payload) {
-            try {
-              // store a copy without the id (id varies per requester)
-              const storeable = { ...payload, id: undefined };
-              this._storeCachedResponse(sig, storeable);
-              this._mmLog('debug', student, `Stored payload in cache for ${student.title} (sig=${sig})`);
-            } catch (err) {
-              this._mmLog('debug', student, `Cache store skipped for ${student.title}: ${this._formatErr(err)}`);
-            }
+          // Fetch fresh data for this student
+          this._mmLog('debug', student, `Fetching data for ${student.title}...`);
+          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays);
+          if (!payload) {
+            this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           }
         } catch (err) {
-          this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
+          const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
+          this._mmLog('error', student, errorMsg);
+
+          // ===== CONVERT REST ERRORS TO USER-FRIENDLY WARNINGS =====
+          const warningMsg = this._convertRestErrorToWarning(err, {
+            studentTitle: student.title,
+            school: student.school || this.config?.school,
+            server: student.server || this.config?.server || 'webuntis.com',
+          });
+          if (warningMsg) {
+            // Only record each distinct warning once per fetch cycle
+            if (!this._currentFetchWarnings.has(warningMsg)) {
+              groupWarnings.push(warningMsg);
+              this._currentFetchWarnings.add(warningMsg);
+            }
+            this._mmLog('warn', student, warningMsg);
+          }
         }
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
+      const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
+      if (!this._currentFetchWarnings.has(authMsg)) {
+        groupWarnings.push(authMsg);
+        this._currentFetchWarnings.add(authMsg);
+      }
     } finally {
+      // Cleanup not needed - session managed by authService cache
+      // Clear per-fetch warning dedupe set now that processing for this group finished
       try {
-        if (untis) await untis.logout();
-      } catch (err) {
-        this._mmLog('error', null, `Error during logout for group ${credKey}: ${this._formatErr(err)}`);
+        this._currentFetchWarnings = undefined;
+      } catch {
+        this._currentFetchWarnings = undefined;
       }
-    }
-  },
-
-  /**
-   * Centralized backend logger that honors module and per-student debug flags.
-   * Emits messages using the MagicMirror `Log` helper.
-   *
-   * @param {'info'|'debug'|'error'} level
-   * @param {Object|null} student
-   * @param {string} message
-   */
-  _mmLog(level, student, message) {
-    try {
-      const prefix = `[MMM-Webuntis]`;
-      if (level === 'info') {
-        Log.info(`${prefix} ${message}`);
-      } else if (level === 'error') {
-        Log.error(`${prefix} ${message}`);
-      } else if (level === 'debug') {
-        if (this.config && this.config.logLevel === 'debug') {
-          if (typeof Log.debug === 'function') {
-            Log.debug(`${prefix} ${message}`);
-          } else {
-            Log.info(`${prefix} [DEBUG] ${message}`);
-          }
-        }
-      } else {
-        Log.info(`${prefix} ${message}`);
-      }
-    } catch (e) {
-      Log.error(`[MMM-Webuntis] Error in logging: ${e && e.message ? e.message : e}`);
-      // swallow
     }
   },
 
@@ -395,42 +1028,141 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
+    this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
+
     if (notification === 'FETCH_DATA') {
       // Assign incoming payload to module config
-      this.config = payload;
-      this._mmLog('info', null, `FETCH_DATA received (students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`);
+      // Normalize legacy config keys server-side
+      const { normalizedConfig } = applyLegacyMappings(payload);
+      this.config = normalizedConfig;
+
+      // Persist debugDate: save it if present in current config, otherwise use the persisted one
+      if (this.config.debugDate) {
+        this._persistedDebugDate = this.config.debugDate;
+        this._mmLog('debug', null, `[FETCH_DATA] Received debugDate="${this.config.debugDate}"`);
+      } else if (this._persistedDebugDate) {
+        // No debugDate in current request, use the persisted one from previous request
+        this.config.debugDate = this._persistedDebugDate;
+        this._mmLog('debug', null, `[FETCH_DATA] Using persisted debugDate="${this._persistedDebugDate}"`);
+      } else {
+        this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
+      }
+
+      // Validate configuration and return errors to frontend if invalid
+      try {
+        // Apply legacy mappings to convert old keys to new structure (includes normalization)
+        const { normalizedConfig, legacyUsed } = applyLegacyMappings(this.config, {
+          warnCallback: (msg) => this._mmLog('warn', null, msg),
+        });
+
+        // Ensure displayMode is lowercase (part of normalization)
+        if (typeof normalizedConfig.displayMode === 'string') {
+          normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
+        }
+
+        // Persist normalized config so the helper uses mapped keys everywhere
+        this.config = normalizedConfig;
+
+        const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
+        const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
+
+        // Generate detailed deprecation warnings for any legacy keys used
+        const detailedWarnings = legacyUsed && legacyUsed.length > 0 ? generateDeprecationWarnings(legacyUsed) : [];
+        const combinedWarnings = [...(warnings || []), ...detailedWarnings];
+        if (!valid) {
+          this.sendSocketNotification('CONFIG_ERROR', {
+            errors,
+            warnings: combinedWarnings,
+            severity: 'ERROR',
+            message: 'Configuration validation failed',
+          });
+          return;
+        }
+        if (combinedWarnings.length > 0) {
+          // Only send CONFIG_WARNING once per helper lifecycle to avoid repeated warnings
+          if (!this._configWarningsSent) {
+            this.sendSocketNotification('CONFIG_WARNING', {
+              warnings: combinedWarnings,
+              severity: 'WARN',
+              message: 'Configuration has warnings (deprecated fields detected)',
+            });
+            this._configWarningsSent = true;
+          } else {
+            this._mmLog('debug', null, 'CONFIG_WARNING suppressed (already sent)');
+          }
+        }
+      } catch (e) {
+        this._mmLog('debug', null, `Config validation failed unexpectedly: ${this._formatErr(e)}`);
+      }
+
+      this._mmLog(
+        'info',
+        null,
+        `Data request received (FETCH_DATA for students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`
+      );
+
+      // Debug: show which interval keys frontend sent (updateInterval preferred)
+      try {
+        this._mmLog(
+          'debug',
+          null,
+          `Received intervals: updateInterval=${this.config.updateInterval} fetchIntervalMs=${this.config.fetchIntervalMs}`
+        );
+      } catch {
+        // ignore
+      }
 
       try {
+        // Auto-discover students from app/data when parent credentials are provided but students[] is missing
+        await this._ensureStudentsFromAppData(this.config);
+
+        // If after normalization there are still no students configured, attempt to build
+        // the students array internally from app/data so the rest of the flow can proceed.
+        if (!Array.isArray(this.config.students) || this.config.students.length === 0) {
+          try {
+            const server = this.config.server || 'webuntis.com';
+            const creds = { username: this.config.username, password: this.config.password, school: this.config.school };
+            if (creds.username && creds.password && creds.school) {
+              const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
+              const autoStudents = this._deriveStudentsFromAppData(appData);
+              if (autoStudents && autoStudents.length > 0) {
+                if (!this.config._autoStudentsAssigned) {
+                  const defNoStudents = { ...(this.config || {}) };
+                  delete defNoStudents.students;
+                  const normalized = autoStudents.map((s) => {
+                    const merged = { ...defNoStudents, ...(s || {}) };
+                    // Ensure displayMode is lowercase
+                    if (typeof merged.displayMode === 'string') {
+                      merged.displayMode = merged.displayMode.toLowerCase();
+                    }
+                    return merged;
+                  });
+                  this.config.students = normalized;
+                  this.config._autoStudentsAssigned = true;
+                  const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+                  this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
+                } else {
+                  this._mmLog('debug', null, 'Auto-built students already assigned; skipping');
+                }
+              }
+            }
+          } catch (e) {
+            this._mmLog('debug', null, `Auto-build students from app/data failed: ${this._formatErr(e)}`);
+          }
+        }
+
         // Group students by credential so we can reuse the same untis session
         const identifier = this.config.id;
         const groups = new Map();
 
-        const properties = [
-          'daysToShow',
-          'pastDaysToShow',
-          'showStartTime',
-          'useClassTimetable',
-          'showTeacherMode',
-          'useShortSubject',
-          'showSubstitutionText',
-          'examsDaysAhead',
-          'showExamSubject',
-          'showExamTeacher',
-          'logLevel',
-        ];
-
-        // normalize student configs and group
-        for (const student of this.config.students) {
-          properties.forEach((prop) => {
-            student[prop] = student[prop] !== undefined ? student[prop] : this.config[prop];
-          });
-          if (student.daysToShow < 0 || student.daysToShow > 10 || isNaN(student.daysToShow)) {
-            student.daysToShow = 1;
-          }
-
-          const credKey = this._getCredentialKey(student);
+        // Group students by credential. Normalize each student config for legacy key compatibility.
+        const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
+        for (const student of studentsList) {
+          // Apply legacy config mapping to student-level config
+          const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
+          const credKey = this._getCredentialKey(normalizedStudent, this.config);
           if (!groups.has(credKey)) groups.set(credKey, []);
-          groups.get(credKey).push(student);
+          groups.get(credKey).push(normalizedStudent);
         }
 
         // For each credential group process independently. Do not coalesce requests
@@ -439,7 +1171,7 @@ module.exports = NodeHelper.create({
           // Run sequentially to reduce peak memory usage on low-RAM devices
           await this.processGroup(credKey, students, identifier);
         }
-        this._mmLog('info', null, 'Successfully fetched data');
+        this._mmLog('debug', null, 'Successfully fetched data');
       } catch (error) {
         this._mmLog('error', null, `Error loading Untis data: ${error}`);
       }
@@ -448,69 +1180,105 @@ module.exports = NodeHelper.create({
 
   /**
    * Build a stable key that represents a login/session so results can be cached.
-   * The key is based on qrcode when present or username/server/school otherwise.
+   * For parent accounts (studentId + module-level username), group by parent credentials.
+   * For direct logins, group by student credentials.
    *
    * @param {Object} student - Student credential object
    * @returns {string} credential key
    */
-  _getCredentialKey(student) {
+  _getCredentialKey(student, moduleConfig) {
+    const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
+    const hasOwnCredentials = student.qrcode || (student.username && student.password && student.school && student.server);
+    const isParentMode = hasStudentId && !hasOwnCredentials;
+
+    // Parent account mode: group by module-level parent credentials
+    if (isParentMode && moduleConfig) {
+      return `parent:${moduleConfig.username || 'undefined'}@${moduleConfig.server || 'webuntis.com'}/${moduleConfig.school || 'undefined'}`;
+    }
+
+    // Direct student login: group by student credentials
     if (student.qrcode) return `qrcode:${student.qrcode}`;
     const server = student.server || 'default';
     return `user:${student.username}@${server}/${student.school}`;
   },
 
   /**
-   * Return the timegrid for the given credential. Always fetch fresh data from WebUntis.
+   * Extract timegrid from timetable data (REST API returns time slots with lessons)
+   * The REST API doesn't have a separate timegrid endpoint, but the timetable includes time information
    *
-   * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (currently unused)
-   * @returns {Promise<Array>} timegrid array
+   * @param {Array} timetable - Timetable array from REST API
+   * @returns {Array} timegrid array with timeUnits
    */
-  async _getTimegrid(untis, credKey) {
-    try {
-      const grid = await untis.getTimegrid();
-      return grid || [];
-    } catch (err) {
-      // return empty array on error
-      this._mmLog('error', null, `Error fetching timegrid for ${credKey}: ${err && err.message ? err.message : err}`);
-      return [];
+  _extractTimegridFromTimetable(timetable) {
+    if (!Array.isArray(timetable) || timetable.length === 0) return [];
+
+    // Extract unique START times from all lessons
+    const startTimes = new Set();
+    timetable.forEach((lesson) => {
+      if (lesson.startTime) {
+        startTimes.add(lesson.startTime);
+      }
+    });
+
+    if (startTimes.size === 0) return [];
+
+    // Sort unique start times
+    const sortedStarts = Array.from(startTimes).sort((a, b) => {
+      const timeA = parseInt(a.replace(':', ''));
+      const timeB = parseInt(b.replace(':', ''));
+      return timeA - timeB;
+    });
+
+    // Create timeUnits (periods) from sorted start times
+    const timeUnits = [];
+    for (let i = 0; i < sortedStarts.length; i++) {
+      const startTime = sortedStarts[i];
+      // Estimate end time: either from next period or assume 45-minute period
+      let endTime = sortedStarts[i + 1];
+      if (!endTime) {
+        // For the last period, find the latest end time from lessons with this start
+        const lessonsWithThisStart = timetable.filter((l) => l.startTime === startTime);
+        endTime = lessonsWithThisStart.length > 0 ? lessonsWithThisStart[0].endTime : null;
+        if (!endTime) {
+          const [hh, mm] = startTime.split(':').map(Number);
+          endTime = `${String(hh).padStart(2, '0')}${String(mm + 45).padStart(2, '0')}`;
+        }
+      }
+
+      timeUnits.push({
+        startTime,
+        endTime,
+        name: `${i + 1}`, // Period number
+      });
     }
+
+    return timeUnits;
   },
 
   /**
-   * Return the week's timetable for the given credential and week start.
-   * Always fetch fresh data from WebUntis.
-   *
-   * @param {Object} untis - Authenticated WebUntis client
-   * @param {string} credKey - Credential key (currently unused)
-   * @param {Date} rangeStart - Week start date
-   * @returns {Promise<Array>} week timetable
-   */
-  async _getWeekTimetable(untis, credKey, rangeStart) {
-    try {
-      const weekTimetable = await untis.getOwnTimetableForWeek(rangeStart);
-      return weekTimetable || [];
-    } catch (err) {
-      this._mmLog('error', null, `Error fetching week timetable for ${credKey}: ${err && err.message ? err.message : err}`);
-      return [];
-    }
-  },
-
-  /**
-   * Fetch and normalize data for a single student using the provided authenticated
-   * `untis` client. This collects lessons, exams and homeworks and sends a
+   * Fetch and normalize data for a single student using the provided authenticated session.
+   * This collects lessons, exams and homeworks and sends a
    * `GOT_DATA` socket notification back to the frontend.
    *
-   * @param {Object} untis - Authenticated WebUntis client
+   * @param {Object} authSession - Authenticated session with server, school, cookies, token
    * @param {Object} student - Student config object
    * @param {string} identifier - Module instance identifier
    * @param {string} credKey - Credential grouping key
+   * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
    */
-  async fetchData(untis, student, identifier, credKey) {
+  async fetchData(authSession, student, identifier, credKey, compactHolidays = []) {
     const logger = (msg) => {
       this._mmLog('debug', student, msg);
     };
     // Backend fetches raw data from Untis API. No transformation here.
+
+    const restOptions = { cacheKey: credKey, authSession };
+    const { school, server } = authSession;
+    const ownPersonId = authSession.personId;
+    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId);
+    const describeTarget = (t) =>
+      t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
+    const className = student.class || student.className || this.config?.class || null;
 
     const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
@@ -519,229 +1287,474 @@ module.exports = NodeHelper.create({
     const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
     const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
 
-    // Data fetching is driven by widgets; legacy per-student flags can only disable.
+    // Data fetching is driven by widgets.
     const fetchTimegrid = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
-    const fetchHomeworks = Boolean(wantsHomeworkWidget && student.fetchHomeworks !== false);
-    const fetchAbsences = Boolean(wantsAbsencesWidget && student.fetchAbsences !== false);
-    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget && student.fetchMessagesOfDay !== false);
-    const fetchHolidays = Boolean((wantsGridWidget || wantsLessonsWidget) && student.fetchHolidays !== false);
+    const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
+    // NOTE: With REST API updates, absences are now available for parent accounts via /WebUntis/api/absences
+    const fetchAbsences = Boolean(wantsAbsencesWidget);
+    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
+    const fetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
 
-    var rangeStart = new Date(Date.now());
-    var rangeEnd = new Date(Date.now());
+    // Respect optional debug date from module config to allow reproducible fetches.
+    const baseNow = function () {
+      try {
+        const dbg = (typeof this.config?.debugDate === 'string' && this.config.debugDate) || null;
+        if (dbg) {
+          // accept YYYY-MM-DD or YYYYMMDD
+          const s = String(dbg).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
+          if (/^\d{8}$/.test(s)) return new Date(`${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}T00:00:00`);
+        }
+      } catch {
+        // fall through to real now
+      }
+      return new Date(Date.now());
+    }.call(this);
 
-    rangeStart.setDate(rangeStart.getDate() - student.pastDaysToShow);
-    rangeEnd.setDate(rangeEnd.getDate() - student.pastDaysToShow + parseInt(student.daysToShow));
+    let rangeStart = new Date(baseNow);
+    let rangeEnd = new Date(baseNow);
+    const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
+
+    // Use per-student `pastDays` / `nextDays` (preferred). Fall back to legacy keys.
+    const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? this.config?.pastDays ?? this.config?.pastDaysToShow ?? 0);
+    // Prefer explicit `nextDays` (student), then module-level `nextDays`,
+    // then fall back to legacy `daysToShow` values.
+    const nextDaysValue = Number(student.nextDays ?? this.config?.nextDays ?? student.daysToShow ?? this.config?.daysToShow ?? 2);
+
+    // For timetable/grid, also check grid-specific nextDays/pastDays
+    // If grid.nextDays is set, use max(global nextDays, grid.nextDays) to ensure we fetch enough data
+    let gridNextDays = nextDaysValue;
+    let gridPastDays = pastDaysValue;
+    if (wantsGridWidget) {
+      const gridNext = Number(student.grid?.nextDays ?? this.config?.grid?.nextDays ?? 0);
+      const gridPast = Number(student.grid?.pastDays ?? this.config?.grid?.pastDays ?? 0);
+      gridNextDays = Math.max(nextDaysValue, gridNext > 0 ? gridNext : 0);
+      gridPastDays = Math.max(pastDaysValue, gridPast > 0 ? gridPast : 0);
+    }
+
+    rangeStart.setDate(rangeStart.getDate() - gridPastDays);
+    rangeEnd.setDate(rangeEnd.getDate() - gridPastDays + parseInt(gridNextDays, 10));
+    logger(
+      `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${gridPastDays}, nextDays=${gridNextDays}`
+    );
+    logger(
+      `Config values: module.nextDays=${this.config?.nextDays}, module.grid.nextDays=${this.config?.grid?.nextDays}, student.grid.nextDays=${student.grid?.nextDays}`
+    );
     // Compute absences-specific start and end dates (allow per-student override or global config)
-    const absPast = Number.isFinite(Number(student.absencesPastDays))
-      ? Number(student.absencesPastDays)
-      : Number.isFinite(Number(this.config?.absencesPastDays))
-        ? Number(this.config.absencesPastDays)
+    const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
+      ? Number(student.absences?.pastDays ?? student.absencesPastDays)
+      : Number.isFinite(Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays))
+        ? Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays)
         : 0;
-    const absFuture = Number.isFinite(Number(student.absencesFutureDays))
-      ? Number(student.absencesFutureDays)
-      : Number.isFinite(Number(this.config?.absencesFutureDays))
-        ? Number(this.config.absencesFutureDays)
+    const absFuture = Number.isFinite(Number(student.absences?.futureDays ?? student.absencesFutureDays))
+      ? Number(student.absences?.futureDays ?? student.absencesFutureDays)
+      : Number.isFinite(Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays))
+        ? Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays)
         : 0;
 
-    const absencesRangeStart = new Date(Date.now());
+    const absencesRangeStart = new Date(baseNow);
     absencesRangeStart.setDate(absencesRangeStart.getDate() - absPast);
-    const absencesRangeEnd = new Date(rangeEnd);
+    const absencesRangeEnd = new Date(baseNow);
     absencesRangeEnd.setDate(absencesRangeEnd.getDate() + absFuture);
 
-    // Get Timegrid (raw) - only needed for grid widget
+    // Get Timegrid - prefer appData.currentSchoolYear.timeGrid.units, fallback to extraction from timetable
+    // This ensures we have timeUnits even during holidays when no lessons are scheduled
     let grid = [];
-    if (fetchTimegrid) {
-      try {
-        grid = await this._getTimegrid(untis, credKey);
-      } catch (error) {
-        this._mmLog('error', null, `getTimegrid error for ${credKey}: ${error && error.message ? error.message : error}`);
+
+    // Try to extract timeGrid from appData first
+    if (authSession?.appData?.currentSchoolYear?.timeGrid?.units) {
+      const units = authSession.appData.currentSchoolYear.timeGrid.units;
+      if (Array.isArray(units) && units.length > 0) {
+        grid = units.map((u) => ({
+          name: String(u.unitOfDay || u.period || ''),
+          startTime: u.startTime || 0,
+          endTime: u.endTime || 0,
+        }));
+        logger(`✓ Timegrid: extracted ${grid.length} time slots from appData.currentSchoolYear.timeGrid\n`);
       }
     }
 
     // Prepare raw timetable containers
     let timetable = [];
 
-    if (fetchTimetable && student.daysToShow > 0) {
+    if (fetchTimetable && gridNextDays > 0) {
       try {
-        if (student.useClassTimetable) {
-          logger(`[MMM-Webuntis] getOwnClassTimetableForRange from ${rangeStart} to ${rangeEnd}`);
-          timetable = await untis.getOwnClassTimetableForRange(rangeStart, rangeEnd);
-          logger(`[MMM-Webuntis] ownClassTimetable received for ${student.title}`);
-        } else {
-          logger(`[MMM-Webuntis] getOwnTimetableForRange from ${rangeStart} to ${rangeEnd}`);
-          timetable = await untis.getOwnTimetableForRange(rangeStart, rangeEnd);
-          logger(`[MMM-Webuntis] ownTimetable received for ${student.title}`);
+        for (const target of restTargets) {
+          logger(`Timetable: fetching via REST (${describeTarget(target)})...`);
+          try {
+            timetable = await this._callRest(
+              this._getTimetableViaRest,
+              target,
+              rangeStart,
+              rangeEnd,
+              target.studentId,
+              {
+                ...restOptions,
+                useClassTimetable: Boolean(student.useClassTimetable),
+                className,
+                classId: student.classId || null,
+                studentId: target.studentId,
+              },
+              Boolean(student.useClassTimetable),
+              className
+            );
+            logger(`✓ Timetable: ${timetable.length} lessons\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Timetable failed (${describeTarget(target)}): ${restError.message}\n`);
+          }
         }
       } catch (error) {
-        this._mmLog('error', student, `Timetable fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Timetable failed: ${error && error.message ? error.message : error}`);
       }
+    } else if (fetchTimetable) {
+      logger(`Timetable: skipped (daysToShow=${student.daysToShow})`);
     }
 
     // Exams (raw)
     let rawExams = [];
-    if (fetchExams && student.examsDaysAhead > 0) {
+
+    // Extract timegrid from timetable data only if not already available from appData
+    if (fetchTimegrid && grid.length === 0 && timetable.length > 0) {
+      grid = this._extractTimegridFromTimetable(timetable);
+      logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable (fallback)\n`);
+    }
+    const examsNextDays =
+      student.exams?.nextDays ??
+      student.examsDaysAhead ??
+      student.exams?.daysAhead ??
+      this.config?.exams?.nextDays ??
+      this.config?.examsDaysAhead ??
+      this.config?.exams?.daysAhead ??
+      0;
+    if (fetchExams && examsNextDays > 0) {
       // Validate the number of days
-      if (student.examsDaysAhead < 1 || student.examsDaysAhead > 360 || isNaN(student.examsDaysAhead)) {
-        student.examsDaysAhead = 30;
+      let validatedDays = examsNextDays;
+      if (validatedDays < 1 || validatedDays > 360 || isNaN(validatedDays)) {
+        validatedDays = 30;
       }
 
-      // var rangeStart = new Date(Date.now());
-      // var rangeEnd = new Date(Date.now());
-      rangeEnd.setDate(rangeStart.getDate() + student.examsDaysAhead);
+      rangeStart = new Date(baseNow);
+      rangeStart.setDate(rangeStart.getDate() - (student.pastDaysToShow ?? student.pastDays ?? this.config?.pastDays ?? 0));
+      rangeEnd = new Date(baseNow);
+      rangeEnd.setDate(rangeEnd.getDate() + validatedDays);
+
+      logger(`Exams: querying ${validatedDays} days ahead...`);
 
       try {
-        rawExams = await untis.getExamsForRange(rangeStart, rangeEnd);
+        for (const target of restTargets) {
+          logger(`Exams: fetching via REST (${describeTarget(target)})...`);
+          try {
+            rawExams = await this._callRest(this._getExamsViaRest, target, rangeStart, rangeEnd, target.studentId, restOptions);
+            logger(`✓ Exams: ${rawExams.length} found\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Exams failed (${describeTarget(target)}): ${restError.message}`);
+          }
+        }
         this._lastRawExams = rawExams;
       } catch (error) {
-        this._mmLog('error', student, `Exams fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
-      }
-    }
-
-    // Load homework for the period (from today until rangeEnd + 7 days) – keep raw
-    let hwResult = null;
-    if (fetchHomeworks) {
-      try {
-        let hwRangeEnd = new Date(rangeEnd);
-        hwRangeEnd.setDate(hwRangeEnd.getDate() + 7);
-        // Try a sequence of candidate homework API calls (first that succeeds wins)
-        try {
-          const candidates = [
-            () => untis.getHomeWorkAndLessons(new Date(), hwRangeEnd),
-            () => untis.getHomeWorksFor(new Date(), hwRangeEnd),
-          ];
-          let lastErr = null;
-          for (const fn of candidates) {
-            try {
-              hwResult = await fn();
-              break;
-            } catch (err) {
-              lastErr = err;
-            }
-          }
-          if (hwResult === null) {
-            logger(`[MMM-Webuntis] Homework fetch failed for ${student.title}: ${lastErr}`);
-          }
-        } catch (error) {
-          logger(`[MMM-Webuntis] Homework fetch unexpected error for ${student.title}: ${error}`);
-          hwResult = null;
-        }
-        // Send raw homework payload to the frontend without normalization
-        const hwCount = Array.isArray(hwResult)
-          ? hwResult.length
-          : Array.isArray(hwResult?.homeworks)
-            ? hwResult.homeworks.length
-            : Array.isArray(hwResult?.homework)
-              ? hwResult.homework.length
-              : 0;
-        logger(`[MMM-Webuntis] Loaded homeworks (raw) for ${student.title}: count=${hwCount}`);
-      } catch (error) {
-        this._mmLog('error', student, `Homework fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Exams failed: ${error && error.message ? error.message : error}\n`);
       }
     } else {
-      logger(`[MMM-Webuntis] Homework fetch skipped for ${student.title} (fetchHomeworks=false)`);
+      logger(`Exams: skipped (exams.nextDays=${examsNextDays})`);
+    }
+
+    // Load homework for the period – keep raw
+    let hwResult = null;
+    if (fetchHomeworks) {
+      logger(`Homework: fetching...`);
+      try {
+        // Calculate the maximum time range needed across ALL widgets to fetch comprehensive homework data.
+        // Then filter by dueDate during display based on homework.nextDays / homework.pastDays.
+
+        // Collect all the relevant day ranges from active widgets
+        const allRanges = [];
+
+        // Timetable/Grid range
+        allRanges.push({ pastDays: gridPastDays, futureDays: gridNextDays });
+
+        // Exams range
+        if (fetchExams && examsNextDays > 0) {
+          const examsPastDays =
+            student.exams?.pastDays ??
+            student.pastDaysToShow ??
+            student.pastDays ??
+            this.config?.exams?.pastDays ??
+            this.config?.pastDays ??
+            0;
+          allRanges.push({ pastDays: examsPastDays, futureDays: examsNextDays });
+        }
+
+        // Absences range
+        if (fetchAbsences && (absPast > 0 || absFuture > 0)) {
+          allRanges.push({ pastDays: absPast, futureDays: absFuture });
+        }
+
+        // Find the maximum range
+        let maxPastDays = 0;
+        let maxFutureDays = 0;
+        allRanges.forEach((range) => {
+          maxPastDays = Math.max(maxPastDays, range.pastDays || 0);
+          maxFutureDays = Math.max(maxFutureDays, range.futureDays || 0);
+        });
+
+        // Apply at least some defaults if no other widgets are fetching
+        if (maxFutureDays === 0) {
+          maxFutureDays = 28; // Default homework lookahead
+        }
+
+        const hwRangeStart = new Date(baseNow);
+        const hwRangeEnd = new Date(baseNow);
+        hwRangeStart.setDate(hwRangeStart.getDate() - maxPastDays);
+        hwRangeEnd.setDate(hwRangeEnd.getDate() + maxFutureDays);
+
+        logger(`Homework: fetching with max widget range (past: ${maxPastDays}, future: ${maxFutureDays})`);
+        logger(`Homework REST API range: ${hwRangeStart.toISOString().split('T')[0]} to ${hwRangeEnd.toISOString().split('T')[0]}`);
+
+        for (const target of restTargets) {
+          logger(`Homework: fetching via REST (${describeTarget(target)})...`);
+          try {
+            const homeworks = await this._callRest(
+              this._getHomeworkViaRest,
+              target,
+              hwRangeStart,
+              hwRangeEnd,
+              target.studentId,
+              restOptions
+            );
+            hwResult = homeworks;
+            logger(`✓ Homework: ${homeworks.length} items\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ Homework failed (${describeTarget(target)}): ${restError.message}\n`);
+          }
+        }
+        // Send  raw homework payload to the frontend without normalization
+      } catch (error) {
+        this._mmLog('error', student, `Homework failed: ${error && error.message ? error.message : error}`);
+      }
+
+      // Filter homework by dueDate based on homework widget config (pastDays / nextDays)
+      if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
+        const hwNextDays = Number(
+          student.homework?.nextDays ??
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
+        );
+        const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
+
+        // Only filter if explicitly configured
+        if (hwNextDays < 999 || hwPastDays < 999) {
+          const filterStart = new Date(baseNow);
+          const filterEnd = new Date(baseNow);
+          filterStart.setDate(filterStart.getDate() - hwPastDays);
+          filterEnd.setDate(filterEnd.getDate() + hwNextDays);
+
+          // Filter by dueDate
+          hwResult = hwResult.filter((hw) => {
+            if (!hw.dueDate) return true; // Keep homeworks without dueDate
+            const dueDateNum = Number(hw.dueDate);
+            const dueDateStr = String(dueDateNum).padStart(8, '0');
+            const dueYear = parseInt(dueDateStr.substring(0, 4), 10);
+            const dueMonth = parseInt(dueDateStr.substring(4, 6), 10);
+            const dueDay = parseInt(dueDateStr.substring(6, 8), 10);
+            const dueDate = new Date(dueYear, dueMonth - 1, dueDay);
+            return dueDate >= filterStart && dueDate <= filterEnd;
+          });
+
+          logger(
+            `Homework: filtered to ${hwResult.length} items by dueDate range ` +
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+          );
+        }
+      }
+    } else {
+      logger(`Homework: skipped`);
     }
 
     // Absences (raw)
     let rawAbsences = [];
     if (fetchAbsences) {
+      logger(`Absences: fetching...`);
       try {
-        const candidates = [
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd),
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.id),
-          () => untis.getAbsentLesson(absencesRangeStart, absencesRangeEnd, student.studentId),
-        ];
-        let lastErr = null;
-        for (const fn of candidates) {
+        for (const target of restTargets) {
+          logger(`Absences: fetching via REST (${describeTarget(target)})...`);
           try {
-            const res = await fn();
-            rawAbsences = Array.isArray(res)
-              ? res
-              : Array.isArray(res?.absences)
-                ? res.absences
-                : Array.isArray(res?.absentLessons)
-                  ? res.absentLessons
-                  : [];
+            rawAbsences = await this._callRest(
+              this._getAbsencesViaRest,
+              target,
+              absencesRangeStart,
+              absencesRangeEnd,
+              target.studentId,
+              restOptions
+            );
+            logger(`✓ Absences: ${rawAbsences.length} records\n`);
             break;
-          } catch (err) {
-            lastErr = err;
+          } catch (restError) {
+            logger(`✗ Absences failed (${describeTarget(target)}): ${restError.message}\n`);
           }
         }
-        if (!Array.isArray(rawAbsences) || rawAbsences.length === 0) {
-          logger(
-            `[MMM-Webuntis] Absences fetch returned no data for ${student.title}${lastErr ? ` (lastErr=${this._formatErr(lastErr)})` : ''}`
-          );
-        } else {
-          logger(`[MMM-Webuntis] Loaded absences (raw) for ${student.title}: count=${rawAbsences.length}`);
-        }
       } catch (error) {
-        this._mmLog('error', student, `Absences fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `Absences failed: ${error && error.message ? error.message : error}`);
       }
     } else {
-      logger(`[MMM-Webuntis] Absences fetch skipped for ${student.title} (fetchAbsences=false)`);
+      logger(`Absences: skipped`);
     }
 
     // MessagesOfDay (raw)
     let rawMessagesOfDay = [];
     if (fetchMessagesOfDay) {
+      logger(`MessagesOfDay: fetching...`);
       try {
-        const newsWidget = await untis.getNewsWidget(new Date());
-        if (newsWidget && Array.isArray(newsWidget.messagesOfDay)) {
-          rawMessagesOfDay = newsWidget.messagesOfDay;
-          logger(`[MMM-Webuntis] Loaded messagesOfDay (raw) for ${student.title}: count=${rawMessagesOfDay.length}`);
-        } else {
-          logger(`[MMM-Webuntis] MessagesOfDay fetch returned no data for ${student.title}`);
+        for (const target of restTargets) {
+          logger(`MessagesOfDay: fetching via REST (${describeTarget(target)})...`);
+          try {
+            rawMessagesOfDay = await this._callRest(this._getMessagesOfDayViaRest, target, baseNow, restOptions);
+            logger(`✓ MessagesOfDay: ${rawMessagesOfDay.length} found\n`);
+            break;
+          } catch (restError) {
+            logger(`✗ MessagesOfDay failed (${describeTarget(target)}): ${restError.message}\n`);
+          }
         }
       } catch (error) {
-        this._mmLog('error', student, `MessagesOfDay fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
+        this._mmLog('error', student, `MessagesOfDay failed: ${error && error.message ? error.message : error}`);
       }
     } else {
-      logger(`[MMM-Webuntis] MessagesOfDay fetch skipped for ${student.title} (fetchMessagesOfDay=false)`);
+      logger(`MessagesOfDay: skipped`);
     }
 
-    // Holidays (raw)
-    let rawHolidays = [];
-    if (fetchHolidays) {
-      try {
-        rawHolidays = await untis.getHolidays();
-        if (Array.isArray(rawHolidays)) {
-          logger(`[MMM-Webuntis] Loaded holidays (raw) for ${student.title}: count=${rawHolidays.length}`);
-        } else {
-          logger(`[MMM-Webuntis] Holidays fetch returned no data for ${student.title}`);
-          rawHolidays = [];
-        }
-      } catch (error) {
-        this._mmLog('error', student, `Holidays fetch error for ${student.title}: ${error && error.message ? error.message : error}`);
-      }
+    // Holidays are now pre-extracted in processGroup() and passed as parameter.
+    // This avoids redundant extraction for each student in the same group.
+    if (fetchHolidays && compactHolidays.length > 0) {
+      logger(`Holidays: using ${compactHolidays.length} pre-extracted periods`);
+    } else if (fetchHolidays) {
+      logger(`Holidays: no data available`);
     } else {
-      logger(`[MMM-Webuntis] Holidays fetch skipped for ${student.title} (fetchHolidays=false)`);
+      logger(`Holidays: skipped`);
     }
 
     // Compact payload to reduce memory before caching and sending to the frontend.
     const compactGrid = this._compactTimegrid(grid);
-    const compactTimetable = this._compactLessons(timetable);
-    const compactExams = this._compactExams(rawExams);
-    const compactHomeworks = fetchHomeworks ? this._compactHomeworks(hwResult) : [];
-    const compactAbsences = fetchAbsences ? this._compactAbsences(rawAbsences) : [];
-    const compactMessagesOfDay = fetchMessagesOfDay ? this._compactMessagesOfDay(rawMessagesOfDay) : [];
-    const compactHolidays = fetchHolidays ? this._compactHolidays(rawHolidays) : [];
+    const compactTimetable = compactArray(timetable, schemas.lesson);
+    const compactExams = compactArray(rawExams, schemas.exam);
+    const compactHomeworks = fetchHomeworks ? compactArray(hwResult, schemas.homework) : [];
+    const compactAbsences = fetchAbsences ? compactArray(rawAbsences, schemas.absence) : [];
+    const compactMessagesOfDay = fetchMessagesOfDay ? compactArray(rawMessagesOfDay, schemas.message) : [];
+
+    const toYmd = (d) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    const rangeStartYmd = toYmd(rangeStart);
+    const rangeEndYmd = toYmd(rangeEnd);
+    const holidayByDate = (() => {
+      if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
+      const map = {};
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
+        const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
+        if (holiday) map[ymd] = holiday;
+        // increment date
+        const year = Math.floor(ymd / 10000);
+        const month = Math.floor((ymd % 10000) / 100) - 1;
+        const day = ymd % 100;
+        const tmp = new Date(year, month, day);
+        tmp.setDate(tmp.getDate() + 1);
+        ymd = tmp.getFullYear() * 10000 + (tmp.getMonth() + 1) * 100 + tmp.getDate();
+      }
+      return map;
+    })();
+
+    const findHolidayForDate = (ymd, holidays) => {
+      if (!Array.isArray(holidays) || holidays.length === 0) return null;
+      const dateNum = Number(ymd);
+      return holidays.find((h) => Number(h.startDate) <= dateNum && dateNum <= Number(h.endDate)) || null;
+    };
+    const activeHoliday = findHolidayForDate(todayYmd, compactHolidays);
 
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
       title: student.title,
       config: student,
       // id will be assigned by the caller to preserve per-request id
-      timegrid: compactGrid,
+      timeUnits: compactGrid,
       timetableRange: compactTimetable,
       exams: compactExams,
       homeworks: compactHomeworks,
       absences: compactAbsences,
       messagesOfDay: compactMessagesOfDay,
       holidays: compactHolidays,
+      holidayByDate,
+      currentHoliday: activeHoliday,
+      // Absences are now available via REST API even for parent accounts
+      absencesUnavailable: false,
     };
     try {
-      const forSend = { ...payload, id: identifier };
+      // Collect any warnings attached to the student and expose them at the
+      // top-level payload so the frontend can display module-level warnings
+      // independent of per-student sections. Dedupe messages so each is shown once.
+      let warnings = [];
+
+      // Include module-level and per-student warnings, but ensure each
+      // distinct warning is emitted only once per fetch cycle to avoid spam.
+      const addWarning = (msg) => {
+        if (!msg) return;
+        if (!this._currentFetchWarnings) this._currentFetchWarnings = new Set();
+        if (!this._currentFetchWarnings.has(msg)) {
+          warnings.push(msg);
+          this._currentFetchWarnings.add(msg);
+        }
+      };
+
+      // Include module-level warnings (e.g., legacy config warnings)
+      if (this.config && Array.isArray(this.config.__warnings)) {
+        this.config.__warnings.forEach(addWarning);
+      }
+
+      // Include per-student warnings
+      if (payload && payload.config && Array.isArray(payload.config.__warnings)) {
+        payload.config.__warnings.forEach(addWarning);
+      }
+
+      // ===== ADD EMPTY DATA WARNINGS =====
+      // Suppress the empty-lessons warning during holidays to avoid noise when no lessons are expected
+      if (!activeHoliday && timetable.length === 0 && fetchTimetable && student.daysToShow > 0) {
+        const emptyWarn = this._checkEmptyDataWarning(timetable, 'lessons', student.title, true);
+        addWarning(emptyWarn);
+      }
+      if (activeHoliday) {
+        this._mmLog(
+          'debug',
+          student,
+          `Skipping empty lessons warning: holiday "${activeHoliday.longName || activeHoliday.name}" (today=${todayYmd})`
+        );
+      }
+
+      const uniqWarnings = Array.from(new Set(warnings));
+      const forSend = { ...payload, id: identifier, warnings: uniqWarnings };
+
+      // Optional: write debug dumps of the payload delivered to the frontend.
+      // Enable by setting `dumpBackendPayloads: true` in the module config.
+      try {
+        if (this.config && this.config.dumpBackendPayloads) {
+          const dumpDir = path.join(__dirname, 'debug_dumps');
+          if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
+          const safeTitle = (student && student.title ? student.title : 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
+          const fname = `${Date.now()}_${safeTitle}_${String(forSend.apiUsed || 'api')}.json`;
+          const target = path.join(dumpDir, fname);
+          fs.writeFileSync(target, JSON.stringify(forSend, null, 2), 'utf8');
+          this._mmLog('debug', student, `Wrote debug payload to ${path.join('debug_dumps', fname)}`, 'debug');
+        }
+      } catch (err) {
+        this._mmLog('error', student, `Failed to write debug payload: ${err && err.message ? err.message : err}`, 'debug');
+      }
+
+      this._mmLog(
+        'debug',
+        student,
+        `✓ Data ready: timetable=${compactTimetable.length} exams=${compactExams.length} hw=${compactHomeworks.length} abs=${compactAbsences.length}\n`
+      );
       this.sendSocketNotification('GOT_DATA', forSend);
     } catch (err) {
       this._mmLog('error', student, `Failed to send GOT_DATA to ${identifier}: ${this._formatErr(err)}`);
