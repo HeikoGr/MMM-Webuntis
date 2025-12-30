@@ -7,7 +7,7 @@ graph TB
     subgraph Frontend["🖥️ Frontend (Browser)"]
         MM["MagicMirror Core"]
         FE["MMM-Webuntis.js"]
-        Widgets["Widgets<br/>(lessons/grid/exams<br/>homework/absences)"]
+        Widgets["Widgets<br/>(lessons/grid/exams<br/>homework/absences<br/>messagesofday)"]
         Util["widgets/util.js<br/>(formatDate, helpers)"]
     end
 
@@ -17,31 +17,35 @@ graph TB
         subgraph Services["🔧 Services (lib/)"]
             HttpClient["httpClient.js<br/>(Generic HTTP)"]
             Auth["authService.js<br/>(Auth & Tokens)"]
+            RestClient["restClient.js<br/>(REST Helper)"]
             API["webuntisApiService.js<br/>(API Calls)"]
             Cache["cacheManager.js<br/>(TTL Cache)"]
             Transform["dataTransformer.js<br/>(Data Transform)"]
+            Compact["payloadCompactor.js<br/>(HTML Sanitize)"]
             Config["configValidator.js<br/>(Config & Legacy)"]
-            Errors["errorHandler.js<br/>(Error Handling)"]
             Validators["widgetConfigValidator.js<br/>(Widget Validation)"]
+            Errors["errorHandler.js<br/>(Error Handling)"]
             DateTime["dateTimeUtils.js<br/>(Date/Time Utils)"]
             Logger["logger.js<br/>(Backend Logging)"]
         end
     end
 
     subgraph External["🌐 External APIs"]
-        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences)"]
+        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences, /messagesofday)"]
         JSONRPC["JSON-RPC API<br/>(auth, OTP)"]
     end
 
-    MM <-->|socketNotification| FE
-    FE <-->|sendSocketNotification| NH
+    MM <-->|Socket Notifications| FE
+    FE <-->|FETCH_DATA / GOT_DATA| NH
     FE --> Widgets
     Widgets --> Util
     NH --> Services
     HttpClient --> JSONRPC
     Auth --> HttpClient
-    API --> REST
-    NH --> REST
+    RestClient --> REST
+    API --> RestClient
+    API --> Auth
+    NH --> Compact
 ```
 
 ## Modular Architecture (lib/)
@@ -74,13 +78,26 @@ The module uses a **service-oriented architecture** with specialized modules in 
 - Error propagation
 - **Dependencies**: restClient.js, authService.js
 
+**restClient.js** - REST API helper
+- Generic REST endpoint caller
+- Bearer token authentication
+- Tenant ID header management
+- Response parsing and error handling
+- **Dependencies**: axios, errorHandler.js, logger.js
+
 ### Data Processing
 
 **dataTransformer.js** - Data transformation and normalization
 - Timetable data transformation
 - Exam, homework, absences transformation
-- HTML sanitization
 - Date/time normalization
+- **Dependencies**: None (pure functions)
+
+**payloadCompactor.js** - Payload optimization and sanitization
+- HTML sanitization (whitelist safe tags: b, strong, i, em, u, etc.)
+- Array compaction (remove nulls, reduce size)
+- Line break conversion (<br> → \n)
+- HTML entity decoding
 - **Dependencies**: None (pure functions)
 
 **cacheManager.js** - TTL-based caching
