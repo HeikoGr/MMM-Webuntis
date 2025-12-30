@@ -3,6 +3,8 @@
 ## Project overview
 
 MMM-Webuntis is a MagicMirror² module that displays timetable, exams, homework, and absences from WebUntis for configured students. It uses a node helper for backend API communication and provides multiple widget views (list, grid, exams, homework, absences, messages of day).
+Main Target ist to get rid of the deprecated JSON-RPC API and switch to the REST API with modern authentication methods (JWT bearer tokens, QR code OTP).
+Use JSON-RPC only to get the OTP and bearer token, then use REST API for all data fetching.
 
 ## Scope and safety
 
@@ -24,7 +26,8 @@ MMM-Webuntis is a MagicMirror² module that displays timetable, exams, homework,
 - `widgets/*.js` - Individual widget renderers (grid, lessons, exams, homework, absences, messagesofday, util)
 - `config/*.template.*` - Template files for configuration and styling (do not modify user copies)
 - `translations/*.json` - Internationalization files (currently: de, en)
-- `cli/cli.js` - Interactive CLI tool for testing configuration
+- `cli/node_helper_wrapper.js` - CLI tool for testing configuration and fetching data
+- `docs/` - Documentation files (API reference, guides, research notes) - everything should be in english and without any sensitive info
 
 ## Quality bar
 
@@ -32,6 +35,9 @@ MMM-Webuntis is a MagicMirror² module that displays timetable, exams, homework,
 - Avoid broad refactors “for cleanliness”; do focused edits.
 - Run `node --run lint`/`npm test` (or at least a smoke test) before finishing larger changes so regressions surface early.
 - Align config/CLI changes with the matching templates and translations (`config.template.js`, `translations/*.json`, `custom.template.css` etc.) to avoid drift.
+- Fix errors and warnings where possible. Don't suppress them unless absolutely necessary.
+- Implement easy fixes even if they weren't your fault.
+- Add comments for complex logic or non-obvious decisions.
 
 ## How to build and test
 

@@ -10,7 +10,7 @@ export default defineConfig([
   js.configs.recommended,
   {
     files: ['**/*.js'],
-    ignores: ['MMM-Webuntis.js'],
+    ignores: ['MMM-Webuntis.js', 'cli/**', 'widgets/**'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'commonjs',
@@ -23,6 +23,24 @@ export default defineConfig([
     },
     rules: {
       ...pluginN.configs.recommended.rules,
+    },
+  },
+  {
+    files: ['cli/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    plugins: {
+      n: pluginN,
+    },
+    rules: {
+      ...pluginN.configs.recommended.rules,
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
+      'n/no-process-exit': 'off', // CLI tool needs process.exit
     },
   },
   {

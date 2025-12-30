@@ -1,51 +1,100 @@
 Module.register('MMM-Webuntis', {
-  defaults: {
-    header: '', // no header by default
-    daysToShow: 7, // number of days to show per student
-    fetchIntervalMs: 15 * 60 * 1000, // 15 minutes (ms)
-    showStartTime: false, // whether to show start time in lesson listings
-    useClassTimetable: false, // whether to use class timetable instead of student timetable
-    showRegularLessons: false, // whether to show regular lessons (not only substitutions)
-    showTeacherMode: 'full', // 'initial'|'full'|'none' - how to show teacher info
-    useShortSubject: false, // whether to use short subject names
-    showSubstitutionText: false, // whether to show substitution text
-    examsDaysAhead: 7, // number of days ahead to show exams
-    showExamSubject: true, // whether to show subject in exam listings
-    showExamTeacher: true, // whether to show teacher in exam listings
-    mode: 'verbose', // 'verbose' or 'compact' mode
-    mergeGapMinutes: 15, // maximum gap in minutes allowed between consecutive lessons to merge
-    pastDaysToShow: 0, // number of past days to include (show previous days)
-    // How many past days to include when fetching absences (default 14)
-    absencesPastDays: 14,
-    // How many future days to include when fetching absences (default 7)
-    absencesFutureDays: 7,
-
-    // Comma-separated list of widgets to render, top-to-bottom.
-    // Supported widgets: grid, lessons, exams, homework, absences
-    // Backwards compatible aliases: 'list' => lessons, exams  |  'grid' => grid
-    displayMode: 'list',
-
-    // Maximum number of lessons to display per day in grid view.
-    // 0 (default) means show all lessons. Can be overridden per-student.
-    maxGridLessons: 0,
-
-    logLevel: 'none', // 'debug' or 'none'
-
-    dateFormat: 'dd.MM.',
-    examDateFormat: 'dd.MM.',
-    homeworkDateFormat: 'dd.MM.',
-
-    students: [
-      {
-        title: 'SET CONFIG!',
-        qrcode: '',
-        school: '',
-        username: '',
-        password: '',
-        server: '',
-        class: '',
+  // Simple frontend logger factory (lightweight, avoids bundler require() issues)
+  _createFrontendLogger(moduleName = 'MMM-Webuntis') {
+    // Use only console methods allowed by linting rules (warn, error)
+    const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
+    return {
+      log(level, msg) {
+        try {
+          const method = METHODS[level] || 'warn';
+          // eslint-disable-next-line no-console
+          console[method](`${moduleName}: ${msg}`);
+        } catch {
+          // ignore
+        }
       },
-    ],
+    };
+  },
+
+  defaults: {
+    // === GLOBAL OPTIONS ===
+    header: 'MMM-Webuntis', // displayed as module title in MagicMirror
+    updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+
+    // === DEBUG OPTIONS ===
+    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
+    debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+    dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
+
+    // === DISPLAY OPTIONS ===
+    // Comma-separated list of widgets to render (top-to-bottom).
+    // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
+    // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
+    displayMode: 'lessons, exams',
+    mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+
+    // === AUTHENTICATION ===
+    // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
+    // password: 'your password', // WebUntis password (leave empty if using studentId/qrcode)
+    // school: 'your school',     // WebUntis school name (most likley subdomain)
+    // server: 'schoolserver.webuntis.com',  // WebUntis server URL (usually subdomain.webuntis.com)
+
+    // === STUDENTS ===
+    //students: [
+    //  {
+    //    title: 'kids name', // Display name for the student
+    //    studentId: 1234, // replace with student ID for individual title
+    //    qrcode: null, // optional: untis:// URL from WebUntis QR code
+    //  },
+    //],
+
+    // === WIDGET NAMESPACED DEFAULTS ===
+    // Per-widget configuration namespaces
+    lessons: {
+      dateFormat: 'EEE', // format for lesson dates
+      showStartTime: false, // show lesson start time instead of timeunit
+      showRegular: false, // show also regular lessons
+      useShortSubject: false, // use short subject names
+      showTeacherMode: 'full', // 'off'|'initial'|'full'
+      showSubstitution: false, // show substitution info
+      nextDays: 2, // widget-specific days ahead
+    },
+
+    grid: {
+      dateFormat: 'EEE dd.MM.', // format for grid dates
+      nextDays: 2, // widget-specific days ahead
+      pastDays: 0, // widget-specific days past
+      mergeGap: 15, // minutes gap to merge adjacent lessons
+      maxLessons: 0, // max lessons per day (0 = no limit)
+      showNowLine: true, // show current time line
+    },
+
+    exams: {
+      dateFormat: 'EEE dd.MM.', // format for exam dates
+      nextDays: 21, // widget-specific days ahead
+      showSubject: true, // show subject name with exam
+      showTeacher: true, // show teacher name with exam
+    },
+
+    homework: {
+      dateFormat: 'EEE dd.MM.', // format for homework dates
+      showSubject: true, // show subject name with homework
+      showText: true, // show homework description/text
+      nextDays: 28, // widget-specific days ahead
+      pastDays: 0, // widget-specific days past
+    },
+
+    absences: {
+      dateFormat: 'EEE dd.MM.', // format for absence dates
+      pastDays: 21, // days in the past to show
+      futureDays: 7, // days in the future to show
+      showDate: true, // show absence date
+      showExcused: true, // show excused/unexcused status
+      showReason: true, // show reason for absence
+      maxItems: null, // max number of absence entries to show (null = no limit)
+    },
+
+    messagesofday: {}, // no specific defaults yet
   },
 
   getStyles() {
@@ -53,6 +102,9 @@ Module.register('MMM-Webuntis', {
   },
 
   getScripts() {
+    // Store logLevel globally so widgets can access it during initialization
+    window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
+
     const scripts = [this.file('widgets/util.js')];
     const widgetScriptMap = {
       lessons: 'widgets/lessons.js',
@@ -135,27 +187,36 @@ Module.register('MMM-Webuntis', {
     return out.length > 0 ? out : ['lessons', 'exams'];
   },
 
+  // Simple log helper to control verbosity from the module config
   _log(level, ...args) {
+    // If a frontend logger is available, delegate to it. Otherwise fallback to console.
     try {
-      const prefix = '[MMM-Webuntis]';
-      const logger = typeof Log !== 'undefined' && Log ? Log : null;
-      if (level === 'info') {
-        if (logger?.info) logger.info(prefix, ...args);
-        else console.warn(prefix, ...args);
-      } else if (level === 'warn') {
-        if (logger?.warn) logger.warn(prefix, ...args);
-        else console.warn(prefix, ...args);
-      } else if (level === 'debug') {
-        if (this?.config?.logLevel === 'debug') {
-          if (logger?.log) logger.log(prefix + ' [DEBUG]', ...args);
-          else console.warn(prefix + ' [DEBUG]', ...args);
-        }
-      } else {
-        if (logger?.log) logger.log(prefix, ...args);
-        else console.warn(prefix, ...args);
+      const frontendFactory = this._createFrontendLogger;
+      if (frontendFactory && !this.frontendLogger) {
+        this.frontendLogger = frontendFactory('MMM-Webuntis');
       }
-    } catch (e) {
-      console.error('[MMM-Webuntis] [LOGGING ERROR]', e);
+      if (this.frontendLogger && typeof this.frontendLogger.log === 'function') {
+        const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        this.frontendLogger.log(level, msg);
+        return;
+      }
+    } catch {
+      // ignore and fallback to legacy console behavior
+    }
+
+    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
+    const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
+    const configuredLevel = levels[configured] !== undefined ? configured : 'info';
+    const msgLevel = levels[level] !== undefined ? level : 'info';
+    if (levels[msgLevel] <= levels[configuredLevel]) {
+      try {
+        if (msgLevel === 'error') console.error('[MMM-Webuntis]', ...args);
+        else if (msgLevel === 'warn') console.warn('[MMM-Webuntis]', ...args);
+        else if (msgLevel === 'info') console.warn('[MMM-Webuntis]', ...args);
+        else console.warn('[MMM-Webuntis]', ...args);
+      } catch {
+        // ignore any console errors
+      }
     }
   },
 
@@ -177,12 +238,13 @@ Module.register('MMM-Webuntis', {
     return table;
   },
 
-  _shouldRenderStudentHeader() {
-    return this.config.mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
+  _shouldRenderStudentHeader(studentConfig) {
+    const mode = studentConfig?.mode ?? this.config.mode;
+    return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
   },
 
-  _prepareStudentCellTitle(table, studentTitle) {
-    if (this._shouldRenderStudentHeader()) {
+  _prepareStudentCellTitle(table, studentTitle, studentConfig) {
+    if (this._shouldRenderStudentHeader(studentConfig)) {
       const helper = this._getDomHelper();
       if (helper && typeof helper.addTableHeader === 'function') {
         helper.addTableHeader(table, studentTitle);
@@ -208,20 +270,29 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderWidgetTableRows(studentTitles, renderRow) {
-    const table = this._createWidgetTable();
-    let tableHasRows = false;
+    // Create a fragment that will contain one table per student (if they have rows).
+    const frag = document.createDocumentFragment();
 
     for (const studentTitle of studentTitles) {
       const studentConfig = this.configByStudent?.[studentTitle] || this.config;
-      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle);
-      const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
-      if (count > 0) tableHasRows = true;
+      const table = this._createWidgetTable();
+      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle, studentConfig);
+      try {
+        const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
+        if (count > 0) {
+          frag.appendChild(table);
+        }
+      } catch (err) {
+        this._log('error', `Error rendering widget for ${studentTitle}:`, err);
+      }
     }
 
-    return tableHasRows ? table : null;
+    return frag.hasChildNodes() ? frag : null;
   },
 
   _computeTodayYmdValue() {
+    // If debugDate is set, always use it instead of current date
+    if (this._currentTodayYmd) return this._currentTodayYmd;
     const now = new Date();
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
   },
@@ -243,8 +314,17 @@ Module.register('MMM-Webuntis', {
     const fallback = this.config || {};
     const defaults = this.defaults || {};
 
-    const daysVal = cfg.daysToShow ?? fallback.daysToShow ?? defaults.daysToShow ?? 0;
-    const pastVal = cfg.pastDaysToShow ?? fallback.pastDaysToShow ?? defaults.pastDaysToShow ?? 0;
+    // Prefer new keys `nextDays` / `pastDays`, fall back to legacy `daysToShow` / `pastDaysToShow`.
+    const daysVal =
+      cfg.nextDays ?? cfg.daysToShow ?? fallback.nextDays ?? fallback.daysToShow ?? defaults.nextDays ?? defaults.daysToShow ?? 0;
+    const pastVal =
+      cfg.pastDays ??
+      cfg.pastDaysToShow ??
+      fallback.pastDays ??
+      fallback.pastDaysToShow ??
+      defaults.pastDays ??
+      defaults.pastDaysToShow ??
+      0;
     const daysToShow = Number(daysVal);
     const pastDaysToShow = Number(pastVal);
     const limitFuture = Number.isFinite(daysToShow) && daysToShow > 0;
@@ -269,83 +349,92 @@ Module.register('MMM-Webuntis', {
     });
   },
 
-  _normalizeLegacyConfig(cfg, defaultsRef) {
-    if (!cfg || typeof cfg !== 'object') return cfg;
-    const out = { ...cfg };
-    const def = defaultsRef && typeof defaultsRef === 'object' ? defaultsRef : this?.defaults || {};
+  _buildSendConfig() {
+    const defNoStudents = { ...(this.config || {}) };
+    delete defNoStudents.students;
 
-    const legacyUsed = [];
-    const mapLegacy = (obj, legacyKey, newKey, transform, context = 'config') => {
-      if (!obj || typeof obj !== 'object') return;
-      const hasLegacy = obj[legacyKey] !== undefined && obj[legacyKey] !== null && obj[legacyKey] !== '';
-      if (!hasLegacy) return;
-      legacyUsed.push(`${context}.${legacyKey}`);
-      const legacyVal = typeof transform === 'function' ? transform(obj[legacyKey]) : obj[legacyKey];
-      obj[newKey] = legacyVal;
-    };
-
-    mapLegacy(out, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), 'config');
-    mapLegacy(out, 'days', 'daysToShow', (v) => Number(v), 'config');
-    mapLegacy(out, 'examsDays', 'examsDaysAhead', (v) => Number(v), 'config');
-    mapLegacy(out, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), 'config');
-
-    const dbg = out.debug ?? out.enableDebug;
-    if (typeof dbg === 'boolean') {
-      legacyUsed.push('config.debug|enableDebug');
-      out.logLevel = dbg ? 'debug' : 'none';
+    // Always include the persisted debugDate if it was configured, to ensure it persists
+    // across multiple FETCH_DATA requests. This allows time-based testing to work correctly.
+    if (this._persistedDebugDate) {
+      defNoStudents.debugDate = this._persistedDebugDate;
+      this._log('debug', `[_buildSendConfig] Persisting debugDate="${this._persistedDebugDate}"`);
     }
 
-    if (out.displaymode !== undefined && out.displaymode !== null && out.displaymode !== '') {
-      legacyUsed.push('config.displaymode');
-      out.displayMode = String(out.displaymode).toLowerCase();
+    const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
+    const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
+
+    const sendConfig = { ...this.config, students: mergedStudents, id: this.identifier };
+
+    // Ensure debugDate persists in the send config
+    if (this._persistedDebugDate) {
+      sendConfig.debugDate = this._persistedDebugDate;
     }
-    if (typeof out.displayMode === 'string') out.displayMode = out.displayMode.toLowerCase();
 
-    if (Array.isArray(out.students)) {
-      for (let i = 0; i < out.students.length; i++) {
-        const s = out.students[i];
-        if (!s || typeof s !== 'object') continue;
-        // IMPORTANT: do not merge `students` into each student config.
-        // Doing so creates circular references (student -> students[] -> student)
-        // which breaks Socket.IO payload serialization (hasBinary recursion).
-        const defNoStudents = { ...def };
-        delete defNoStudents.students;
-        const outNoStudents = { ...out };
-        delete outNoStudents.students;
+    // Note: legacy config normalization is performed server-side in node_helper.js.
+    // Keep client-side bundle minimal and rely on backend normalization for compatibility.
 
-        const ns = { ...defNoStudents, ...outNoStudents, ...s };
+    // ===== VALIDATE MODULE CONFIG =====
+    this._validateAndWarnConfig(sendConfig);
 
-        mapLegacy(ns, 'fetchInterval', 'fetchIntervalMs', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'days', 'daysToShow', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'examsDays', 'examsDaysAhead', (v) => Number(v), `students[${i}]`);
-        mapLegacy(ns, 'mergeGapMin', 'mergeGapMinutes', (v) => Number(v), `students[${i}]`);
+    return sendConfig;
+  },
 
-        if (ns.displaymode !== undefined && ns.displaymode !== null && ns.displaymode !== '') {
-          ns.displayMode = String(ns.displaymode).toLowerCase();
-          legacyUsed.push(`students[${i}].displaymode`);
-        }
-        if (typeof ns.displayMode === 'string') ns.displayMode = ns.displayMode.toLowerCase();
+  /**
+   * Validate module configuration and collect warnings before sending to backend
+   */
+  _validateAndWarnConfig(config) {
+    const warnings = [];
 
-        out.students[i] = ns;
+    // Validate displayMode
+    const validWidgets = ['list', 'grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
+    if (config.displayMode && typeof config.displayMode === 'string') {
+      const widgets = config.displayMode
+        .split(',')
+        .map((w) => w.trim())
+        .filter(Boolean)
+        .map((w) => w.toLowerCase());
+      const invalid = widgets.filter((w) => !validWidgets.includes(w));
+      if (invalid.length > 0) {
+        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
       }
     }
 
-    if (legacyUsed.length > 0) {
-      try {
-        const uniq = Array.from(new Set(legacyUsed));
-        const msg = `Deprecated config keys detected and mapped: ${uniq.join(', ')}. Please update your config to use the new keys.`;
-        if (typeof Log !== 'undefined' && Log && typeof Log.warn === 'function') {
-          Log.warn('[MMM-Webuntis] ' + msg);
-        } else {
-          console.warn('[MMM-Webuntis] ' + msg);
-        }
-      } catch {
-        // ignore
-      }
+    // Validate logLevel
+    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
+    if (config.logLevel && !validLogLevels.includes(String(config.logLevel).toLowerCase())) {
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use one of: ${validLogLevels.join(', ')}`);
     }
 
-    this._log('debug', 'Normalized legacy config keys (post-merge)', out);
-    return out;
+    // Validate numeric ranges
+    // Validate new and legacy range keys
+    if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
+      warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
+    }
+    if (Number.isFinite(config.pastDays) && config.pastDays < 0) {
+      warnings.push(`pastDays cannot be negative. Value: ${config.pastDays}`);
+    }
+    if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
+      warnings.push(`daysToShow cannot be negative (deprecated key). Value: ${config.daysToShow}`);
+    }
+
+    if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
+      warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
+    }
+
+    // Check if no students configured
+    if (!Array.isArray(config.students) || config.students.length === 0) {
+      warnings.push(
+        'No students configured. Module is idle. Configure students[] or provide parent account credentials for auto-discovery.'
+      );
+    }
+
+    // Warn for each unique warning
+    warnings.forEach((warning) => {
+      if (!this.moduleWarningsSet.has(warning)) {
+        this.moduleWarningsSet.add(warning);
+        this._log('warn', warning);
+      }
+    });
   },
 
   _toMinutes(t) {
@@ -367,14 +456,14 @@ Module.register('MMM-Webuntis', {
     return hh * 60 + mm;
   },
 
-  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays) {
+  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams) {
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
       this._log('warn', 'grid widget script not loaded');
       return null;
     }
-    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
+    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
   },
 
   _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
@@ -415,7 +504,13 @@ Module.register('MMM-Webuntis', {
   },
 
   start() {
-    this.config = this._normalizeLegacyConfig(this.config, this.defaults);
+    // Normalization moved to backend (node_helper); keep frontend config untouched
+
+    // Store logLevel in global config so widgets can access it independently
+    if (typeof window !== 'undefined') {
+      window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
+      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
+    }
 
     // Ensure we always have a locale string for widgets.
     try {
@@ -433,22 +528,55 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent = {};
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
+    this.absencesUnavailableByStudent = {};
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
+    this.holidayMapByStudent = {};
     this.preprocessedByStudent = {};
+    this.moduleWarningsSet = new Set();
     this._domUpdateTimer = null;
+    this._lastFetchTime = 0; // Debounce rapid FETCH_DATA requests
 
     this._paused = false;
     this._startNowLineUpdater();
 
-    const now = new Date();
-    this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    // Initialize module-level today value. If `debugDate` is configured, use it
+    // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
+    // Store debugDate separately so it persists across fetch cycles.
+    this._persistedDebugDate = null;
+    if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
+      const s = String(this.config.debugDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(s + 'T00:00:00');
+        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+        this._persistedDebugDate = s;
+        this._log('debug', `[start] Set _persistedDebugDate="${s}"`);
+      } else if (/^\d{8}$/.test(s)) {
+        const by = parseInt(s.substring(0, 4), 10);
+        const bm = parseInt(s.substring(4, 6), 10) - 1;
+        const bd = parseInt(s.substring(6, 8), 10);
+        const d = new Date(by, bm, bd);
+        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+        this._persistedDebugDate = `${String(by).padStart(4, '0')}-${String(bm + 1).padStart(2, '0')}-${String(bd).padStart(2, '0')}`;
+        this._log('debug', `[start] Set _persistedDebugDate="${this._persistedDebugDate}"`);
+      }
+    }
+    if (!this._currentTodayYmd) {
+      const now = new Date();
+      this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    }
 
-    this.config.id = this.identifier;
-    this.sendSocketNotification('FETCH_DATA', this.config);
+    // Send a sanitized copy to the backend where each student inherits module
+    // defaults and legacy keys have been mapped. The backend (node_helper)
+    // expects normalized student objects in a closed system.
+    this._sendFetchData('startup');
+
+    this._log('info', 'MMM-Webuntis started with config:', this.config);
   },
 
   _startNowLineUpdater() {
+    // Only start the now line updater if showNowLine is enabled (applies to grid view)
+    if (this.config.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
@@ -461,11 +589,33 @@ Module.register('MMM-Webuntis', {
   _startFetchTimer() {
     if (this._paused) return;
     if (this._fetchTimer) return;
-    if (typeof this.config?.fetchIntervalMs !== 'number') return;
+    // Prefer the new `updateInterval` config key, fall back to legacy `fetchIntervalMs`.
+    const interval =
+      typeof this.config?.updateInterval === 'number'
+        ? Number(this.config.updateInterval)
+        : typeof this.config?.fetchIntervalMs === 'number'
+          ? Number(this.config.fetchIntervalMs)
+          : null;
+    if (!interval || !Number.isFinite(interval) || interval <= 0) return;
 
     this._fetchTimer = setInterval(() => {
-      this.sendSocketNotification('FETCH_DATA', this.config);
-    }, this.config.fetchIntervalMs);
+      this._sendFetchData('periodic');
+    }, interval);
+  },
+
+  _sendFetchData(reason = 'manual') {
+    const now = Date.now();
+    const timeSinceLastFetch = now - this._lastFetchTime;
+    const minInterval = 5000; // Minimum 5 seconds between FETCH_DATA requests
+
+    // Debounce: skip if too soon after last fetch
+    if (timeSinceLastFetch < minInterval) {
+      this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch (${timeSinceLastFetch}ms since last)`);
+      return;
+    }
+
+    this._lastFetchTime = now;
+    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
   },
 
   _stopFetchTimer() {
@@ -497,16 +647,38 @@ Module.register('MMM-Webuntis', {
 
   resume() {
     this._paused = false;
-    this.sendSocketNotification('FETCH_DATA', this.config);
+    this._sendFetchData('resume');
     this._startFetchTimer();
     this._startNowLineUpdater();
   },
 
   getDom() {
+    this._log('debug', `[getDom] Called - generating DOM`);
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
 
     const sortedStudentTitles = this._getSortedStudentTitles();
+    this._log(
+      'debug',
+      `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
+    );
+
+    // Render any module-level warnings once, above all widgets
+    if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
+      const warnContainer = document.createDocumentFragment();
+      for (const w of Array.from(this.moduleWarningsSet)) {
+        const warnDiv = document.createElement('div');
+        warnDiv.className = 'mmm-webuntis-warning small bright';
+        try {
+          warnDiv.textContent = `⚠️ ${w}`;
+        } catch {
+          warnDiv.textContent = '⚠️ Configuration warning';
+        }
+        warnContainer.appendChild(warnDiv);
+      }
+      wrapper.appendChild(warnContainer);
+    }
+
     if (sortedStudentTitles.length === 0) {
       return wrapper;
     }
@@ -523,22 +695,49 @@ Module.register('MMM-Webuntis', {
           const exams = this.examsByStudent?.[studentTitle] || [];
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
 
-          if (timeUnits.length > 0 && timetable.length > 0) {
-            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, holidays);
-            if (gridElem) wrapper.appendChild(gridElem);
+          this._log('debug', `[grid-prep] homeworks for ${studentTitle}: ${homeworks.length} items`);
+          if (homeworks.length > 0) {
+            this._log('debug', `  First hw: dueDate=${homeworks[0].dueDate}, su=${JSON.stringify(homeworks[0].su)}`);
+          }
+
+          // Render grid if we have timeUnits OR holidays
+          // This ensures the grid is shown even during holidays when there are no lessons/timeUnits
+          const hasHolidays = holidays.length > 0;
+          this._log('debug', `[grid-check] timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays}, holidays.length=${holidays.length}`);
+          if (timeUnits.length > 0 || hasHolidays) {
+            this._log('debug', `[grid-render] Rendering grid for ${studentTitle}`);
+            const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
+            if (gridElem) {
+              this._log('debug', `[grid-append] Grid element created, appending to wrapper`);
+              wrapper.appendChild(gridElem);
+            } else {
+              this._log('debug', `[grid-skip] Grid element was null/undefined`);
+            }
+          } else {
+            this._log('debug', `[grid-skip] Condition not met (timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays})`);
           }
         }
         continue;
       }
 
       if (widget === 'lessons') {
+        this._log('debug', '[lessons-check] Rendering lessons widget');
         const lessonsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const timetable = this.timetableByStudent[studentTitle] || [];
           const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
+          this._log(
+            'debug',
+            `[lessons-check] ${studentTitle}: timetable=${timetable.length}, holidays=${holidays.length}, holidayMap=${Object.keys(this.holidayMapByStudent?.[studentTitle] || {}).length}`
+          );
           return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
         });
-        if (lessonsTable) wrapper.appendChild(lessonsTable);
+        if (lessonsTable) {
+          this._log('debug', '[lessons-check] Appending lessons table to wrapper');
+          wrapper.appendChild(lessonsTable);
+        } else {
+          this._log('debug', '[lessons-check] No lessons table returned');
+        }
         continue;
       }
 
@@ -562,6 +761,15 @@ Module.register('MMM-Webuntis', {
       }
 
       if (widget === 'absences') {
+        // Check if absences are unavailable due to parent account limitation
+        const hasUnavailableAbsences = sortedStudentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
+        if (hasUnavailableAbsences) {
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'dimmed small absences-unavailable-info';
+          infoDiv.innerHTML = `⚠️ ${this.translate('absences_unavailable_parent_account')}`;
+          wrapper.appendChild(infoDiv);
+        }
+
         const absencesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
           const absences = this.absencesByStudent?.[studentTitle] || [];
           return this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
@@ -585,12 +793,33 @@ Module.register('MMM-Webuntis', {
 
   notificationReceived(notification) {
     if (notification === 'DOM_OBJECTS_CREATED') {
+      // Display deprecation warnings if legacy config keys are detected
+      if (this.config.__legacyUsed && this.config.__legacyUsed.length > 0) {
+        this._log('warn', `⚠️ DEPRECATED CONFIG DETECTED: ${this.config.__legacyUsed.join(', ')}`);
+        this._log('warn', 'Your configuration uses deprecated keys that will be removed in future versions.');
+        this._log('warn', 'Please update your config.js to use the new configuration format.');
+        this._log('warn', 'See the module documentation for migration details.');
+      }
+
       this._startFetchTimer();
     }
   },
 
   socketNotificationReceived(notification, payload) {
-    if (!payload || this.identifier !== payload.id) {
+    if (payload && payload.id && this.identifier !== payload.id) {
+      return;
+    }
+
+    if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
+      const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
+      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+      warnList.forEach((w) => {
+        if (!this.moduleWarningsSet.has(w)) {
+          this.moduleWarningsSet.add(w);
+          this._log('warn', `Config warning: ${w}`);
+        }
+      });
+      this.updateDom();
       return;
     }
 
@@ -600,11 +829,28 @@ Module.register('MMM-Webuntis', {
     const cfg = payload.config || {};
     this.configByStudent[title] = cfg;
 
-    const grid = payload.timegrid || [];
+    // Update persisted debugDate if it's included in the response, to handle any backend changes
+    if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
+      this._persistedDebugDate = cfg.debugDate;
+      this._log('debug', `[GOT_DATA] Updated _persistedDebugDate="${cfg.debugDate}"`);
+    }
+
+    // Collect module-level warnings (deduped) and log newly seen ones to console
+    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+      payload.warnings.forEach((w) => {
+        if (!this.moduleWarningsSet.has(w)) {
+          this.moduleWarningsSet.add(w);
+          this._log('warn', `Module warning: ${w}`);
+        }
+      });
+    }
+
+    const timeUnitsList = payload.timeUnits || [];
     let timeUnits = [];
     try {
-      if (Array.isArray(grid) && grid[0] && Array.isArray(grid[0].timeUnits)) {
-        timeUnits = grid[0].timeUnits.map((u) => ({
+      if (Array.isArray(timeUnitsList)) {
+        timeUnits = timeUnitsList.map((u) => ({
           startTime: u.startTime,
           endTime: u.endTime,
           startMin: this._toMinutes(u.startTime),
@@ -646,13 +892,23 @@ Module.register('MMM-Webuntis', {
     const hw = payload.homeworks;
     const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
     this.homeworksByStudent[title] = hwNorm;
+    this._log('debug', `[GOT_DATA] Assigned ${hwNorm.length} homeworks to student "${title}"`);
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
+
+    this.absencesUnavailableByStudent[title] = Boolean(payload.absencesUnavailable);
 
     this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
 
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
+    this.holidayMapByStudent[title] = payload.holidayByDate || {};
 
+    this._log(
+      'debug',
+      `[GOT_DATA] holidays: ${this.holidaysByStudent[title].length}, holidayMap keys: ${Object.keys(this.holidayMapByStudent[title] || {}).length}`
+    );
+    this._log('debug', `[GOT_DATA] Calling _scheduleDomUpdate()`);
     this._scheduleDomUpdate();
+    this._log('debug', `[GOT_DATA] _scheduleDomUpdate() called`);
   },
 });

@@ -1,9 +1,11 @@
 /**
- * Example MagicMirror configuration for MMM-Webuntis (devcontainer).
+ * Example MagicMirror configuration for MMM-Webuntis.
  * Copy this file to `config.js` inside the same folder and adjust
- * credentials/settings as needed. The DevContainer mounts it into
- * /opt/magic_mirror/config/config.js so editing inside the container
- * writes back to this repo file.
+ * credentials/settings as needed.
+ *
+ * For detailed option documentation, see:
+ * - MMM-Webuntis.js (defaults object)
+ * - README.md (Configuration options section)
  */
 let config = {
   address: '0.0.0.0',
@@ -21,9 +23,92 @@ let config = {
       module: 'MMM-Webuntis',
       position: 'top_right',
       config: {
-        logLevel: 'info',
-        daysToShow: 7,
-        students: [{ title: 'Sample', qrcode: 'untis://setschool?' }],
+        // === GLOBAL OPTIONS ===
+        header: 'Timetable', // optional header text
+        logLevel: 'debug', // 'debug', 'info', 'warn', 'error'
+
+        // === DISPLAY OPTIONS ===
+        displayMode: 'list', // 'list', 'grid', or comma-separated: 'lessons,exams,grid'
+        mode: 'verbose', // 'verbose' or 'compact'
+
+        // Per-widget namespaces (new preferred structure)
+        lessons: {
+          dateFormat: 'EEE',
+          showStartTime: false,
+          showRegular: false,
+          useShortSubject: false,
+          showTeacherMode: 'full', // 'off'|'initial'|'full'
+          showSubstitution: false,
+          nextDays: 7, // (optional) widget-specific days ahead
+        },
+
+        grid: {
+          dateFormat: 'EEE dd.MM.',
+          mergeGap: 15,
+          maxLessons: 0,
+          showNowLine: true,
+          nextDays: 1, // (optional) widget-specific days ahead
+          pastDays: 0, // (optional) widget-specific days past
+        },
+
+        exams: {
+          dateFormat: 'dd.MM.',
+          daysAhead: 21,
+          showSubject: true,
+          showTeacher: true,
+        },
+
+        homework: {
+          dateFormat: 'dd.MM.',
+          showSubject: true, // (optional) show subject name with homework
+          showText: true, // (optional) show homework description/text
+          nextDays: 28, // (optional) widget-specific days ahead
+          pastDays: 0, // (optional) widget-specific days past
+        },
+
+        absences: {
+          dateFormat: 'dd.MM.',
+          pastDays: 21, // days in the past to show
+          futureDays: 7, // days in the future to show
+          showDate: true, // (optional) show absence date
+          showExcused: true, // (optional) show excused/unexcused status
+          showReason: true, // (optional) show reason for absence
+          maxItems: null, // (optional) max number of absence entries to show (null = no limit)
+        },
+
+        messagesofday: {},
+
+        // === TIMETABLE SOURCE ===
+        useClassTimetable: false,
+
+        // === PARENT ACCOUNT SUPPORT (optional) ===
+        // Uncomment to use parent account credentials for multiple children:
+        // username: 'parent@example.com',
+        // password: 'password',
+        // school: 'school_name',
+        // server: 'webuntis.com',
+
+        // === DEBUG OPTIONS (optional) ===
+        // dumpBackendPayloads: false, // dump API responses to debug_dumps/
+
+        // === STUDENTS ===
+        students: [
+          {
+            title: 'Student',
+            studentId: 0,
+            qrcode: 'untis://setschool?url=https://example.webuntis.com&school=example&user=<user>&key=<key>',
+            // OR use direct credentials if no QR code:
+            // username: 'user@example.com',
+            // password: '<password>',
+            // school: 'example',
+            // server: 'example.webuntis.com',
+          },
+          // Example with parent account (requires parentUsername/parentPassword above):
+          // {
+          //   title: 'Child 1',
+          //   studentId: 12345,
+          // },
+        ],
       },
     },
   ],
