@@ -33,6 +33,21 @@ Module.register('MMM-Webuntis', {
     displayMode: 'lessons, exams',
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
 
+    // === AUTHENTICATION ===
+    // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
+    // password: 'your password', // WebUntis password (leave empty if using studentId/qrcode)
+    // school: 'your school',     // WebUntis school name (most likley subdomain)
+    // server: 'schoolserver.webuntis.com',  // WebUntis server URL (usually subdomain.webuntis.com)
+
+    // === STUDENTS ===
+    //students: [
+    //  {
+    //    title: 'kids name', // Display name for the student
+    //    studentId: 1234, // replace with student ID for individual title
+    //    qrcode: null, // optional: untis:// URL from WebUntis QR code
+    //  },
+    //],
+
     // === WIDGET NAMESPACED DEFAULTS ===
     // Per-widget configuration namespaces
     lessons: {
@@ -42,12 +57,12 @@ Module.register('MMM-Webuntis', {
       useShortSubject: false, // use short subject names
       showTeacherMode: 'full', // 'off'|'initial'|'full'
       showSubstitution: false, // show substitution info
-      nextDays: 7, // widget-specific days ahead
+      nextDays: 2, // widget-specific days ahead
     },
 
     grid: {
       dateFormat: 'EEE dd.MM.', // format for grid dates
-      nextDays: 1, // widget-specific days ahead
+      nextDays: 2, // widget-specific days ahead
       pastDays: 0, // widget-specific days past
       mergeGap: 15, // minutes gap to merge adjacent lessons
       maxLessons: 0, // max lessons per day (0 = no limit)
@@ -55,14 +70,14 @@ Module.register('MMM-Webuntis', {
     },
 
     exams: {
-      dateFormat: 'dd.MM.', // format for exam dates
+      dateFormat: 'EEE dd.MM.', // format for exam dates
       nextDays: 21, // widget-specific days ahead
       showSubject: true, // show subject name with exam
       showTeacher: true, // show teacher name with exam
     },
 
     homework: {
-      dateFormat: 'dd.MM.', // format for homework dates
+      dateFormat: 'EEE dd.MM.', // format for homework dates
       showSubject: true, // show subject name with homework
       showText: true, // show homework description/text
       nextDays: 28, // widget-specific days ahead
@@ -70,7 +85,7 @@ Module.register('MMM-Webuntis', {
     },
 
     absences: {
-      dateFormat: 'dd.MM.', // format for absence dates
+      dateFormat: 'EEE dd.MM.', // format for absence dates
       pastDays: 21, // days in the past to show
       futureDays: 7, // days in the future to show
       showDate: true, // show absence date
@@ -80,15 +95,6 @@ Module.register('MMM-Webuntis', {
     },
 
     messagesofday: {}, // no specific defaults yet
-
-    // === STUDENTS ===
-    students: [
-      {
-        title: 'M', // Display name for the student
-        studentId: 1774, // replace with student ID for individual title
-        qrcode: null, // optional: untis:// URL from WebUntis QR code
-      },
-    ],
   },
 
   getStyles() {
