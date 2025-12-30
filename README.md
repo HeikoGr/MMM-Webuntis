@@ -18,60 +18,38 @@ A MagicMirror² module that shows cancelled, irregular or substituted lessons fr
 graph TB
     subgraph Frontend["🖥️ Frontend (Browser)"]
         MM["MagicMirror Core"]
-        FE["MMM-Webuntis.js"]
-        Widgets["Widgets<br/>(lessons/grid/exams<br/>homework/absences)"]
-        Util["widgets/util.js<br/>(formatDate, helpers)"]
+        FE["MMM-Webuntis.js<br/>(Module)"]
+        Widgets["Widgets<br/>(lessons, grid, exams,<br/>homework, absences,<br/>messagesofday)"]
     end
 
     subgraph Backend["⚙️ Backend (Node.js)"]
         NH["node_helper.js<br/>(Coordinator)"]
-
-        subgraph Services["🔧 Services (lib/)"]
-            HttpClient["httpClient.js<br/>(Generic HTTP)"]
-            Auth["authService.js<br/>(Auth & Tokens)"]
-            API["webuntisApiService.js<br/>(API Calls)"]
-            Cache["cacheManager.js<br/>(TTL Cache)"]
-            Transform["dataTransformer.js<br/>(Data Transform)"]
-            Config["configValidator.js<br/>(Config & Legacy)"]
-            Errors["errorHandler.js<br/>(Error Handling)"]
-            Validators["widgetConfigValidator.js<br/>(Widget Validation)"]
-            DateTime["dateTimeUtils.js<br/>(Date/Time Utils)"]
-            Logger["logger.js<br/>(Backend Logging)"]
-        end
+        Services["Services (lib/)<br/>(12 modules:<br/>auth, API client,<br/>validation, caching,<br/>data transform, etc.)"]
     end
 
-    subgraph External["🌐 External APIs"]
-        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences)"]
-        JSONRPC["JSON-RPC API<br/>(auth, OTP)"]
+    subgraph External["🌐 External"]
+        REST["WebUntis REST API"]
+        JSONRPC["JSON-RPC API<br/>(legacy auth)"]
     end
 
-    MM <-->|socketNotification| FE
-    FE <-->|sendSocketNotification| NH
+    MM <-->|Socket Notifications| FE
+    FE <-->|FETCH_DATA<br/>GOT_DATA| NH
     FE --> Widgets
-    Widgets --> Util
     NH --> Services
-    HttpClient --> JSONRPC
-    Auth --> HttpClient
-    API --> REST
-    NH --> REST
+    Services --> REST
+    Services --> JSONRPC
 ```
 
 → For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Architecture Highlights
 
-**Modular Design**: The module follows a service-oriented architecture with 10 specialized modules in `lib/`:
+**Modular Design**: The module follows a service-oriented architecture with **12 specialized services** in `lib/`:
 
-- **httpClient.js** - Generic HTTP client for WebUntis (QR auth, credentials auth, bearer tokens) - **no direct WebUntis library dependency**
-- **authService.js** - Authentication and token management with 14-minute caching
-- **webuntisApiService.js** - Unified REST API client for all data fetching
-- **dataTransformer.js** - Data normalization and transformation
-- **cacheManager.js** - TTL-based caching for class IDs and other data
-- **configValidator.js** - Schema validation and 25 legacy config mappings
-- **widgetConfigValidator.js** - Widget-specific validation (grid, exams, homework, etc.)
-- **errorHandler.js** - Centralized error handling and user-friendly messages
-- **dateTimeUtils.js** - Date/time calculations and formatting
-- **logger.js** - Configurable backend logging
+- **Authentication & API**: httpClient.js, authService.js, restClient.js, webuntisApiService.js
+- **Data Processing**: dataTransformer.js, payloadCompactor.js
+- **Configuration**: configValidator.js, widgetConfigValidator.js
+- **Infrastructure**: cacheManager.js, errorHandler.js, dateTimeUtils.js, logger.js
 
 **Benefits**:
 - ✅ **Reduced coupling**: Generic HTTP client instead of tight WebUntis library dependency
