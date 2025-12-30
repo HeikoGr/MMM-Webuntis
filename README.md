@@ -180,6 +180,15 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 Note: Legacy keys `daysToShow` and `pastDaysToShow` are still supported but deprecated — update your `config.js` to use `nextDays`/`pastDays`.
 
+## Widget-Specific Options
+
+> **Important:** All widget options below (**lessons**, **grid**, **exams**, **homework**, **absences**, **messagesofday**) **must be configured as nested objects**, not with dot notation.
+> 
+> ✅ Correct: `lessons: { dateFormat: 'EEEE' }`, `grid: { maxLessons: 8 }`, `exams: { daysAhead: 21 }`  
+> ❌ Wrong: `lessons.dateFormat: 'EEEE'` (this is not valid JavaScript object syntax)
+> 
+> The dot notation in the tables below (e.g. `lessons.dateFormat`) is only used for **documentation purposes** to show which namespace each option belongs to.
+
 ### Lessons Widget Options
 
 Configure lessons widget behavior using the `lessons` configuration namespace:
@@ -193,8 +202,9 @@ Configure lessons widget behavior using the `lessons` configuration namespace:
 | `lessons.showTeacherMode` | string | `'full'` | Teacher display mode: `'full'` (full name), `'initial'` (initials), or null/falsy for none. |
 | `lessons.showSubstitution` | bool | `false` | Show substitution text/notes for changed lessons. |
 
-**Example:**
+**Example (nested object):**
 ```javascript
+// Widget options must be nested objects:
 lessons: {
   dateFormat: 'EEEE',
   showStartTime: false,
