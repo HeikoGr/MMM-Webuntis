@@ -70,7 +70,7 @@ All widgets now use the new widget-namespaced configuration structure.
 
 ## Legacy Configuration Support
 
-The module includes a compatibility mapper (`config/legacy-config-mapper.js`) that automatically translates old configuration keys to the new widget-namespaced structure at runtime. Old keys such as:
+The module includes a compatibility mapper (in `lib/configValidator.js` via `applyLegacyMappings()`) that automatically translates old configuration keys to the new widget-namespaced structure at runtime. Old keys such as:
 
 - `dateFormat` (global)
 - `homeworkDateFormat`, `examDateFormat`

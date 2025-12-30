@@ -1,8 +1,8 @@
 # MMM-Webuntis Refactoring Roadmap
 
-> **Status:** Planning Phase  
-> **Last Updated:** 2025-12-29  
-> **Code Review Date:** 2025-12-29  
+> **Status:** Planning Phase
+> **Last Updated:** 2025-12-29
+> **Code Review Date:** 2025-12-29
 > **Estimated Total Effort:** ~59 hours (~1.5 weeks full-time)
 
 ## Executive Summary
@@ -217,17 +217,17 @@ async getAuth({ school, username, password, server, options = {} }) {
 ```javascript
 /**
  * Authenticate with WebUntis and retrieve bearer token + cookies
- * 
+ *
  * @param {Object} params - Authentication parameters
  * @param {string} params.school - School identifier (e.g., "demo-school")
  * @param {string} params.username - WebUntis username
- * @param {string} params.password - WebUntis password  
+ * @param {string} params.password - WebUntis password
  * @param {string} [params.server='webuntis.com'] - Server hostname
  * @param {Object} [params.options={}] - Additional options
  * @param {string} [params.options.cacheKey] - Cache key for token reuse
  * @returns {Promise<AuthResult>} Authentication result with token, cookies, tenantId
  * @throws {Error} When authentication fails or credentials are invalid
- * 
+ *
  * @example
  * const auth = await authService.getAuth({
  *   school: 'demo',
@@ -507,7 +507,7 @@ lesson: [
 - Optional file write
 
 **Tasks:**
-- [ ] Add `generateConfig()` function to `cli/cli.js`
+- [ ] Add `generateConfig()` function to `cli/node_helper_wrapper.js`
   - [ ] Use `inquirer` for interactive prompts
   - [ ] Prompt for QR code URL
   - [ ] Prompt for credentials (if no QR)

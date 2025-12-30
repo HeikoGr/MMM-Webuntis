@@ -26,7 +26,7 @@ Use JSON-RPC only to get the OTP and bearer token, then use REST API for all dat
 - `widgets/*.js` - Individual widget renderers (grid, lessons, exams, homework, absences, messagesofday, util)
 - `config/*.template.*` - Template files for configuration and styling (do not modify user copies)
 - `translations/*.json` - Internationalization files (currently: de, en)
-- `cli/cli.js` - Interactive CLI tool for testing configuration
+- `cli/node_helper_wrapper.js` - CLI tool for testing configuration and fetching data
 - `docs/` - Documentation files (API reference, guides, research notes) - everything should be in english and without any sensitive info
 
 ## Quality bar

@@ -26,7 +26,7 @@
       if (mode === 'verbose') addTableHeader(table, studentCellTitle);
 
       // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-      const rangeEnd = Number(util.getWidgetConfig(studentConfig, 'exams', 'daysAhead') ?? 7);
+      const rangeEnd = Number(util.getWidgetConfig(studentConfig, 'exams', 'nextDays') ?? 7);
 
       if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;

@@ -569,7 +569,7 @@ module.exports = NodeHelper.create({
       }
 
       // Merge module-level defaults into each discovered student so downstream
-      // fetch logic has the expected fields (daysToShow, examsDaysAhead, etc.)
+      // fetch logic has the expected fields (nextDays, etc.)
       // Only assign discovered students once to avoid repeated re-assignment
       // during periodic fetches which can lead to duplicate or inconsistent
       // entries being appended to the runtime config.

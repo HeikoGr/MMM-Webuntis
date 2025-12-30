@@ -1,13 +1,17 @@
 # QR Code Login Testing - Summary
 
+> **Note:** This document describes the research and testing that led to the current QR code implementation. QR code authentication is now **fully implemented** in MMM-Webuntis via `lib/httpClient.js` and `lib/authService.js`. This document is kept for historical reference.
+
 ## Problem
 Student QR codes work in the WebUntis mobile app but not in the web UI. The question is: **Can we use QR code credentials to get REST API access?**
 
-## Solution Built
+## Solution Built (Historical - Now Implemented)
 
-I've created two comprehensive test suites in the `cli/` folder to answer this question:
+This research led to the implementation now in `lib/httpClient.js` (`authenticateWithQRCode()`) and `lib/authService.js` (`getAuthFromQRCode()`).
 
-### 1. `test-qrcode-rest-api.js`
+The original test suites were in the `cli/` folder:
+
+### 1. `test-qrcode-rest-api.js` (Historical)
 **Comprehensive QR Code Testing Suite**
 
 Tests multiple aspects of QR code authentication:
@@ -121,18 +125,32 @@ This will:
 cat docs/02-api-reference/QR_CODE_REST_API.md
 ```
 
-## Next Steps (for Implementation)
+## Implementation Status
 
-If you want to extend MMM-Webuntis to support student QR codes:
+✅ **QR code authentication is fully implemented** in:
+- `lib/httpClient.js` - `authenticateWithQRCode()` method
+- `lib/authService.js` - `getAuthFromQRCode()` method
+- `node_helper.js` - Automatic QR code detection and handling
 
-1. **Update student config schema** to accept `qrcode` field
-2. **Modify `node_helper.js`** `_createUntisClient()` to:
-   - Detect QR code credentials
-   - Use JSON-RPC + bearer token flow instead of WebUntisQR library
-   - Automatically refresh bearer tokens (15-min lifetime)
-3. **Update documentation** with QR code examples
-4. **Add config validation** for QR code format
-5. **Test with real student accounts** using provided test suites
+To use QR codes in your configuration, simply add:
+```javascript
+students: [
+  {
+    title: "Student Name",
+    qrcode: "untis://setschool?url=https://...&school=...&user=...&key=..."
+  }
+]
+```
+
+## Next Steps (Historical - Already Completed)
+
+~~If you want to extend MMM-Webuntis to support student QR codes:~~
+
+1. ✅ **DONE:** Updated student config schema to accept `qrcode` field
+2. ✅ **DONE:** Modified `node_helper.js` to detect QR code credentials and use REST API flow
+3. ✅ **DONE:** Automatically refreshes bearer tokens (14-min cache with 1-min buffer)
+4. ✅ **DONE:** Updated documentation with QR code examples
+5. ✅ **DONE:** Added config validation for QR code format
 
 ## Files Added/Modified
 
