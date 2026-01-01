@@ -3,9 +3,20 @@ Module.register('MMM-Webuntis', {
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
     // Use only console methods allowed by linting rules (warn, error)
     const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
+    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     return {
       log(level, msg) {
         try {
+          // Respect logLevel setting from global window variable
+          const configured = window.MMMWebuntisLogLevel || 'info';
+          const configuredLevel = levels[configured] !== undefined ? configured : 'info';
+          const msgLevel = levels[level] !== undefined ? level : 'info';
+
+          // Skip logging if message level exceeds configured level
+          if (levels[msgLevel] > levels[configuredLevel]) {
+            return;
+          }
+
           const method = METHODS[level] || 'warn';
           // eslint-disable-next-line no-console
           console[method](`${moduleName}: ${msg}`);
@@ -204,9 +215,9 @@ Module.register('MMM-Webuntis', {
       // ignore and fallback to legacy console behavior
     }
 
-    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
-    const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
-    const configuredLevel = levels[configured] !== undefined ? configured : 'info';
+    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+    const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'none';
+    const configuredLevel = levels[configured] !== undefined ? configured : 'none';
     const msgLevel = levels[level] !== undefined ? level : 'info';
     if (levels[msgLevel] <= levels[configuredLevel]) {
       try {
