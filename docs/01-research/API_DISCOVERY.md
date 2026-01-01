@@ -485,7 +485,7 @@ async function getHolidaysWithBearerToken() {
   const cookieJar = new CookieJar();
   const baseURL = 'https://{SCHOOL_NAME}.webuntis.com/WebUntis';
 
-  await client.post('/jsonrpc.do?school={SCHOOL_NAME}', {
+  await fetchClient.post(`${baseURL}/jsonrpc.do?school={SCHOOL_NAME}`, {
     jsonrpc: '2.0',
     method: 'authenticate',
     params: {
@@ -494,7 +494,7 @@ async function getHolidaysWithBearerToken() {
       client: 'App'
     },
     id: 1,
-  });
+  }, { cookieJar });
 
   // Step 2: Get Bearer token
   const tokenResp = await fetchClient.get(`${baseURL}/api/token/new`, { cookieJar });

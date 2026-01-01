@@ -289,38 +289,45 @@ class WebUntisAPI {
     this.cookieJar = new CookieJar();
     const baseURL = `https://${this.server}/WebUntis`;
 
-    const response = await this.client.post(
-      `/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
+    const response = await fetchClient.post(
+      `${baseURL}/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
       {
         id: `req-${Date.now()}`,
         method: 'authenticate',
         params: { user: this.username, password: this.password, client: 'App' },
         jsonrpc: '2.0',
-      }
+      },
+      { cookieJar: this.cookieJar }
     );
 
-    if (response.status !== 200) {
-      throw new Error(`Authentication failed: ${response.data?.error?.message}`);
+    if (response.data?.error) {
+      throw new Error(`Authentication failed: ${response.data.error.message}`);
     }
   }
 
   async getStudentAbsences(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/classreg/absences/students?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}&excuseStatusId=-1`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/classreg/absences/students?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}&excuseStatusId=-1`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.absences || [];
   }
 
   async getStudentHomework(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/homeworks/lessons?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/homeworks/lessons?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.records || [];
   }
 
   async getStudentExams(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/exams?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/exams?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.exams || [];
   }
