@@ -121,8 +121,6 @@ const timetable = await client.getOwnTimetableForRange(
 
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-
 const { URL } = require('url');
 const fetchClient = require('./lib/fetchClient');
 const CookieJar = require('./lib/cookieJar');
