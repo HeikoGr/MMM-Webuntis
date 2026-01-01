@@ -69,7 +69,7 @@ The module uses a **service-oriented architecture** with specialized modules in 
 - Token caching (14-minute TTL, 1-minute buffer)
 - School/server resolution from QR codes
 - Multi-student target building
-- **Dependencies**: httpClient.js, axios (for app/data)
+- **Dependencies**: httpClient.js, fetchClient.js (for app/data)
 
 **webuntisApiService.js** - Unified API client
 - Generic REST API call function
@@ -83,7 +83,7 @@ The module uses a **service-oriented architecture** with specialized modules in 
 - Bearer token authentication
 - Tenant ID header management
 - Response parsing and error handling
-- **Dependencies**: axios, errorHandler.js, logger.js
+- **Dependencies**: fetchClient.js, errorHandler.js, logger.js
 
 ### Data Processing
 

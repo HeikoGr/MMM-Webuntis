@@ -130,7 +130,7 @@ Applied to both `text` and `excuse` fields to prevent XSS attacks.
 **Implementation:**
 ```javascript
 // Parent account: Must provide studentId
-const resp = await axios.get(
+const resp = await fetchClient.get(
   `https://${server}/WebUntis/api/classreg/absences/students`,
   {
     params: {

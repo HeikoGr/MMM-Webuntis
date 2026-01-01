@@ -426,12 +426,12 @@ Bearer tokens can be **self-generated**. The key benefit is that you can access 
 
 **Step 1: Authenticate with JSON-RPC (get session cookies)**
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+const { wrapper } = require('CookieJar (custom implementation)-support');
 
 const cookieJar = new CookieJar();
-const client = wrapper(axios.create({
+const client = wrapper(fetchClient with options {
   baseURL: 'https://{server}/WebUntis',
   jar: cookieJar,
   withCredentials: true,
@@ -467,7 +467,7 @@ console.log('Token expires:', new Date(payload.exp * 1000));
 
 **Step 3: Use Bearer Token for specific endpoints**
 ```javascript
-const bearerClient = axios.create({
+const bearerClient = fetchClient with options {
   baseURL: 'https://{server}/WebUntis',
   headers: {
     'Authorization': 'Bearer ' + jwtToken,
@@ -485,14 +485,14 @@ const messages = await bearerClient.get('/api/rest/view/v1/messages');
 ### Complete Self-Contained Example
 
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+const { wrapper } = require('CookieJar (custom implementation)-support');
 
 async function getHolidaysWithBearerToken() {
   // Step 1: Setup and authenticate
   const cookieJar = new CookieJar();
-  const client = wrapper(axios.create({
+  const client = wrapper(fetchClient with options {
     baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
     jar: cookieJar,
     withCredentials: true,
@@ -515,7 +515,7 @@ async function getHolidaysWithBearerToken() {
   const token = tokenResp.data;
 
   // Step 3: Use Bearer token
-  const bearerClient = axios.create({
+  const bearerClient = fetchClient with options {
     baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
     headers: {
       'Authorization': 'Bearer ' + token,
@@ -799,7 +799,7 @@ curl -H "Authorization: Bearer {token}" \
 
 ### Method 1: Direct JSON-RPC (Legacy)
 ```javascript
-const axios = require('axios');
+
 
 const response = await axios.post(
   `https://server/WebUntis/jsonrpc.do?school=SCHOOL_NAME`,
@@ -814,14 +814,14 @@ const response = await axios.post(
 
 ### Method 2: REST API with Session Management (Recommended)
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+const { wrapper } = require('CookieJar (custom implementation)-support');
 
 // Setup session jar
 const cookieJar = new CookieJar();
 const client = wrapper(
-  axios.create({
+  fetchClient with options {
     baseURL: `https://${server}/WebUntis`,
     jar: cookieJar,
     withCredentials: true

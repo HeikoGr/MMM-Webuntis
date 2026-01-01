@@ -3,7 +3,7 @@ const NodeHelper = require('node_helper');
 /* eslint-enable n/no-missing-require */
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+const fetchClient = require('./lib/fetchClient');
 /* eslint-disable n/no-missing-require */
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
@@ -252,14 +252,13 @@ module.exports = NodeHelper.create({
     // Aggressive path: if we have a studentId, try classservices first (closest to "what this student sees")
     if (options.studentId) {
       try {
-        const resp = await axios.get(`https://${server}/WebUntis/api/classreg/classservices`, {
-          params: {
-            startDate: formatDateYYYYMMDD(rangeStart),
-            endDate: formatDateYYYYMMDD(rangeEnd),
-            elementId: options.studentId,
-          },
+        const url = new URL(`https://${server}/WebUntis/api/classreg/classservices`);
+        url.searchParams.append('startDate', formatDateYYYYMMDD(rangeStart));
+        url.searchParams.append('endDate', formatDateYYYYMMDD(rangeEnd));
+        url.searchParams.append('elementId', options.studentId);
+
+        const resp = await fetchClient.get(url.toString(), {
           headers,
-          validateStatus: () => true,
           timeout: 15000,
         });
 
@@ -283,15 +282,14 @@ module.exports = NodeHelper.create({
     // Secondary path: timetable/filter (broader) if nothing found yet
     if (!candidates || candidates.length === 0) {
       try {
-        const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`, {
-          params: {
-            resourceType: 'CLASS',
-            timetableType: 'STANDARD',
-            start: formatDateISO(rangeStart),
-            end: formatDateISO(rangeEnd),
-          },
+        const url = new URL(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`);
+        url.searchParams.append('resourceType', 'CLASS');
+        url.searchParams.append('timetableType', 'STANDARD');
+        url.searchParams.append('start', formatDateISO(rangeStart));
+        url.searchParams.append('end', formatDateISO(rangeEnd));
+
+        const resp = await fetchClient.get(url.toString(), {
           headers,
-          validateStatus: () => true,
           timeout: 15000,
         });
 
@@ -1541,10 +1539,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-            student.homework?.daysAhead ??
-            this.config?.homework?.nextDays ??
-            this.config?.homework?.daysAhead ??
-            999 // Default: show all if not configured
+          student.homework?.daysAhead ??
+          this.config?.homework?.nextDays ??
+          this.config?.homework?.daysAhead ??
+          999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1569,7 +1567,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1652,7 +1650,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date

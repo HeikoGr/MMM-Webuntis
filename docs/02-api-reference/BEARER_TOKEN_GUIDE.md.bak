@@ -4,13 +4,11 @@
 
 WebUntis supports JWT Bearer token authentication in addition to traditional session cookies. This guide explains how to use Bearer tokens for REST API calls.
 
-**Note:** This module uses Node.js built-in `fetch` with custom `fetchClient` and `CookieJar` implementations instead of third-party HTTP libraries.
-
 ## Authentication Flow
 
 ### Step 1: JSON-RPC Login (Traditional)
 ```javascript
-const response = await fetchClient.post(
+const response = await axios.post(
   'https://{server}/WebUntis/jsonrpc.do?school={school}',
   {
     jsonrpc: '2.0',
@@ -22,44 +20,61 @@ const response = await fetchClient.post(
     },
     id: 1
   },
-  { cookieJar }  // Session cookies stored here
+  {
+    jar: cookieJar,  // Session cookies stored here
+    validateStatus: () => true
+  }
 );
 ```
 
 ### Step 2: Get JWT Token
 ```javascript
-const jwtToken = await fetchClient.get(
+const tokenResponse = await axios.get(
   'https://{server}/WebUntis/api/token/new',
-  { cookieJar }  // Requires valid session
+  {
+    jar: cookieJar,  // Requires valid session
+    validateStatus: () => true
+  }
 );
-// jwtToken is raw JWT string
+
+const jwtToken = tokenResponse.data;  // Raw JWT string
 ```
 
 ### Step 3: Use Bearer Token for API Calls
 ```javascript
-const headers = {
-  'Authorization': 'Bearer ' + jwtToken,
-  'Accept': 'application/json'
-};
+const client = axios.create({
+  baseURL: 'https://{server}/WebUntis',
+  headers: {
+    'Authorization': 'Bearer ' + jwtToken,
+    'Accept': 'application/json'
+  }
+});
 
 // Now all requests include Bearer token
-const exams = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/exams', { headers });
-const messages = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/messages', { headers });
-const appData = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/app/data', { headers });
+const exams = await client.get('/api/rest/view/v1/exams');
+const messages = await client.get('/api/rest/view/v1/messages');
+const appData = await client.get('/api/rest/view/v1/app/data');
 ```
 
 ## Complete Example
 
 ```javascript
-const fetchClient = require('./lib/fetchClient');
-const CookieJar = require('./lib/cookieJar');
+const axios = require('axios');
+const { CookieJar } = require('tough-cookie');
+const { wrapper } = require('axios-cookiejar-support');
 
 async function getAppDataWithBearerToken() {
   // Create cookie jar for session management
   const cookieJar = new CookieJar();
+  const client = wrapper(axios.create({
+    baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
+    jar: cookieJar,
+    withCredentials: true,
+    validateStatus: () => true
+  }));
 
   // 1. Authenticate
-  await fetchClient.post('https://{SCHOOL_NAME}.webuntis.com/WebUntis/jsonrpc.do?school={SCHOOL_NAME}', {
+  await client.post('/jsonrpc.do?school={SCHOOL_NAME}', {
     jsonrpc: '2.0',
     method: 'authenticate',
     params: {
@@ -68,26 +83,28 @@ async function getAppDataWithBearerToken() {
       client: 'App'
     },
     id: 1
-  }, { cookieJar });
+  });
 
   // 2. Get JWT token
-  const token = await fetchClient.get(
-    'https://{SCHOOL_NAME}.webuntis.com/WebUntis/api/token/new',
-    { cookieJar }
-  );
+  const tokenResp = await client.get('/api/token/new');
+  const token = tokenResp.data;
 
-  // 3. Use Bearer token for authenticated requests
-  const headers = {
-    'Authorization': 'Bearer ' + token,
-    'Accept': 'application/json'
-  };
+  // 3. Create Bearer-authenticated client
+  const bearerClient = axios.create({
+    baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Accept': 'application/json'
+    },
+    validateStatus: () => true
+  });
 
   // 4. Use Bearer-authenticated endpoints
-  const exams = await fetchClient.get('https://{SCHOOL_NAME}.webuntis.com/WebUntis/api/rest/view/v1/exams', { headers });
-  const messages = await fetchClient.get('https://{SCHOOL_NAME}.webuntis.com/WebUntis/api/rest/view/v1/messages', { headers });
-  const appData = await fetchClient.get('https://{SCHOOL_NAME}.webuntis.com/WebUntis/api/rest/view/v1/app/data', { headers });
+  const exams = await bearerClient.get('/api/rest/view/v1/exams');
+  const messages = await bearerClient.get('/api/rest/view/v1/messages');
+  const appData = await bearerClient.get('/api/rest/view/v1/app/data');
 
-  return { exams, messages, appData };
+  return { exams: exams.data, messages: messages.data, appData: appData.data };
 }
 ```
 
@@ -122,13 +139,13 @@ Bearer tokens are RS256-signed JWT tokens with the following payload:
 
 | Field | Meaning | Notes |
 |-------|---------|-------|
-| \`user_id\` | User ID | Different from person_id |
-| \`person_id\` | Person ID | Use for student lookup |
-| \`username\` | Login username | Full email for parent accounts |
-| \`roles\` | User role | \`LEGAL_GUARDIAN\` for parents, \`USER\` for students |
-| \`exp\` | Expiration (unix timestamp) | Token expires after ~15 minutes |
-| \`iat\` | Issued at (unix timestamp) | When token was generated |
-| \`scopes\` | API scopes | \`mg:r\` = read management |
+| `user_id` | User ID | Different from person_id |
+| `person_id` | Person ID | Use for student lookup |
+| `username` | Login username | Full email for parent accounts |
+| `roles` | User role | `LEGAL_GUARDIAN` for parents, `USER` for students |
+| `exp` | Expiration (unix timestamp) | Token expires after ~15 minutes |
+| `iat` | Issued at (unix timestamp) | When token was generated |
+| `scopes` | API scopes | `mg:r` = read management |
 
 ## Bearer Token Endpoints
 
@@ -136,9 +153,9 @@ Bearer tokens are RS256-signed JWT tokens with the following payload:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| \`/api/rest/view/v1/exams\` | GET | Get exams for authenticated user |
-| \`/api/rest/view/v1/messages\` | GET | Get messages for authenticated user |
-| \`/api/rest/view/v1/app/data\` | GET | Get system config and app data |
+| `/api/rest/view/v1/exams` | GET | Get exams for authenticated user |
+| `/api/rest/view/v1/messages` | GET | Get messages for authenticated user |
+| `/api/rest/view/v1/app/data` | GET | Get system config and app data |
 
 ### Endpoints NOT Supporting Bearer Tokens
 
@@ -146,16 +163,16 @@ These endpoints **require session cookies** even though Bearer tokens are availa
 
 | Endpoint | Method | Workaround |
 |----------|--------|-----------|
-| \`/api/rest/view/v1/timetable/*\` | GET | Use \`/api/public/timetable/weekly/data\` (cookie-based) |
-| \`/api/rest/view/v1/absences\` | GET | Use \`/api/classreg/absences/students\` (cookie-based) |
-| \`/api/rest/view/v1/homeworks\` | GET | Use \`/api/homeworks/lessons\` (cookie-based) |
+| `/api/rest/view/v1/timetable/*` | GET | Use `/api/public/timetable/weekly/data` (cookie-based) |
+| `/api/rest/view/v1/absences` | GET | Use `/api/classreg/absences/students` (cookie-based) |
+| `/api/rest/view/v1/homeworks` | GET | Use `/api/homeworks/lessons` (cookie-based) |
 
 ## Token Validity and Caching
 
 ### Token Lifetime
 - **Validity period:** ~15 minutes (900 seconds)
-- **Expiration claim:** \`exp\` field contains unix timestamp
-- **Check expiration:** \`Math.floor(Date.now() / 1000) > token.exp\`
+- **Expiration claim:** `exp` field contains unix timestamp
+- **Check expiration:** `Math.floor(Date.now() / 1000) > token.exp`
 
 ### Token Caching Strategy
 
@@ -170,17 +187,14 @@ class TokenCache {
     return Math.floor(Date.now() / 1000) > this.expiresAt;
   }
 
-  async getToken(cookieJar) {
+  async getToken(client) {
     if (this.token && !this.isExpired()) {
       return this.token;  // Return cached token
     }
 
     // Generate new token
-    const token = await fetchClient.get(
-      'https://{server}/WebUntis/api/token/new',
-      { cookieJar }
-    );
-    this.token = token;
+    const resp = await client.get('/api/token/new');
+    this.token = resp.data;
 
     // Decode to get expiration
     const parts = this.token.split('.');
@@ -227,17 +241,18 @@ class TokenCache {
 ## Testing Bearer Tokens
 
 ```bash
-# 1. Authenticate and get session
-curl -c cookies.txt -X POST \
+# Get token
+TOKEN=$(curl -s -X POST \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"authenticate","params":{"user":"user@email.com","password":"pass","client":"App"},"id":1}' \
-  https://server.webuntis.com/WebUntis/jsonrpc.do?school=schoolname
+  https://server.webuntis.com/WebUntis/jsonrpc.do?school=schoolname \
+  | jq -r '.result.sessionId')
 
-# 2. Get JWT token using session
-TOKEN=$(curl -b cookies.txt \
-  https://server.webuntis.com/WebUntis/api/token/new)
+# The above gives session ID, to get JWT:
+curl -H "Cookie: JSESSIONID=$JSESSIONID" \
+  https://server.webuntis.com/WebUntis/api/token/new
 
-# 3. Use token
+# Use token
 curl -H "Authorization: Bearer $TOKEN" \
   https://server.webuntis.com/WebUntis/api/rest/view/v1/exams
 ```

@@ -9,15 +9,15 @@ Quick reference for implementing the new REST APIs in your code.
 All REST API calls require proper session management. Use `axios` + `tough-cookie`:
 
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+const { wrapper } = require('CookieJar (custom implementation)-support');
 
 // Create session-aware HTTP client
 const createClient = (server) => {
   const cookieJar = new CookieJar();
   return wrapper(
-    axios.create({
+    fetchClient with options {
       baseURL: `https://${server}/WebUntis`,
       jar: cookieJar,
       withCredentials: true,
@@ -275,9 +275,9 @@ metadata.excuseStatuses?.forEach((status) => {
 ## Complete Example: Multi-Student Monitoring
 
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+const { wrapper } = require('CookieJar (custom implementation)-support');
 
 class WebUntisAPI {
   constructor(server, school, username, password) {
@@ -291,7 +291,7 @@ class WebUntisAPI {
   async authenticate() {
     const cookieJar = new CookieJar();
     this.client = wrapper(
-      axios.create({
+      fetchClient with options {
         baseURL: `https://${this.server}/WebUntis`,
         jar: cookieJar,
         withCredentials: true,
@@ -426,7 +426,7 @@ try {
 Make sure your project has these installed:
 
 ```bash
-npm install axios tough-cookie axios-cookiejar-support
+npm install axios tough-cookie CookieJar (custom implementation)-support
 ```
 
 Add to `package.json`:
@@ -434,9 +434,9 @@ Add to `package.json`:
 ```json
 {
   "dependencies": {
-    "axios": "^1.6.0",
+    
     "tough-cookie": "^4.1.0",
-    "axios-cookiejar-support": "^4.0.4"
+    "CookieJar (custom implementation)-support": "^4.0.4"
   }
 }
 ```

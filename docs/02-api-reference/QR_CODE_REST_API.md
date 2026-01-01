@@ -120,9 +120,9 @@ const timetable = await client.getOwnTimetableForRange(
 ### Manual Implementation (for REST API tokens)
 
 ```javascript
-const axios = require('axios');
+
 const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+
 const { URL } = require('url');
 
 // 1. Parse QR code
@@ -135,7 +135,7 @@ const key = qrUrl.searchParams.get('key');
 // 2. Create axios client with cookie jar
 const cookieJar = new CookieJar();
 const client = wrapper(
-  axios.create({
+  fetchClient with options {
     baseURL: `https://${url}`,
     jar: cookieJar,
     withCredentials: true,
@@ -166,7 +166,7 @@ const tokenResp = await client.get('/WebUntis/api/token/new');
 const bearerToken = tokenResp.data;
 
 // 5. Create REST API client
-const restClient = axios.create({
+const restClient = fetchClient with options {
   baseURL: `https://${url}/WebUntis`,
   headers: {
     Authorization: `Bearer ${bearerToken}`,

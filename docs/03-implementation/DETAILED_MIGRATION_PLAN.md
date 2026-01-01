@@ -14,7 +14,7 @@ This document provides a step-by-step migration plan to transition MMM-Webuntis 
 ### Goals
 
 1. **Eliminate dependency on `webuntis` library** for data fetching
-2. **Implement direct REST API calls** using axios (already a dependency)
+2. **Implement direct REST API calls** using built-in fetch (no dependency)
 3. **Maintain 100% backward compatibility** during transition
 4. **Add comprehensive logging** to track API usage (JSON-RPC vs REST)
 5. **Enable experimental mode** via feature flag for early testing
@@ -35,8 +35,8 @@ This document provides a step-by-step migration plan to transition MMM-Webuntis 
 ```json
 {
   "webuntis": "^2.2.1",           // ← TO BE REMOVED (eventually)
-  "axios": "^1.7.0",              // ✅ Already available
-  "axios-cookiejar-support": "^6.0.5",  // ✅ Already available
+                // ✅ Already available
+    // ✅ Already available
   "tough-cookie": "^6.0.0",       // ✅ Already available
   "otplib": "^12.0.1"             // ✅ Used for QR code TOTP
 }
@@ -241,13 +241,13 @@ start() {
      }
 
      // Step 2: JSON-RPC authenticate
-     const authResp = await axios.post(/*...*/);
+     const authResp = await fetchClient.post(/*...*/);
 
      // Step 3: Extract cookies from Set-Cookie headers
      const cookies = this._extractCookies(authResp.headers['set-cookie']);
 
      // Step 4: Get Bearer token
-     const tokenResp = await axios.get('/api/token/new', {
+     const tokenResp = await fetchClient.get('/api/token/new', {
        headers: { Cookie: cookies }
      });
 
@@ -293,7 +293,7 @@ start() {
      };
 
      const startTime = Date.now();
-     const resp = await axios(config);
+     const resp = await fetchClient(config);
      const duration = Date.now() - startTime;
 
      this.logger('debug', `${method} ${endpoint} → ${resp.status} (${duration}ms)`);
@@ -563,7 +563,7 @@ async logout() {
   this.logger('info', 'Logging out via JSON-RPC');
 
   try {
-    await axios.post(
+    await fetchClient.post(
       `https://${this.server}/WebUntis/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
       {
         jsonrpc: '2.0',
@@ -1143,8 +1143,8 @@ MMM-Webuntis supports multiple API modes for fetching data from WebUntis:
 ```json
 {
   "dependencies": {
-    "axios": "^1.7.0",
-    "axios-cookiejar-support": "^6.0.5",
+    
+    
     "tough-cookie": "^6.0.0",
     "otplib": "^12.0.1"
   },
