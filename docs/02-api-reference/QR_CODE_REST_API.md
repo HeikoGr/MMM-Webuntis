@@ -169,7 +169,7 @@ const headers = {
 };
 
 // 6. Use REST API
-const appData = await restClient.get('/api/rest/view/v1/app/data');
+const appData = await fetchClient.get(`${baseURL}/WebUntis/api/rest/view/v1/app/data`, { headers });
 ```
 
 ---
