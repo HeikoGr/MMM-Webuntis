@@ -21,7 +21,7 @@ For exhaustive research notes and discovery logs, start at: [04-research/README.
 
 ```bash
 # Test configuration and fetch data
-npm run debug
+node --run debug
 
 # Lint
 node --run lint

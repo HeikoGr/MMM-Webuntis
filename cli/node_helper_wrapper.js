@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -482,7 +482,7 @@ Fetches and tests data from WebUntis API using config.js credentials.
 All student data is loaded automatically from your MagicMirror configuration.
 
 USAGE:
-  npm run debug -- [options]
+  node --run debug -- [options]
 
 OPTIONS:
   --config  | -c   <path>    Path to config.js (auto-detected if omitted)
@@ -496,25 +496,25 @@ OPTIONS:
 EXAMPLES:
 
   # Fetch all data for first student only (default)
-  npm run debug
+  node --run debug
 
   # Fetch for all configured students
-  npm run debug -- --all
+  node --run debug -- --all
 
   # Fetch for specific student with verbose output
-  npm run debug -- --student 1 --verbose
+  node --run debug -- --student 1 --verbose
 
   # Fetch only exams for all students
-  npm run debug -- --all --action exams
+  node --run debug -- --all --action exams
 
   # Fetch and create debug dump for student 0
-  npm run debug -- --dump --verbose
+  node --run debug -- --dump --verbose
 
   # Use custom config file, test student 1
-  npm run debug -- --config ./custom-config.js --student 1
+  node --run debug -- --config ./custom-config.js --student 1
 
   # Test authentication only for all students
-  npm run debug -- --all --action auth --verbose
+  node --run debug -- --all --action auth --verbose
 `);
 }
 

@@ -3,7 +3,7 @@ const NodeHelper = require('node_helper');
 /* eslint-enable n/no-missing-require */
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+const fetchClient = require('./lib/fetchClient');
 /* eslint-disable n/no-missing-require */
 const Log = require('logger');
 /* eslint-enable n/no-missing-require */
@@ -252,18 +252,17 @@ module.exports = NodeHelper.create({
     // Aggressive path: if we have a studentId, try classservices first (closest to "what this student sees")
     if (options.studentId) {
       try {
-        const resp = await axios.get(`https://${server}/WebUntis/api/classreg/classservices`, {
-          params: {
-            startDate: formatDateYYYYMMDD(rangeStart),
-            endDate: formatDateYYYYMMDD(rangeEnd),
-            elementId: options.studentId,
-          },
+        const url = new URL(`https://${server}/WebUntis/api/classreg/classservices`);
+        url.searchParams.append('startDate', formatDateYYYYMMDD(rangeStart));
+        url.searchParams.append('endDate', formatDateYYYYMMDD(rangeEnd));
+        url.searchParams.append('elementId', options.studentId);
+
+        const resp = await fetchClient.get(url.toString(), {
           headers,
-          validateStatus: () => true,
           timeout: 15000,
         });
 
-        if (resp.status === 200 && resp.data) {
+        if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
           // Prefer explicit mapping from personKlasseMap when present
           const map = resp.data?.data?.personKlasseMap;
@@ -272,8 +271,6 @@ module.exports = NodeHelper.create({
             if (Number.isFinite(Number(mapped))) mappedClassId = Number(mapped);
           }
           this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
-        } else {
-          this._mmLog('debug', null, `[REST] classservices failed with status ${resp.status}`);
         }
       } catch (err) {
         this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
@@ -283,23 +280,20 @@ module.exports = NodeHelper.create({
     // Secondary path: timetable/filter (broader) if nothing found yet
     if (!candidates || candidates.length === 0) {
       try {
-        const resp = await axios.get(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`, {
-          params: {
-            resourceType: 'CLASS',
-            timetableType: 'STANDARD',
-            start: formatDateISO(rangeStart),
-            end: formatDateISO(rangeEnd),
-          },
+        const url = new URL(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`);
+        url.searchParams.append('resourceType', 'CLASS');
+        url.searchParams.append('timetableType', 'STANDARD');
+        url.searchParams.append('start', formatDateISO(rangeStart));
+        url.searchParams.append('end', formatDateISO(rangeEnd));
+
+        const resp = await fetchClient.get(url.toString(), {
           headers,
-          validateStatus: () => true,
           timeout: 15000,
         });
 
-        if (resp.status === 200 && resp.data) {
+        if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
           this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
-        } else {
-          this._mmLog('debug', null, `[REST] timetable/filter failed with status ${resp.status}`);
         }
       } catch (err) {
         this._mmLog('debug', null, `[REST] timetable/filter error: ${this._formatErr(err)}`);

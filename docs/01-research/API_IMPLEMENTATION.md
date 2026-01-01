@@ -9,21 +9,18 @@ Quick reference for implementing the new REST APIs in your code.
 All REST API calls require proper session management. Use `axios` + `tough-cookie`:
 
 ```javascript
-const axios = require('axios');
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 // Create session-aware HTTP client
 const createClient = (server) => {
   const cookieJar = new CookieJar();
-  return wrapper(
-    axios.create({
-      baseURL: `https://${server}/WebUntis`,
-      jar: cookieJar,
-      withCredentials: true,
-      validateStatus: () => true, // Don't throw on any status
-    })
-  );
+  return {
+    cookieJar,
+    server,
+    baseURL: `https://${server}/WebUntis`,
+  };
 };
 
 // Authenticate once - all subsequent calls include session cookies
@@ -275,9 +272,9 @@ metadata.excuseStatuses?.forEach((status) => {
 ## Complete Example: Multi-Student Monitoring
 
 ```javascript
-const axios = require('axios');
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('axios-cookiejar-support');
+
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 class WebUntisAPI {
   constructor(server, school, username, password) {
@@ -285,52 +282,52 @@ class WebUntisAPI {
     this.school = school;
     this.username = username;
     this.password = password;
-    this.client = null;
+    this.cookieJar = null;
   }
 
   async authenticate() {
-    const cookieJar = new CookieJar();
-    this.client = wrapper(
-      axios.create({
-        baseURL: `https://${this.server}/WebUntis`,
-        jar: cookieJar,
-        withCredentials: true,
-        validateStatus: () => true,
-      })
-    );
+    this.cookieJar = new CookieJar();
+    const baseURL = `https://${this.server}/WebUntis`;
 
-    const response = await this.client.post(
-      `/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
+    const response = await fetchClient.post(
+      `${baseURL}/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
       {
         id: `req-${Date.now()}`,
         method: 'authenticate',
         params: { user: this.username, password: this.password, client: 'App' },
         jsonrpc: '2.0',
-      }
+      },
+      { cookieJar: this.cookieJar }
     );
 
-    if (response.status !== 200) {
-      throw new Error(`Authentication failed: ${response.data?.error?.message}`);
+    if (response.data?.error) {
+      throw new Error(`Authentication failed: ${response.data.error.message}`);
     }
   }
 
   async getStudentAbsences(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/classreg/absences/students?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}&excuseStatusId=-1`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/classreg/absences/students?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}&excuseStatusId=-1`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.absences || [];
   }
 
   async getStudentHomework(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/homeworks/lessons?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/homeworks/lessons?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.records || [];
   }
 
   async getStudentExams(studentId, startDate, endDate) {
-    const response = await this.client.get(
-      `/api/exams?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`
+    const baseURL = `https://${this.server}/WebUntis`;
+    const response = await fetchClient.get(
+      `${baseURL}/api/exams?studentId=${studentId}&startDate=${startDate}&endDate=${endDate}`,
+      { cookieJar: this.cookieJar }
     );
     return response.data?.data?.exams || [];
   }
@@ -426,7 +423,7 @@ try {
 Make sure your project has these installed:
 
 ```bash
-npm install axios tough-cookie axios-cookiejar-support
+npm install otplib
 ```
 
 Add to `package.json`:
@@ -434,12 +431,12 @@ Add to `package.json`:
 ```json
 {
   "dependencies": {
-    "axios": "^1.6.0",
-    "tough-cookie": "^4.1.0",
-    "axios-cookiejar-support": "^4.0.4"
+    "otplib": "^12.0.1"
   }
 }
 ```
+
+Note: This module includes custom `fetchClient` and `CookieJar` implementations in `lib/` directory.
 
 ---
 

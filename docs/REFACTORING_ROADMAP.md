@@ -302,7 +302,7 @@ async getAuth({ school, username, password, server, options = {} }) {
   ```json
   {
     "scripts": {
-      "test": "npm run lint && jest",
+      "test": "node --run lint && jest",
       "test:unit": "jest",
       "test:coverage": "jest --coverage",
       "test:watch": "jest --watch"
@@ -606,7 +606,7 @@ lesson: [
   ```
 - [ ] **Create refactoring branch**
   ```bash
-  git checkout -b refactor/critical-improvements
+  git switch -b refactor/critical-improvements
   ```
 - [ ] **Install testing dependencies**
   ```bash
@@ -652,7 +652,7 @@ lesson: [
 - [ ] All widgets render correctly
 - [ ] Fetch times < 2 seconds
 - [ ] No regressions vs v0.4.1
-- [ ] `npm run lint` passes
+- [ ] `node --run lint` passes
 - [ ] Manual testing (all widgets, all configs)
 
 ### Phase 2 Checklist (Quality)
@@ -727,7 +727,7 @@ lesson: [
 
 **Release Preparation:**
 - [ ] `package.json` version bump (0.5.0)
-- [ ] `npm run lint --fix`
+- [ ] `node --run lint --fix`
 - [ ] `npm test` (all green)
 - [ ] Manual testing (all widgets, all configs)
 - [ ] Performance benchmark vs 0.4.1

@@ -10,7 +10,7 @@
 |--------|----------|-------------------|
 | **Purpose** | Standalone REST API wrapper | MagicMirror² module |
 | **Authentication** | Puppeteer (browser automation) | webuntis.js library + REST API |
-| **Session Handling** | Manual cookie extraction via CDP | Session management via axios + cookiejar |
+| **Session Handling** | Manual cookie extraction via CDP | Session management via fetchClient + CookieJar |
 | **API Approach** | Direct HTTP to WebUntis endpoints | Library wrapper + REST API discovery |
 | **Parent Support** | Yes (handles parent login) | **NEW: REST APIs now support parent accounts** ✅ |
 | **Architecture** | Express.js API server | Node.js helper + frontend module |
@@ -35,7 +35,7 @@
 ✅ REST API based authentication is superior:
 - No browser simulation needed
 - Direct JSON-RPC login returns session cookies
-- Session automatically managed by axios-cookiejar
+- Session automatically managed by CookieJar (custom implementation)
 - More reliable and lighter weight
 
 ### 2. **API Endpoints Discovery**
@@ -64,7 +64,7 @@ UntisApi extracts 3 critical components:
 ```
 
 **Our Implementation**: 
-✅ axios-cookiejar automatically handles JSESSIONID and schoolname
+✅ CookieJar (custom implementation) automatically handles JSESSIONID and schoolname
 ⚠️ We don't track traceId (but it may not be required for REST APIs)
 
 ### 4. **User-Agent Spoofing**
@@ -77,7 +77,7 @@ headers: {
 ```
 
 **Our Approach**: 
-✅ axios defaults to Node.js user agent
+✅ fetchClient uses standard Node.js fetch user agent
 - REST APIs seem to accept both
 - May need to add if timetable endpoint requires it
 
@@ -147,7 +147,7 @@ Parameters:
 4. **Simplicity**
    - No external dependencies (Puppeteer)
    - Plain HTTP is easier to debug
-   - Session cookies automatic via axios-cookiejar
+   - Session cookies automatic via CookieJar (custom implementation)
 
 ---
 
@@ -161,7 +161,7 @@ Parameters:
 makeCookiesString(cookies) { ... }
 ```
 
-**Our Solution**: ✅ axios-cookiejar handles this automatically
+**Our Solution**: ✅ CookieJar (custom implementation) handles this automatically
 ```javascript
 const cookieJar = new CookieJar();
 // Cookies stored and sent automatically
@@ -193,13 +193,12 @@ GET /api/public/timetable/weekly/data?elementType=5&elementId={studentId}&date=2
 ### 2. Add User-Agent header to requests
 
 ```javascript
-const client = wrapper(
-  axios.create({
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-  })
-);
+const headers = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+};
+
+// Use headers in fetchClient calls
+await fetchClient.get(url, { headers });
 ```
 
 ### 3. Implement JWT token caching
@@ -246,7 +245,7 @@ const elementTypes = {
 
 **Our approach is superior** because:
 1. REST APIs provide direct access without browser automation
-2. Session management via axios-cookiejar is robust
+2. Session management via CookieJar (custom implementation) is robust
 3. Parent account support works seamlessly
 4. No heavy Puppeteer dependency
 5. Easier to test and debug

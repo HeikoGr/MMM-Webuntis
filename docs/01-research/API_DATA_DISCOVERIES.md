@@ -302,5 +302,5 @@ QR code: ✓ Holidays are now possible
 - [cli/test-webuntis-rest-api.js](../../cli/test-webuntis-rest-api.js) - REST API tests
 - [cli/api-report.js](../../cli/api-report.js) - API reporting
 - [cli/traceroute.js](../../cli/traceroute.js) - Network troubleshooting helper
-- [cli/node_helper_wrapper.js](../../cli/node_helper_wrapper.js) - CLI tool for testing (`npm run debug`)
+- [cli/node_helper_wrapper.js](../../cli/node_helper_wrapper.js) - CLI tool for testing (`node --run debug`)
 
