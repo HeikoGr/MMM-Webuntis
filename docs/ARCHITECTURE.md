@@ -635,13 +635,13 @@ graph TD
 
 ```bash
 # CLI tool (test config + fetch data)
-npm run debug
+node --run debug
 
 # CLI with specific student
-npm run debug -- --student 1
+node --run debug -- --student 1
 
 # CLI with verbose output
-npm run debug -- --verbose
+node --run debug -- --verbose
 
 # Check linting
 node --run lint

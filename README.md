@@ -556,19 +556,19 @@ This module includes a CLI tool that reads your MagicMirror config and fetches t
 Run from the module directory:
 
 ```bash
-npm run debug
+node --run debug
 ```
 
 For more options:
 
 ```bash
-npm run debug -- --help
+node --run debug -- --help
 ```
 
 Use a custom config file:
 
 ```bash
-npm run debug -- --config /path/to/config.js
+node --run debug -- --config /path/to/config.js
 ```
 
 ## Dependencies
@@ -663,7 +663,7 @@ Check logs: `pm2 logs MagicMirror --lines 200 | grep -E "\\[MMM-Webuntis\\]|\\[H
 **Rollback** (if needed):
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
-git checkout v0.3.x  # Replace with your previous version tag
+git switch v0.3.x  # Replace with your previous version tag
 npm ci --omit=dev
 pm2 restart MagicMirror
 ```

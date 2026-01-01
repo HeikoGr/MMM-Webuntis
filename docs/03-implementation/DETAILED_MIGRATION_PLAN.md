@@ -1143,8 +1143,8 @@ MMM-Webuntis supports multiple API modes for fetching data from WebUntis:
 ```json
 {
   "dependencies": {
-    
-    
+
+
     "tough-cookie": "^6.0.0",
     "otplib": "^12.0.1"
   },
@@ -1397,16 +1397,16 @@ if (apiMode === 'jsonrpc' && !WEBUNTIS_AVAILABLE) {
 **New Commands:**
 ```bash
 # Test specific API mode
-npm run debug -- --api-mode rest
+node --run debug -- --api-mode rest
 
 # Compare REST vs JSON-RPC results (future enhancement)
-npm run debug -- --compare-apis
+node --run debug -- --compare-apis
 
 # Benchmark API performance (future enhancement)
-npm run debug -- --benchmark
+node --run debug -- --benchmark
 
 # Validate configuration for REST API
-npm run debug -- --validate-rest-config
+node --run debug -- --validate-rest-config
 ```
 
 ---

@@ -72,7 +72,7 @@ Configure parent credentials **once at module level**, then list each child with
 Use the CLI tool to find your child's student ID:
 
 ```bash
-npm run debug -- --config config/config.js
+node --run debug -- --config config/config.js
 ```
 
 Choose option **1) Test timetable with manual Student ID**:

@@ -22,39 +22,39 @@ The WebUntis CLI provides a production-like command-line interface for testing n
 The CLI is invoked through npm:
 
 ```bash
-npm run debug -- [command] [options]
+node --run debug -- [command] [options]
 ```
 
 ### Fastest Way: Auto-Detect Everything
 
 ```bash
 # Test all students with auto-detected config
-npm run debug
+node --run debug
 
 # Show help
-npm run debug -- --help
+node --run debug -- --help
 ```
 
 ### Common Quick Tests
 
 ```bash
 # Fetch all data for first student (auto-loads config)
-npm run debug
+node --run debug
 
 # With verbose output (shows sample data)
-npm run debug -- --verbose
+node --run debug -- --verbose
 
 # Test specific student
-npm run debug -- --student 1
+node --run debug -- --student 1
 
 # Test only authentication
-npm run debug -- --action auth
+node --run debug -- --action auth
 
 # Create a JSON dump for frontend testing
-npm run debug -- --dump
+node --run debug -- --dump
 
 # Combine options
-npm run debug -- --student 0 --action exams --verbose --dump
+node --run debug -- --student 0 --action exams --verbose --dump
 ```
 
 ---
@@ -118,7 +118,7 @@ Fetches data for configured students using auto-loaded config.
 
 **Signature:**
 ```bash
-npm run debug [options]
+node --run debug [options]
 ```
 
 **Options:**
@@ -136,19 +136,19 @@ npm run debug [options]
 
 ```bash
 # Test all data for first student (simplest)
-npm run debug
+node --run debug
 
 # Test authentication only for second student
-npm run debug -- --student 1 --action auth
+node --run debug -- --student 1 --action auth
 
 # Verbose output with exams only
-npm run debug -- --action exams -v
+node --run debug -- --action exams -v
 
 # Create a dump for testing
-npm run debug -- --dump
+node --run debug -- --dump
 
 # Use custom config
-npm run debug -- --config ./my-config.js --student 0
+node --run debug -- --config ./my-config.js --student 0
 ```
 
 ---
@@ -266,13 +266,13 @@ students: [
 
 ```bash
 # Test if config is readable
-npm run debug -- --help
+node --run debug -- --help
 
 # Test authentication only
-npm run debug -- --action auth --verbose
+node --run debug -- --action auth --verbose
 
 # If auth passes, fetch all data
-npm run debug
+node --run debug
 
 # Check console output for "successfully fetched data" message
 ```
@@ -281,10 +281,10 @@ npm run debug
 
 ```bash
 # List all configured students with index
-npm run debug -- --verbose
+node --run debug -- --verbose
 
 # Test student at index 1
-npm run debug -- --student 1 --action all --verbose
+node --run debug -- --student 1 --action all --verbose
 
 # Inspect the JSON dump
 cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head -20
@@ -294,9 +294,9 @@ cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head -20
 
 ```bash
 # Create fresh dumps for all students
-npm run debug -- --student 0 --dump
-npm run debug -- --student 1 --dump
-npm run debug -- --student 2 --dump
+node --run debug -- --student 0 --dump
+node --run debug -- --student 1 --dump
+node --run debug -- --student 2 --dump
 
 # Use dumps in your widget tests
 cp debug_dumps/*.json test_data/
@@ -311,16 +311,16 @@ set -e
 echo "Testing WebUntis configuration..."
 
 # Test auth
-npm run debug -- --action auth || exit 1
+node --run debug -- --action auth || exit 1
 
 # Fetch data for each student
 for i in {0..2}; do
   echo "Testing student $i..."
-  npm run debug -- --student $i || exit 1
+  node --run debug -- --student $i || exit 1
 done
 
 # Create dumps for regression testing
-npm run debug -- --dump
+node --run debug -- --dump
 
 echo "✓ All tests passed!"
 ```
@@ -329,13 +329,13 @@ echo "✓ All tests passed!"
 
 ```bash
 # Get detailed output about what's failing
-npm run debug -- --verbose
+node --run debug -- --verbose
 
 # Test each component separately
-npm run debug -- --action auth --verbose      # Check authentication
-npm run debug -- --action timetable --verbose # Check timetable fetching
-npm run debug -- --action exams --verbose     # Check exam API
-npm run debug -- --action homework --verbose  # Check homework API
+node --run debug -- --action auth --verbose      # Check authentication
+node --run debug -- --action timetable --verbose # Check timetable fetching
+node --run debug -- --action exams --verbose     # Check exam API
+node --run debug -- --action homework --verbose  # Check homework API
 
 # Check the log output for specific error messages
 # Look for patterns like "REST API failed" or "parse error"
@@ -418,7 +418,7 @@ Error: Config file not found
 
 3. Specify config explicitly:
    ```bash
-   npm run debug -- --config ./config/config.js
+   node --run debug -- --config ./config/config.js
    ```
 
 ### "Missing credentials"
@@ -462,12 +462,12 @@ REST API failed: 401 Unauthorized
 
 1. Test with `--verbose` flag:
    ```bash
-   npm run debug -- --action auth --verbose
+   node --run debug -- --action auth --verbose
    ```
 
 2. Check authentication specifically:
    ```bash
-   npm run debug -- --action auth
+   node --run debug -- --action auth
    ```
 
 3. Verify school/server values:
@@ -494,12 +494,12 @@ REST API returned 0 exams
 
 1. Check date ranges:
    ```bash
-   npm run debug -- --verbose  # Shows actual date ranges used
+   node --run debug -- --verbose  # Shows actual date ranges used
    ```
 
 2. Verify student ID:
    ```bash
-   npm run debug -- --verbose --action all
+   node --run debug -- --verbose --action all
    ```
 
 3. Check WebUntis web interface directly for the student
@@ -516,12 +516,12 @@ REST API returned 0 exams
 
 1. Run with full error output:
    ```bash
-   npm run debug -- --verbose 2>&1 | tail -50
+   node --run debug -- --verbose 2>&1 | tail -50
    ```
 
 2. Check for specific error patterns:
    ```bash
-   npm run debug 2>&1 | grep -i "error\|failed\|undefined"
+   node --run debug 2>&1 | grep -i "error\|failed\|undefined"
    ```
 
 3. Validate config syntax:
@@ -660,7 +660,7 @@ module.exports = {
 EOF
 
 # Use it
-npm run debug -- --config /tmp/test-config.js
+node --run debug -- --config /tmp/test-config.js
 ```
 
 ### Parse Dump Files
@@ -682,7 +682,7 @@ cat debug_dumps/*.json | jq '.homeworks[] | {title, dueDate}'
 # Watch for changes and re-test
 while true; do
   clear
-  npm run debug -- --action all
+  node --run debug -- --action all
   sleep 5
 done
 ```
@@ -697,7 +697,7 @@ When reporting CLI issues, include:
 
 1. Node.js version: `node --version`
 2. npm version: `npm --version`
-3. Full output with `--verbose`: `npm run debug -- --verbose 2>&1`
+3. Full output with `--verbose`: `node --run debug -- --verbose 2>&1`
 4. Config file (with credentials redacted)
 5. Error message (first and last 20 lines)
 
@@ -705,9 +705,9 @@ When reporting CLI issues, include:
 
 - [ ] Config file exists and is readable
 - [ ] Credentials are correct in config
-- [ ] `npm run debug -- --action auth` passes
-- [ ] `npm run debug` fetches data successfully
-- [ ] `npm run debug -- --dump` creates JSON file
+- [ ] `node --run debug -- --action auth` passes
+- [ ] `node --run debug` fetches data successfully
+- [ ] `node --run debug -- --dump` creates JSON file
 - [ ] JSON dump contains expected student data
 
 ---
