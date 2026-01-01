@@ -427,19 +427,14 @@ Bearer tokens can be **self-generated**. The key benefit is that you can access 
 **Step 1: Authenticate with JSON-RPC (get session cookies)**
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('CookieJar (custom implementation)-support');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 const cookieJar = new CookieJar();
-const client = wrapper(fetchClient with options {
-  baseURL: 'https://{server}/WebUntis',
-  jar: cookieJar,
-  withCredentials: true,
-  validateStatus: () => true,
-}));
+const baseURL = 'https://{server}/WebUntis';
 
 // Authenticate once
-await client.post('/jsonrpc.do?school={school}', {
+await fetchClient.post(`${baseURL}/jsonrpc.do?school={school}`, {
   jsonrpc: '2.0',
   method: 'authenticate',
   params: {
@@ -467,39 +462,30 @@ console.log('Token expires:', new Date(payload.exp * 1000));
 
 **Step 3: Use Bearer Token for specific endpoints**
 ```javascript
-const bearerClient = fetchClient with options {
-  baseURL: 'https://{server}/WebUntis',
-  headers: {
-    'Authorization': 'Bearer ' + jwtToken,
-  },
-  validateStatus: () => true,
-});
+const headers = {
+  'Authorization': 'Bearer ' + jwtToken,
+};
 
 // Now use Bearer-authenticated endpoints
-const appData = await bearerClient.get('/api/rest/view/v1/app/data');
+const appData = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/app/data', { headers });
 const holidays = appData.data.holidays;  // Get holidays!
-const exams = await bearerClient.get('/api/rest/view/v1/exams');
-const messages = await bearerClient.get('/api/rest/view/v1/messages');
+const exams = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/exams', { headers });
+const messages = await fetchClient.get('https://{server}/WebUntis/api/rest/view/v1/messages', { headers });
 ```
 
 ### Complete Self-Contained Example
 
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('CookieJar (custom implementation)-support');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 async function getHolidaysWithBearerToken() {
   // Step 1: Setup and authenticate
   const cookieJar = new CookieJar();
-  const client = wrapper(fetchClient with options {
-    baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
-    jar: cookieJar,
-    withCredentials: true,
-    validateStatus: () => true,
-  }));
+  const baseURL = 'https://{SCHOOL_NAME}.webuntis.com/WebUntis';
 
-  await client.post('/jsonrpc.do?school={SCHOOL_NAME}', {
+  await fetchClient.post(`${baseURL}/jsonrpc.do?school={SCHOOL_NAME}`, {
     jsonrpc: '2.0',
     method: 'authenticate',
     params: {
@@ -508,23 +494,19 @@ async function getHolidaysWithBearerToken() {
       client: 'App'
     },
     id: 1,
-  });
+  }, { cookieJar });
 
   // Step 2: Get Bearer token
-  const tokenResp = await client.get('/api/token/new');
+  const tokenResp = await fetchClient.get(`${baseURL}/api/token/new`, { cookieJar });
   const token = tokenResp.data;
 
   // Step 3: Use Bearer token
-  const bearerClient = fetchClient with options {
-    baseURL: 'https://{SCHOOL_NAME}.webuntis.com/WebUntis',
-    headers: {
-      'Authorization': 'Bearer ' + token,
-    },
-    validateStatus: () => true,
-  });
+  const headers = {
+    'Authorization': 'Bearer ' + token,
+  };
 
   // Get holidays
-  const appData = await bearerClient.get('/api/rest/view/v1/app/data');
+  const appData = await fetchClient.get(`${baseURL}/api/rest/view/v1/app/data`, { headers });
   return appData.data.holidays;  // 47 holidays!
 }
 
@@ -815,32 +797,28 @@ const response = await axios.post(
 ### Method 2: REST API with Session Management (Recommended)
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('CookieJar (custom implementation)-support');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 // Setup session jar
 const cookieJar = new CookieJar();
-const client = wrapper(
-  fetchClient with options {
-    baseURL: `https://${server}/WebUntis`,
-    jar: cookieJar,
-    withCredentials: true
-  })
-);
+const baseURL = `https://${server}/WebUntis`;
 
 // Authenticate (stores JSESSIONID in cookie jar)
-await client.post(
-  `/jsonrpc.do?school=${encodeURIComponent(school)}`,
+await fetchClient.post(
+  `${baseURL}/jsonrpc.do?school=${encodeURIComponent(school)}`,
   {
     method: 'authenticate',
     params: { user, password, client: 'App' },
     jsonrpc: '2.0'
-  }
+  },
+  { cookieJar }
 );
 
 // Subsequent REST API calls automatically include cookies
-const result = await client.get(
-  `/api/classreg/absences/students?startDate=20250901&endDate=20251231&studentId={STUDENT_ID}`
+const result = await fetchClient.get(
+  `${baseURL}/api/classreg/absences/students?startDate=20250901&endDate=20251231&studentId={STUDENT_ID}`,
+  { cookieJar }
 );
 ```
 
