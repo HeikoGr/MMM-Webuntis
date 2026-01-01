@@ -142,7 +142,7 @@ async function getTimetableForRange(untis, rangeStart, rangeEnd, studentId = nul
 - **Challenge:** The `webuntis` library does not expose the cookie jar/session cookies needed for `/WebUntis/api/token/new`.
   - Earlier attempts without a proper cookie jar led to 403/HTML responses.
   - **Updated conclusion:** Bearer token generation is possible programmatically if you obtain valid session cookies first, and then call `/WebUntis/api/token/new`.
-  - Practical approach: implement a small cookie-based JSON-RPC login (axios) + `/api/token/new` call as documented in the implementation reference.
+  - Practical approach: implement a small cookie-based JSON-RPC login (fetchClient) + `/api/token/new` call as documented in the implementation reference.
   - See: [IMPLEMENTATION_REFERENCE.md](../01-getting-started/IMPLEMENTATION_REFERENCE.md) and [BEARER_TOKEN_GUIDE.md](../02-api-reference/BEARER_TOKEN_GUIDE.md)
 - **Status:** REST endpoint works; the remaining work is integrating cookie-based login/token generation cleanly
 

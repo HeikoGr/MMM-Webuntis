@@ -11,25 +11,25 @@ Production-like CLI interface for testing node_helper functions directly. **Conf
 **Quick Start:**
 ```bash
 # Show help
-npm run debug -- --help
+node --run debug -- --help
 
 # Fetch all data for first student (config auto-loads)
-npm run debug
+node --run debug
 
 # Fetch with verbose output
-npm run debug -- --verbose
+node --run debug -- --verbose
 
 # Fetch for specific student
-npm run debug -- --student 1
+node --run debug -- --student 1
 
 # Fetch and create debug dump
-npm run debug -- --dump --verbose
+node --run debug -- --dump --verbose
 
 # Test only authentication
-npm run debug -- --action auth
+node --run debug -- --action auth
 
 # Use custom config file
-npm run debug -- --config ./custom-config.js
+node --run debug -- --config ./custom-config.js
 ```
 
 **Features:**

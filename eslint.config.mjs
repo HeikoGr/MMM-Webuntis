@@ -23,6 +23,12 @@ export default defineConfig([
     },
     rules: {
       ...pluginN.configs.recommended.rules,
+      'n/no-unsupported-features/node-builtins': [
+        'error',
+        {
+          ignores: ['fetch', 'Headers', 'Request', 'Response', 'AbortController'],
+        },
+      ],
     },
   },
   {

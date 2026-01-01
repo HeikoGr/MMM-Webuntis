@@ -20,7 +20,7 @@
 - **Enhanced Data Filtering**: Student-specific filtering for exams and absences in parent account mode
 - **Holiday Integration**: Full holiday support in grid and lessons widgets with visual indicators
 - **Messages of Day Widget**: New widget displaying school-wide announcements and messages
-- **Improved CLI Tool**: `npm run debug` with comprehensive testing and data validation
+- **Improved CLI Tool**: `node --run debug` with comprehensive testing and data validation
 
 ### ⚙️ Configuration Changes
 
