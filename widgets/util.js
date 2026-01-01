@@ -18,8 +18,8 @@
       return; // Not enough args
     }
 
-    const levels = { error: 0, warn: 1, info: 2, debug: 3 };
-    const configured = window.MMMWebuntisLogLevel || 'info';
+    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+    const configured = window.MMMWebuntisLogLevel || 'none';
     // Special: if configured is 'none', never log
     if (configured === 'none') return;
 
