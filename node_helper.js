@@ -262,7 +262,7 @@ module.exports = NodeHelper.create({
           timeout: 15000,
         });
 
-        if (resp.status === 200 && resp.data) {
+        if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
           // Prefer explicit mapping from personKlasseMap when present
           const map = resp.data?.data?.personKlasseMap;
@@ -271,8 +271,6 @@ module.exports = NodeHelper.create({
             if (Number.isFinite(Number(mapped))) mappedClassId = Number(mapped);
           }
           this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
-        } else {
-          this._mmLog('debug', null, `[REST] classservices failed with status ${resp.status}`);
         }
       } catch (err) {
         this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
@@ -293,11 +291,9 @@ module.exports = NodeHelper.create({
           timeout: 15000,
         });
 
-        if (resp.status === 200 && resp.data) {
+        if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
           this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
-        } else {
-          this._mmLog('debug', null, `[REST] timetable/filter failed with status ${resp.status}`);
         }
       } catch (err) {
         this._mmLog('debug', null, `[REST] timetable/filter error: ${this._formatErr(err)}`);

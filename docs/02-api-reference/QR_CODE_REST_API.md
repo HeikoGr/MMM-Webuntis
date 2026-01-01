@@ -124,6 +124,8 @@ const timetable = await client.getOwnTimetableForRange(
 const { CookieJar } = require('tough-cookie');
 
 const { URL } = require('url');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 // 1. Parse QR code
 const qrUrl = new URL('untis://setschool?...');
@@ -132,19 +134,13 @@ const user = qrUrl.searchParams.get('user');
 const url = qrUrl.searchParams.get('url');
 const key = qrUrl.searchParams.get('key');
 
-// 2. Create axios client with cookie jar
+// 2. Create cookie jar for session
 const cookieJar = new CookieJar();
-const client = wrapper(
-  fetchClient with options {
-    baseURL: `https://${url}`,
-    jar: cookieJar,
-    withCredentials: true,
-  })
-);
+const baseURL = `https://${url}`;
 
 // 3. JSON-RPC Login
-const authResp = await client.post(
-  `/WebUntis/jsonrpc.do?school=${encodeURIComponent(school)}`,
+const authResp = await fetchClient.post(
+  `${baseURL}/WebUntis/jsonrpc.do?school=${encodeURIComponent(school)}`,
   {
     jsonrpc: '2.0',
     method: 'authenticate',
@@ -154,7 +150,8 @@ const authResp = await client.post(
       client: 'MyApp'
     },
     id: 1
-  }
+  },
+  { cookieJar }
 );
 
 if (authResp.data.error) {
@@ -162,17 +159,14 @@ if (authResp.data.error) {
 }
 
 // 4. Get Bearer Token
-const tokenResp = await client.get('/WebUntis/api/token/new');
+const tokenResp = await fetchClient.get(`${baseURL}/WebUntis/api/token/new`, { cookieJar });
 const bearerToken = tokenResp.data;
 
-// 5. Create REST API client
-const restClient = fetchClient with options {
-  baseURL: `https://${url}/WebUntis`,
-  headers: {
-    Authorization: `Bearer ${bearerToken}`,
-    Accept: 'application/json'
-  }
-});
+// 5. Use Bearer Token for REST API calls
+const headers = {
+  Authorization: `Bearer ${bearerToken}`,
+  Accept: 'application/json'
+};
 
 // 6. Use REST API
 const appData = await restClient.get('/api/rest/view/v1/app/data');

@@ -35,9 +35,6 @@ This document provides a step-by-step migration plan to transition MMM-Webuntis 
 ```json
 {
   "webuntis": "^2.2.1",           // ← TO BE REMOVED (eventually)
-                // ✅ Already available
-    // ✅ Already available
-  "tough-cookie": "^6.0.0",       // ✅ Already available
   "otplib": "^12.0.1"             // ✅ Used for QR code TOTP
 }
 ```
@@ -1143,9 +1140,6 @@ MMM-Webuntis supports multiple API modes for fetching data from WebUntis:
 ```json
 {
   "dependencies": {
-
-
-    "tough-cookie": "^6.0.0",
     "otplib": "^12.0.1"
   },
   "optionalDependencies": {

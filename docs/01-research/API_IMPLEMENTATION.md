@@ -10,20 +10,17 @@ All REST API calls require proper session management. Use `axios` + `tough-cooki
 
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('CookieJar (custom implementation)-support');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 // Create session-aware HTTP client
 const createClient = (server) => {
   const cookieJar = new CookieJar();
-  return wrapper(
-    fetchClient with options {
-      baseURL: `https://${server}/WebUntis`,
-      jar: cookieJar,
-      withCredentials: true,
-      validateStatus: () => true, // Don't throw on any status
-    })
-  );
+  return {
+    cookieJar,
+    server,
+    baseURL: `https://${server}/WebUntis`,
+  };
 };
 
 // Authenticate once - all subsequent calls include session cookies
@@ -276,8 +273,8 @@ metadata.excuseStatuses?.forEach((status) => {
 
 ```javascript
 
-const { CookieJar } = require('tough-cookie');
-const { wrapper } = require('CookieJar (custom implementation)-support');
+const fetchClient = require('./lib/fetchClient');
+const CookieJar = require('./lib/cookieJar');
 
 class WebUntisAPI {
   constructor(server, school, username, password) {
@@ -285,19 +282,12 @@ class WebUntisAPI {
     this.school = school;
     this.username = username;
     this.password = password;
-    this.client = null;
+    this.cookieJar = null;
   }
 
   async authenticate() {
-    const cookieJar = new CookieJar();
-    this.client = wrapper(
-      fetchClient with options {
-        baseURL: `https://${this.server}/WebUntis`,
-        jar: cookieJar,
-        withCredentials: true,
-        validateStatus: () => true,
-      })
-    );
+    this.cookieJar = new CookieJar();
+    const baseURL = `https://${this.server}/WebUntis`;
 
     const response = await this.client.post(
       `/jsonrpc.do?school=${encodeURIComponent(this.school)}`,
@@ -426,7 +416,7 @@ try {
 Make sure your project has these installed:
 
 ```bash
-npm install axios tough-cookie CookieJar (custom implementation)-support
+npm install otplib
 ```
 
 Add to `package.json`:
@@ -434,12 +424,12 @@ Add to `package.json`:
 ```json
 {
   "dependencies": {
-    
-    "tough-cookie": "^4.1.0",
-    "CookieJar (custom implementation)-support": "^4.0.4"
+    "otplib": "^12.0.1"
   }
 }
 ```
+
+Note: This module includes custom `fetchClient` and `CookieJar` implementations in `lib/` directory.
 
 ---
 

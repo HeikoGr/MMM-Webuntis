@@ -193,13 +193,12 @@ GET /api/public/timetable/weekly/data?elementType=5&elementId={studentId}&date=2
 ### 2. Add User-Agent header to requests
 
 ```javascript
-const client = wrapper(
-  fetchClient with options {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-  })
-);
+const headers = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+};
+
+// Use headers in fetchClient calls
+await fetchClient.get(url, { headers });
 ```
 
 ### 3. Implement JWT token caching
