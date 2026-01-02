@@ -12,61 +12,6 @@
 
 A MagicMirror² module that shows cancelled, irregular or substituted lessons from WebUntis for configured students. It fetches timetable, exams and homework data from WebUntis and presents them in a compact list or a multi-day grid.
 
-## Recent Updates
-
-### Version 0.5.0 - REST API Migration & Major Features 🚀
-
-**BREAKING CHANGE**: This release migrates from the deprecated JSON-RPC API to the modern REST API.
-
-**Major Changes**:
-- ✨ **REST API Integration**: All data operations now use REST endpoints (timetable, exams, homework, absences, messages of day)
-- 🔐 **QR Code Login**: Support for direct student authentication via WebUntisQR codes
-- 👨‍👩‍👧‍👦 **Parent Account Mode**: Configure once with parent credentials, automatically discover all children
-- 🎯 **Auto-Discovery**: Students automatically detected from WebUntis `app/data` endpoint
-- 📅 **Holiday Support**: Full holiday integration in grid and lessons widgets
-- 📢 **Messages Widget**: New widget for school announcements
-- 🔧 **Enhanced Configuration**: Widget-specific settings, improved validation, better error messages
-
-**Upgrade Notes**: Existing QR code and username/password configurations remain compatible. Parent account mode is optional. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-### Version 0.4.x - Configuration & Display
-
-See migration notes below for breaking changes introduced in 0.4.0.
-
-## BREAKING CHANGES in 0.4.0 (Historical)
-
-This release consolidates several configuration keys and changes how the module handles config compatibility.
-
-Important notes:
-
-- The module contains a compatibility mapper that automatically translates several deprecated keys from older configs to the new key names during startup. By design, when a deprecated key is present its value will now take precedence — legacy values "win" and overwrite the new key. This makes upgrades safer for users who still have old keys in place, but you should still update your `config.js` to the canonical names.
-
-Mapper behavior and warnings:
-
-- When deprecated keys are detected the frontend emits a conspicuous browser console warning (styled in red) that lists the detected legacy keys and their location (e.g. `students[0].days`). This helps you find and update old keys during MagicMirror startup.
-- Additionally, the backend will log an informational message for fetch operations; however, the compatibility mapping and the red console warning are produced in the frontend module so you can see them in the browser devtools when MagicMirror starts.
-
-Common legacy → new mappings (applied automatically if present):
-
-- `fetchInterval` → `fetchIntervalMs`
-- `days` → `daysToShow`
-- `examsDays` → `examsDaysAhead`
-- `mergeGapMin` → `mergeGapMinutes`
-- legacy `debug` / `enableDebug` (boolean) → `logLevel: 'debug'` or `'none'`
-- `displaymode` → `displayMode` (normalized to lowercase)
-
-Quick tip: find deprecated keys in your `config.js` with this command (run from your MagicMirror folder):
-
-```bash
-grep -n "fetchInterval\|days\|mergeGapMin\|displaymode\|enableDebug\|debug" config/config.js || true
-```
-
-Upgrade notes:
-
-1. The mapper will translate legacy keys automatically at startup, but it's recommended to update your `config.js` to the new key names listed above.
-2. Use the red console warning and the quick grep above to find legacy keys and replace them.
-3. Restart MagicMirror after editing `config.js` to ensure the new keys are used consistently.
-
 ## Installation
 
 1. Go to your MagicMirror² `modules` folder and run:
@@ -526,6 +471,62 @@ When using parent account credentials (see [Parent Account Support](README.md#pa
   studentId: 12345, // retrieved from parent account API
 }
 ```
+
+## Recent Updates
+
+### Version 0.5.0 - REST API Migration & Major Features 🚀
+
+**BREAKING CHANGE**: This release migrates from the deprecated JSON-RPC API to the modern REST API.
+
+**Major Changes**:
+- ✨ **REST API Integration**: All data operations now use REST endpoints (timetable, exams, homework, absences, messages of day)
+- 🔐 **QR Code Login**: Support for direct student authentication via WebUntisQR codes
+- 👨‍👩‍👧‍👦 **Parent Account Mode**: Configure once with parent credentials, automatically discover all children
+- 🎯 **Auto-Discovery**: Students automatically detected from WebUntis `app/data` endpoint
+- 📅 **Holiday Support**: Full holiday integration in grid and lessons widgets
+- 📢 **Messages Widget**: New widget for school announcements
+- 🔧 **Enhanced Configuration**: Widget-specific settings, improved validation, better error messages
+
+**Upgrade Notes**: Existing QR code and username/password configurations remain compatible. Parent account mode is optional. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+### Version 0.4.x - Configuration & Display
+
+See migration notes below for breaking changes introduced in 0.4.0.
+
+## BREAKING CHANGES in 0.4.0 (Historical)
+
+This release consolidates several configuration keys and changes how the module handles config compatibility.
+
+Important notes:
+
+- The module contains a compatibility mapper that automatically translates several deprecated keys from older configs to the new key names during startup. By design, when a deprecated key is present its value will now take precedence — legacy values "win" and overwrite the new key. This makes upgrades safer for users who still have old keys in place, but you should still update your `config.js` to the canonical names.
+
+Mapper behavior and warnings:
+
+- When deprecated keys are detected the frontend emits a conspicuous browser console warning (styled in red) that lists the detected legacy keys and their location (e.g. `students[0].days`). This helps you find and update old keys during MagicMirror startup.
+- Additionally, the backend will log an informational message for fetch operations; however, the compatibility mapping and the red console warning are produced in the frontend module so you can see them in the browser devtools when MagicMirror starts.
+
+Common legacy → new mappings (applied automatically if present):
+
+- `fetchInterval` → `fetchIntervalMs`
+- `days` → `daysToShow`
+- `examsDays` → `examsDaysAhead`
+- `mergeGapMin` → `mergeGapMinutes`
+- legacy `debug` / `enableDebug` (boolean) → `logLevel: 'debug'` or `'none'`
+- `displaymode` → `displayMode` (normalized to lowercase)
+
+Quick tip: find deprecated keys in your `config.js` with this command (run from your MagicMirror folder):
+
+```bash
+grep -n "fetchInterval\|days\|mergeGapMin\|displaymode\|enableDebug\|debug" config/config.js || true
+```
+
+Upgrade notes:
+
+1. The mapper will translate legacy keys automatically at startup, but it's recommended to update your `config.js` to the new key names listed above.
+2. Use the red console warning and the quick grep above to find legacy keys and replace them.
+3. Restart MagicMirror after editing `config.js` to ensure the new keys are used consistently.
+
 
 ## How the timetable grid works (developer notes)
 
