@@ -584,7 +584,7 @@ class TokenManager {
 | Feature | QR-Code Login | Username/Password | Bearer Token Possible? |
 |---------|--------------|------------------|----------------------|
 | Authentication Method | Puppeteer (browser) | JSON-RPC HTTP | - |
-| Session Management | Internal to Puppeteer | Cookie jar (axios) | - |
+| Session Management | Internal to Puppeteer | Cookie jar - |
 | JSESSIONID Access | ⚠️ Not exposed by default | ✅ Accessible | - |
 | Can call `/api/token/new` | ⚠️ Yes, if you can obtain valid session cookies | ✅ Yes | - |
 | **Bearer Token Support** | **⚠️ Possible (cookie-dependent)** | **✅ Yes** | **Depends on whether you have cookies** |
@@ -779,22 +779,7 @@ curl -H "Authorization: Bearer {token}" \
 
 ## Authentication & Session Management
 
-### Method 1: Direct JSON-RPC (Legacy)
-```javascript
-
-
-const response = await axios.post(
-  `https://server/WebUntis/jsonrpc.do?school=SCHOOL_NAME`,
-  {
-    jsonrpc: '2.0',
-    method: 'authenticate',
-    params: { user: username, password: password, client: 'App' },
-    id: 1
-  }
-);
-```
-
-### Method 2: REST API with Session Management (Recommended)
+### REST API with Session Management (Recommended)
 ```javascript
 
 const fetchClient = require('./lib/fetchClient');

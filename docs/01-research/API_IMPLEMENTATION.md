@@ -6,7 +6,7 @@ Quick reference for implementing the new REST APIs in your code.
 
 ## Setup: Session Management
 
-All REST API calls require proper session management. Use `axios` + `tough-cookie`:
+All REST API calls require proper session management.
 
 ```javascript
 

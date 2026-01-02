@@ -1334,7 +1334,7 @@ if (apiMode === 'jsonrpc' && !WEBUNTIS_AVAILABLE) {
 - Parallel requests where possible (multi-week timetable fetches)
 - Aggressive token caching (15-minute lifetime, refresh at 14 minutes)
 - Response caching at node_helper level (existing mechanism)
-- Reuse axios instances per credential
+- Reuse instances per credential
 
 **Monitoring:**
 - Log request durations
