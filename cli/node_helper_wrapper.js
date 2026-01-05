@@ -37,7 +37,7 @@ const Log = {
   wrapper_info: (...args) => console.log(`${ANSI.reset}[INFO] `, ...args),
 };
 
-function setLogLevel(_level) {
+function setLogLevel() {
   // Log level is controlled by node_helper logger, not by this wrapper
   // Keep function for API compatibility
 }
@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -198,7 +198,7 @@ function loadModuleDefaults() {
     const content = fs.readFileSync(mmmPath, 'utf8');
 
     // Use regex to find the defaults object
-    // Match from "defaults: {" to the closing "}" before getStyles()
+    // Match from defaults:  from "{" to the closing "}" before getStyles()
     const match = content.match(/defaults:\s*\{([\s\S]*?)\n\s*\},\s*getStyles/);
     if (!match) {
       throw new Error('Could not find defaults object in MMM-Webuntis.js');
@@ -208,9 +208,9 @@ function loadModuleDefaults() {
     const defaultsStr = `({${match[1]}\n})`;
 
     // Evaluate to get the object (safe because we control the file)
-    const defaults = eval(defaultsStr);
+    const moduleDefaults = eval(defaultsStr);
 
-    return defaults;
+    return moduleDefaults;
   } catch (err) {
     // Fallback to hardcoded defaults if dynamic load fails
     console.warn(`Warning: Could not load defaults from MMM-Webuntis.js: ${err.message}`);
@@ -358,7 +358,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
         if (recentDumps.length > 0) {
           Log.wrapper_info(`  📄 Dump: debug_dumps/${recentDumps[0]}`);
         }
-      } catch (_e) {
+      } catch {
         // ignore if can't find dumps dir
       }
     }
@@ -457,7 +457,7 @@ async function cmdFetch(flags) {
       try {
         await fetchStudentData(moduleConfig, idx, action, shouldDump, verbose);
         successCount++;
-      } catch (_err) {
+      } catch {
         failureCount++;
       }
     }
