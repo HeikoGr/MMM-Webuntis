@@ -1,12 +1,10 @@
 /* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
+const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 const fs = require('fs');
 const path = require('path');
 const fetchClient = require('./lib/fetchClient');
-/* eslint-disable n/no-missing-require */
-const Log = require('logger');
-/* eslint-enable n/no-missing-require */
 
 // New utility modules for refactoring
 const { compactArray, schemas } = require('./lib/payloadCompactor');
@@ -628,7 +626,7 @@ module.exports = NodeHelper.create({
         school: authResult.school,
         server: authResult.server,
         personId: authResult.personId,
-        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        cookieString: authResult.cookieString, // Changed 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
@@ -1535,10 +1533,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-            student.homework?.daysAhead ??
-            this.config?.homework?.nextDays ??
-            this.config?.homework?.daysAhead ??
-            999 // Default: show all if not configured
+          student.homework?.daysAhead ??
+          this.config?.homework?.nextDays ??
+          this.config?.homework?.daysAhead ??
+          999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1563,7 +1561,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1646,7 +1644,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date

@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -198,7 +198,7 @@ function loadModuleDefaults() {
     const content = fs.readFileSync(mmmPath, 'utf8');
 
     // Use regex to find the defaults object
-    // Match from defaults:  from "{" to the closing "}" before getStyles()
+    // Match defaults: beginning with "{" to the closing "}" before getStyles()
     const match = content.match(/defaults:\s*\{([\s\S]*?)\n\s*\},\s*getStyles/);
     if (!match) {
       throw new Error('Could not find defaults object in MMM-Webuntis.js');
