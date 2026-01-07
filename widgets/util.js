@@ -65,13 +65,22 @@
 
     if (Number.isNaN(dt.getTime())) return '';
 
+    // Get locale from MagicMirror global config (fallback to browser default)
+    let locale;
+    try {
+      // eslint-disable-next-line no-undef
+      locale = (typeof config !== 'undefined' && config && config.language) || undefined;
+    } catch {
+      locale = undefined;
+    }
+
     // Use Intl.DateTimeFormat.formatToParts to obtain locale-aware, zero-padded parts
     // and optionally weekday names. Support tokens:
     //  - yyyy, yy, dd, mm
     //  - d, m      -> non-padded day/month
     //  - EEE  -> localized short weekday (e.g. 'Do')
     //  - EEEE -> localized long weekday (e.g. 'Donnerstag')
-    const parts = new Intl.DateTimeFormat(undefined, {
+    const parts = new Intl.DateTimeFormat(locale, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -89,8 +98,8 @@
     map.d = String(Number(map.dd || '0'));
     map.m = String(Number(map.mm || '0'));
 
-    const weekdayShort = map._weekdayShort || new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt);
-    const weekdayLong = new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(dt);
+    const weekdayShort = map._weekdayShort || new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(dt);
+    const weekdayLong = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(dt);
 
     // Replace known tokens (longer tokens first to avoid partial matches)
     return String(format || '').replace(/(EEEE|EEE|yyyy|yy|dd|d|mm|m)/gi, (match) => {
