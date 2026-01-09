@@ -62,43 +62,43 @@ Module.register('MMM-Webuntis', {
     // === WIDGET NAMESPACED DEFAULTS ===
     // Per-widget configuration namespaces
     lessons: {
+      nextDays: 2, // widget-specific days ahead
       dateFormat: 'EEE', // format for lesson dates
       showStartTime: false, // show lesson start time instead of timeunit
       showRegular: false, // show also regular lessons
       useShortSubject: false, // use short subject names
       showTeacherMode: 'full', // 'off'|'initial'|'full'
       showSubstitution: false, // show substitution info
-      nextDays: 2, // widget-specific days ahead
     },
 
     grid: {
-      dateFormat: 'EEE dd.MM.', // format for grid dates
       nextDays: 2, // widget-specific days ahead
       pastDays: 0, // widget-specific days past
+      dateFormat: 'EEE dd.MM.', // format for grid dates
+      showNowLine: true, // show current time line
       mergeGap: 15, // minutes gap to merge adjacent lessons
       maxLessons: 0, // max lessons per day (0 = no limit)
-      showNowLine: true, // show current time line
     },
 
     exams: {
-      dateFormat: 'EEE dd.MM.', // format for exam dates
       nextDays: 21, // widget-specific days ahead
+      dateFormat: 'EEE dd.MM.', // format for exam dates
       showSubject: true, // show subject name with exam
       showTeacher: true, // show teacher name with exam
     },
 
     homework: {
+      nextDays: 28, // widget-specific days ahead
+      pastDays: 0, // widget-specific days past
       dateFormat: 'EEE dd.MM.', // format for homework dates
       showSubject: true, // show subject name with homework
       showText: true, // show homework description/text
-      nextDays: 28, // widget-specific days ahead
-      pastDays: 0, // widget-specific days past
     },
 
     absences: {
-      dateFormat: 'EEE dd.MM.', // format for absence dates
       pastDays: 21, // days in the past to show
       futureDays: 7, // days in the future to show
+      dateFormat: 'EEE dd.MM.', // format for absence dates
       showDate: true, // show absence date
       showExcused: true, // show excused/unexcused status
       showReason: true, // show reason for absence

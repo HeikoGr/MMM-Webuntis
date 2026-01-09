@@ -38,7 +38,8 @@ Restart MagicMirror after updating.
 
 ## Quick start
 
-Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. Here's a **minimal** example:
+Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. Here's a **minimal** example.
+This will setup the widgets for lessons and exams and relies on the use of a student based logon string (qrcode).
 
 ```javascript
 {
@@ -46,7 +47,10 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. Here's
   position: "top_right",
   config: {
     students: [
-      { title: "Alice", qrcode: "untis://setschool?..." },
+      {
+        title: "Alice",
+        qrcode: "untis://setschool?..."
+      },
     ]
   }
 },
@@ -54,9 +58,9 @@ Add `MMM-Webuntis` to your `config/config.js` inside the `modules` array. Here's
 
 For a more complete example with common options, see [config/config.template.js](config/config.template.js).
 
-## Template-based config workflow
+## config template
 
-- This repository ships with templates in `config/` so you can bootstrap a MagicMirror setup quickly without committing personal credentials or styling tweaks.
+- This repository ships with templates in `config/` so you can bootstrap a MagicMirror setup quickly with VSCode DevContainer or Github Codespace.
 
 - Copy the template files to `config.js` / `custom.css` inside the same folder (both paths are listed in `.gitignore`) and customize them locally:
 
@@ -83,7 +87,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `displayMode` | string | `'list'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. Backwards-compatible: `'list'` = `lessons, exams`; `'grid'` = `grid`. |
+| `displayMode` | string | `'lessons,exams'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. |
 | `mode` | string | `'verbose'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
 
 ### Timetable Fetch Range
@@ -92,13 +96,10 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | --- | --- | --- | --- |
 | `nextDays` | int | `7` | Number of upcoming days to display **starting from tomorrow**. Example: `nextDays: 3` shows tomorrow, +2 days, +3 days. |
 | `pastDays` | int | `0` | Number of past days to display **before today**. Example: `pastDays: 1` shows yesterday. |
-| `debugDate` | string|null | `null` | Optional debug override for "today" in `YYYY-MM-DD` format. When set, the module will treat this date as the current day for all range calculations and rendering. |
 
 **Range Calculation:** `totalDays = pastDays + 1 (today) + nextDays`
 - Example: `pastDays: 1, nextDays: 3` = Yesterday + Today + Tomorrow + +2 days + +3 days = **5 days total**
 - Default: `pastDays: 0, nextDays: 7` = Today + 7 future days = **8 days total**
-
-Note: Legacy keys `daysToShow` and `pastDaysToShow` are still supported but deprecated — update your `config.js` to use `nextDays`/`pastDays`.
 
 ## Widget-Specific Options
 
@@ -233,7 +234,7 @@ absences: {
 | --- | --- | --- | --- |
 | `useClassTimetable` | bool | `false` | Use class timetable instead of student timetable (some schools only provide class data). |
 
-### Parent Account Support (Optional)
+### Parent Account Support (optional)
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -248,10 +249,10 @@ The module includes an **automatic student discovery** feature that eliminates t
 
 ### How it works
 
-When you provide **parent account credentials** (`username`, `password`, `school`, `server`), the module will:
+When you provide **parent account credentials** (`parentUsername`, `parentPassword`, `school`, `server`), the module will:
 
 1. Authenticate with the parent account credentials
-2. Fetch the list of children from WebUntis (`app/data` endpoint)
+2. Fetch the list of children from WebUntis
 3. Automatically populate the `students` array with all children's names and IDs
 4. Display all discovered children in the MagicMirror logs for reference
 
@@ -412,6 +413,7 @@ If you don't see the auto-discovery message:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `dumpBackendPayloads` | bool | `false` | Dump backend API responses to `debug_dumps/` folder for troubleshooting. |
+| `debugDate` | string | `null` | Optional debug override for "today" in `YYYY-MM-DD` format. When set, the module will treat this date as the current day for all range calculations and rendering. |
 
 ### Student Credential Object
 
@@ -427,7 +429,7 @@ Each entry in the `students` array is an object with the following fields:
 - `qrcode` (string) — WebUntis QR code string (`untis://setschool?url=...&school=...&user=...&key=...`).
   - To get the QR code: log into WebUntis → Account → Data Access → generate QR code for this app.
 
-**Option B: Direct Credentials**
+**Option B: Direct Credentials** (untested!)
 - `username` (string) — student's WebUntis username or email.
 - `password` (string) — student's WebUntis password.
 - `school` (string) — school name in WebUntis.
@@ -437,7 +439,7 @@ Each entry in the `students` array is an object with the following fields:
 
 - `class` (string) — class name (only needed if `useClassTimetable: true` and you want to fetch class timetable data).
 - `studentId` (number) — when using parent account mode (see [Parent Account Support](README.md#parent-account-support-optional)), use this to configure children by their ID instead of individual credentials.
-- Per-student option overrides — any global option (like `daysToShow`, `exams.daysAhead`, `logLevel`, etc.) can be supplied here to override the global value for this student only.
+- Per-student option overrides — any global option can be supplied here to override the global value for this student only.
 
 #### Example with QR Code
 
@@ -445,11 +447,13 @@ Each entry in the `students` array is an object with the following fields:
 {
   title: "Alice",
   qrcode: "untis://setschool?url=https://example.webuntis.com&school=example&user=alice&key=ABC123XYZ",
-  daysToShow: 5, // override global daysToShow for this student
+    homework: {
+      nextDays: 45, // show the next 45 days for this student!
+  }
 }
 ```
 
-#### Example with Direct Credentials
+#### Example with Direct Credentials (untested!)
 
 ```javascript
 {
@@ -472,72 +476,6 @@ When using parent account credentials (see [Parent Account Support](README.md#pa
 }
 ```
 
-## Recent Updates
-
-### Version 0.5.0 - REST API Migration & Major Features 🚀
-
-**BREAKING CHANGE**: This release migrates from the deprecated JSON-RPC API to the modern REST API.
-
-**Major Changes**:
-- ✨ **REST API Integration**: All data operations now use REST endpoints (timetable, exams, homework, absences, messages of day)
-- 🔐 **QR Code Login**: Support for direct student authentication via WebUntisQR codes
-- 👨‍👩‍👧‍👦 **Parent Account Mode**: Configure once with parent credentials, automatically discover all children
-- 🎯 **Auto-Discovery**: Students automatically detected from WebUntis `app/data` endpoint
-- 📅 **Holiday Support**: Full holiday integration in grid and lessons widgets
-- 📢 **Messages Widget**: New widget for school announcements
-- 🔧 **Enhanced Configuration**: Widget-specific settings, improved validation, better error messages
-
-**Upgrade Notes**: Existing QR code and username/password configurations remain compatible. Parent account mode is optional. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-### Version 0.4.x - Configuration & Display
-
-See migration notes below for breaking changes introduced in 0.4.0.
-
-## BREAKING CHANGES in 0.4.0 (Historical)
-
-This release consolidates several configuration keys and changes how the module handles config compatibility.
-
-Important notes:
-
-- The module contains a compatibility mapper that automatically translates several deprecated keys from older configs to the new key names during startup. By design, when a deprecated key is present its value will now take precedence — legacy values "win" and overwrite the new key. This makes upgrades safer for users who still have old keys in place, but you should still update your `config.js` to the canonical names.
-
-Mapper behavior and warnings:
-
-- When deprecated keys are detected the frontend emits a conspicuous browser console warning (styled in red) that lists the detected legacy keys and their location (e.g. `students[0].days`). This helps you find and update old keys during MagicMirror startup.
-- Additionally, the backend will log an informational message for fetch operations; however, the compatibility mapping and the red console warning are produced in the frontend module so you can see them in the browser devtools when MagicMirror starts.
-
-Common legacy → new mappings (applied automatically if present):
-
-- `fetchInterval` → `fetchIntervalMs`
-- `days` → `daysToShow`
-- `examsDays` → `examsDaysAhead`
-- `mergeGapMin` → `mergeGapMinutes`
-- legacy `debug` / `enableDebug` (boolean) → `logLevel: 'debug'` or `'none'`
-- `displaymode` → `displayMode` (normalized to lowercase)
-
-Quick tip: find deprecated keys in your `config.js` with this command (run from your MagicMirror folder):
-
-```bash
-grep -n "fetchInterval\|days\|mergeGapMin\|displaymode\|enableDebug\|debug" config/config.js || true
-```
-
-Upgrade notes:
-
-1. The mapper will translate legacy keys automatically at startup, but it's recommended to update your `config.js` to the new key names listed above.
-2. Use the red console warning and the quick grep above to find legacy keys and replace them.
-3. Restart MagicMirror after editing `config.js` to ensure the new keys are used consistently.
-
-
-## How the timetable grid works (developer notes)
-
-- The backend (`node_helper.js`) fetches raw WebUntis data from the REST API. The frontend builds `timeUnits` from the timegrid and computes minute values from `startTime`/`endTime` strings when rendering.
-- The frontend merges consecutive lessons with identical subject/teacher/code when the gap is within `mergeGap` (minutes). A merged block keeps a `lessonIds` array; `lessonId` is set when available.
-- The backend includes a response cache (30s TTL) and REST auth token cache (14min TTL) to minimize redundant API calls and avoid authentication overhead.
-
-Additional grid rendering notes:
-
-- When `maxLessons` is set to `>=1` and `timeUnits` are available, the grid vertical range (time axis, hour lines and lesson blocks) is clipped to the end/start of the Nth `timeUnit` so periods below the cutoff are not shown. A small "... more" badge appears in the day's column when additional lessons are hidden.
-
 ## Debugging and Logging
 
 - The default `logLevel` is `'none'` (silent). Set it to `'debug'` to enable detailed logging.
@@ -548,7 +486,6 @@ Additional grid rendering notes:
 - **Empty results:** Check credentials and try `useClassTimetable: true` — some schools expose only class timetables.
 - **Debug info:** Enable `logLevel: 'debug'` in the config and check the MagicMirror server log.
 - **SSO/MS365 logins:** If a student uses corporate SSO, generate a WebUntis data-access QR code inside the student's account and use that instead of direct credentials.
-- **Absences with parent accounts:** The WebUntis API does not support retrieving absences through parent account logins. Absences are only available when logged in directly as the student. If `displayMode` includes `absences` but uses parent account credentials, the module will silently skip absences.
 
 ## CLI tool (config check)
 
@@ -576,14 +513,6 @@ node --run debug -- --config /path/to/config.js
 
 - installed via `npm install` in the module directory.
 
-## Holiday Display
-
-The `lessons` and `grid` widgets automatically display holiday information from the WebUntis API:
-
-- **Lessons widget:** Shows a holiday notice with the 🏖️ emoji and holiday name on days that fall within a holiday period (no lessons shown)
-- **Grid widget:** Displays a semi-transparent overlay with the 🏖️ emoji and holiday name on holiday days
-- **Warning suppression:** The "No lessons found" warning is automatically suppressed during holiday periods
-
 ### How it works
 
 The backend pre-computes a `holidayByDate` lookup map for the requested date range and includes it in the payload. Widgets simply look up each date in this map instead of iterating through holiday periods. This centralizes holiday detection in the backend and simplifies widget code.
@@ -594,20 +523,6 @@ No additional configuration is required — holiday data is automatically fetche
 
 ## Troubleshooting & Migration Guide
 
-### Deprecated Configuration Keys
-
-The module automatically maps legacy configuration keys to their new equivalents. When deprecated keys are detected, you'll see:
-- **Red browser console warning** listing all deprecated keys and their locations
-- **Backend logs** with detailed migration instructions
-
-**Common migrations**:
-- `fetchInterval` → `fetchIntervalMs` (e.g., `300000` instead of `300`)
-- `days` → `nextDays` (for student-level config)
-- `examsDays` → `exams.nextDays`
-- `mergeGapMin` → `grid.mergeGap`
-- `debug: true` / `enableDebug: true` → `logLevel: 'debug'`
-- `displaymode` → `displayMode` (camelCase)
-
 ### Authentication Issues
 
 **QR Code Login Fails**:
@@ -616,8 +531,8 @@ The module automatically maps legacy configuration keys to their new equivalents
 3. Verify OTP generation: The module uses `otplib` to generate time-based tokens
 
 **Parent Account Login Fails**:
-1. Verify credentials in module config: `username`, `password`, `school`, `server`
-2. Check student `studentId` matches WebUntis (visible in app/data response)
+1. Verify credentials in module config: `parentUsername`, `parentPassword`, `school`, `server`
+2. Check student `studentId` matches WebUntis
 3. Backend logs will show: `"Creating WebUntis client for parent account"`
 
 **Token Expiration**:
@@ -628,9 +543,10 @@ The module automatically maps legacy configuration keys to their new equivalents
 ### Data Not Loading
 
 **Empty Widgets**:
-1. Check date range: `nextDays` and `pastDays` must cover the period you want to see
-2. Verify `studentId` in logs: `"Processing student: <title> (ID: <studentId>)"`
-3. Check for warnings in GOT_DATA payload (browser console)
+1. past lessons (even from today) will not be displayed by design
+2. Check date range: `nextDays` and `pastDays` must cover the period you want to see
+3. Verify `studentId` in logs: `"Processing student: <title> (ID: <studentId>)"`
+4. Check for warnings in GOT_DATA payload (browser console)
 
 **Specific Widget Issues**:
 - **Exams**: Set `exams.nextDays` (default: 21 days, range: 0-365)
@@ -643,7 +559,6 @@ The module automatically maps legacy configuration keys to their new equivalents
 **Reduce API Calls**:
 - Increase `fetchIntervalMs` (default: 5 minutes = 300000ms)
 - Use smaller date ranges (`nextDays`, `pastDays`)
-- Enable caching is automatic (14-minute TTL for auth)
 
 **Debug Logging**:
 ```javascript
@@ -651,23 +566,6 @@ logLevel: 'debug'  // Shows all HTTP requests, cache hits, authentication flow
 ```
 
 Check logs: `pm2 logs MagicMirror --lines 200 | grep -E "\\[MMM-Webuntis\\]|\\[HttpClient\\]|\\[AuthService\\]"`
-
-### Migration from 0.3.x to 0.4.x
-
-**No breaking changes** for most users, but recommended updates:
-
-1. **Update deprecated keys** (see section above)
-2. **Verify exam configuration**: Change `exams.daysAhead` to `exams.nextDays`
-3. **Test authentication**: QR code and parent account flows have been refactored
-4. **Review logs**: New modular architecture provides more detailed logging
-
-**Rollback** (if needed):
-```bash
-cd ~/MagicMirror/modules/MMM-Webuntis
-git switch v0.3.x  # Replace with your previous version tag
-npm ci --omit=dev
-pm2 restart MagicMirror
-```
 
 ## Screenshot
 
@@ -709,19 +607,3 @@ graph TB
 ```
 
 → For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## Architecture Highlights
-
-**Modular Design**: The module follows a service-oriented architecture with **12 specialized services** in `lib/`:
-
-- **Authentication & API**: httpClient.js, authService.js, restClient.js, webuntisApiService.js
-- **Data Processing**: dataTransformer.js, payloadCompactor.js
-- **Configuration**: configValidator.js, widgetConfigValidator.js
-- **Infrastructure**: cacheManager.js, errorHandler.js, dateTimeUtils.js, logger.js
-
-**Benefits**:
-- ✅ **Reduced coupling**: Generic HTTP client instead of tight WebUntis library dependency
-- ✅ **Testability**: Each service is independently testable
-- ✅ **Maintainability**: Clear separation of concerns (auth, data, validation, errors)
-- ✅ **Performance**: Smart caching reduces API calls by ~70%
-- ✅ **Code reduction**: node_helper.js reduced from 2,383 to ~1,550 lines (-35%)
