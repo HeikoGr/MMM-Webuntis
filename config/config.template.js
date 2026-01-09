@@ -47,12 +47,12 @@ let config = {
           {
             title: 'Student',
             studentId: 0,
-            qrcode: 'untis://setschool?url=https://example.webuntis.com&school=example&user=<user>&key=<key>',
+            qrcode: 'untis://setschool?url=example.webuntis.com&school=example&user=<user>&key=<key>',
             // OR use direct credentials if no QR code:
             // username: 'user@example.com',
             // password: '<password>',
             // school: 'example',
-            // server: 'example.webuntis.com',
+            // server: 'example.webuntis.com', without https://
           },
           // Example with parent account (requires parentUsername/parentPassword at config level):
           // {
