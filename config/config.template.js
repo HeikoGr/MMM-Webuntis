@@ -25,71 +25,22 @@ let config = {
       config: {
         // === GLOBAL OPTIONS ===
         header: 'Timetable', // optional header text
-        logLevel: 'debug', // 'debug', 'info', 'warn', 'error'
+        updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+
+        // === DEBUG OPTIONS ===
+        logLevel: 'none', // 'none', 'error', 'warn', 'info', 'debug'
+        debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+        dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
 
         // === DISPLAY OPTIONS ===
-        displayMode: 'list', // 'list', 'grid', or comma-separated: 'lessons,exams,grid'
-        mode: 'verbose', // 'verbose' or 'compact'
+        displayMode: 'lessons, exams', // comma-separated list: lessons, exams, grid, homework, absences, messagesofday
+        mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
 
-        // Per-widget namespaces (new preferred structure)
-        lessons: {
-          dateFormat: 'EEE',
-          showStartTime: false,
-          showRegular: false,
-          useShortSubject: false,
-          showTeacherMode: 'full', // 'off'|'initial'|'full'
-          showSubstitution: false,
-          nextDays: 7, // (optional) widget-specific days ahead
-        },
-
-        grid: {
-          dateFormat: 'EEE dd.MM.',
-          mergeGap: 15,
-          maxLessons: 0,
-          showNowLine: true,
-          nextDays: 1, // (optional) widget-specific days ahead
-          pastDays: 0, // (optional) widget-specific days past
-        },
-
-        exams: {
-          dateFormat: 'dd.MM.',
-          daysAhead: 21,
-          showSubject: true,
-          showTeacher: true,
-        },
-
-        homework: {
-          dateFormat: 'dd.MM.',
-          showSubject: true, // (optional) show subject name with homework
-          showText: true, // (optional) show homework description/text
-          nextDays: 28, // (optional) widget-specific days ahead
-          pastDays: 0, // (optional) widget-specific days past
-        },
-
-        absences: {
-          dateFormat: 'dd.MM.',
-          pastDays: 21, // days in the past to show
-          futureDays: 7, // days in the future to show
-          showDate: true, // (optional) show absence date
-          showExcused: true, // (optional) show excused/unexcused status
-          showReason: true, // (optional) show reason for absence
-          maxItems: null, // (optional) max number of absence entries to show (null = no limit)
-        },
-
-        messagesofday: {},
-
-        // === TIMETABLE SOURCE ===
-        useClassTimetable: false,
-
-        // === PARENT ACCOUNT SUPPORT (optional) ===
-        // Uncomment to use parent account credentials for multiple children:
-        // username: 'parent@example.com',
-        // password: 'password',
-        // school: 'school_name',
-        // server: 'webuntis.com',
-
-        // === DEBUG OPTIONS (optional) ===
-        // dumpBackendPayloads: false, // dump API responses to debug_dumps/
+        // === AUTHENTICATION ===
+        // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
+        // password: 'your password', // WebUntis password (leave empty if using studentId/qrcode)
+        // school: 'your school',     // WebUntis school name (most likely subdomain)
+        // server: 'schoolserver.webuntis.com',  // WebUntis server URL (usually subdomain.webuntis.com)
 
         // === STUDENTS ===
         students: [
@@ -103,12 +54,60 @@ let config = {
             // school: 'example',
             // server: 'example.webuntis.com',
           },
-          // Example with parent account (requires parentUsername/parentPassword above):
+          // Example with parent account (requires parentUsername/parentPassword at config level):
           // {
           //   title: 'Child 1',
           //   studentId: 12345,
           // },
         ],
+
+        // === WIDGET NAMESPACED DEFAULTS ===
+        // Per-widget configuration namespaces
+        lessons: {
+          nextDays: 2, // widget-specific days ahead
+          dateFormat: 'EEE', // format for lesson dates
+          showStartTime: false, // show lesson start time instead of timeunit
+          showRegular: false, // show also regular lessons
+          useShortSubject: false, // use short subject names
+          showTeacherMode: 'full', // 'off'|'initial'|'full'
+          showSubstitution: false, // show substitution info
+        },
+
+        grid: {
+          nextDays: 2, // widget-specific days ahead
+          pastDays: 0, // widget-specific days past
+          dateFormat: 'EEE dd.MM.', // format for grid dates
+          showNowLine: true, // show current time line
+          mergeGap: 15, // minutes gap to merge adjacent lessons
+          maxLessons: 0, // max lessons per day (0 = no limit)
+        },
+
+        exams: {
+          nextDays: 21, // widget-specific days ahead
+          dateFormat: 'EEE dd.MM.', // format for exam dates
+          showSubject: true, // show subject name with exam
+          showTeacher: true, // show teacher name with exam
+        },
+
+        homework: {
+          nextDays: 28, // widget-specific days ahead
+          pastDays: 0, // widget-specific days past
+          dateFormat: 'EEE dd.MM.', // format for homework dates
+          showSubject: true, // show subject name with homework
+          showText: true, // show homework description/text
+        },
+
+        absences: {
+          pastDays: 21, // days in the past to show
+          nextDays: 7, // days in the future to show
+          dateFormat: 'EEE dd.MM.', // format for absence dates
+          showDate: true, // show absence date
+          showExcused: true, // show excused/unexcused status
+          showReason: true, // show reason for absence
+          maxItems: null, // max number of absence entries to show (null = no limit)
+        },
+
+        messagesofday: {}, // no specific defaults yet
       },
     },
   ],

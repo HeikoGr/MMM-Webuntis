@@ -97,7 +97,7 @@ Module.register('MMM-Webuntis', {
 
     absences: {
       pastDays: 21, // days in the past to show
-      futureDays: 7, // days in the future to show
+      nextDays: 7, // days in the future to show
       dateFormat: 'EEE dd.MM.', // format for absence dates
       showDate: true, // show absence date
       showExcused: true, // show excused/unexcused status
