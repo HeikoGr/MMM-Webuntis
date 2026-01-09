@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => { };
+    nodeHelper.sendSocketNotification = () => {};
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -130,7 +130,7 @@ function parseArgs(argv) {
           // Help flag
           result.command = 'help';
         } else {
-          // Boolean flags: v, d
+          // Boolean flags: v, d, x
           result.flags[char] = true;
         }
       }
@@ -375,6 +375,7 @@ async function cmdFetch(flags) {
   const action = flags.action || flags.a || 'all';
   const verbose = flags.verbose || flags.v;
   const shouldDump = flags.dump || flags.d;
+  const debugApi = flags['debug-api'] || flags.x;
   const allStudents = flags.all || flags.a_all; // Special flag to iterate all students
 
   if (verbose) setLogLevel('debug');
@@ -396,6 +397,7 @@ async function cmdFetch(flags) {
     await nodeHelper._ensureStudentsFromAppData(moduleConfig);
     // Emulate MagicMirror socket payload: set id, config and per-student fallbacks
     moduleConfig.id = moduleConfig.id || 'wrapper-cli';
+    moduleConfig.debugApi = debugApi;
     nodeHelper.config = moduleConfig;
     const defaultProps = [
       'daysToShow',
@@ -491,6 +493,7 @@ OPTIONS:
                              all, auth, timetable, exams, homework, absences
   --dump    | -d             Also write debug dump JSON to debug_dumps/
   --verbose | -v             Show detailed output
+  --debug-api | -x           Show detailed API requests and truncated responses
   --help    | -h             Show this help
 
 EXAMPLES:
