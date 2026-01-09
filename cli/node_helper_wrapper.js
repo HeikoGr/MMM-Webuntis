@@ -234,7 +234,7 @@ function loadModuleDefaults() {
       maxLessons: 0,
       showNowLine: true,
       pastDays: 21,
-      futureDays: 7,
+      nextDays: 7,
       dateFormat: 'dd.MM.',
       examDateFormat: 'dd.MM.',
       homeworkDateFormat: 'dd.MM.',

@@ -1340,10 +1340,10 @@ module.exports = NodeHelper.create({
       : Number.isFinite(Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays))
         ? Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays)
         : 0;
-    const absFuture = Number.isFinite(Number(student.absences?.futureDays ?? student.absencesFutureDays))
-      ? Number(student.absences?.futureDays ?? student.absencesFutureDays)
-      : Number.isFinite(Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays))
-        ? Number(this.config?.absences?.futureDays ?? this.config?.absencesFutureDays)
+    const absFuture = Number.isFinite(Number(student.absences?.nextDays ?? student.absencesFutureDays))
+      ? Number(student.absences?.nextDays ?? student.absencesFutureDays)
+      : Number.isFinite(Number(this.config?.absences?.nextDays ?? this.config?.absencesFutureDays))
+        ? Number(this.config?.absences?.nextDays ?? this.config?.absencesFutureDays)
         : 0;
 
     const absencesRangeStart = new Date(baseNow);

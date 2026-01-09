@@ -209,7 +209,7 @@ Configure absences widget behavior using the `absences` configuration namespace:
 | --- | --- | --- | --- |
 | `absences.dateFormat` | string | `'dd.MM.'` | Date format for absence dates. |
 | `absences.pastDays` | int | `21` | Number of past days to include when fetching absences. |
-| `absences.futureDays` | int | `7` | Number of future days to include when fetching absences. |
+| `absences.nextDays` | int | `7` | Number of future days to include when fetching absences. |
 | `absences.showDate` | bool | `true` | Show absence date. |
 | `absences.showExcused` | bool | `true` | Show excused/unexcused status indicator. |
 | `absences.showReason` | bool | `true` | Show reason/note for absence. |
@@ -220,7 +220,7 @@ Configure absences widget behavior using the `absences` configuration namespace:
 absences: {
   dateFormat: 'dd.MM.',
   pastDays: 21,
-  futureDays: 7,
+  nextDays: 7,
   showDate: true,
   showExcused: true,
   showReason: true,
