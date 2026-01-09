@@ -137,7 +137,7 @@ To use QR codes in your configuration, simply add:
 students: [
   {
     title: "Student Name",
-    qrcode: "untis://setschool?url=https://...&school=...&user=...&key=..."
+    qrcode: "untis://setschool?url=...&school=...&user=...&key=..."
   }
 ]
 ```

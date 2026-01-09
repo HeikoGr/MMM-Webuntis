@@ -581,7 +581,7 @@ graph TD
       studentId: 1234,                    // student ID (parent account mode)
 
       // QR Code login (alternative to credentials)
-      qrcode: "untis://setschool?url=https://...",
+      qrcode: "untis://setschool?url=...",
 
       // OR direct student credentials
       username: "student@example.com",
