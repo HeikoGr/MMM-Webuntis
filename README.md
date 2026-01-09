@@ -238,8 +238,8 @@ absences: {
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `parentUsername` | string | - | Parent account email/username for accessing multiple children's data. |
-| `parentPassword` | string | - | Parent account password. |
+| `username` | string | - | Parent account email/username for accessing multiple children's data. |
+| `password` | string | - | Parent account password. |
 | `school` | string | - | School name (can be overridden per student). |
 | `server` | string | `'webuntis.com'` | WebUntis server hostname. |
 
@@ -249,7 +249,7 @@ The module includes an **automatic student discovery** feature that eliminates t
 
 ### How it works
 
-When you provide **parent account credentials** (`parentUsername`, `parentPassword`, `school`, `server`), the module will:
+When you provide **parent account credentials** (`username`, `password`, `school`, `server`), the module will:
 
 1. Authenticate with the parent account credentials
 2. Fetch the list of children from WebUntis
@@ -267,7 +267,7 @@ When you provide **parent account credentials** (`parentUsername`, `parentPasswo
   config: {
     // Parent account credentials
     username: "parent@example.com",
-    password: "parentPassword123",
+    password: "password123",
     school: "myschool",
     server: "myschool.webuntis.com",
 
@@ -300,7 +300,7 @@ If you want to customize settings for specific auto-discovered students using pa
   config: {
     // Parent account credentials
     username: "parent@example.com",
-    password: "parentPassword123",
+    password: "password123",
     school: "myschool",
     server: "myschool.webuntis.com",
 
@@ -341,7 +341,7 @@ Create a config with empty `students` array and parent credentials:
   module: "MMM-Webuntis",
   config: {
     username: "parent@example.com",
-    password: "parentPassword123",
+    password: "password123",
     school: "myschool",
     server: "myschool.webuntis.com",
     students: [],  // Empty = trigger auto-discovery
@@ -370,7 +370,7 @@ Now update your config with the student IDs and custom names:
   module: "MMM-Webuntis",
   config: {
     username: "parent@example.com",
-    password: "parentPassword123",
+    password: "password123",
     school: "myschool",
     server: "myschool.webuntis.com",
 
@@ -399,7 +399,7 @@ If you don't see the auto-discovery message:
    ```javascript
    config: {
      username: "parent@example.com",
-     password: "parentPassword123",
+     password: "password123",
      school: "myschool",
      server: "myschool.webuntis.com",
      students: [],
@@ -531,7 +531,7 @@ No additional configuration is required — holiday data is automatically fetche
 3. Verify OTP generation: The module uses `otplib` to generate time-based tokens
 
 **Parent Account Login Fails**:
-1. Verify credentials in module config: `parentUsername`, `parentPassword`, `school`, `server`
+1. Verify credentials in module config: `username`, `password`, `school`, `server`
 2. Check student `studentId` matches WebUntis
 3. Backend logs will show: `"Creating WebUntis client for parent account"`
 
