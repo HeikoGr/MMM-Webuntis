@@ -76,7 +76,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => { };
+    nodeHelper.sendSocketNotification = () => {};
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -297,9 +297,37 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     const authSession = await nodeHelper._createAuthSession(student, mergedConfig);
     const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
 
+    // Display studentId from authSession
+    if (authSession.personId) {
+      Log.wrapper_info(`  👤 PersonId (studentId): ${authSession.personId}`);
+    }
+
+    // Also show configured studentId if different
+    const configuredStudentId = student.studentId;
+    if (configuredStudentId && configuredStudentId !== authSession.personId) {
+      Log.wrapper_info(`  ⚠️  Configured studentId: ${configuredStudentId} (differs from personId!)`);
+    } else if (configuredStudentId) {
+      Log.wrapper_info(`  ✓ Configured studentId matches personId`);
+    }
+
     // Enable dumping if requested
     if (shouldDump) {
       mergedConfig.dumpBackendPayloads = true;
+    }
+
+    // Override displayMode based on action to fetch only requested data
+    const originalDisplayMode = mergedConfig.displayMode;
+    const originalStudentDisplayMode = student.displayMode;
+
+    if (action && action !== 'all' && action !== 'auth') {
+      // Action corresponds to widget name(s)
+      const limitedDisplayMode = action;
+      mergedConfig.displayMode = limitedDisplayMode;
+      student.displayMode = limitedDisplayMode;
+
+      if (verbose) {
+        Log.wrapper_info(`  🎯 Limiting fetch to widget(s): ${limitedDisplayMode}`);
+      }
     }
 
     // Extract holidays once (matches processGroup behavior)
@@ -309,6 +337,10 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     const compactHolidays = nodeHelper._extractAndCompactHolidays(authSession, shouldFetchHolidays);
 
     const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey, compactHolidays);
+
+    // Restore original displayMode
+    mergedConfig.displayMode = originalDisplayMode;
+    student.displayMode = originalStudentDisplayMode;
 
     const results = {
       timetable: payload?.timetableRange?.length || 0,
@@ -321,7 +353,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     if (action === 'auth') {
       Log.wrapper_info('  ✓ Auth: login ok');
     } else if (action === 'all') {
-      Log.wrapper_info(`  ✓ Timetable entries: ${results.timetable}`);
+      Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
       Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
       Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
       Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
@@ -347,7 +379,18 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
         });
       }
     } else {
-      Log.wrapper_info(`  ✓ ${action.charAt(0).toUpperCase() + action.slice(1)}: ${results[action] || 0}`);
+      // Map widget action to result key
+      const widgetToResult = {
+        lessons: 'timetable',
+        grid: 'timetable',
+        exams: 'exams',
+        homework: 'homework',
+        absences: 'absences',
+        messagesofday: 'messagesofday',
+      };
+      const resultKey = widgetToResult[action] || action;
+      const count = results[resultKey] || 0;
+      Log.wrapper_info(`  ✓ ${action.charAt(0).toUpperCase() + action.slice(1)}: ${count}`);
     }
 
     if (shouldDump) {
@@ -489,8 +532,9 @@ USAGE:
 OPTIONS:
   --config  | -c   <path>    Path to config.js (auto-detected if omitted)
   --student | -s   <index>   Student index to test (default: 0, or all if no -s given)
-  --action  | -a   <action>  Which data to fetch (default: all):
-                             all, auth, timetable, exams, homework, absences
+  --action  | -a   <widget>  Which widget(s) to fetch (default: all):
+                             all, auth, lessons, grid, exams, homework, absences, messagesofday
+                             or combinations: lessons,grid  or  exams,homework
   --dump    | -d             Also write debug dump JSON to debug_dumps/
   --verbose | -v             Show detailed output
   --debug-api | -x           Show detailed API requests and truncated responses
@@ -507,8 +551,14 @@ EXAMPLES:
   # Fetch for specific student with verbose output
   node --run debug -- --student 1 --verbose
 
-  # Fetch only exams for all students
+  # Fetch only exams widget for all students
   node --run debug -- --all --action exams
+
+  # Fetch lessons and grid widgets (timetable data)
+  node --run debug -- --action lessons,grid
+
+  # Fetch only homework widget
+  node --run debug -- --action homework --verbose
 
   # Fetch and create debug dump for student 0
   node --run debug -- --dump --verbose
