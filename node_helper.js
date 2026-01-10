@@ -1272,17 +1272,21 @@ module.exports = NodeHelper.create({
     const restOptions = { cacheKey: credKey, authSession };
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
-    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId);
+    const bearerToken = authSession.token;
+    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId, bearerToken);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
     const className = student.class || student.className || this.config?.class || null;
 
-    const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
-    const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
-    const wantsExamsWidget = this._wantsWidget('exams', this.config?.displayMode);
-    const wantsHomeworkWidget = this._wantsWidget('homework', this.config?.displayMode);
-    const wantsAbsencesWidget = this._wantsWidget('absences', this.config?.displayMode);
-    const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', this.config?.displayMode);
+    // Use student-specific displayMode if available, otherwise fall back to module-level
+    const effectiveDisplayMode = student.displayMode ?? this.config?.displayMode;
+
+    const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
+    const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
+    const wantsExamsWidget = this._wantsWidget('exams', effectiveDisplayMode);
+    const wantsHomeworkWidget = this._wantsWidget('homework', effectiveDisplayMode);
+    const wantsAbsencesWidget = this._wantsWidget('absences', effectiveDisplayMode);
+    const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', effectiveDisplayMode);
 
     // Data fetching is driven by widgets.
     const fetchTimegrid = Boolean(wantsGridWidget || wantsLessonsWidget);
@@ -1538,10 +1542,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          999 // Default: show all if not configured
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1566,7 +1570,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1649,7 +1653,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
