@@ -585,7 +585,7 @@ module.exports = NodeHelper.create({
         const defNoStudents = { ...(moduleConfig || {}) };
         delete defNoStudents.students;
         const normalizedAutoStudents = autoStudents.map((s) => {
-          const merged = { ...defNoStudents, ...(s || {}) };
+          const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
           // Ensure displayMode is lowercase
           if (typeof merged.displayMode === 'string') {
             merged.displayMode = merged.displayMode.toLowerCase();
@@ -655,7 +655,7 @@ module.exports = NodeHelper.create({
       return {
         school,
         server,
-        personId: null,
+        personId: authResult.personId, // Parent's personId (used for auto-discovery)
         cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
@@ -678,7 +678,7 @@ module.exports = NodeHelper.create({
       return {
         school: sample.school,
         server: sample.server,
-        personId: null,
+        personId: authResult.personId,
         cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
@@ -1127,7 +1127,7 @@ module.exports = NodeHelper.create({
                   const defNoStudents = { ...(this.config || {}) };
                   delete defNoStudents.students;
                   const normalized = autoStudents.map((s) => {
-                    const merged = { ...defNoStudents, ...(s || {}) };
+                    const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
                     // Ensure displayMode is lowercase
                     if (typeof merged.displayMode === 'string') {
                       merged.displayMode = merged.displayMode.toLowerCase();
@@ -1273,7 +1273,8 @@ module.exports = NodeHelper.create({
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
     const bearerToken = authSession.token;
-    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId, bearerToken);
+    const appData = authSession.appData; // Contains user.students[] for parent account mapping
+    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId, bearerToken, appData);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
     const className = student.class || student.className || this.config?.class || null;

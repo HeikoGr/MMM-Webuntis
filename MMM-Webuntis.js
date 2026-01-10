@@ -432,11 +432,17 @@ Module.register('MMM-Webuntis', {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
     }
 
-    // Check if no students configured
+    // Check if no students configured AND no parent credentials for auto-discovery
+    const hasParentCreds = config.username && config.password && config.school;
     if (!Array.isArray(config.students) || config.students.length === 0) {
-      warnings.push(
-        'No students configured. Module is idle. Configure students[] or provide parent account credentials for auto-discovery.'
-      );
+      if (!hasParentCreds) {
+        warnings.push(
+          'No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.'
+        );
+      } else {
+        // Auto-discovery will happen in backend - don't show warning in frontend yet
+        this._log('info', 'Empty students[] with parent credentials: waiting for auto-discovery from backend...');
+      }
     }
 
     // Warn for each unique warning

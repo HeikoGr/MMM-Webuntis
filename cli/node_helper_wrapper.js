@@ -297,17 +297,45 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     const authSession = await nodeHelper._createAuthSession(student, mergedConfig);
     const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
 
-    // Display studentId from authSession
+    // Resolve actual studentId using buildRestTargets (matches fetchData behavior)
+    const appData = authSession.appData;
+    const restTargets = nodeHelper.authService.buildRestTargets(
+      student,
+      mergedConfig,
+      authSession.school,
+      authSession.server,
+      authSession.personId,
+      authSession.token,
+      appData
+    );
+
+    // Display personId vs studentId distinction
     if (authSession.personId) {
-      Log.wrapper_info(`  👤 PersonId (studentId): ${authSession.personId}`);
+      Log.wrapper_info(`  👤 Login PersonId: ${authSession.personId}`);
     }
 
-    // Also show configured studentId if different
+    // Show resolved studentId from buildRestTargets
+    const resolvedStudentId = restTargets.length > 0 ? restTargets[0].studentId : null;
+
+    // Check if studentId was manually configured in original config or auto-discovered
+    const wasAutoDiscovered = mergedConfig._autoStudentsAssigned === true;
     const configuredStudentId = student.studentId;
-    if (configuredStudentId && configuredStudentId !== authSession.personId) {
-      Log.wrapper_info(`  ⚠️  Configured studentId: ${configuredStudentId} (differs from personId!)`);
-    } else if (configuredStudentId) {
-      Log.wrapper_info(`  ✓ Configured studentId matches personId`);
+
+    if (resolvedStudentId) {
+      if (resolvedStudentId === authSession.personId) {
+        Log.wrapper_info(`  📊 Timetable StudentId: ${resolvedStudentId} (same as personId - direct student login)`);
+      } else {
+        Log.wrapper_info(`  📊 Timetable StudentId: ${resolvedStudentId} (child account - parent login)`);
+      }
+
+      // Show source of studentId
+      if (configuredStudentId && wasAutoDiscovered) {
+        Log.wrapper_info(`  🔍 Source: Auto-discovered from parent account (${student.title || 'unnamed'})`);
+      } else if (configuredStudentId && !wasAutoDiscovered) {
+        Log.wrapper_info(`  ⚙️  Source: Manual studentId in config (overrides auto-discovery)`);
+      }
+    } else {
+      Log.wrapper_info(`  ⚠️  No valid studentId resolved (check config)`);
     }
 
     // Enable dumping if requested
