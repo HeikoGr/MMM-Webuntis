@@ -601,7 +601,7 @@ module.exports = NodeHelper.create({
         username: moduleConfig.username,
         password: moduleConfig.password,
         server,
-        options: this._getStandardAuthOptions(),
+        options: this._getStandardAuthOptions({ cacheKey: `parent:${moduleConfig.username}@${server}` }),
       });
       autoStudents = this.authService.deriveStudentsFromAppData(appData);
 
@@ -618,6 +618,11 @@ module.exports = NodeHelper.create({
       if (!moduleConfig._autoStudentsAssigned) {
         const defNoStudents = { ...(moduleConfig || {}) };
         delete defNoStudents.students;
+        // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
+        delete defNoStudents.username;
+        delete defNoStudents.password;
+        delete defNoStudents.school;
+        delete defNoStudents.server;
         const normalizedAutoStudents = autoStudents.map((s) => {
           const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
           // Ensure displayMode is lowercase
@@ -632,7 +637,7 @@ module.exports = NodeHelper.create({
 
         // Log all discovered students with their IDs in a prominent way
         const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-        this._mmLog('info', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
+        this._mmLog('debug', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
       } else {
         this._mmLog('debug', null, 'Auto-discovered students already assigned; skipping reassignment');
       }
@@ -1123,7 +1128,7 @@ module.exports = NodeHelper.create({
         this.config = normalizedConfig;
 
         this._mmLog(
-          'info',
+          'debug',
           null,
           `Data request received (FETCH_DATA identifier=${identifier}, students=${Array.isArray(normalizedConfig.students) ? normalizedConfig.students.length : 0})`
         );
