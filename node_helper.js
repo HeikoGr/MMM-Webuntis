@@ -366,6 +366,9 @@ module.exports = NodeHelper.create({
       );
     }
 
+    const authOptions = this._getStandardAuthOptions(options);
+    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+
     return webuntisApiService.getTimetable({
       getAuth: () =>
         this.authService.getAuth({
@@ -373,8 +376,9 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: this._getStandardAuthOptions(options),
+          options: authOptions,
         }),
+      onAuthError: () => this.authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -388,6 +392,9 @@ module.exports = NodeHelper.create({
   },
 
   async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const authOptions = this._getStandardAuthOptions(options);
+    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+
     return webuntisApiService.getExams({
       getAuth: () =>
         this.authService.getAuth({
@@ -395,8 +402,9 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: this._getStandardAuthOptions(options),
+          options: authOptions,
         }),
+      onAuthError: () => this.authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -410,6 +418,9 @@ module.exports = NodeHelper.create({
   },
 
   async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const authOptions = this._getStandardAuthOptions(options);
+    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+
     return webuntisApiService.getHomework({
       getAuth: () =>
         this.authService.getAuth({
@@ -417,8 +428,9 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: this._getStandardAuthOptions(options),
+          options: authOptions,
         }),
+      onAuthError: () => this.authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -429,6 +441,9 @@ module.exports = NodeHelper.create({
   },
 
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+    const authOptions = this._getStandardAuthOptions(options);
+    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+
     return webuntisApiService.getAbsences({
       getAuth: () =>
         this.authService.getAuth({
@@ -436,8 +451,9 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: this._getStandardAuthOptions(options),
+          options: authOptions,
         }),
+      onAuthError: () => this.authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -448,6 +464,9 @@ module.exports = NodeHelper.create({
   },
 
   async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
+    const authOptions = this._getStandardAuthOptions(options);
+    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+
     return webuntisApiService.getMessagesOfDay({
       getAuth: () =>
         this.authService.getAuth({
@@ -455,8 +474,9 @@ module.exports = NodeHelper.create({
           username,
           password,
           server,
-          options: this._getStandardAuthOptions(options),
+          options: authOptions,
         }),
+      onAuthError: () => this.authService.invalidateCache(cacheKey),
       server,
       date,
       logger: this._mmLog.bind(this),
