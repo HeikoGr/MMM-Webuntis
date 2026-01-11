@@ -512,11 +512,11 @@ async function cmdFetch(flags) {
       const idx = parseInt(studentIndexFlag, 10);
       studentIndices = [idx];
     } else if (allStudents) {
-      // All students requested (explicit flag)
+      // All students explicitly requested
       studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
     } else {
-      // Default: first student only (backward compatibility)
-      studentIndices = [0];
+      // Default: all students (changed from first-only for better UX)
+      studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
     }
 
     Log.wrapper_info(`\n📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
@@ -559,7 +559,7 @@ USAGE:
 
 OPTIONS:
   --config  | -c   <path>    Path to config.js (auto-detected if omitted)
-  --student | -s   <index>   Student index to test (default: 0, or all if no -s given)
+  --student | -s   <index>   Student index to test (default: all students)
   --action  | -a   <widget>  Which widget(s) to fetch (default: all):
                              all, auth, lessons, grid, exams, homework, absences, messagesofday
                              or combinations: lessons,grid  or  exams,homework
@@ -570,17 +570,17 @@ OPTIONS:
 
 EXAMPLES:
 
-  # Fetch all data for first student only (default)
+  # Fetch all data for all configured students (default)
   node --run debug
 
-  # Fetch for all configured students
-  node --run debug -- --all
+  # Fetch for specific student only
+  node --run debug -- --student 0
 
   # Fetch for specific student with verbose output
   node --run debug -- --student 1 --verbose
 
   # Fetch only exams widget for all students
-  node --run debug -- --all --action exams
+  node --run debug -- --action exams
 
   # Fetch lessons and grid widgets (timetable data)
   node --run debug -- --action lessons,grid
