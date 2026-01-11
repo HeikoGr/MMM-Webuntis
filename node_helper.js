@@ -38,6 +38,11 @@ module.exports = NodeHelper.create({
     this._configWarningsSent = false;
     // Persist debugDate across FETCH_DATA requests to ensure consistent date-based testing
     this._persistedDebugDate = null;
+    // Multi-instance support: store config per identifier
+    this._configsByIdentifier = new Map();
+    this._pendingFetchByCredKey = new Map(); // Track pending fetches to coalesce requests
+    this._coalescingTimer = null;
+    this._coalescingDelay = 2000; // 2 seconds window to coalesce requests
   },
 
   _normalizeLegacyConfig(cfg) {
@@ -1048,37 +1053,31 @@ module.exports = NodeHelper.create({
     this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
 
     if (notification === 'FETCH_DATA') {
-      // Assign incoming payload to module config
-      // Normalize legacy config keys server-side
-      const { normalizedConfig } = applyLegacyMappings(payload);
-      this.config = normalizedConfig;
-
-      // Persist debugDate: save it if present in current config, otherwise use the persisted one
-      if (this.config.debugDate) {
-        this._persistedDebugDate = this.config.debugDate;
-        this._mmLog('debug', null, `[FETCH_DATA] Received debugDate="${this.config.debugDate}"`);
-      } else if (this._persistedDebugDate) {
-        // No debugDate in current request, use the persisted one from previous request
-        this.config.debugDate = this._persistedDebugDate;
-        this._mmLog('debug', null, `[FETCH_DATA] Using persisted debugDate="${this._persistedDebugDate}"`);
-      } else {
-        this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
-      }
-
       // Validate configuration and return errors to frontend if invalid
       try {
         // Apply legacy mappings to convert old keys to new structure (includes normalization)
-        const { normalizedConfig, legacyUsed } = applyLegacyMappings(this.config, {
+        const { normalizedConfig, legacyUsed } = applyLegacyMappings(payload, {
           warnCallback: (msg) => this._mmLog('warn', null, msg),
         });
+
+        const identifier = normalizedConfig.id || 'default';
+
+        // Persist debugDate: save it if present in current config, otherwise use the persisted one
+        if (normalizedConfig.debugDate) {
+          this._persistedDebugDate = normalizedConfig.debugDate;
+          this._mmLog('debug', null, `[FETCH_DATA] Received debugDate="${normalizedConfig.debugDate}"`);
+        } else if (this._persistedDebugDate) {
+          // No debugDate in current request, use the persisted one from previous request
+          normalizedConfig.debugDate = this._persistedDebugDate;
+          this._mmLog('debug', null, `[FETCH_DATA] Using persisted debugDate="${this._persistedDebugDate}"`);
+        } else {
+          this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
+        }
 
         // Ensure displayMode is lowercase (part of normalization)
         if (typeof normalizedConfig.displayMode === 'string') {
           normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
         }
-
-        // Persist normalized config so the helper uses mapped keys everywhere
-        this.config = normalizedConfig;
 
         const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
         const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
@@ -1108,26 +1107,58 @@ module.exports = NodeHelper.create({
             this._mmLog('debug', null, 'CONFIG_WARNING suppressed (already sent)');
           }
         }
-      } catch (e) {
-        this._mmLog('debug', null, `Config validation failed unexpectedly: ${this._formatErr(e)}`);
-      }
 
-      this._mmLog(
-        'info',
-        null,
-        `Data request received (FETCH_DATA for students=${Array.isArray(this.config.students) ? this.config.students.length : 0})`
-      );
+        // Store validated config per identifier for multi-instance support
+        this._configsByIdentifier.set(identifier, normalizedConfig);
+        // Also set as global config for backward compatibility (use most recent)
+        this.config = normalizedConfig;
 
-      // Debug: show which interval keys frontend sent (updateInterval preferred)
-      try {
+        this._mmLog(
+          'info',
+          null,
+          `Data request received (FETCH_DATA identifier=${identifier}, students=${Array.isArray(normalizedConfig.students) ? normalizedConfig.students.length : 0})`
+        );
+
+        // Debug: show which interval keys frontend sent (updateInterval preferred)
         this._mmLog(
           'debug',
           null,
-          `Received intervals: updateInterval=${this.config.updateInterval} fetchIntervalMs=${this.config.fetchIntervalMs}`
+          `Received intervals: updateInterval=${normalizedConfig.updateInterval} fetchIntervalMs=${normalizedConfig.fetchIntervalMs}`
         );
-      } catch {
-        // ignore
+      } catch (e) {
+        this._mmLog('error', null, `Config validation failed: ${this._formatErr(e)}`);
+        return;
       }
+
+      // Debounce and coalesce requests from multiple instances
+      // If multiple module instances send FETCH_DATA within a short window,
+      // execute them together to reduce API calls
+      if (this._coalescingTimer) {
+        const identifier = this.config.id || 'default';
+        this._mmLog('debug', null, `[FETCH_DATA] Request queued for coalescing (identifier=${identifier})`);
+        return;
+      }
+
+      this._coalescingTimer = setTimeout(async () => {
+        this._coalescingTimer = null;
+        await this._executeFetchForAllInstances();
+      }, this._coalescingDelay);
+
+      this._mmLog('debug', null, `[FETCH_DATA] Coalescing timer started (${this._coalescingDelay}ms window)`);
+    }
+  },
+
+  /**
+   * Execute fetch for all queued module instances
+   * This reduces redundant API calls when multiple instances are configured
+   */
+  async _executeFetchForAllInstances() {
+    const instances = Array.from(this._configsByIdentifier.entries());
+    this._mmLog('debug', null, `Processing ${instances.length} module instance(s)`);
+
+    for (const [identifier, config] of instances) {
+      // Set as active config for this execution
+      this.config = config;
 
       try {
         // Auto-discover students from app/data when parent credentials are provided but students[] is missing
@@ -1169,7 +1200,6 @@ module.exports = NodeHelper.create({
         }
 
         // Group students by credential so we can reuse the same untis session
-        const identifier = this.config.id;
         const groups = new Map();
 
         // Group students by credential. Normalize each student config for legacy key compatibility.
@@ -1182,15 +1212,29 @@ module.exports = NodeHelper.create({
           groups.get(credKey).push(normalizedStudent);
         }
 
-        // For each credential group process independently. Do not coalesce requests
-        // across module instances so that per-instance options are always respected.
+        // Process each credential group for this instance
         for (const [credKey, students] of groups.entries()) {
-          // Run sequentially to reduce peak memory usage on low-RAM devices
-          await this.processGroup(credKey, students, identifier);
+          // Check if already processing this credKey from another instance
+          if (this._pendingFetchByCredKey.has(credKey)) {
+            this._mmLog('debug', null, `Skipping duplicate fetch for credKey=${credKey} (already processing from another instance)`);
+            continue;
+          }
+
+          // Mark as processing
+          this._pendingFetchByCredKey.set(credKey, true);
+
+          try {
+            // Run sequentially to reduce peak memory usage on low-RAM devices
+            await this.processGroup(credKey, students, identifier);
+          } finally {
+            // Remove from pending after completion
+            this._pendingFetchByCredKey.delete(credKey);
+          }
         }
-        this._mmLog('debug', null, 'Successfully fetched data');
+
+        this._mmLog('debug', null, `Successfully fetched data for instance ${identifier}`);
       } catch (error) {
-        this._mmLog('error', null, `Error loading Untis data: ${error}`);
+        this._mmLog('error', null, `Error loading Untis data for instance ${identifier}: ${error}`);
       }
     }
   },
@@ -1563,10 +1607,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          999 // Default: show all if not configured
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1591,7 +1635,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1674,7 +1718,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
