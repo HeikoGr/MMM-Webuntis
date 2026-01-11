@@ -94,7 +94,7 @@ untis://setschool?school=SCHOOL_NAME&user=USERNAME&url=SERVER_URL&key=API_KEY
 
 ```javascript
 const { WebUntisQR } = require('webuntis');
-const Authenticator = require('otplib').authenticator;
+const { generate } = require('otplib');
 const { URL } = require('url');
 
 const qrcode = 'untis://setschool?school=...&user=...&url=...&key=...';
@@ -103,7 +103,8 @@ const qrcode = 'untis://setschool?school=...&user=...&url=...&key=...';
 const client = new WebUntisQR(
   qrcode,
   'my-app-name',
-  Authenticator,
+  // Pass async OTP generator function for otplib v13
+  async (secret) => await generate({ secret }),
   URL
 );
 

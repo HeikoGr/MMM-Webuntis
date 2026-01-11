@@ -685,7 +685,9 @@ Module.register('MMM-Webuntis', {
       const warnContainer = document.createDocumentFragment();
       for (const w of Array.from(this.moduleWarningsSet)) {
         const warnDiv = document.createElement('div');
-        warnDiv.className = 'mmm-webuntis-warning small bright';
+        // Add critical class for dependency-related warnings
+        const isCritical = w.includes('Dependency issues') || w.includes('npm install') || w.includes('node_modules');
+        warnDiv.className = isCritical ? 'mmm-webuntis-warning critical small bright' : 'mmm-webuntis-warning small bright';
         try {
           warnDiv.textContent = `⚠️ ${w}`;
         } catch {
@@ -834,6 +836,11 @@ Module.register('MMM-Webuntis', {
         if (!this.moduleWarningsSet.has(w)) {
           this.moduleWarningsSet.add(w);
           this._log('warn', `Config warning: ${w}`);
+
+          // Show critical dependency warnings as browser notification
+          if (w.includes('Dependency issues') || w.includes('npm install')) {
+            this._log('error', `CRITICAL: ${w}`);
+          }
         }
       });
       this.updateDom();

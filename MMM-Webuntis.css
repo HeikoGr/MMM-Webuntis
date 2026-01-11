@@ -383,3 +383,22 @@
   color: #ff9800;
   font-weight: 600;
 }
+
+/* Critical warnings (e.g., dependency issues) */
+.MMM-Webuntis .mmm-webuntis-warning.critical {
+  border-left-color: #f44336;
+  background-color: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+  font-weight: 700;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}

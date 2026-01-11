@@ -24,7 +24,10 @@
     "lint:fix": "eslint --fix && prettier --write .",
     "test:spelling": "cspell .",
     "check": "node cli/node_helper_wrapper.js || true",
-    "debug": "node cli/node_helper_wrapper.js"
+    "debug": "node cli/node_helper_wrapper.js",
+    "preinstall:check": "node -e \"process.exit(require('fs').existsSync('node_modules') ? 0 : 1)\" && echo 'node_modules exists' || echo 'npm install needed'",
+    "install:check": "npm list --depth=0 2>&1 | grep -q 'missing:' && echo 'Missing dependencies - run: npm install' || echo 'All dependencies installed'",
+    "deps:check": "node scripts/check-deps.js"
   },
   "lint-staged": {
     "*": [
@@ -33,7 +36,7 @@
     ]
   },
   "dependencies": {
-    "otplib": "^12.0.1"
+    "otplib": "^13.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

@@ -607,3 +607,58 @@ graph TB
 ```
 
 → For a comprehensive overview of functions, data flow, initialization phases, and detailed diagrams, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Development & Maintenance
+
+### Available npm Scripts
+
+```bash
+# Code quality
+node --run lint              # Check code style and formatting
+node --run lint:fix          # Auto-fix linting and formatting issues
+node --run test:spelling     # Check spelling in code and docs
+
+# Dependency management
+node --run deps:check        # Check if npm install is needed
+npm install                  # Install/update dependencies
+
+# Testing & debugging
+node --run check             # Test configuration (non-failing)
+node --run debug             # Test configuration (strict mode)
+```
+
+### Checking Dependencies
+
+To verify if `npm install` is needed, use:
+
+```bash
+node --run deps:check
+```
+
+This script checks:
+- ✅ Existence of `node_modules` directory
+- ✅ Presence of `package-lock.json`
+- ✅ Modification time comparison (package.json vs package-lock.json)
+- ✅ All dependencies from package.json are installed
+- ✅ No version mismatches detected by `npm list`
+
+**Example output:**
+
+```
+📦 Dependency Check Results:
+
+✅ All dependencies are properly installed
+✅ No npm install needed
+```
+
+or if issues are detected:
+
+```
+📦 Dependency Check Results:
+
+Issues found:
+  ❌ Missing dependencies: otplib
+  ⚠️  package.json is newer than package-lock.json
+
+🔧 Action required: Run npm install
+```
