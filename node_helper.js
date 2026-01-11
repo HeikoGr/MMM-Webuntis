@@ -998,6 +998,9 @@ module.exports = NodeHelper.create({
       }
 
       // Authentication complete via authService (no login() needed)
+      // Collect all student payloads before sending to avoid multiple DOM updates
+      const studentPayloads = [];
+
       for (const student of students) {
         try {
           // ===== VALIDATE STUDENT CONFIG =====
@@ -1017,6 +1020,10 @@ module.exports = NodeHelper.create({
           const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
+          } else {
+            // Add warnings to payload
+            const uniqWarnings = Array.from(new Set(groupWarnings));
+            studentPayloads.push({ ...payload, id: identifier, warnings: uniqWarnings });
           }
         } catch (err) {
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
@@ -1037,6 +1044,12 @@ module.exports = NodeHelper.create({
             this._mmLog('warn', student, warningMsg);
           }
         }
+      }
+
+      // Send all collected payloads at once to minimize DOM redraws
+      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s)`);
+      for (const payload of studentPayloads) {
+        this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
@@ -1534,7 +1547,6 @@ module.exports = NodeHelper.create({
             logger(`✗ Exams failed (${describeTarget(target)}): ${restError.message}`);
           }
         }
-        this._lastRawExams = rawExams;
       } catch (error) {
         this._mmLog('error', student, `Exams failed: ${error && error.message ? error.message : error}\n`);
       }
@@ -1807,12 +1819,12 @@ module.exports = NodeHelper.create({
         this._mmLog(
           'debug',
           student,
-          `Skipping empty lessons warning: holiday "${activeHoliday.longName || activeHoliday.name}" (today=${todayYmd})`
+          `Skipping empty lessons warning: "${activeHoliday.longName || activeHoliday.name}" (today=${todayYmd})`
         );
       }
 
-      const uniqWarnings = Array.from(new Set(warnings));
-      const forSend = { ...payload, id: identifier, warnings: uniqWarnings };
+      // Attach warnings to payload for caller to merge
+      payload._warnings = Array.from(new Set(warnings));
 
       // Optional: write debug dumps of the payload delivered to the frontend.
       // Enable by setting `dumpBackendPayloads: true` in the module config.
@@ -1821,9 +1833,9 @@ module.exports = NodeHelper.create({
           const dumpDir = path.join(__dirname, 'debug_dumps');
           if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
           const safeTitle = (student && student.title ? student.title : 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
-          const fname = `${Date.now()}_${safeTitle}_${String(forSend.apiUsed || 'api')}.json`;
+          const fname = `${Date.now()}_${safeTitle}_api.json`;
           const target = path.join(dumpDir, fname);
-          fs.writeFileSync(target, JSON.stringify(forSend, null, 2), 'utf8');
+          fs.writeFileSync(target, JSON.stringify(payload, null, 2), 'utf8');
           this._mmLog('debug', student, `Wrote debug payload to ${path.join('debug_dumps', fname)}`, 'debug');
         }
       } catch (err) {
@@ -1835,9 +1847,9 @@ module.exports = NodeHelper.create({
         student,
         `✓ Data ready: timetable=${compactTimetable.length} exams=${compactExams.length} hw=${compactHomeworks.length} abs=${compactAbsences.length}\n`
       );
-      this.sendSocketNotification('GOT_DATA', forSend);
     } catch (err) {
-      this._mmLog('error', student, `Failed to send GOT_DATA to ${identifier}: ${this._formatErr(err)}`);
+      this._mmLog('error', student, `Failed to prepare payload for ${identifier}: ${this._formatErr(err)}`);
+      return null;
     }
     return payload;
   },
