@@ -1633,10 +1633,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-            student.homework?.daysAhead ??
-            this.config?.homework?.nextDays ??
-            this.config?.homework?.daysAhead ??
-            999 // Default: show all if not configured
+          student.homework?.daysAhead ??
+          this.config?.homework?.nextDays ??
+          this.config?.homework?.daysAhead ??
+          999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1661,7 +1661,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1744,7 +1744,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
