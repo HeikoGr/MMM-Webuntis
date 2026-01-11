@@ -28,8 +28,17 @@ module.exports = NodeHelper.create({
     this._mmLog('debug', null, 'Node helper started');
     // Initialize unified logger
     this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
+
+    // Create lib logger wrapper that adapts to _mmLog signature
+    // lib classes call: logger(level, message)
+    // _mmLog expects: (level, student, message)
+    const libLogger = (level, message) => {
+      // Add [lib] prefix to distinguish lib logs from module logs
+      this._mmLog(level, null, `[lib] ${message}`);
+    };
+
     // Initialize AuthService for token and authentication management
-    this.authService = new AuthService(this._mmLog.bind(this));
+    this.authService = new AuthService({ logger: libLogger });
     // Initialize CacheManager for class ID and other caching
     this.cacheManager = new CacheManager(this._mmLog.bind(this));
     // expose payload compactor so linters don't flag unused imports until full refactor
@@ -109,9 +118,9 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------
 
   _mmLog(level, student, message) {
-    const moduleTag = '[MMM-Webuntis]';
-    const studentTag = student && student.title ? ` [${String(student.title).trim()}]` : '';
-    const formatted = `${moduleTag}${studentTag} ${message}`;
+    // Don't add [MMM-Webuntis] tag here - MagicMirror's Log methods add it automatically
+    const studentTag = student && student.title ? `[${String(student.title).trim()}] ` : '';
+    const formatted = `${studentTag}${message}`;
 
     // Always forward debug messages to the underlying MagicMirror logger.
     // The MagicMirror logging subsystem (or the environment) decides which
