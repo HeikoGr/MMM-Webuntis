@@ -24,7 +24,8 @@ const ANSI = {
 
 const stripModuleTag = (str) => {
   if (typeof str === 'string') {
-    return str.replace(/^\[MMM-Webuntis\]\s*/, '');
+    // Remove all [MMM-Webuntis] tags (can appear multiple times)
+    return str.replace(/\[MMM-Webuntis\]\s*/g, '');
   }
   return str;
 };
@@ -76,7 +77,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => { };
+    nodeHelper.sendSocketNotification = () => {};
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
