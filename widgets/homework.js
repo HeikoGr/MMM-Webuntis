@@ -1,13 +1,19 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addTableRow, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
-  function renderHomeworksForStudent(ctx, table, studentCellTitle, studentConfig, homeworks) {
+  function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
+
+    // Determine mode and handle header
+    const mode = studentConfig?.mode ?? 'compact';
+    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+    // Header is already added by main module if studentCellTitle is empty
+    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
       log('debug', `[homework] no data`);
-      addTableRow(table, 'homeworkRowEmpty', studentCellTitle, ctx.translate('no_homework'));
+      addRow(container, 'homeworkRowEmpty', studentCell, ctx.translate('no_homework'));
       return 1;
     }
 
@@ -34,7 +40,7 @@
       if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
       const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
 
-      addTableRow(table, 'homeworkRow', studentCellTitle, left, right);
+      addRow(container, 'homeworkRow', studentCell, left, right);
       addedRows++;
     }
 

@@ -234,19 +234,19 @@ Module.register('MMM-Webuntis', {
   _getDomHelper() {
     const helper = this._getWidgetApi()?.dom || null;
     if (!helper) {
-      this._log('warn', 'MMMW Webuntis dom helper not available, table helpers will be skipped.');
+      this._log('warn', 'MMM-Webuntis dom helper not available, widget container helpers will be skipped.');
     }
     return helper;
   },
 
-  _createWidgetTable() {
+  _createWidgetContainer() {
     const helper = this._getDomHelper();
-    if (helper && typeof helper.createTable === 'function') {
-      return helper.createTable();
+    if (helper && typeof helper.createContainer === 'function') {
+      return helper.createContainer();
     }
-    const table = document.createElement('table');
-    table.className = 'bright small light';
-    return table;
+    const container = document.createElement('div');
+    container.className = 'wu-widget-container bright small light';
+    return container;
   },
 
   _shouldRenderStudentHeader(studentConfig) {
@@ -254,11 +254,11 @@ Module.register('MMM-Webuntis', {
     return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
   },
 
-  _prepareStudentCellTitle(table, studentTitle, studentConfig) {
+  _prepareStudentLabel(container, studentTitle, studentConfig) {
     if (this._shouldRenderStudentHeader(studentConfig)) {
       const helper = this._getDomHelper();
-      if (helper && typeof helper.addTableHeader === 'function') {
-        helper.addTableHeader(table, studentTitle);
+      if (helper && typeof helper.addHeader === 'function') {
+        helper.addHeader(container, studentTitle);
       }
       return '';
     }
@@ -281,17 +281,17 @@ Module.register('MMM-Webuntis', {
   },
 
   _renderWidgetTableRows(studentTitles, renderRow) {
-    // Create a fragment that will contain one table per student (if they have rows).
+    // Create a fragment that will contain one container per student (if they have rows).
     const frag = document.createDocumentFragment();
 
     for (const studentTitle of studentTitles) {
       const studentConfig = this.configByStudent?.[studentTitle] || this.config;
-      const table = this._createWidgetTable();
-      const studentCellTitle = this._prepareStudentCellTitle(table, studentTitle, studentConfig);
+      const container = this._createWidgetContainer();
+      const studentLabel = this._prepareStudentLabel(container, studentTitle, studentConfig);
       try {
-        const count = renderRow(studentTitle, studentCellTitle, studentConfig, table);
+        const count = renderRow(studentTitle, studentLabel, studentConfig, container);
         if (count > 0) {
-          frag.appendChild(table);
+          frag.appendChild(container);
         }
       } catch (err) {
         this._log('error', `Error rendering widget for ${studentTitle}:`, err);
@@ -374,7 +374,12 @@ Module.register('MMM-Webuntis', {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
     const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
 
-    const sendConfig = { ...this.config, students: mergedStudents, id: this.identifier };
+    const sendConfig = {
+      ...this.config,
+      students: mergedStudents,
+      id: this.identifier,
+      sessionId: this._sessionId, // Include session ID for config isolation
+    };
 
     // Ensure debugDate persists in the send config
     if (this._persistedDebugDate) {
@@ -483,12 +488,12 @@ Module.register('MMM-Webuntis', {
     return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams);
   },
 
-  _renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
+  _renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     return this._invokeWidgetRenderer(
       'lessons',
       'renderLessonsForStudent',
-      table,
-      studentCellTitle,
+      container,
+      studentLabel,
       studentTitle,
       studentConfig,
       timetable,
@@ -497,24 +502,24 @@ Module.register('MMM-Webuntis', {
     );
   },
 
-  _renderExamsForStudent(table, studentCellTitle, studentConfig, exams) {
-    return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', table, studentCellTitle, studentConfig, exams);
+  _renderExamsForStudent(container, studentLabel, studentConfig, exams) {
+    return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', container, studentLabel, studentConfig, exams);
   },
 
-  _renderHomeworksForStudent(table, studentCellTitle, studentConfig, homeworks) {
-    return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', table, studentCellTitle, studentConfig, homeworks);
+  _renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks) {
+    return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', container, studentLabel, studentConfig, homeworks);
   },
 
-  _renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences) {
-    return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', table, studentCellTitle, studentConfig, absences);
+  _renderAbsencesForStudent(container, studentLabel, studentConfig, absences) {
+    return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', container, studentLabel, studentConfig, absences);
   },
 
-  _renderMessagesOfDayForStudent(table, studentCellTitle, studentConfig, messagesOfDay) {
+  _renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay) {
     return this._invokeWidgetRenderer(
       'messagesofday',
       'renderMessagesOfDayForStudent',
-      table,
-      studentCellTitle,
+      container,
+      studentLabel,
       studentConfig,
       messagesOfDay
     );
@@ -556,6 +561,9 @@ Module.register('MMM-Webuntis', {
 
     this._paused = false;
     this._startNowLineUpdater();
+    // Generate unique session ID for this browser window instance
+    this._sessionId = Math.random().toString(36).substring(2, 11);
+    this._log('debug', `[start] Generated session ID: ${this._sessionId}`);
 
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
@@ -741,41 +749,47 @@ Module.register('MMM-Webuntis', {
 
       if (widget === 'lessons') {
         this._log('debug', '[lessons-check] Rendering lessons widget');
-        const lessonsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
-          const timetable = this.timetableByStudent[studentTitle] || [];
-          const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
-          const holidays = this.holidaysByStudent?.[studentTitle] || [];
-          this._log(
-            'debug',
-            `[lessons-check] ${studentTitle}: timetable=${timetable.length}, holidays=${holidays.length}, holidayMap=${Object.keys(this.holidayMapByStudent?.[studentTitle] || {}).length}`
-          );
-          return this._renderListForStudent(table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays);
-        });
-        if (lessonsTable) {
-          this._log('debug', '[lessons-check] Appending lessons table to wrapper');
-          wrapper.appendChild(lessonsTable);
+        const lessonsContainer = this._renderWidgetTableRows(
+          sortedStudentTitles,
+          (studentTitle, studentLabel, studentConfig, container) => {
+            const timetable = this.timetableByStudent[studentTitle] || [];
+            const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
+            const holidays = this.holidaysByStudent?.[studentTitle] || [];
+            this._log(
+              'debug',
+              `[lessons-check] ${studentTitle}: timetable=${timetable.length}, holidays=${holidays.length}, holidayMap=${Object.keys(this.holidayMapByStudent?.[studentTitle] || {}).length}`
+            );
+            return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
+          }
+        );
+        if (lessonsContainer) {
+          this._log('debug', '[lessons-check] Appending lessons container to wrapper');
+          wrapper.appendChild(lessonsContainer);
         } else {
-          this._log('debug', '[lessons-check] No lessons table returned');
+          this._log('debug', '[lessons-check] No lessons container returned');
         }
         continue;
       }
 
       if (widget === 'exams') {
-        const examsTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
+        const examsContainer = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentLabel, studentConfig, container) => {
           const exams = this.examsByStudent?.[studentTitle] || [];
           if (!Array.isArray(exams) || Number(studentConfig?.examsDaysAhead) <= 0) return 0;
-          return this._renderExamsForStudent(table, studentCellTitle, studentConfig, exams);
+          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
         });
-        if (examsTable) wrapper.appendChild(examsTable);
+        if (examsContainer) wrapper.appendChild(examsContainer);
         continue;
       }
 
       if (widget === 'homework') {
-        const homeworkTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
-          const homeworks = this.homeworksByStudent?.[studentTitle] || [];
-          return this._renderHomeworksForStudent(table, studentCellTitle, studentConfig, homeworks);
-        });
-        if (homeworkTable) wrapper.appendChild(homeworkTable);
+        const homeworkContainer = this._renderWidgetTableRows(
+          sortedStudentTitles,
+          (studentTitle, studentLabel, studentConfig, container) => {
+            const homeworks = this.homeworksByStudent?.[studentTitle] || [];
+            return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
+          }
+        );
+        if (homeworkContainer) wrapper.appendChild(homeworkContainer);
         continue;
       }
 
@@ -789,20 +803,26 @@ Module.register('MMM-Webuntis', {
           wrapper.appendChild(infoDiv);
         }
 
-        const absencesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
-          const absences = this.absencesByStudent?.[studentTitle] || [];
-          return this._renderAbsencesForStudent(table, studentCellTitle, studentConfig, absences);
-        });
-        if (absencesTable) wrapper.appendChild(absencesTable);
+        const absencesContainer = this._renderWidgetTableRows(
+          sortedStudentTitles,
+          (studentTitle, studentLabel, studentConfig, container) => {
+            const absences = this.absencesByStudent?.[studentTitle] || [];
+            return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
+          }
+        );
+        if (absencesContainer) wrapper.appendChild(absencesContainer);
         continue;
       }
 
       if (widget === 'messagesofday') {
-        const messagesTable = this._renderWidgetTableRows(sortedStudentTitles, (studentTitle, studentCellTitle, studentConfig, table) => {
-          const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
-          return this._renderMessagesOfDayForStudent(table, studentCellTitle, studentConfig, messagesOfDay);
-        });
-        if (messagesTable) wrapper.appendChild(messagesTable);
+        const messagesContainer = this._renderWidgetTableRows(
+          sortedStudentTitles,
+          (studentTitle, studentLabel, studentConfig, container) => {
+            const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
+            return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
+          }
+        );
+        if (messagesContainer) wrapper.appendChild(messagesContainer);
         continue;
       }
     }
@@ -827,6 +847,18 @@ Module.register('MMM-Webuntis', {
   socketNotificationReceived(notification, payload) {
     if (payload && payload.id && this.identifier !== payload.id) {
       return;
+    }
+
+    // Session isolation: only process data for our own session
+    if (payload && payload.sessionKey && this._sessionId) {
+      const expectedSessionKey = `${this.identifier}:${this._sessionId}`;
+      if (payload.sessionKey !== expectedSessionKey) {
+        this._log(
+          'debug',
+          `[socketNotificationReceived] Ignoring data for different session (ours: ${expectedSessionKey}, received: ${payload.sessionKey})`
+        );
+        return;
+      }
     }
 
     if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
