@@ -543,6 +543,16 @@ Module.register('MMM-Webuntis', {
       // ignore
     }
 
+    // Multi-instance support via explicit identifiers.
+    // For multiple MMM-Webuntis instances, you MUST add unique 'identifier' fields in config.js:
+    // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
+    // Without explicit identifiers, MagicMirror will auto-assign them (MMM-Webuntis_0, MMM-Webuntis_1, etc)
+    if (this.identifier) {
+      this._log('debug', `[start] Using explicit identifier from config: ${this.identifier}`);
+    } else {
+      this._log('warn', '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js');
+    }
+
     this.timetableByStudent = {};
     this.examsByStudent = {};
     this.configByStudent = {};
@@ -561,9 +571,19 @@ Module.register('MMM-Webuntis', {
 
     this._paused = false;
     this._startNowLineUpdater();
-    // Generate unique session ID for this browser window instance
-    this._sessionId = Math.random().toString(36).substring(2, 11);
-    this._log('debug', `[start] Generated session ID: ${this._sessionId}`);
+    // Generate or retrieve unique session ID for this browser window instance
+    // Use localStorage to persist the sessionId across page reloads
+    const storageKey = `MMM-Webuntis_sessionId_${this.identifier}`;
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(storageKey)) {
+      this._sessionId = localStorage.getItem(storageKey);
+      this._log('debug', `[start] Retrieved persisted session ID from localStorage: ${this._sessionId}`);
+    } else {
+      this._sessionId = Math.random().toString(36).substring(2, 11);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(storageKey, this._sessionId);
+      }
+      this._log('debug', `[start] Generated new session ID: ${this._sessionId}`);
+    }
 
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
@@ -687,6 +707,20 @@ Module.register('MMM-Webuntis', {
       'debug',
       `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
     );
+
+    // DEBUG: Add instance info to help troubleshoot multi-instance issues
+    if (this.config?.logLevel === 'debug') {
+      const debugDiv = document.createElement('div');
+      debugDiv.style.fontSize = '10px';
+      debugDiv.style.color = '#888';
+      debugDiv.style.padding = '5px';
+      debugDiv.style.backgroundColor = '#f0f0f0';
+      debugDiv.style.marginBottom = '5px';
+      debugDiv.style.borderRadius = '3px';
+      debugDiv.style.fontFamily = 'monospace';
+      debugDiv.textContent = `[DEBUG] Instance: ${this.identifier} | Session: ${this._sessionId}`;
+      wrapper.appendChild(debugDiv);
+    }
 
     // Render any module-level warnings once, above all widgets
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
@@ -845,20 +879,11 @@ Module.register('MMM-Webuntis', {
   },
 
   socketNotificationReceived(notification, payload) {
+    // Filter by id to ensure data goes to the correct module instance
+    // All instances receive the broadcast, but only the matching one processes it
     if (payload && payload.id && this.identifier !== payload.id) {
+      this._log('debug', `[socketNotificationReceived] Ignoring data for different id (ours: ${this.identifier}, received: ${payload.id})`);
       return;
-    }
-
-    // Session isolation: only process data for our own session
-    if (payload && payload.sessionKey && this._sessionId) {
-      const expectedSessionKey = `${this.identifier}:${this._sessionId}`;
-      if (payload.sessionKey !== expectedSessionKey) {
-        this._log(
-          'debug',
-          `[socketNotificationReceived] Ignoring data for different session (ours: ${expectedSessionKey}, received: ${payload.sessionKey})`
-        );
-        return;
-      }
     }
 
     if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
