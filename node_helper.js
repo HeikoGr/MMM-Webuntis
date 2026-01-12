@@ -51,6 +51,8 @@ module.exports = NodeHelper.create({
     this._configsByIdentifier = new Map();
     // Session-based config isolation: each browser window keeps its own config
     this._configsBySession = new Map();
+    // Cache fetched data by credKey so we can reuse for sessions with same credentials
+    this._dataByCredKey = new Map();
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to coalesce requests
     // Session-based coalescing: each session gets its own timer
     this._coalescingTimerBySession = new Map();
@@ -951,12 +953,13 @@ module.exports = NodeHelper.create({
 
   /**
    * Process a credential group: login, fetch data for students and logout.
+   * If cachedAuthSession is provided, reuses it instead of creating a new one.
    * This function respects the inflightRequests Map's pending flag: if pending
    * becomes true while running, it will loop once more to handle the coalesced request.
    */
-  async processGroup(credKey, students, identifier, sessionKey) {
-    // Single-run processing: authenticate, fetch data for each student, and logout.
-    let authSession = null;
+  async processGroup(credKey, students, identifier, sessionKey, cachedAuthSession = null) {
+    // Single-run processing: authenticate (or reuse cached session), fetch data for each student, and logout.
+    let authSession = cachedAuthSession;
     const sample = students[0];
     const groupWarnings = [];
     // Per-fetch-cycle warning deduplication set. Ensures identical warnings
@@ -965,7 +968,12 @@ module.exports = NodeHelper.create({
 
     try {
       try {
-        authSession = await this._createAuthSession(sample, this.config);
+        if (!authSession) {
+          // No cached session - create new one
+          authSession = await this._createAuthSession(sample, this.config);
+        } else {
+          this._mmLog('debug', null, `Reusing cached authSession for credKey=${credKey}`);
+        }
       } catch (err) {
         const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
         this._mmLog('error', null, msg);
@@ -1057,10 +1065,15 @@ module.exports = NodeHelper.create({
       }
 
       // Send all collected payloads at once to minimize DOM redraws
-      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to session ${sessionKey}`);
+      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to identifier ${identifier}`);
+
+      // Cache the authSession by credKey so other sessions can reuse it instead of re-authenticating
+      this._dataByCredKey.set(credKey, authSession);
+
       for (const payload of studentPayloads) {
-        // Add session info so frontend can filter by its own session
-        payload.sessionKey = sessionKey;
+        // Send to ALL module instances with this identifier (via the id field)
+        // Frontend filters by id, not sessionKey, so all instances receive the data
+        payload.id = identifier;
         this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
@@ -1233,7 +1246,6 @@ module.exports = NodeHelper.create({
     }
 
     const config = this._configsBySession.get(sessionKey);
-    const [identifier] = sessionKey.split(':'); // Extract identifier from "identifier:sessionId"
 
     this._mmLog('debug', null, `Processing session: ${sessionKey}`);
 
@@ -1294,21 +1306,54 @@ module.exports = NodeHelper.create({
 
       // Process each credential group for this session
       for (const [credKey, students] of groups.entries()) {
-        // Check if already processing this credKey from another session
-        if (this._pendingFetchByCredKey.has(credKey)) {
-          this._mmLog('debug', null, `Skipping duplicate fetch for credKey=${credKey} (already processing from another session)`);
-          continue;
-        }
+        // Check if we already have a cached authSession for this credKey
+        const cachedAuthSession = this._dataByCredKey.has(credKey) ? this._dataByCredKey.get(credKey) : null;
 
-        // Mark as processing
-        this._pendingFetchByCredKey.set(credKey, true);
+        if (cachedAuthSession) {
+          // Reuse cached authentication session - no need to re-authenticate
+          this._mmLog('debug', null, `Session ${sessionKey}: Found cached authSession for credKey=${credKey}, fetching data`);
 
-        try {
-          // Run sequentially to reduce peak memory usage on low-RAM devices
-          await this.processGroup(credKey, students, identifier, sessionKey);
-        } finally {
-          // Remove from pending after completion
-          this._pendingFetchByCredKey.delete(credKey);
+          // Check if another session is currently fetching this credKey
+          if (this._pendingFetchByCredKey.has(credKey)) {
+            this._mmLog('debug', null, `Session ${sessionKey}: Waiting for another session's fetch of credKey=${credKey} to complete`);
+            // Wait for the other session to finish processing
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+
+          // Process this session's data using the cached authSession
+          const sessionIdentifier = sessionKey.split(':')[0];
+          await this.processGroup(credKey, students, sessionIdentifier, sessionKey, cachedAuthSession);
+        } else {
+          // No cached authSession - need to authenticate and fetch
+          this._mmLog('debug', null, `Session ${sessionKey}: No cached authSession for credKey=${credKey}, authenticating and fetching`);
+
+          // Check if another session is already authenticating this credKey
+          if (this._pendingFetchByCredKey.has(credKey)) {
+            this._mmLog('debug', null, `Session ${sessionKey}: Waiting for another session's authentication of credKey=${credKey}`);
+            // Wait for the other session to complete and cache the authSession
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            // Check again if authSession is now cached
+            if (this._dataByCredKey.has(credKey)) {
+              this._mmLog('debug', null, `Session ${sessionKey}: Using authSession cached by other session`);
+              const cachedSession = this._dataByCredKey.get(credKey);
+              const sessionIdentifier = sessionKey.split(':')[0];
+              await this.processGroup(credKey, students, sessionIdentifier, sessionKey, cachedSession);
+              continue;
+            }
+          }
+
+          // Mark as processing
+          this._pendingFetchByCredKey.set(credKey, true);
+
+          try {
+            // Authenticate and fetch - this caches the authSession in processGroup
+            const sessionIdentifier = sessionKey.split(':')[0];
+            await this.processGroup(credKey, students, sessionIdentifier, sessionKey);
+          } finally {
+            // Remove from pending after completion
+            this._pendingFetchByCredKey.delete(credKey);
+          }
         }
       }
 
@@ -1824,6 +1869,7 @@ module.exports = NodeHelper.create({
     // Build payload and send it. Also return the payload for caching callers.
     const payload = {
       title: student.title,
+      studentId: student.studentId, // Include studentId for filtering in multi-instance broadcasting
       config: student,
       // id will be assigned by the caller to preserve per-request id
       timeUnits: compactGrid,

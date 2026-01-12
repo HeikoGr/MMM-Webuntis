@@ -223,15 +223,15 @@
     const util = widgetRoot.util || {};
     const dom = widgetRoot.dom || {};
     return {
-      log: typeof util.log === 'function' ? util.log : () => { },
+      log: typeof util.log === 'function' ? util.log : () => {},
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
       formatDate: typeof util.formatDate === 'function' ? util.formatDate : () => '',
       formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
       toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
-      addRow: typeof dom.addRow === 'function' ? dom.addRow : () => { },
-      addFullRow: typeof dom.addFullRow === 'function' ? dom.addFullRow : () => { },
-      addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => { },
+      addRow: typeof dom.addRow === 'function' ? dom.addRow : () => {},
+      addFullRow: typeof dom.addFullRow === 'function' ? dom.addFullRow : () => {},
+      addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => {},
       createElement: typeof dom.createElement === 'function' ? dom.createElement : () => document.createElement('div'),
       createContainer: typeof dom.createContainer === 'function' ? dom.createContainer : () => document.createElement('div'),
     };

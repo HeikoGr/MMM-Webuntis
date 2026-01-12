@@ -22,6 +22,9 @@ let config = {
     {
       module: 'MMM-Webuntis',
       position: 'top_right',
+      // REQUIRED for multiple instances: Add a unique identifier.
+      // Each instance MUST have a different identifier.
+      identifier: 'webuntis_instance_1',
       config: {
         // === GLOBAL OPTIONS ===
         header: 'Timetable', // optional header text

@@ -75,6 +75,65 @@ If you are not using the DevContainer, you can still treat the template files as
 
 All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1-L48) in the `defaults` object, organized by feature area. Global options can be declared at the top level of `config` and can be overridden per-student by adding the same property in a student object.
 
+### Multiple Instances (Multi-Student / Multi-Family Setups)
+
+You can run **multiple independent instances** of MMM-Webuntis on the same MagicMirror screen to display different students or families side-by-side or in different positions.
+
+#### Auto-Generated Instance IDs (Recommended)
+
+By default, each instance automatically generates a unique identifier based on:
+- Module position (e.g., `top_left`, `bottom_right`)
+- Configuration content (hashed for uniqueness)
+
+This means **multiple instances will work out-of-the-box without any additional configuration**:
+
+```javascript
+modules: [
+  {
+    module: 'MMM-Webuntis',
+    position: 'top_left',
+    config: {
+      header: 'Alice',
+      students: [{ title: 'Alice', qrcode: 'untis://...' }],
+    },
+  },
+  {
+    module: 'MMM-Webuntis',
+    position: 'top_right',
+    config: {
+      header: 'Bob',
+      students: [{ title: 'Bob', qrcode: 'untis://...' }],
+    },
+  },
+]
+```
+
+#### Explicit Instance IDs (Optional)
+
+For more control or predictable instance identifiers, add an `identifier` field to your module config:
+
+```javascript
+modules: [
+  {
+    module: 'MMM-Webuntis',
+    position: 'top_left',
+    identifier: 'student_alice',  // Unique, stable identifier
+    config: { /* ... */ },
+  },
+  {
+    module: 'MMM-Webuntis',
+    position: 'top_right',
+    identifier: 'student_bob',    // Different identifier
+    config: { /* ... */ },
+  },
+]
+```
+
+**Why might you use explicit identifiers?**
+- For scripting or remote control (if your setup calls MagicMirror modules by name)
+- When you want stable, human-readable instance names
+- For debugging (easier to spot in logs)
+
 ### Global Options
 
 | Option | Type | Default | Description |
