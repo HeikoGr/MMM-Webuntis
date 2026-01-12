@@ -473,22 +473,22 @@ Create `docs/TYPESCRIPT_MIGRATION_GUIDE.md` for:
 
 ## Benefits of TypeScript Migration
 
-TypeScript bietet für MMM-Webuntis erhebliche Vorteile, die sowohl die Entwicklung als auch die langfristige Wartbarkeit des Projekts verbessern.
+TypeScript offers significant advantages for MMM-Webuntis, improving both development efficiency and long-term maintainability of the project.
 
-### 1. **Type Safety - Fehler zur Kompilierzeit statt zur Laufzeit**
+### 1. **Type Safety - Compile-Time Errors Instead of Runtime Errors**
 
-#### Probleme im aktuellen JavaScript-Code
+#### Problems in Current JavaScript Code
 ```javascript
-// Aktuell in JavaScript - keine Typprüfung
+// Current JavaScript - no type checking
 function getLessonTime(lesson) {
-  return lesson.startTime + ' - ' + lesson.endTime; // Was wenn lesson undefined ist?
+  return lesson.startTime + ' - ' + lesson.endTime; // What if lesson is undefined?
 }
 
-// Unbemerkte Fehler möglich:
-const time = getLessonTime(null); // Runtime-Fehler!
+// Unnoticed errors possible:
+const time = getLessonTime(null); // Runtime error!
 ```
 
-#### Mit TypeScript
+#### With TypeScript
 ```typescript
 interface Lesson {
   startTime: string;
@@ -500,19 +500,19 @@ function getLessonTime(lesson: Lesson): string {
   return `${lesson.startTime} - ${lesson.endTime}`;
 }
 
-// Compiler verhindert Fehler:
-const time = getLessonTime(null); // ❌ Compile-Fehler: Argument of type 'null' is not assignable to parameter of type 'Lesson'
+// Compiler prevents errors:
+const time = getLessonTime(null); // ❌ Compile error: Argument of type 'null' is not assignable to parameter of type 'Lesson'
 ```
 
-#### Konkrete Vorteile
-- **Null/Undefined Safety**: Verhindert die häufigsten JavaScript-Fehler (z.B. "Cannot read property 'X' of undefined")
-- **Wrong Type Protection**: Verhindert versehentliches Übergeben falscher Datentypen
-- **API Response Validation**: WebUntis API-Antworten werden gegen definierte Interfaces geprüft
-- **Config Schema Enforcement**: Ungültige Konfigurationen werden sofort erkannt
+#### Concrete Advantages
+- **Null/Undefined Safety**: Prevents the most common JavaScript errors (e.g., "Cannot read property 'X' of undefined")
+- **Wrong Type Protection**: Prevents accidentally passing wrong data types
+- **API Response Validation**: WebUntis API responses are checked against defined interfaces
+- **Config Schema Enforcement**: Invalid configurations are immediately detected
 
-#### Beispiel aus MMM-Webuntis
+#### Example from MMM-Webuntis
 ```typescript
-// Aktuell: Runtime-Validierung nötig
+// Current: Runtime validation needed
 if (config.students && Array.isArray(config.students)) {
   config.students.forEach(student => {
     if (student.username && typeof student.username === 'string') {
@@ -521,7 +521,7 @@ if (config.students && Array.isArray(config.students)) {
   });
 }
 
-// Mit TypeScript: Compile-Zeit-Garantien
+// With TypeScript: Compile-time guarantees
 interface StudentConfig {
   username: string;
   password: string;
@@ -533,21 +533,21 @@ interface ModuleConfig {
   students: StudentConfig[];
 }
 
-// Compiler garantiert korrekte Struktur - keine Runtime-Checks nötig
+// Compiler guarantees correct structure - no runtime checks needed
 ```
 
-### 2. **Bessere IDE-Unterstützung - Produktivitätssteigerung**
+### 2. **Better IDE Support - Productivity Boost**
 
 #### IntelliSense & Autocomplete
 ```typescript
-// TypeScript kennt alle verfügbaren Eigenschaften und Methoden
+// TypeScript knows all available properties and methods
 const lesson: Lesson = getLessonData();
-lesson. // IDE zeigt: startTime, endTime, subject, teacher, room, etc.
+lesson. // IDE shows: startTime, endTime, subject, teacher, room, etc.
 
-// JavaScript: Keine Hilfe, man muss sich erinnern oder Code durchsuchen
+// JavaScript: No help, you have to remember or search through code
 ```
 
-#### Inline-Dokumentation
+#### Inline Documentation
 ```typescript
 /**
  * Fetches timetable data for a specific student and date range.
@@ -564,27 +564,27 @@ async function getTimetable(
   // ...
 }
 
-// IDE zeigt beim Aufrufen automatisch:
-// - Parameter-Namen und -Typen
-// - Return-Typ
-// - JSDoc-Beschreibung
+// IDE automatically shows when calling:
+// - Parameter names and types
+// - Return type
+// - JSDoc description
 ```
 
 #### Jump to Definition
-- **Strg+Click** auf eine Funktion → sofort zur Definition springen
-- Funktioniert über Dateigrenzen hinweg
-- Zeigt alle Verwendungsstellen einer Funktion/Klasse
+- **Ctrl+Click** on a function → jump directly to definition
+- Works across file boundaries
+- Shows all usage locations of a function/class
 
-#### Refactoring-Tools
-- **Rename Symbol**: Umbenennen einer Variable/Funktion in allen Dateien
-- **Extract Function**: Automatisches Extrahieren von Code in neue Funktionen
-- **Move to File**: Code zwischen Dateien verschieben mit automatischen Import-Updates
+#### Refactoring Tools
+- **Rename Symbol**: Rename a variable/function across all files
+- **Extract Function**: Automatically extract code into new functions
+- **Move to File**: Move code between files with automatic import updates
 
-### 3. **Verbesserte Wartbarkeit - Weniger technische Schulden**
+### 3. **Improved Maintainability - Less Technical Debt**
 
-#### Code-Verständlichkeit
+#### Code Understandability
 ```typescript
-// Selbstdokumentierend durch Typen
+// Self-documenting through types
 interface WebUntisApiResponse {
   data: {
     result: {
@@ -599,28 +599,28 @@ interface WebUntisApiResponse {
   };
 }
 
-// Ein Blick genügt, um die Struktur zu verstehen - keine API-Dokumentation nötig
+// One glance is enough to understand the structure - no API documentation needed
 ```
 
-#### Sicheres Refactoring
+#### Safe Refactoring
 ```typescript
-// Änderung einer Interface-Definition
+// Changing an interface definition
 interface Student {
   id: number;
   name: string;
-  displayName: string; // neu hinzugefügt
+  displayName: string; // newly added
 }
 
-// TypeScript findet ALLE Stellen, die aktualisiert werden müssen:
+// TypeScript finds ALL places that need to be updated:
 // ❌ Error in widgets/lessons.ts: Property 'displayName' is missing
 // ❌ Error in lib/dataTransformer.ts: Property 'displayName' is missing
 
-// In JavaScript: Man muss alle Dateien manuell durchsuchen
+// In JavaScript: You have to manually search all files
 ```
 
-#### Bessere Code-Organisation
+#### Better Code Organization
 ```typescript
-// Klare Trennung von Interfaces und Implementierung
+// Clear separation of interfaces and implementation
 // types/webuntis.d.ts
 export interface BearerToken {
   token: string;
@@ -637,9 +637,9 @@ export class AuthService {
 }
 ```
 
-#### Weniger Runtime-Validierung nötig
+#### Less Runtime Validation Needed
 ```typescript
-// JavaScript: Defensive Programmierung überall
+// JavaScript: Defensive programming everywhere
 function processLesson(lesson) {
   if (!lesson) return null;
   if (typeof lesson.startTime !== 'number') return null;
@@ -647,9 +647,9 @@ function processLesson(lesson) {
   // ...
 }
 
-// TypeScript: Typ-System garantiert bereits korrekte Struktur
+// TypeScript: Type system already guarantees correct structure
 function processLesson(lesson: Lesson): ProcessedLesson {
-  // Direkt arbeiten - keine Validierung nötig
+  // Work directly - no validation needed
   return {
     time: formatTime(lesson.startTime, lesson.endTime),
     subject: lesson.subject.name
@@ -657,9 +657,9 @@ function processLesson(lesson: Lesson): ProcessedLesson {
 }
 ```
 
-### 4. **API-Vertrags-Klarheit - WebUntis Integration**
+### 4. **API Contract Clarity - WebUntis Integration**
 
-#### Stark typisierte API-Responses
+#### Strongly Typed API Responses
 ```typescript
 // WebUntis REST API Response Types
 interface TimetableResponse {
@@ -680,12 +680,12 @@ interface TimetableResponse {
   };
 }
 
-// Typsicherheit bei der Verarbeitung
+// Type safety during processing
 async function fetchTimetable(studentId: number): Promise<Lesson[]> {
   const response: TimetableResponse = await api.get('/timetable');
 
   return response.data.elements.map(element => ({
-    // TypeScript prüft, dass alle Felder korrekt gemapped werden
+    // TypeScript checks that all fields are mapped correctly
     date: parseDate(element.date),
     startTime: parseTime(element.startTime),
     endTime: parseTime(element.endTime),
@@ -694,22 +694,22 @@ async function fetchTimetable(studentId: number): Promise<Lesson[]> {
 }
 ```
 
-#### Config-Schema Type-Checked
+#### Config Schema Type-Checked
 ```typescript
-// Vollständige Typ-Definition der Modul-Konfiguration
+// Complete type definition of module configuration
 interface ModuleConfig {
-  // Globale Optionen
+  // Global options
   header?: string;
   updateInterval?: number; // in milliseconds
   logLevel?: 'none' | 'error' | 'warn' | 'info' | 'debug';
   debugDate?: string | null; // YYYY-MM-DD format
   dumpBackendPayloads?: boolean;
 
-  // Display-Optionen
+  // Display options
   displayMode?: string; // comma-separated widget list
   mode?: 'verbose' | 'compact';
 
-  // Authentifizierung
+  // Authentication
   students: Array<{
     name?: string;
     studentId?: number;
@@ -720,7 +720,7 @@ interface ModuleConfig {
     qrcode?: string;
   }>;
 
-  // Widget-spezifische Konfigurationen
+  // Widget-specific configurations
   gridConfig?: GridConfig;
   lessonsConfig?: LessonsConfig;
   examsConfig?: ExamsConfig;
@@ -728,18 +728,18 @@ interface ModuleConfig {
   absencesConfig?: AbsencesConfig;
 }
 
-// Verwendung garantiert Typ-Korrektheit
+// Usage guarantees type correctness
 function validateConfig(config: ModuleConfig): ValidationResult {
-  // TypeScript garantiert, dass config die richtige Struktur hat
+  // TypeScript guarantees that config has the right structure
   if (config.logLevel && !['none', 'error', 'warn', 'info', 'debug'].includes(config.logLevel)) {
-    // Dieser Fehler wird bereits zur Compile-Zeit gefangen
+    // This error is already caught at compile time
   }
 }
 ```
 
-#### Fehlerbehandlung mit Union Types
+#### Error Handling with Union Types
 ```typescript
-// Typsichere Fehlerbehandlung
+// Type-safe error handling
 type ApiResult<T> =
   | { success: true; data: T }
   | { success: false; error: ApiError };
@@ -762,22 +762,22 @@ async function fetchData(): Promise<ApiResult<Lesson[]>> {
   }
 }
 
-// Verwendung mit Type Guards
+// Usage with type guards
 const result = await fetchData();
 if (result.success) {
-  // TypeScript weiß: result.data ist verfügbar
+  // TypeScript knows: result.data is available
   console.log(result.data.length);
 } else {
-  // TypeScript weiß: result.error ist verfügbar
+  // TypeScript knows: result.error is available
   console.error(result.error.message);
 }
 ```
 
-### 5. **Developer Experience - Schnellere Entwicklung**
+### 5. **Developer Experience - Faster Development**
 
-#### Schnellere Entwicklung durch Autocomplete
+#### Faster Development Through Autocomplete
 ```typescript
-// Tippen: "lesson." → IDE schlägt sofort vor:
+// Type: "lesson." → IDE immediately suggests:
 // - startTime: number
 // - endTime: number
 // - subject: Subject
@@ -786,67 +786,67 @@ if (result.success) {
 // - code?: string
 // - info?: string
 
-// Keine Zeit verschwendet mit:
-// - Code durchsuchen
-// - Dokumentation lesen
-// - console.log() zum Testen der Struktur
+// No time wasted with:
+// - Searching through code
+// - Reading documentation
+// - console.log() to test the structure
 ```
 
-#### Weniger Bugs in Production
+#### Fewer Bugs in Production
 ```typescript
-// Typische JavaScript-Bugs, die TypeScript verhindert:
+// Typical JavaScript bugs that TypeScript prevents:
 
-// 1. Typo in Property-Namen
+// 1. Typo in property name
 const name = lesson.subjectt; // ❌ Property 'subjectt' does not exist on type 'Lesson'
 
-// 2. Falsche Funktion aufgerufen
+// 2. Wrong function called
 getLessonTime(student); // ❌ Argument of type 'Student' is not assignable to parameter of type 'Lesson'
 
-// 3. Vergessener Parameter
+// 3. Forgotten parameter
 formatDate(); // ❌ Expected 1 argument, but got 0
 
-// 4. Wrong Return Type
+// 4. Wrong return type
 function getStudentId(): number {
   return "123"; // ❌ Type 'string' is not assignable to type 'number'
 }
 
-// 5. Null-Pointer-Fehler
+// 5. Null-pointer error
 const lesson = lessons.find(l => l.id === 5);
 console.log(lesson.subject); // ❌ Object is possibly 'undefined'
 ```
 
-#### Besseres Onboarding für neue Contributors
+#### Better Onboarding for New Contributors
 ```typescript
-// Neuer Contributor sieht sofort:
-// - Welche Parameter eine Funktion erwartet
-// - Was eine Funktion zurückgibt
-// - Welche Properties ein Objekt hat
-// - Wo eine Funktion verwendet wird
+// New contributor immediately sees:
+// - What parameters a function expects
+// - What a function returns
+// - What properties an object has
+// - Where a function is used
 
-// Kein langes Einarbeiten durch Code-Lesen nötig
-// IDE führt durch den Code wie ein Guide
+// No lengthy onboarding through code reading needed
+// IDE guides through the code like a guide
 ```
 
 #### Refactoring Confidence
 ```typescript
-// Große Änderungen werden sicher:
-// 1. Interface ändern
-// 2. TypeScript zeigt ALLE betroffenen Stellen
-// 3. Systematisch durch alle Fehler gehen
-// 4. Wenn Compiler zufrieden ist → Code funktioniert
+// Large changes become safe:
+// 1. Change interface
+// 2. TypeScript shows ALL affected places
+// 3. Systematically work through all errors
+// 4. When compiler is happy → code works
 
 // In JavaScript:
-// 1. Änderung machen
-// 2. Hoffen, dass man alles gefunden hat
-// 3. Manuelle Tests durchführen
-// 4. Bugs in Production finden
+// 1. Make change
+// 2. Hope you found everything
+// 3. Perform manual tests
+// 4. Find bugs in production
 ```
 
-### 6. **Spezifische Vorteile für MMM-Webuntis**
+### 6. **Specific Benefits for MMM-Webuntis**
 
-#### WebUntis API-Integration
+#### WebUntis API Integration
 ```typescript
-// Klare Typdefinitionen für alle WebUntis-Endpoints
+// Clear type definitions for all WebUntis endpoints
 interface WebUntisRestClient {
   getTimetable(studentId: number, startDate: string, endDate: string): Promise<Lesson[]>;
   getExams(studentId: number): Promise<Exam[]>;
@@ -855,32 +855,32 @@ interface WebUntisRestClient {
   authenticate(credentials: Credentials): Promise<BearerToken>;
 }
 
-// Compiler garantiert korrekte Verwendung
+// Compiler guarantees correct usage
 const client: WebUntisRestClient = new RestClient();
 const lessons = await client.getTimetable(123, '2026-01-01', '2026-01-31');
-// ❌ Fehler bei falschen Parameter-Typen oder falscher Reihenfolge
+// ❌ Error with wrong parameter types or wrong order
 ```
 
-#### Widget-System
+#### Widget System
 ```typescript
-// Einheitliche Widget-Interfaces
+// Uniform widget interfaces
 interface Widget {
   render(data: WidgetData, config: WidgetConfig): HTMLElement;
   update?(data: WidgetData): void;
   destroy?(): void;
 }
 
-// Jedes Widget muss dieses Interface implementieren
+// Each widget must implement this interface
 export class LessonsWidget implements Widget {
   render(data: WidgetData, config: WidgetConfig): HTMLElement {
-    // TypeScript garantiert korrekte Implementierung
+    // TypeScript guarantees correct implementation
   }
 }
 ```
 
-#### Konfigurationsvalidierung
+#### Configuration Validation
 ```typescript
-// Automatische Validierung durch Typ-System
+// Automatic validation through type system
 type LogLevel = 'none' | 'error' | 'warn' | 'info' | 'debug';
 
 interface Config {
@@ -892,65 +892,65 @@ const config: Config = {
 };
 ```
 
-### 7. **Langfristige Vorteile**
+### 7. **Long-Term Benefits**
 
-#### Skalierbarkeit
-- Größere Codebase bleibt wartbar
-- Neue Features sicherer hinzufügen
-- Komplexe Refactorings möglich
+#### Scalability
+- Larger codebase remains maintainable
+- Safer to add new features
+- Complex refactorings possible
 
-#### Dokumentation
-- Code dokumentiert sich selbst durch Typen
-- TSDoc für zusätzliche Informationen
-- API-Dokumentation automatisch generierbar
+#### Documentation
+- Code documents itself through types
+- TSDoc for additional information
+- API documentation automatically generatable
 
-#### Qualitätssicherung
-- Weniger Tests nötig (Typ-System übernimmt viel)
-- Höhere Test-Abdeckung durch weniger Edge-Cases
-- Refactoring-Tests automatisch durch Compiler
+#### Quality Assurance
+- Fewer tests needed (type system covers much)
+- Higher test coverage through fewer edge cases
+- Refactoring tests automatic through compiler
 
 #### Community & Ecosystem
-- Moderne Entwicklungs-Standards
-- Bessere Integration mit Tools (VS Code, WebStorm)
-- Attraktiver für Contributors
-- Zukunftssicher
+- Modern development standards
+- Better integration with tools (VS Code, WebStorm)
+- More attractive for contributors
+- Future-proof
 
-### 8. **Messbare Verbesserungen**
+### 8. **Measurable Improvements**
 
-#### Code-Qualität
-- **95%+ Type Coverage**: Fast alle Code-Pfade typisiert
-- **Zero Runtime Type Errors**: Typ-Fehler unmöglich
-- **50% weniger Bugs**: Studien zeigen 15-50% weniger Bugs mit TypeScript
+#### Code Quality
+- **95%+ Type Coverage**: Nearly all code paths typed
+- **Zero Runtime Type Errors**: Type errors impossible
+- **50% Fewer Bugs**: Studies show 15-50% fewer bugs with TypeScript
 
-#### Entwicklungsgeschwindigkeit
-- **30-50% schnellere Feature-Entwicklung**: Autocomplete & IntelliSense
-- **70% weniger Debugging-Zeit**: Fehler zur Compile-Zeit statt Runtime
-- **Sofortiges Feedback**: Fehler beim Tippen, nicht beim Ausführen
+#### Development Speed
+- **30-50% Faster Feature Development**: Autocomplete & IntelliSense
+- **70% Less Debugging Time**: Errors at compile time instead of runtime
+- **Immediate Feedback**: Errors while typing, not when executing
 
-#### Wartungskosten
-- **Einfacheres Refactoring**: Compiler findet alle betroffenen Stellen
-- **Weniger Regressions-Bugs**: Typ-System verhindert viele Breaking Changes
-- **Bessere Code-Verständlichkeit**: Neue Entwickler produktiver
+#### Maintenance Costs
+- **Easier Refactoring**: Compiler finds all affected places
+- **Fewer Regression Bugs**: Type system prevents many breaking changes
+- **Better Code Understandability**: New developers more productive
 
-### Zusammenfassung
+### Summary
 
-Die Migration zu TypeScript ist eine **Investition in die Zukunft** des Projekts:
+Migrating to TypeScript is an **investment in the future** of the project:
 
-| Aspekt | Vorher (JavaScript) | Nachher (TypeScript) |
-|--------|---------------------|----------------------|
-| **Fehler-Erkennung** | Runtime | Compile-Zeit |
-| **IDE-Support** | Basis | Exzellent |
-| **Refactoring** | Riskant | Sicher |
-| **Dokumentation** | Extern | Im Code |
-| **Onboarding** | Langsam | Schnell |
-| **Wartbarkeit** | Mittel | Hoch |
-| **Code-Qualität** | Variabel | Konsistent |
+| Aspect | Before (JavaScript) | After (TypeScript) |
+|--------|----------------------|---------------------|
+| **Error Detection** | Runtime | Compile time |
+| **IDE Support** | Basic | Excellent |
+| **Refactoring** | Risky | Safe |
+| **Documentation** | External | In code |
+| **Onboarding** | Slow | Fast |
+| **Maintainability** | Medium | High |
+| **Code Quality** | Variable | Consistent |
 
 **ROI (Return on Investment)**:
-- Initiale Migration: ~8 Wochen
-- Langfristige Zeitersparnis: ~30-50% bei Entwicklung und Wartung
-- Break-Even: Nach ~6 Monaten
-- Lebensdauer-Benefit: Unbezahlbar
+- Initial migration: ~8 weeks
+- Long-term time savings: ~30-50% in development and maintenance
+- Break-even: After ~6 months
+- Lifetime benefit: Priceless
 
 ## Risks & Mitigations
 
