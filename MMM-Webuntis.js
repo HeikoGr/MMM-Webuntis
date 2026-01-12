@@ -708,20 +708,6 @@ Module.register('MMM-Webuntis', {
       `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
     );
 
-    // DEBUG: Add instance info to help troubleshoot multi-instance issues
-    if (this.config?.logLevel === 'debug') {
-      const debugDiv = document.createElement('div');
-      debugDiv.style.fontSize = '10px';
-      debugDiv.style.color = '#888';
-      debugDiv.style.padding = '5px';
-      debugDiv.style.backgroundColor = '#f0f0f0';
-      debugDiv.style.marginBottom = '5px';
-      debugDiv.style.borderRadius = '3px';
-      debugDiv.style.fontFamily = 'monospace';
-      debugDiv.textContent = `[DEBUG] Instance: ${this.identifier} | Session: ${this._sessionId}`;
-      wrapper.appendChild(debugDiv);
-    }
-
     // Render any module-level warnings once, above all widgets
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
       const warnContainer = document.createDocumentFragment();
