@@ -9,7 +9,7 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, getWidgetConfig, formatDate, formatTime, toMinutes } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addHeader, getWidgetConfig, formatDate, formatTime, toMinutes } = root.util?.initWidget?.(root) || {};
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -689,7 +689,20 @@ function getNowLineState(ctx) {
       : new Date();
     const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 
-    // 4. Create header and grid container
+    // 4. Create wrapper and add student title header for verbose mode
+    const wrapper = document.createElement('div');
+
+    // Add student title header if in verbose mode
+    const mode = studentConfig?.mode ?? 'compact';
+    if (mode === 'verbose' && studentTitle && typeof addHeader === 'function') {
+      // Create a separate container for the header with the standard widget styling
+      const headerContainer = document.createElement('div');
+      headerContainer.className = 'wu-widget-container bright small light';
+      addHeader(headerContainer, studentTitle);
+      wrapper.appendChild(headerContainer);
+    }
+
+    // 5. Create date header and grid container
     const { header, gridTemplateColumns } = createGridHeader(
       config.totalDisplayDays,
       baseDate,
@@ -699,7 +712,6 @@ function getNowLineState(ctx) {
       { formatDate, formatTime, toMinutes }
     );
 
-    const wrapper = document.createElement('div');
     wrapper.appendChild(header);
 
     const grid = document.createElement('div');

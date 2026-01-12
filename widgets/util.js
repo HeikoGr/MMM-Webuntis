@@ -145,43 +145,55 @@
     return el;
   }
 
-  function addTableHeader(table, studentTitle = '') {
-    const thisRow = createElement('tr');
-    const studentCell = createElement('th', 'align-left alignTop', studentTitle);
-    studentCell.colSpan = 3;
-    thisRow.appendChild(studentCell);
-    table.appendChild(thisRow);
+  function addHeader(container, studentTitle = '') {
+    const header = createElement('div', 'wu-row wu-row-header', studentTitle);
+    container.appendChild(header);
   }
 
-  function addTableRow(table, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
-    const thisRow = createElement('tr');
-    thisRow.className = type;
-    if (addClass) {
-      thisRow.className = `${thisRow.className} ${addClass}`.trim();
-    }
+  function addRow(container, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
+    const row = createElement('div');
+    row.className = `wu-row ${type}`;
 
-    if (studentTitle !== '') {
-      const studentCell = createElement('td', 'align-left alignTop bold wu-col-student', studentTitle);
-      thisRow.appendChild(studentCell);
-    }
+    // Always create student column (empty div if no title) to maintain grid alignment
+    const studentCol = createElement('div', 'wu-col wu-col-student', studentTitle);
+    row.appendChild(studentCol);
 
-    const primaryClass = text2 === '' ? 'wu-col-data' : 'wu-col-meta';
-    const cell1 = createElement('td', `align-left alignTop ${primaryClass}`, text1);
-    if (text2 === '') cell1.colSpan = 2;
-    thisRow.appendChild(cell1);
+    const metaCol = createElement('div', 'wu-col wu-col-meta', text1);
+    row.appendChild(metaCol);
 
     if (text2 !== '') {
-      const cell2 = createElement('td', `align-left alignTop wu-col-data ${addClass}`, text2);
-      thisRow.appendChild(cell2);
+      const dataCol = createElement('div', 'wu-col wu-col-data', text2);
+      // Apply additional classes to the data column (e.g., cancelled, substitution, exam)
+      if (addClass) {
+        dataCol.className = `${dataCol.className} ${addClass}`.trim();
+      }
+      row.appendChild(dataCol);
+    } else if (text1 !== '') {
+      // If no text2, make text1 take both columns
+      metaCol.className = 'wu-col wu-col-full';
     }
 
-    table.appendChild(thisRow);
+    container.appendChild(row);
   }
 
-  function createTable() {
-    const t = createElement('table');
-    t.className = 'bright small light';
-    return t;
+  function addFullRow(container, type, content = '', addClass = '') {
+    const row = createElement('div');
+    row.className = `wu-row ${type}`;
+
+    const fullCol = createElement('div', 'wu-col wu-col-full-width', content);
+    // Apply additional classes to the full column
+    if (addClass) {
+      fullCol.className = `${fullCol.className} ${addClass}`.trim();
+    }
+    row.appendChild(fullCol);
+
+    container.appendChild(row);
+  }
+
+  function createContainer() {
+    const container = createElement('div');
+    container.className = 'wu-widget-container bright small light';
+    return container;
   }
 
   // NOTE: `formatDate` now accepts Date objects directly. No separate
@@ -211,16 +223,17 @@
     const util = widgetRoot.util || {};
     const dom = widgetRoot.dom || {};
     return {
-      log: typeof util.log === 'function' ? util.log : () => {},
+      log: typeof util.log === 'function' ? util.log : () => { },
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
       formatDate: typeof util.formatDate === 'function' ? util.formatDate : () => '',
       formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
       toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
-      addTableRow: typeof dom.addTableRow === 'function' ? dom.addTableRow : () => {},
-      addTableHeader: typeof dom.addTableHeader === 'function' ? dom.addTableHeader : () => {},
+      addRow: typeof dom.addRow === 'function' ? dom.addRow : () => { },
+      addFullRow: typeof dom.addFullRow === 'function' ? dom.addFullRow : () => { },
+      addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => { },
       createElement: typeof dom.createElement === 'function' ? dom.createElement : () => document.createElement('div'),
-      createTable: typeof dom.createTable === 'function' ? dom.createTable : () => document.createElement('table'),
+      createContainer: typeof dom.createContainer === 'function' ? dom.createContainer : () => document.createElement('div'),
     };
   }
 
@@ -242,8 +255,9 @@
 
   root.dom = {
     createElement,
-    addTableHeader,
-    addTableRow,
-    createTable,
+    addHeader,
+    addRow,
+    addFullRow,
+    createContainer,
   };
 })();

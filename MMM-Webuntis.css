@@ -24,28 +24,72 @@
   box-sizing: inherit;
 }
 
-.MMM-Webuntis table {
+/* Widget Container (replaces table) */
+.MMM-Webuntis .wu-widget-container {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
   width: 100%;
-  border-collapse: collapse;
   margin-bottom: 0.6rem;
+  text-align: left;
 }
 
-.MMM-Webuntis > table:last-child {
+.MMM-Webuntis>.wu-widget-container:last-child {
   margin-bottom: 0;
 }
 
-.MMM-Webuntis td.wu-col-student,
-.MMM-Webuntis td.wu-col-meta {
-  white-space: nowrap;
-  width: 1%;
-  padding-right: 0.5rem;
+/* Widget Row (replaces tr) - now transparent container */
+.MMM-Webuntis .wu-row {
+  display: contents;
+  /* Makes row transparent, cols become direct grid items */
 }
 
-.MMM-Webuntis td.wu-col-data {
-  /* Make data column greedy so it takes remaining table width */
-  width: 100%;
+/* Widget Row Header (for verbose mode) - overrides display: contents */
+.MMM-Webuntis .wu-row-header {
+  display: block;
+  /* Override contents for header */
+  grid-column: 1 / -1;
+  /* Spans all columns */
+  font-weight: bold;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #333;
+  text-align: left;
+}
+
+/* Widget Columns (replaces td) */
+.MMM-Webuntis .wu-col {
+  white-space: pre-line;
+  text-align: left;
+}
+
+.MMM-Webuntis .wu-col-student {
+  font-weight: bold;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.MMM-Webuntis .wu-col-meta {
+  white-space: nowrap;
+  text-align: left;
+}
+
+.MMM-Webuntis .wu-col-data {
   word-break: break-word;
   white-space: pre-line;
+  text-align: left;
+}
+
+.MMM-Webuntis .wu-col-full {
+  /* When only one data column is present, it should span both meta and data */
+  grid-column: 2 / -1;
+  text-align: left;
+}
+
+.MMM-Webuntis .wu-col-full-width {
+  /* Full row without student/meta columns - spans all 3 grid columns */
+  grid-column: 1 / -1;
+  text-align: left;
 }
 
 .MMM-Webuntis .cancelled {
@@ -81,8 +125,7 @@
 .MMM-Webuntis .absenceRowEmpty,
 .MMM-Webuntis .messageRow,
 .MMM-Webuntis .messageRowEmpty {
-  vertical-align: top;
-  padding-left: 20px;
+  /* Row-specific styling can go here */
 }
 
 .MMM-Webuntis .examRow,
@@ -124,7 +167,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell > div {
+.MMM-Webuntis .grid-combined .grid-timecell>div {
   margin: 0;
   padding: 0;
   line-height: 1;
@@ -356,7 +399,7 @@
 
 /* Presentation: uppercase day labels and meta/date columns */
 .MMM-Webuntis .grid-daylabel,
-.MMM-Webuntis td.wu-col-meta {
+.MMM-Webuntis .wu-col-meta {
   /* text-transform: uppercase; */
 }
 
@@ -394,10 +437,12 @@
 }
 
 @keyframes pulse-warning {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
