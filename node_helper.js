@@ -1093,9 +1093,9 @@ module.exports = NodeHelper.create({
 
     if (notification === 'FETCH_DATA') {
       // Track if this is a config update (for browser reload detection)
-      let configChanged = false;
       let normalizedConfig; // Declare outside try so it's accessible after catch
       let sessionKey; // Declare outside try for use in coalescing logic
+      let configChanged = false; // Declare outside try for use in coalescing logic
 
       // Validate configuration and return errors to frontend if invalid
       try {
@@ -1164,7 +1164,7 @@ module.exports = NodeHelper.create({
         // Always update config, even if a timer is already running, to ensure
         // the latest config is used for the next execution (e.g., after browser reload)
         const existingConfig = this._configsByIdentifier.get(identifier);
-        const configChanged = existingConfig !== undefined;
+        configChanged = existingConfig !== undefined; // true if config already existed (update scenario)
         this._configsByIdentifier.set(identifier, normalizedConfig);
         // Also set as global config for backward compatibility (use most recent)
         this.config = normalizedConfig;
@@ -1689,10 +1689,10 @@ module.exports = NodeHelper.create({
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
           student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          999 // Default: show all if not configured
+            student.homework?.daysAhead ??
+            this.config?.homework?.nextDays ??
+            this.config?.homework?.daysAhead ??
+            999 // Default: show all if not configured
         );
         const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
 
@@ -1717,7 +1717,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1800,7 +1800,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
