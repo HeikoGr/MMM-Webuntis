@@ -446,3 +446,79 @@
     opacity: 0.7;
   }
 }
+
+/* Ticker Animation for Multiple Lessons in Same Time Slot */
+.MMM-Webuntis .lesson-ticker-wrapper {
+  overflow: hidden;
+  background: transparent;
+  /* No border, no padding - items have their own styling */
+}
+
+.MMM-Webuntis .ticker-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 100%;
+  align-items: stretch;
+}
+
+.MMM-Webuntis .ticker-item {
+  flex-shrink: 0;
+  padding: 0.15rem;
+  margin: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  /* Align content to left, not center */
+  justify-content: flex-start;
+  /* Align content to top, not center */
+  text-align: left;
+  /* Left-align text like normal lessons */
+  line-height: 1;
+  /* Each item looks like a standalone lesson */
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  overflow: hidden;
+}
+
+/* Apply background colors to ticker items based on lesson type */
+.MMM-Webuntis .ticker-item.lesson-replacement {
+  background-color: var(--wu-replacement-bg);
+  color: var(--wu-replacement-text);
+}
+
+.MMM-Webuntis .ticker-item.lesson-cancelled-split {
+  background-color: var(--wu-cancelled-bg);
+  color: var(--wu-cancelled-text);
+}
+
+.MMM-Webuntis .ticker-item.lesson-regular {
+  background-color: var(--wu-regular-bg);
+  color: var(--wu-regular-text);
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Apply styling to ticker items based on lesson type */
+.MMM-Webuntis .lesson-ticker-wrapper .ticker-item.past {
+  opacity: 0.5;
+}
+
+.MMM-Webuntis .lesson-ticker-wrapper .ticker-item.has-exam::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--wu-exam-bar, #ffeb3b);
+}

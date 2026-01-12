@@ -105,7 +105,7 @@ export default defineConfig([
       sourceType: 'commonjs',
       globals: {
         ...globals.node,
-        ...globals.mocha,
+        ...globals.jest,
       },
     },
   },

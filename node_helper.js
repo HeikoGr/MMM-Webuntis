@@ -176,6 +176,38 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Cleanup old debug dumps, keeping only the N most recent files
+   * @param {string} dumpDir - Directory containing debug dump files
+   * @param {number} keepCount - Number of most recent files to keep
+   */
+  _cleanupOldDebugDumps(dumpDir, keepCount = 10) {
+    try {
+      const files = fs
+        .readdirSync(dumpDir)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => ({
+          name: f,
+          path: path.join(dumpDir, f),
+          mtime: fs.statSync(path.join(dumpDir, f)).mtime.getTime(),
+        }))
+        .sort((a, b) => b.mtime - a.mtime); // Newest first
+
+      // Delete files beyond keepCount
+      if (files.length > keepCount) {
+        files.slice(keepCount).forEach((f) => {
+          try {
+            fs.unlinkSync(f.path);
+          } catch {
+            // Ignore deletion errors
+          }
+        });
+      }
+    } catch {
+      // Ignore cleanup errors (directory might not exist yet)
+    }
+  },
+
+  /**
    * Create standard options object for authService calls (with logging and error handlers)
    */
   _getStandardAuthOptions(additionalOptions = {}) {
@@ -369,7 +401,7 @@ module.exports = NodeHelper.create({
       throw new Error(hint);
     }
 
-    this.cacheManager.set('classId', cacheKey, chosen.id);
+    this.cacheManager.set('classId', cacheKey, chosen.id, 24 * 60 * 60 * 1000); // TTL: 24 hours
     return chosen.id;
   },
 
@@ -1561,17 +1593,19 @@ module.exports = NodeHelper.create({
     if (wantsGridWidget) {
       const gridNext = Number(student.grid?.nextDays ?? config?.grid?.nextDays ?? 0);
       const gridPast = Number(student.grid?.pastDays ?? config?.grid?.pastDays ?? 0);
-      gridNextDays = Math.max(nextDaysValue, gridNext > 0 ? gridNext : 0);
-      gridPastDays = Math.max(pastDaysValue, gridPast > 0 ? gridPast : 0);
+      // Validate: prevent NaN, ensure non-negative
+      gridNextDays = Math.max(0, Number.isFinite(gridNext) ? gridNext : 0, Number.isFinite(nextDaysValue) ? nextDaysValue : 0);
+      gridPastDays = Math.max(0, Number.isFinite(gridPast) ? gridPast : 0, Number.isFinite(pastDaysValue) ? pastDaysValue : 0);
+    } else {
+      // Ensure valid numbers for non-grid widgets too
+      gridNextDays = Math.max(0, Number.isFinite(nextDaysValue) ? nextDaysValue : 0);
+      gridPastDays = Math.max(0, Number.isFinite(pastDaysValue) ? pastDaysValue : 0);
     }
 
     rangeStart.setDate(rangeStart.getDate() - gridPastDays);
-    rangeEnd.setDate(rangeEnd.getDate() - gridPastDays + parseInt(gridNextDays, 10));
+    rangeEnd.setDate(rangeEnd.getDate() - gridPastDays + Math.floor(gridNextDays));
     logger(
       `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${gridPastDays}, nextDays=${gridNextDays}`
-    );
-    logger(
-      `Config values: module.nextDays=${config?.nextDays}, module.grid.nextDays=${config?.grid?.nextDays}, student.grid.nextDays=${student.grid?.nextDays}`
     );
     // Compute absences-specific start and end dates (allow per-student override or global config)
     const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
@@ -1962,6 +1996,10 @@ module.exports = NodeHelper.create({
         if (this.config && this.config.dumpBackendPayloads) {
           const dumpDir = path.join(__dirname, 'debug_dumps');
           if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
+
+          // Cleanup old dumps: keep only the 10 most recent files
+          this._cleanupOldDebugDumps(dumpDir, 10);
+
           const safeTitle = (student && student.title ? student.title : 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_');
           const fname = `${Date.now()}_${safeTitle}_api.json`;
           const target = path.join(dumpDir, fname);

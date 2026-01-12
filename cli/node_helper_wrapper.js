@@ -77,7 +77,7 @@ try {
   }
   // Mock sendSocketNotification for wrapper mode
   if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
+    nodeHelper.sendSocketNotification = () => { };
   }
 } catch (err) {
   console.error('Failed to load node_helper.js:', err.message);
@@ -208,8 +208,9 @@ function loadModuleDefaults() {
     // Build a valid JavaScript object string
     const defaultsStr = `({${match[1]}\n})`;
 
-    // Evaluate to get the object (safe because we control the file)
-    const moduleDefaults = eval(defaultsStr);
+    // Use Function constructor instead of eval (safer) - still isolated
+    // Since we control the source file, this is safe for our use case
+    const moduleDefaults = new Function(`return ${defaultsStr}`)();
 
     return moduleDefaults;
   } catch (err) {
