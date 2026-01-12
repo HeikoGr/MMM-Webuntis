@@ -37,8 +37,10 @@ module.exports = NodeHelper.create({
       this._mmLog(level, null, `[lib] ${message}`);
     };
 
-    // Initialize AuthService for token and authentication management
-    this.authService = new AuthService({ logger: libLogger });
+    // Store libLogger for later use when creating per-instance AuthService
+    this._libLogger = libLogger;
+    // AuthService instances per module identifier to prevent cache cross-contamination
+    this._authServicesByIdentifier = new Map();
     // Initialize CacheManager for class ID and other caching
     this.cacheManager = new CacheManager(this._mmLog.bind(this));
     // expose payload compactor so linters don't flag unused imports until full refactor
@@ -51,12 +53,24 @@ module.exports = NodeHelper.create({
     this._configsByIdentifier = new Map();
     // Session-based config isolation: each browser window keeps its own config
     this._configsBySession = new Map();
-    // Cache fetched data by credKey so we can reuse for sessions with same credentials
-    this._dataByCredKey = new Map();
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to coalesce requests
     // Session-based coalescing: each session gets its own timer
     this._coalescingTimerBySession = new Map();
     this._coalescingDelay = 2000; // 2 seconds window to coalesce requests
+  },
+
+  /**
+   * Get or create AuthService instance for a specific module identifier
+   * Each module instance gets its own AuthService to prevent cache cross-contamination
+   * @param {string} identifier - Module instance identifier
+   * @returns {AuthService} AuthService instance for this identifier
+   */
+  _getAuthServiceForIdentifier(identifier) {
+    if (!this._authServicesByIdentifier.has(identifier)) {
+      this._mmLog('debug', null, `Creating new AuthService instance for identifier=${identifier}`);
+      this._authServicesByIdentifier.set(identifier, new AuthService({ logger: this._libLogger }));
+    }
+    return this._authServicesByIdentifier.get(identifier);
   },
 
   _normalizeLegacyConfig(cfg) {
@@ -238,7 +252,13 @@ module.exports = NodeHelper.create({
       return `${year}${month}${day}`;
     };
 
-    const { token, cookieString, tenantId, schoolYearId } = await this.authService.getAuth({
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
+    const { token, cookieString, tenantId, schoolYearId } = await authService.getAuth({
       school,
       username,
       password,
@@ -389,16 +409,22 @@ module.exports = NodeHelper.create({
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
     return webuntisApiService.getTimetable({
       getAuth: () =>
-        this.authService.getAuth({
+        authService.getAuth({
           school,
           username,
           password,
           server,
           options: authOptions,
         }),
-      onAuthError: () => this.authService.invalidateCache(cacheKey),
+      onAuthError: () => authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -407,7 +433,7 @@ module.exports = NodeHelper.create({
       classId,
       logger: this._mmLog.bind(this),
       mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
-      debugApi: this.config?.debugApi || false,
+      debugApi: options.debugApi || false,
     });
   },
 
@@ -416,16 +442,22 @@ module.exports = NodeHelper.create({
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
     return webuntisApiService.getExams({
       getAuth: () =>
-        this.authService.getAuth({
+        authService.getAuth({
           school,
           username,
           password,
           server,
           options: authOptions,
         }),
-      onAuthError: () => this.authService.invalidateCache(cacheKey),
+      onAuthError: () => authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
@@ -434,7 +466,7 @@ module.exports = NodeHelper.create({
       normalizeDate: this._normalizeDateToInteger.bind(this),
       normalizeTime: this._normalizeTimeToMinutes.bind(this),
       sanitizeHtml: this._sanitizeHtmlText.bind(this),
-      debugApi: this.config?.debugApi || false,
+      debugApi: options.debugApi || false,
     });
   },
 
@@ -443,22 +475,28 @@ module.exports = NodeHelper.create({
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
     return webuntisApiService.getHomework({
       getAuth: () =>
-        this.authService.getAuth({
+        authService.getAuth({
           school,
           username,
           password,
           server,
           options: authOptions,
         }),
-      onAuthError: () => this.authService.invalidateCache(cacheKey),
+      onAuthError: () => authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
       studentId,
       logger: this._mmLog.bind(this),
-      debugApi: this.config?.debugApi || false,
+      debugApi: options.debugApi || false,
     });
   },
 
@@ -467,22 +505,28 @@ module.exports = NodeHelper.create({
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
     return webuntisApiService.getAbsences({
       getAuth: () =>
-        this.authService.getAuth({
+        authService.getAuth({
           school,
           username,
           password,
           server,
           options: authOptions,
         }),
-      onAuthError: () => this.authService.invalidateCache(cacheKey),
+      onAuthError: () => authService.invalidateCache(cacheKey),
       server,
       rangeStart,
       rangeEnd,
       studentId,
       logger: this._mmLog.bind(this),
-      debugApi: this.config?.debugApi || false,
+      debugApi: options.debugApi || false,
     });
   },
 
@@ -491,20 +535,26 @@ module.exports = NodeHelper.create({
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
+    // Get AuthService from options (set in fetchData)
+    const authService = options.authService;
+    if (!authService) {
+      throw new Error('AuthService not available in restOptions');
+    }
+
     return webuntisApiService.getMessagesOfDay({
       getAuth: () =>
-        this.authService.getAuth({
+        authService.getAuth({
           school,
           username,
           password,
           server,
           options: authOptions,
         }),
-      onAuthError: () => this.authService.invalidateCache(cacheKey),
+      onAuthError: () => authService.invalidateCache(cacheKey),
       server,
       date,
       logger: this._mmLog.bind(this),
-      debugApi: this.config?.debugApi || false,
+      debugApi: options.debugApi || false,
     });
   },
 
@@ -533,14 +583,14 @@ module.exports = NodeHelper.create({
         // try to fetch auto-discovered data to fill in the missing titles
         const server = moduleConfig.server || 'webuntis.com';
         try {
-          const { appData } = await this.authService.getAuth({
+          const { appData } = await moduleConfig._authService.getAuth({
             school: moduleConfig.school,
             username: moduleConfig.username,
             password: moduleConfig.password,
             server,
             options: this._getStandardAuthOptions(),
           });
-          autoStudents = this.authService.deriveStudentsFromAppData(appData);
+          autoStudents = moduleConfig._authService.deriveStudentsFromAppData(appData);
 
           if (autoStudents && autoStudents.length > 0) {
             // For each configured student try to improve the configured data:
@@ -606,14 +656,14 @@ module.exports = NodeHelper.create({
       }
 
       const server = moduleConfig.server || 'webuntis.com';
-      const { appData } = await this.authService.getAuth({
+      const { appData } = await moduleConfig._authService.getAuth({
         school: moduleConfig.school,
         username: moduleConfig.username,
         password: moduleConfig.password,
         server,
         options: this._getStandardAuthOptions({ cacheKey: `parent:${moduleConfig.username}@${server}` }),
       });
-      autoStudents = this.authService.deriveStudentsFromAppData(appData);
+      autoStudents = moduleConfig._authService.deriveStudentsFromAppData(appData);
 
       if (!autoStudents || autoStudents.length === 0) {
         this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
@@ -664,16 +714,19 @@ module.exports = NodeHelper.create({
    * @param {Object} moduleConfig - Module configuration
    * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
    */
-  async _createAuthSession(sample, moduleConfig) {
+  async _createAuthSession(sample, moduleConfig, identifier) {
     const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
     const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin;
 
+    // Get identifier-specific AuthService to prevent cache cross-contamination
+    const authService = this._getAuthServiceForIdentifier(identifier);
+
     // Mode 0: QR Code Login (student)
     if (useQrLogin) {
       this._mmLog('debug', sample, 'Getting QR code authentication (cached or new)');
-      const authResult = await this.authService.getAuthFromQRCode(sample.qrcode, {
+      const authResult = await authService.getAuthFromQRCode(sample.qrcode, {
         cacheKey: `qrcode:${sample.qrcode}`,
       });
       return {
@@ -684,7 +737,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData,
+        appData: authResult.appData || null, // May be undefined if from cache
         mode: 'qr',
         qrCodeUrl: sample.qrcode, // Store QR code URL for re-authentication
       };
@@ -695,7 +748,7 @@ module.exports = NodeHelper.create({
       const school = sample.school || moduleConfig.school;
       const server = sample.server || moduleConfig.server || 'webuntis.com';
       this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
-      const authResult = await this.authService.getAuth({
+      const authResult = await authService.getAuth({
         school,
         username: moduleConfig.username,
         password: moduleConfig.password,
@@ -710,7 +763,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData,
+        appData: authResult.appData || null, // May be undefined if from cache
         mode: 'parent',
       };
     }
@@ -718,7 +771,7 @@ module.exports = NodeHelper.create({
     // Mode 2: Direct Student Login (own credentials)
     if (hasOwnCredentials) {
       this._mmLog('debug', sample, `Authenticating with direct login (school=${sample.school}, server=${sample.server})`);
-      const authResult = await this.authService.getAuth({
+      const authResult = await authService.getAuth({
         school: sample.school,
         username: sample.username,
         password: sample.password,
@@ -733,7 +786,7 @@ module.exports = NodeHelper.create({
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData,
+        appData: authResult.appData || null, // May be undefined if from cache
         mode: 'direct',
       };
     }
@@ -953,13 +1006,12 @@ module.exports = NodeHelper.create({
 
   /**
    * Process a credential group: login, fetch data for students and logout.
-   * If cachedAuthSession is provided, reuses it instead of creating a new one.
-   * This function respects the inflightRequests Map's pending flag: if pending
-   * becomes true while running, it will loop once more to handle the coalesced request.
+   * Authentication is cached by authService, so multiple sessions with same credentials
+   * will only authenticate once.
    */
-  async processGroup(credKey, students, identifier, sessionKey, cachedAuthSession = null) {
-    // Single-run processing: authenticate (or reuse cached session), fetch data for each student, and logout.
-    let authSession = cachedAuthSession;
+  async processGroup(credKey, students, identifier, sessionKey, config) {
+    // Single-run processing: authenticate (authService handles caching), fetch data for each student, and logout.
+    let authSession = null;
     const sample = students[0];
     const groupWarnings = [];
     // Per-fetch-cycle warning deduplication set. Ensures identical warnings
@@ -968,12 +1020,10 @@ module.exports = NodeHelper.create({
 
     try {
       try {
-        if (!authSession) {
-          // No cached session - create new one
-          authSession = await this._createAuthSession(sample, this.config);
-        } else {
-          this._mmLog('debug', null, `Reusing cached authSession for credKey=${credKey}`);
-        }
+        // Create/get authSession - authService handles caching internally
+        // If credentials were recently used, authService will return cached result
+        // Use identifier-specific AuthService to prevent cache cross-contamination
+        authSession = await this._createAuthSession(sample, config, identifier);
       } catch (err) {
         const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
         this._mmLog('error', null, msg);
@@ -1003,8 +1053,8 @@ module.exports = NodeHelper.create({
       // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
       // Holidays are shared across all students in the same school/group.
       // Extract and compact them once before processing students to avoid redundant work.
-      const wantsGridWidget = this._wantsWidget('grid', this.config?.displayMode);
-      const wantsLessonsWidget = this._wantsWidget('lessons', this.config?.displayMode);
+      const wantsGridWidget = this._wantsWidget('grid', config?.displayMode);
+      const wantsLessonsWidget = this._wantsWidget('lessons', config?.displayMode);
       const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
       if (shouldFetchHolidays) {
@@ -1035,7 +1085,7 @@ module.exports = NodeHelper.create({
 
           // Fetch fresh data for this student
           this._mmLog('debug', student, `Fetching data for ${student.title}...`);
-          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays);
+          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           } else {
@@ -1050,8 +1100,8 @@ module.exports = NodeHelper.create({
           // ===== CONVERT REST ERRORS TO USER-FRIENDLY WARNINGS =====
           const warningMsg = this._convertRestErrorToWarning(err, {
             studentTitle: student.title,
-            school: student.school || this.config?.school,
-            server: student.server || this.config?.server || 'webuntis.com',
+            school: student.school || config?.school,
+            server: student.server || config?.server || 'webuntis.com',
           });
           if (warningMsg) {
             // Only record each distinct warning once per fetch cycle
@@ -1066,9 +1116,6 @@ module.exports = NodeHelper.create({
 
       // Send all collected payloads at once to minimize DOM redraws
       this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to identifier ${identifier}`);
-
-      // Cache the authSession by credKey so other sessions can reuse it instead of re-authenticating
-      this._dataByCredKey.set(credKey, authSession);
 
       for (const payload of studentPayloads) {
         // Send to ALL module instances with this identifier (via the id field)
@@ -1112,8 +1159,12 @@ module.exports = NodeHelper.create({
 
       // Validate configuration and return errors to frontend if invalid
       try {
+        // Create a deep copy of payload first to prevent modifying the original config
+        // This prevents auto-discovery changes from affecting the frontend's config object
+        const payloadCopy = JSON.parse(JSON.stringify(payload));
+
         // Apply legacy mappings to convert old keys to new structure (includes normalization)
-        const result = applyLegacyMappings(payload, {
+        const result = applyLegacyMappings(payloadCopy, {
           warnCallback: (msg) => this._mmLog('warn', null, msg),
         });
         normalizedConfig = result.normalizedConfig;
@@ -1249,8 +1300,12 @@ module.exports = NodeHelper.create({
 
     this._mmLog('debug', null, `Processing session: ${sessionKey}`);
 
-    // Set as active config for this execution
-    this.config = config;
+    // Extract identifier from sessionKey (format: identifier:sessionId)
+    const sessionIdentifier = sessionKey.split(':')[0];
+
+    // Store AuthService in config object to avoid race conditions with parallel requests
+    // Each config gets its own AuthService reference
+    config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
 
     try {
       // Auto-discover students from app/data when parent credentials are provided but students[] is missing
@@ -1258,16 +1313,22 @@ module.exports = NodeHelper.create({
 
       // If after normalization there are still no students configured, attempt to build
       // the students array internally from app/data so the rest of the flow can proceed.
-      if (!Array.isArray(this.config.students) || this.config.students.length === 0) {
+      if (!Array.isArray(config.students) || config.students.length === 0) {
         try {
-          const server = this.config.server || 'webuntis.com';
-          const creds = { username: this.config.username, password: this.config.password, school: this.config.school };
+          const server = config.server || 'webuntis.com';
+          const creds = { username: config.username, password: config.password, school: config.school };
           if (creds.username && creds.password && creds.school) {
-            const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
-            const autoStudents = this._deriveStudentsFromAppData(appData);
+            const { appData } = await config._authService.getAuth({
+              school: creds.school,
+              username: creds.username,
+              password: creds.password,
+              server,
+              options: this._getStandardAuthOptions({ cacheKey: `parent:${creds.username}@${server}` }),
+            });
+            const autoStudents = config._authService.deriveStudentsFromAppData(appData);
             if (autoStudents && autoStudents.length > 0) {
-              if (!this.config._autoStudentsAssigned) {
-                const defNoStudents = { ...(this.config || {}) };
+              if (!config._autoStudentsAssigned) {
+                const defNoStudents = { ...(config || {}) };
                 delete defNoStudents.students;
                 const normalized = autoStudents.map((s) => {
                   const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
@@ -1277,8 +1338,8 @@ module.exports = NodeHelper.create({
                   }
                   return merged;
                 });
-                this.config.students = normalized;
-                this.config._autoStudentsAssigned = true;
+                config.students = normalized;
+                config._autoStudentsAssigned = true;
                 const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
                 this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
               } else {
@@ -1295,65 +1356,36 @@ module.exports = NodeHelper.create({
       const groups = new Map();
 
       // Group students by credential. Normalize each student config for legacy key compatibility.
-      const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
+      const studentsList = Array.isArray(config.students) ? config.students : [];
       for (const student of studentsList) {
         // Apply legacy config mapping to student-level config
         const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-        const credKey = this._getCredentialKey(normalizedStudent, this.config);
+        const credKey = this._getCredentialKey(normalizedStudent, config);
         if (!groups.has(credKey)) groups.set(credKey, []);
         groups.get(credKey).push(normalizedStudent);
       }
 
       // Process each credential group for this session
+      // authService handles caching of authentication, so we don't need to cache authSession here
       for (const [credKey, students] of groups.entries()) {
-        // Check if we already have a cached authSession for this credKey
-        const cachedAuthSession = this._dataByCredKey.has(credKey) ? this._dataByCredKey.get(credKey) : null;
+        // Check if another session is already fetching this credKey
+        if (this._pendingFetchByCredKey.has(credKey)) {
+          this._mmLog('debug', null, `Session ${sessionKey}: Another session is fetching credKey=${credKey}, waiting...`);
+          // Wait for the other session to complete (its cache will be available to us too)
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
 
-        if (cachedAuthSession) {
-          // Reuse cached authentication session - no need to re-authenticate
-          this._mmLog('debug', null, `Session ${sessionKey}: Found cached authSession for credKey=${credKey}, fetching data`);
+        // Mark as processing
+        this._pendingFetchByCredKey.set(credKey, true);
 
-          // Check if another session is currently fetching this credKey
-          if (this._pendingFetchByCredKey.has(credKey)) {
-            this._mmLog('debug', null, `Session ${sessionKey}: Waiting for another session's fetch of credKey=${credKey} to complete`);
-            // Wait for the other session to finish processing
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-
-          // Process this session's data using the cached authSession
+        try {
+          // Process this session's data
+          // authService.getAuth() will use its internal cache for subsequent calls with same cacheKey
           const sessionIdentifier = sessionKey.split(':')[0];
-          await this.processGroup(credKey, students, sessionIdentifier, sessionKey, cachedAuthSession);
-        } else {
-          // No cached authSession - need to authenticate and fetch
-          this._mmLog('debug', null, `Session ${sessionKey}: No cached authSession for credKey=${credKey}, authenticating and fetching`);
-
-          // Check if another session is already authenticating this credKey
-          if (this._pendingFetchByCredKey.has(credKey)) {
-            this._mmLog('debug', null, `Session ${sessionKey}: Waiting for another session's authentication of credKey=${credKey}`);
-            // Wait for the other session to complete and cache the authSession
-            await new Promise((resolve) => setTimeout(resolve, 100));
-
-            // Check again if authSession is now cached
-            if (this._dataByCredKey.has(credKey)) {
-              this._mmLog('debug', null, `Session ${sessionKey}: Using authSession cached by other session`);
-              const cachedSession = this._dataByCredKey.get(credKey);
-              const sessionIdentifier = sessionKey.split(':')[0];
-              await this.processGroup(credKey, students, sessionIdentifier, sessionKey, cachedSession);
-              continue;
-            }
-          }
-
-          // Mark as processing
-          this._pendingFetchByCredKey.set(credKey, true);
-
-          try {
-            // Authenticate and fetch - this caches the authSession in processGroup
-            const sessionIdentifier = sessionKey.split(':')[0];
-            await this.processGroup(credKey, students, sessionIdentifier, sessionKey);
-          } finally {
-            // Remove from pending after completion
-            this._pendingFetchByCredKey.delete(credKey);
-          }
+          await this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);
+        } finally {
+          // Remove from pending after completion
+          this._pendingFetchByCredKey.delete(credKey);
         }
       }
 
@@ -1451,7 +1483,7 @@ module.exports = NodeHelper.create({
    * @param {string} credKey - Credential grouping key
    * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
    */
-  async fetchData(authSession, student, identifier, credKey, compactHolidays = []) {
+  async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config) {
     const logger = (msg) => {
       this._mmLog('debug', student, msg);
     };
@@ -1462,17 +1494,22 @@ module.exports = NodeHelper.create({
     if (authSession.qrCodeUrl) {
       restOptions.qrCodeUrl = authSession.qrCodeUrl;
     }
+    // Pass AuthService instance to avoid race conditions
+    restOptions.authService = config._authService;
+
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
     const bearerToken = authSession.token;
     const appData = authSession.appData; // Contains user.students[] for parent account mapping
-    const restTargets = this.authService.buildRestTargets(student, this.config, school, server, ownPersonId, bearerToken, appData);
+    // Use AuthService from config parameter
+    const authService = config._authService;
+    const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData);
     const describeTarget = (t) =>
       t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
-    const className = student.class || student.className || this.config?.class || null;
+    const className = student.class || student.className || config?.class || null;
 
     // Use student-specific displayMode if available, otherwise fall back to module-level
-    const effectiveDisplayMode = student.displayMode ?? this.config?.displayMode;
+    const effectiveDisplayMode = student.displayMode ?? config?.displayMode;
 
     const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
@@ -1494,7 +1531,7 @@ module.exports = NodeHelper.create({
     // Respect optional debug date from module config to allow reproducible fetches.
     const baseNow = function () {
       try {
-        const dbg = (typeof this.config?.debugDate === 'string' && this.config.debugDate) || null;
+        const dbg = (typeof config?.debugDate === 'string' && this.config.debugDate) || null;
         if (dbg) {
           // accept YYYY-MM-DD or YYYYMMDD
           const s = String(dbg).trim();
@@ -1512,18 +1549,18 @@ module.exports = NodeHelper.create({
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
     // Use per-student `pastDays` / `nextDays` (preferred). Fall back to legacy keys.
-    const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? this.config?.pastDays ?? this.config?.pastDaysToShow ?? 0);
+    const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? config?.pastDays ?? config?.pastDaysToShow ?? 0);
     // Prefer explicit `nextDays` (student), then module-level `nextDays`,
     // then fall back to legacy `daysToShow` values.
-    const nextDaysValue = Number(student.nextDays ?? this.config?.nextDays ?? student.daysToShow ?? this.config?.daysToShow ?? 2);
+    const nextDaysValue = Number(student.nextDays ?? config?.nextDays ?? student.daysToShow ?? config?.daysToShow ?? 2);
 
     // For timetable/grid, also check grid-specific nextDays/pastDays
     // If grid.nextDays is set, use max(global nextDays, grid.nextDays) to ensure we fetch enough data
     let gridNextDays = nextDaysValue;
     let gridPastDays = pastDaysValue;
     if (wantsGridWidget) {
-      const gridNext = Number(student.grid?.nextDays ?? this.config?.grid?.nextDays ?? 0);
-      const gridPast = Number(student.grid?.pastDays ?? this.config?.grid?.pastDays ?? 0);
+      const gridNext = Number(student.grid?.nextDays ?? config?.grid?.nextDays ?? 0);
+      const gridPast = Number(student.grid?.pastDays ?? config?.grid?.pastDays ?? 0);
       gridNextDays = Math.max(nextDaysValue, gridNext > 0 ? gridNext : 0);
       gridPastDays = Math.max(pastDaysValue, gridPast > 0 ? gridPast : 0);
     }
@@ -1534,18 +1571,18 @@ module.exports = NodeHelper.create({
       `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${gridPastDays}, nextDays=${gridNextDays}`
     );
     logger(
-      `Config values: module.nextDays=${this.config?.nextDays}, module.grid.nextDays=${this.config?.grid?.nextDays}, student.grid.nextDays=${student.grid?.nextDays}`
+      `Config values: module.nextDays=${config?.nextDays}, module.grid.nextDays=${config?.grid?.nextDays}, student.grid.nextDays=${student.grid?.nextDays}`
     );
     // Compute absences-specific start and end dates (allow per-student override or global config)
     const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
       ? Number(student.absences?.pastDays ?? student.absencesPastDays)
-      : Number.isFinite(Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays))
-        ? Number(this.config?.absences?.pastDays ?? this.config?.absencesPastDays)
+      : Number.isFinite(Number(config?.absences?.pastDays ?? config?.absencesPastDays))
+        ? Number(config?.absences?.pastDays ?? config?.absencesPastDays)
         : 0;
     const absFuture = Number.isFinite(Number(student.absences?.nextDays ?? student.absencesFutureDays))
       ? Number(student.absences?.nextDays ?? student.absencesFutureDays)
-      : Number.isFinite(Number(this.config?.absences?.nextDays ?? this.config?.absencesFutureDays))
-        ? Number(this.config?.absences?.nextDays ?? this.config?.absencesFutureDays)
+      : Number.isFinite(Number(config?.absences?.nextDays ?? config?.absencesFutureDays))
+        ? Number(config?.absences?.nextDays ?? config?.absencesFutureDays)
         : 0;
 
     const absencesRangeStart = new Date(baseNow);
@@ -1619,9 +1656,9 @@ module.exports = NodeHelper.create({
       student.exams?.nextDays ??
       student.examsDaysAhead ??
       student.exams?.daysAhead ??
-      this.config?.exams?.nextDays ??
-      this.config?.examsDaysAhead ??
-      this.config?.exams?.daysAhead ??
+      config?.exams?.nextDays ??
+      config?.examsDaysAhead ??
+      config?.exams?.daysAhead ??
       0;
     if (fetchExams && examsNextDays > 0) {
       // Validate the number of days
@@ -1631,7 +1668,7 @@ module.exports = NodeHelper.create({
       }
 
       rangeStart = new Date(baseNow);
-      rangeStart.setDate(rangeStart.getDate() - (student.pastDaysToShow ?? student.pastDays ?? this.config?.pastDays ?? 0));
+      rangeStart.setDate(rangeStart.getDate() - (student.pastDaysToShow ?? student.pastDays ?? config?.pastDays ?? 0));
       rangeEnd = new Date(baseNow);
       rangeEnd.setDate(rangeEnd.getDate() + validatedDays);
 
@@ -1672,12 +1709,7 @@ module.exports = NodeHelper.create({
         // Exams range
         if (fetchExams && examsNextDays > 0) {
           const examsPastDays =
-            student.exams?.pastDays ??
-            student.pastDaysToShow ??
-            student.pastDays ??
-            this.config?.exams?.pastDays ??
-            this.config?.pastDays ??
-            0;
+            student.exams?.pastDays ?? student.pastDaysToShow ?? student.pastDays ?? config?.exams?.pastDays ?? config?.pastDays ?? 0;
           allRanges.push({ pastDays: examsPastDays, futureDays: examsNextDays });
         }
 
@@ -1733,13 +1765,9 @@ module.exports = NodeHelper.create({
       // Filter homework by dueDate based on homework widget config (pastDays / nextDays)
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
         const hwNextDays = Number(
-          student.homework?.nextDays ??
-          student.homework?.daysAhead ??
-          this.config?.homework?.nextDays ??
-          this.config?.homework?.daysAhead ??
-          999 // Default: show all if not configured
+          student.homework?.nextDays ?? student.homework?.daysAhead ?? config?.homework?.nextDays ?? config?.homework?.daysAhead ?? 999 // Default: show all if not configured
         );
-        const hwPastDays = Number(student.homework?.pastDays ?? this.config?.homework?.pastDays ?? 999);
+        const hwPastDays = Number(student.homework?.pastDays ?? config?.homework?.pastDays ?? 999);
 
         // Only filter if explicitly configured
         if (hwNextDays < 999 || hwPastDays < 999) {
@@ -1762,7 +1790,7 @@ module.exports = NodeHelper.create({
 
           logger(
             `Homework: filtered to ${hwResult.length} items by dueDate range ` +
-            `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
+              `${filterStart.toISOString().split('T')[0]} to ${filterEnd.toISOString().split('T')[0]}`
           );
         }
       }
@@ -1845,7 +1873,7 @@ module.exports = NodeHelper.create({
     const holidayByDate = (() => {
       if (!Array.isArray(compactHolidays) || compactHolidays.length === 0) return {};
       const map = {};
-      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd;) {
+      for (let ymd = rangeStartYmd; ymd <= rangeEndYmd; ) {
         const holiday = compactHolidays.find((h) => Number(h.startDate) <= ymd && ymd <= Number(h.endDate));
         if (holiday) map[ymd] = holiday;
         // increment date
