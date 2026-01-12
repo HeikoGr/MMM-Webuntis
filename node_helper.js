@@ -49,8 +49,11 @@ module.exports = NodeHelper.create({
     this._persistedDebugDate = null;
     // Multi-instance support: store config per identifier
     this._configsByIdentifier = new Map();
+    // Session-based config isolation: each browser window keeps its own config
+    this._configsBySession = new Map();
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to coalesce requests
-    this._coalescingTimer = null;
+    // Session-based coalescing: each session gets its own timer
+    this._coalescingTimerBySession = new Map();
     this._coalescingDelay = 2000; // 2 seconds window to coalesce requests
   },
 
@@ -382,6 +385,7 @@ module.exports = NodeHelper.create({
 
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
     return webuntisApiService.getTimetable({
       getAuth: () =>
@@ -408,6 +412,7 @@ module.exports = NodeHelper.create({
   async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
     return webuntisApiService.getExams({
       getAuth: () =>
@@ -434,6 +439,7 @@ module.exports = NodeHelper.create({
   async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
     return webuntisApiService.getHomework({
       getAuth: () =>
@@ -457,6 +463,7 @@ module.exports = NodeHelper.create({
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
     return webuntisApiService.getAbsences({
       getAuth: () =>
@@ -480,6 +487,7 @@ module.exports = NodeHelper.create({
   async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
+    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
 
     return webuntisApiService.getMessagesOfDay({
       getAuth: () =>
@@ -662,9 +670,9 @@ module.exports = NodeHelper.create({
 
     // Mode 0: QR Code Login (student)
     if (useQrLogin) {
-      this._mmLog('debug', sample, 'Authenticating with QR code');
+      this._mmLog('debug', sample, 'Getting QR code authentication (cached or new)');
       const authResult = await this.authService.getAuthFromQRCode(sample.qrcode, {
-        cacheKey: `qr:${sample.qrcode}`,
+        cacheKey: `qrcode:${sample.qrcode}`,
       });
       return {
         school: authResult.school,
@@ -676,6 +684,7 @@ module.exports = NodeHelper.create({
         schoolYearId: authResult.schoolYearId,
         appData: authResult.appData,
         mode: 'qr',
+        qrCodeUrl: sample.qrcode, // Store QR code URL for re-authentication
       };
     }
 
@@ -945,7 +954,7 @@ module.exports = NodeHelper.create({
    * This function respects the inflightRequests Map's pending flag: if pending
    * becomes true while running, it will loop once more to handle the coalesced request.
    */
-  async processGroup(credKey, students, identifier) {
+  async processGroup(credKey, students, identifier, sessionKey) {
     // Single-run processing: authenticate, fetch data for each student, and logout.
     let authSession = null;
     const sample = students[0];
@@ -977,6 +986,7 @@ module.exports = NodeHelper.create({
             exams: [],
             homeworks: [],
             absences: [],
+            sessionKey: sessionKey, // Add session info for filtering
           });
         }
         return;
@@ -1047,8 +1057,10 @@ module.exports = NodeHelper.create({
       }
 
       // Send all collected payloads at once to minimize DOM redraws
-      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s)`);
+      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to session ${sessionKey}`);
       for (const payload of studentPayloads) {
+        // Add session info so frontend can filter by its own session
+        payload.sessionKey = sessionKey;
         this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
@@ -1080,14 +1092,27 @@ module.exports = NodeHelper.create({
     this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
 
     if (notification === 'FETCH_DATA') {
+      // Track if this is a config update (for browser reload detection)
+      let normalizedConfig; // Declare outside try so it's accessible after catch
+      let sessionKey; // Declare outside try for use in coalescing logic
+      let configChanged = false; // Declare outside try for use in coalescing logic
+
       // Validate configuration and return errors to frontend if invalid
       try {
         // Apply legacy mappings to convert old keys to new structure (includes normalization)
-        const { normalizedConfig, legacyUsed } = applyLegacyMappings(payload, {
+        const result = applyLegacyMappings(payload, {
           warnCallback: (msg) => this._mmLog('warn', null, msg),
         });
+        normalizedConfig = result.normalizedConfig;
+        const legacyUsed = result.legacyUsed;
 
         const identifier = normalizedConfig.id || 'default';
+        const sessionId = payload.sessionId || 'unknown';
+
+        // Store config per session for isolation (each browser window keeps its own config)
+        sessionKey = `${identifier}:${sessionId}`;
+        this._configsBySession.set(sessionKey, normalizedConfig);
+        this._mmLog('debug', null, `[FETCH_DATA] Config stored for session=${sessionKey}`);
 
         // Persist debugDate: save it if present in current config, otherwise use the persisted one
         if (normalizedConfig.debugDate) {
@@ -1136,9 +1161,18 @@ module.exports = NodeHelper.create({
         }
 
         // Store validated config per identifier for multi-instance support
+        // Always update config, even if a timer is already running, to ensure
+        // the latest config is used for the next execution (e.g., after browser reload)
+        const existingConfig = this._configsByIdentifier.get(identifier);
+        configChanged = existingConfig !== undefined; // true if config already existed (update scenario)
         this._configsByIdentifier.set(identifier, normalizedConfig);
         // Also set as global config for backward compatibility (use most recent)
         this.config = normalizedConfig;
+
+        // Log if config was updated for an existing identifier
+        if (configChanged) {
+          this._mmLog('debug', null, `[FETCH_DATA] Config updated for identifier=${identifier} (likely browser reload)`);
+        }
 
         this._mmLog(
           'debug',
@@ -1157,112 +1191,130 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      // Debounce and coalesce requests from multiple instances
-      // If multiple module instances send FETCH_DATA within a short window,
-      // execute them together to reduce API calls
-      if (this._coalescingTimer) {
-        const identifier = this.config.id || 'default';
-        this._mmLog('debug', null, `[FETCH_DATA] Request queued for coalescing (identifier=${identifier})`);
+      // If config was updated (browser reload), cancel the existing timer for this session and start fresh
+      // This ensures the new config is used immediately instead of waiting for the next interval
+      const shouldFetchImmediately = configChanged;
+      if (this._coalescingTimerBySession.has(sessionKey) && shouldFetchImmediately) {
+        this._mmLog(
+          'debug',
+          null,
+          `[FETCH_DATA] Cancelling existing timer for session ${sessionKey} to apply new config immediately (configChanged=${configChanged})`
+        );
+        clearTimeout(this._coalescingTimerBySession.get(sessionKey));
+        this._coalescingTimerBySession.delete(sessionKey);
+      }
+
+      // Debounce and coalesce requests per session
+      // If this session already has a timer running, just queue the config and wait
+      if (this._coalescingTimerBySession.has(sessionKey)) {
+        this._mmLog('debug', null, `[FETCH_DATA] Request queued for coalescing (session=${sessionKey})`);
         return;
       }
 
-      this._coalescingTimer = setTimeout(async () => {
-        this._coalescingTimer = null;
-        await this._executeFetchForAllInstances();
+      // Start session-specific coalescing timer
+      const timer = setTimeout(async () => {
+        this._coalescingTimerBySession.delete(sessionKey);
+        await this._executeFetchForSession(sessionKey);
       }, this._coalescingDelay);
 
-      this._mmLog('debug', null, `[FETCH_DATA] Coalescing timer started (${this._coalescingDelay}ms window)`);
+      this._coalescingTimerBySession.set(sessionKey, timer);
+      this._mmLog('debug', null, `[FETCH_DATA] Coalescing timer started for session ${sessionKey} (${this._coalescingDelay}ms window)`);
     }
   },
 
   /**
-   * Execute fetch for all queued module instances
-   * This reduces redundant API calls when multiple instances are configured
+   * Execute fetch for a specific session
+   * This processes only the config for the given session
    */
-  async _executeFetchForAllInstances() {
-    const instances = Array.from(this._configsByIdentifier.entries());
-    this._mmLog('debug', null, `Processing ${instances.length} module instance(s)`);
+  async _executeFetchForSession(sessionKey) {
+    if (!this._configsBySession.has(sessionKey)) {
+      this._mmLog('warn', null, `Session ${sessionKey} not found, skipping fetch`);
+      return;
+    }
 
-    for (const [identifier, config] of instances) {
-      // Set as active config for this execution
-      this.config = config;
+    const config = this._configsBySession.get(sessionKey);
+    const [identifier] = sessionKey.split(':'); // Extract identifier from "identifier:sessionId"
 
-      try {
-        // Auto-discover students from app/data when parent credentials are provided but students[] is missing
-        await this._ensureStudentsFromAppData(this.config);
+    this._mmLog('debug', null, `Processing session: ${sessionKey}`);
 
-        // If after normalization there are still no students configured, attempt to build
-        // the students array internally from app/data so the rest of the flow can proceed.
-        if (!Array.isArray(this.config.students) || this.config.students.length === 0) {
-          try {
-            const server = this.config.server || 'webuntis.com';
-            const creds = { username: this.config.username, password: this.config.password, school: this.config.school };
-            if (creds.username && creds.password && creds.school) {
-              const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
-              const autoStudents = this._deriveStudentsFromAppData(appData);
-              if (autoStudents && autoStudents.length > 0) {
-                if (!this.config._autoStudentsAssigned) {
-                  const defNoStudents = { ...(this.config || {}) };
-                  delete defNoStudents.students;
-                  const normalized = autoStudents.map((s) => {
-                    const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
-                    // Ensure displayMode is lowercase
-                    if (typeof merged.displayMode === 'string') {
-                      merged.displayMode = merged.displayMode.toLowerCase();
-                    }
-                    return merged;
-                  });
-                  this.config.students = normalized;
-                  this.config._autoStudentsAssigned = true;
-                  const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-                  this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
-                } else {
-                  this._mmLog('debug', null, 'Auto-built students already assigned; skipping');
-                }
+    // Set as active config for this execution
+    this.config = config;
+
+    try {
+      // Auto-discover students from app/data when parent credentials are provided but students[] is missing
+      await this._ensureStudentsFromAppData(this.config);
+
+      // If after normalization there are still no students configured, attempt to build
+      // the students array internally from app/data so the rest of the flow can proceed.
+      if (!Array.isArray(this.config.students) || this.config.students.length === 0) {
+        try {
+          const server = this.config.server || 'webuntis.com';
+          const creds = { username: this.config.username, password: this.config.password, school: this.config.school };
+          if (creds.username && creds.password && creds.school) {
+            const { appData } = await this._getRestAuthTokenAndCookies(creds.school, creds.username, creds.password, server);
+            const autoStudents = this._deriveStudentsFromAppData(appData);
+            if (autoStudents && autoStudents.length > 0) {
+              if (!this.config._autoStudentsAssigned) {
+                const defNoStudents = { ...(this.config || {}) };
+                delete defNoStudents.students;
+                const normalized = autoStudents.map((s) => {
+                  const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
+                  // Ensure displayMode is lowercase
+                  if (typeof merged.displayMode === 'string') {
+                    merged.displayMode = merged.displayMode.toLowerCase();
+                  }
+                  return merged;
+                });
+                this.config.students = normalized;
+                this.config._autoStudentsAssigned = true;
+                const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
+                this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
+              } else {
+                this._mmLog('debug', null, 'Auto-built students already assigned; skipping');
               }
             }
-          } catch (e) {
-            this._mmLog('debug', null, `Auto-build students from app/data failed: ${this._formatErr(e)}`);
           }
+        } catch (e) {
+          this._mmLog('debug', null, `Auto-build students from app/data failed: ${this._formatErr(e)}`);
         }
-
-        // Group students by credential so we can reuse the same untis session
-        const groups = new Map();
-
-        // Group students by credential. Normalize each student config for legacy key compatibility.
-        const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
-        for (const student of studentsList) {
-          // Apply legacy config mapping to student-level config
-          const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-          const credKey = this._getCredentialKey(normalizedStudent, this.config);
-          if (!groups.has(credKey)) groups.set(credKey, []);
-          groups.get(credKey).push(normalizedStudent);
-        }
-
-        // Process each credential group for this instance
-        for (const [credKey, students] of groups.entries()) {
-          // Check if already processing this credKey from another instance
-          if (this._pendingFetchByCredKey.has(credKey)) {
-            this._mmLog('debug', null, `Skipping duplicate fetch for credKey=${credKey} (already processing from another instance)`);
-            continue;
-          }
-
-          // Mark as processing
-          this._pendingFetchByCredKey.set(credKey, true);
-
-          try {
-            // Run sequentially to reduce peak memory usage on low-RAM devices
-            await this.processGroup(credKey, students, identifier);
-          } finally {
-            // Remove from pending after completion
-            this._pendingFetchByCredKey.delete(credKey);
-          }
-        }
-
-        this._mmLog('debug', null, `Successfully fetched data for instance ${identifier}`);
-      } catch (error) {
-        this._mmLog('error', null, `Error loading Untis data for instance ${identifier}: ${error}`);
       }
+
+      // Group students by credential so we can reuse the same untis session
+      const groups = new Map();
+
+      // Group students by credential. Normalize each student config for legacy key compatibility.
+      const studentsList = Array.isArray(this.config.students) ? this.config.students : [];
+      for (const student of studentsList) {
+        // Apply legacy config mapping to student-level config
+        const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
+        const credKey = this._getCredentialKey(normalizedStudent, this.config);
+        if (!groups.has(credKey)) groups.set(credKey, []);
+        groups.get(credKey).push(normalizedStudent);
+      }
+
+      // Process each credential group for this session
+      for (const [credKey, students] of groups.entries()) {
+        // Check if already processing this credKey from another session
+        if (this._pendingFetchByCredKey.has(credKey)) {
+          this._mmLog('debug', null, `Skipping duplicate fetch for credKey=${credKey} (already processing from another session)`);
+          continue;
+        }
+
+        // Mark as processing
+        this._pendingFetchByCredKey.set(credKey, true);
+
+        try {
+          // Run sequentially to reduce peak memory usage on low-RAM devices
+          await this.processGroup(credKey, students, identifier, sessionKey);
+        } finally {
+          // Remove from pending after completion
+          this._pendingFetchByCredKey.delete(credKey);
+        }
+      }
+
+      this._mmLog('debug', null, `Successfully fetched data for session ${sessionKey}`);
+    } catch (error) {
+      this._mmLog('error', null, `Error loading Untis data for session ${sessionKey}: ${error}`);
     }
   },
 
@@ -1361,6 +1413,10 @@ module.exports = NodeHelper.create({
     // Backend fetches raw data from Untis API. No transformation here.
 
     const restOptions = { cacheKey: credKey, authSession };
+    // Pass QR code URL if available (needed for re-authentication when token expires)
+    if (authSession.qrCodeUrl) {
+      restOptions.qrCodeUrl = authSession.qrCodeUrl;
+    }
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
     const bearerToken = authSession.token;

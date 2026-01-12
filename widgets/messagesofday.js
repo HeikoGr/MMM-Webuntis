@@ -1,13 +1,17 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addTableRow } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addFullRow, addHeader } = root.util?.initWidget?.(root) || {};
 
-  function renderMessagesOfDayForStudent(ctx, table, studentCellTitle, studentConfig, messagesOfDay) {
+  function renderMessagesOfDayForStudent(ctx, container, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;
+
+    // Add localized header "Messages of the Day" / "Nachrichten des Tages"
+    const headerTitle = ctx.translate('messagesofday');
+    addHeader(container, headerTitle);
 
     if (!Array.isArray(messagesOfDay) || messagesOfDay.length === 0) {
       log('debug', `[messagesofday] no data`);
-      addTableRow(table, 'messageRowEmpty', studentCellTitle, ctx.translate('no_messages'));
+      addFullRow(container, 'messageRowEmpty', ctx.translate('no_messages'));
       return 1;
     }
 
@@ -20,11 +24,12 @@
       const text = String(msg?.text || '').trim();
       const isExpanded = msg?.isExpanded === true;
 
-      // Subject is displayed as the "meta" column (similar to date in other widgets)
-      const meta = subject || '';
-
-      // Text comes pre-sanitized from backend with \n preserved from <br> tags
+      // Subject as bold prefix, followed by text on the same line or next line
+      const subjectHtml = subject ? `<strong>${escapeHtml(subject)}</strong>` : '';
       const contentText = text || ctx.translate('no_text');
+
+      // Combine subject and text
+      const fullContent = subjectHtml ? `${subjectHtml}<br/>${contentText}` : contentText;
 
       // Build the row classes
       let rowClasses = 'messageRow';
@@ -34,8 +39,7 @@
 
       // Text contains safe HTML formatting tags from backend (b, i, u, etc.)
       // Don't escape - render as HTML via innerHTML. Backend sanitizes and only allows safe tags.
-      // But DO escape the meta (subject) field
-      addTableRow(table, rowClasses, '', escapeHtml(meta), contentText);
+      addFullRow(container, rowClasses, fullContent);
       addedRows++;
     }
 

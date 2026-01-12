@@ -1,13 +1,19 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addTableRow, getWidgetConfig, formatDate, formatTime } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime } = root.util?.initWidget?.(root) || {};
 
-  function renderAbsencesForStudent(ctx, table, studentCellTitle, studentConfig, absences) {
+  function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
+
+    // Determine mode and handle header
+    const mode = studentConfig?.mode ?? 'compact';
+    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+    // Header is already added by main module if studentCellTitle is empty
+    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(absences) || absences.length === 0) {
       log('debug', `[absences] no data`);
-      addTableRow(table, 'absenceRowEmpty', studentCellTitle, ctx.translate('no_absences'));
+      addRow(container, 'absenceRowEmpty', studentCell, ctx.translate('no_absences'));
       return 1;
     }
 
@@ -112,7 +118,7 @@
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 
-      addTableRow(table, 'absenceRow', studentCellTitle, meta || ctx.translate('absences'), data);
+      addRow(container, 'absenceRow', studentCell, meta || ctx.translate('absences'), data);
       addedRows++;
       visibleCount++;
     }

@@ -1,8 +1,8 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addTableRow, addTableHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
-  function renderLessonsForStudent(ctx, table, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
+  function renderLessonsForStudent(ctx, container, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
     let addedRows = 0;
 
@@ -60,7 +60,8 @@
     // Determine mode (student-config has priority)
     const mode = studentConfig?.mode ?? 'compact';
     const studentCell = mode === 'verbose' ? '' : studentCellTitle;
-    if (mode === 'verbose') addTableHeader(table, studentCellTitle);
+    // Header is already added by main module if studentCellTitle is empty
+    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     // Determine lessons date format
     const lessonsDateFormat = getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
@@ -86,7 +87,19 @@
       const dd = ('0' + dayDate.getDate()).slice(-2);
       const dateYmd = Number(`${y}${m}${dd}`);
 
-      const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
+      const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => {
+        const aTime = Number(a.startTime) || 0;
+        const bTime = Number(b.startTime) || 0;
+        if (aTime !== bTime) return aTime - bTime;
+
+        // Same time: cancelled lessons first, then substitutions/irregulars
+        const aCancelled = a.code === 'cancelled' || a.status === 'CANCELLED';
+        const bCancelled = b.code === 'cancelled' || b.status === 'CANCELLED';
+        if (aCancelled && !bCancelled) return -1;
+        if (!aCancelled && bCancelled) return 1;
+
+        return 0;
+      });
 
       if (!entries || entries.length === 0) {
         // No lessons that day — check for holiday
@@ -94,7 +107,7 @@
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
-          addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
+          addRow(container, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
         continue;
@@ -187,7 +200,7 @@
           }
         }
 
-        addTableRow(table, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
+        addRow(container, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
       }
 
       // If no rows rendered for this date (all filtered), still show holiday notice if applicable
@@ -196,7 +209,7 @@
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
           const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
-          addTableRow(table, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
+          addRow(container, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
           addedRows++;
         }
       }
@@ -204,7 +217,7 @@
 
     if (addedRows === 0) {
       log('debug', `[lessons] no entries to display`);
-      addTableRow(table, 'lessonRowEmpty', studentCell, ctx.translate('nothing'));
+      addRow(container, 'lessonRowEmpty', studentCell, ctx.translate('nothing'));
       return 1;
     }
 

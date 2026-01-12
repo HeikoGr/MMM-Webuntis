@@ -1,8 +1,8 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addTableRow, addTableHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
 
-  function renderExamsForStudent(ctx, table, studentCellTitle, studentConfig, exams) {
+  function renderExamsForStudent(ctx, container, studentCellTitle, studentConfig, exams) {
     try {
       let addedRows = 0;
       if (!Array.isArray(exams)) {
@@ -17,7 +17,8 @@
       // Determine mode (normalized from student config)
       const mode = studentConfig?.mode ?? 'compact';
       const studentCell = mode === 'verbose' ? '' : studentCellTitle;
-      if (mode === 'verbose') addTableHeader(table, studentCellTitle);
+      // Header is already added by main module if studentCellTitle is empty
+      if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
       // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
       const rangeEnd = Number(getWidgetConfig(studentConfig, 'exams', 'nextDays') ?? 7);
@@ -69,12 +70,12 @@
             nameCell += `<br/><span class="xsmall dimmed">${escapeHtml(exam.text)}</span>`;
           }
 
-          addTableRow(table, 'examRow', studentCell, dateTimeCell, nameCell);
+          addRow(container, 'examRow', studentCell, dateTimeCell, nameCell);
         });
 
       if (addedRows === 0) {
         log('debug', `[exams] no entries to display`);
-        addTableRow(table, 'examRowEmpty', studentCell, ctx.translate('no_exams'));
+        addRow(container, 'examRowEmpty', studentCell, ctx.translate('no_exams'));
       } else {
         log('debug', `[exams] render complete | rows: ${addedRows}`);
       }
