@@ -434,7 +434,7 @@ function getNowLineState(ctx) {
         ctx,
         'debug',
         `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-        `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
       );
     }
 
@@ -651,12 +651,14 @@ function getNowLineState(ctx) {
     };
 
     const subjectGroups = new Map();
-    for (const lesson of lessons) {
-      const subject = getSubjectName(lesson) || `unknown_${lesson.id}`;
-      if (!subjectGroups.has(subject)) {
-        subjectGroups.set(subject, []);
+    for (let index = 0; index < lessons.length; index++) {
+      const lesson = lessons[index];
+      const subject = getSubjectName(lesson);
+      const groupKey = subject || `unknown_${lesson.id ?? index}`;
+      if (!subjectGroups.has(groupKey)) {
+        subjectGroups.set(groupKey, []);
       }
-      subjectGroups.get(subject).push(lesson);
+      subjectGroups.get(groupKey).push(lesson);
     }
 
     // Create ticker wrapper - minimal container without lesson styling
@@ -707,8 +709,18 @@ function getNowLineState(ctx) {
           const lessonStartOffset = lesson.startMin - groupStartMin;
           const lessonDuration = lesson.endMin - lesson.startMin;
 
-          const topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
-          const heightPercent = (lessonDuration / totalGroupMinutes) * 100;
+          let topPercent;
+          let heightPercent;
+
+          if (totalGroupMinutes === 0) {
+            // Degenerate case: no time span in this group (e.g. zero-length lesson).
+            // Render the lesson as occupying the full height.
+            topPercent = 0;
+            heightPercent = 100;
+          } else {
+            topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
+            heightPercent = (lessonDuration / totalGroupMinutes) * 100;
+          }
 
           lessonDiv.style.position = 'absolute';
           lessonDiv.style.top = `${topPercent}%`;
@@ -845,12 +857,12 @@ function getNowLineState(ctx) {
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
       ? (() => {
-        const s = String(ctx._currentTodayYmd);
-        const by = parseInt(s.substring(0, 4), 10);
-        const bm = parseInt(s.substring(4, 6), 10) - 1;
-        const bd = parseInt(s.substring(6, 8), 10);
-        return new Date(by, bm, bd);
-      })()
+          const s = String(ctx._currentTodayYmd);
+          const by = parseInt(s.substring(0, 4), 10);
+          const bm = parseInt(s.substring(4, 6), 10) - 1;
+          const bd = parseInt(s.substring(6, 8), 10);
+          return new Date(by, bm, bd);
+        })()
       : new Date();
     const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 
