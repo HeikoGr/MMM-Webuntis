@@ -14,6 +14,7 @@
   --wu-exam-bar: #ffeb3b;
   --wu-lesson-radius: 4px;
   --wu-lesson-padding: 2px;
+  --wu-lesson-full-padding: 4px;
   --wu-ticker-padding-block: 1px;
   --wu-ticker-padding-inline: 2px;
   --wu-ticker-stack-gap: 2px;
@@ -360,7 +361,7 @@
 .MMM-Webuntis .grid-combined .grid-lesson .full {
   width: 100%;
   box-sizing: border-box;
-  padding: var(--wu-lesson-radius);
+  padding: var(--wu-lesson-full-padding);
   overflow: hidden;
 }
 
