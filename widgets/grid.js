@@ -654,7 +654,7 @@ function getNowLineState(ctx) {
     for (let index = 0; index < lessons.length; index++) {
       const lesson = lessons[index];
       const subject = getSubjectName(lesson);
-      const groupKey = subject || `unknown_${lesson.id != null ? lesson.id : index}`;
+      const groupKey = subject || `unknown_${lesson.id ?? index}`;
       if (!subjectGroups.has(groupKey)) {
         subjectGroups.set(groupKey, []);
       }
