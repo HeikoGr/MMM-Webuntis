@@ -584,20 +584,83 @@ function getNowLineState(ctx) {
   }
 
   function groupLessonsByTimeSlot(lessonsToRender) {
-    const groups = new Map();
-
+    // Group lessons by date first
+    const byDate = new Map();
     for (const lesson of lessonsToRender) {
-      const key = `${lesson.dateStr}_${lesson.startMin}_${lesson.endMin}`;
-      if (!groups.has(key)) {
-        groups.set(key, []);
+      if (!byDate.has(lesson.dateStr)) {
+        byDate.set(lesson.dateStr, []);
       }
-      groups.get(key).push(lesson);
+      byDate.get(lesson.dateStr).push(lesson);
+    }
+
+    // For each date, find overlapping time slots
+    const groups = new Map();
+    let groupId = 0;
+
+    for (const [dateStr, lessons] of byDate.entries()) {
+      // Sort lessons by start time for efficient overlap detection
+      const sorted = lessons.slice().sort((a, b) => a.startMin - b.startMin);
+
+      // Track which lessons have been assigned to a group
+      const assigned = new Set();
+
+      for (let i = 0; i < sorted.length; i++) {
+        if (assigned.has(i)) continue;
+
+        const lesson = sorted[i];
+        const overlappingGroup = [lesson];
+        assigned.add(i);
+
+        // Find all lessons that overlap with any lesson in this group
+        let foundNew = true;
+        while (foundNew) {
+          foundNew = false;
+          for (let j = i + 1; j < sorted.length; j++) {
+            if (assigned.has(j)) continue;
+
+            const candidate = sorted[j];
+            // Check if candidate overlaps with any lesson in the current group
+            const hasOverlap = overlappingGroup.some(
+              (groupLesson) => candidate.startMin < groupLesson.endMin && candidate.endMin > groupLesson.startMin
+            );
+
+            if (hasOverlap) {
+              overlappingGroup.push(candidate);
+              assigned.add(j);
+              foundNew = true;
+            }
+          }
+        }
+
+        // Create unique key for this group
+        const key = `${dateStr}_group_${groupId++}`;
+        groups.set(key, overlappingGroup);
+      }
     }
 
     return groups;
   }
 
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks, lessonType) {
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks) {
+    // Group lessons by subject (same subject = one ticker unit, displayed stacked)
+    const getSubjectName = (lesson) => {
+      if (lesson.su && lesson.su.length > 0) {
+        return lesson.su[0].name || lesson.su[0].longname;
+      }
+      return null;
+    };
+
+    const subjectGroups = new Map();
+    for (let index = 0; index < lessons.length; index++) {
+      const lesson = lessons[index];
+      const subject = getSubjectName(lesson);
+      const groupKey = subject || `unknown_${lesson.id ?? index}`;
+      if (!subjectGroups.has(groupKey)) {
+        subjectGroups.set(groupKey, []);
+      }
+      subjectGroups.get(groupKey).push(lesson);
+    }
+
     // Create ticker wrapper - minimal container without lesson styling
     const tickerWrapper = document.createElement('div');
     tickerWrapper.className = 'lesson-ticker-wrapper';
@@ -607,45 +670,84 @@ function getNowLineState(ctx) {
     tickerWrapper.style.left = '0.15rem'; // Match grid-lesson left offset
     tickerWrapper.style.right = '0.15rem'; // Match grid-lesson right offset
     tickerWrapper.setAttribute('data-date', lessons[0].dateStr);
-    tickerWrapper.setAttribute('data-end-min', String(lessons[0].endMin));
+    tickerWrapper.setAttribute('data-end-min', String(Math.max(...lessons.map((l) => l.endMin))));
 
     // Create ticker track (will contain 2 copies for seamless loop)
     const tickerTrack = document.createElement('div');
     tickerTrack.className = 'ticker-track';
 
-    // Calculate item width as percentage (each item is 100% of wrapper width)
-    const itemCount = lessons.length;
+    // Each subject group is one ticker unit
+    const itemCount = subjectGroups.size;
     const itemWidthPercent = 100; // Each item should be 100% of wrapper width
 
     // Track width is: number of items * 2 (for 2 copies) * item width
     const trackWidth = itemCount * 2 * itemWidthPercent;
     tickerTrack.style.width = `${trackWidth}%`;
 
-    // Add lessons twice for seamless loop
+    // Add subject groups twice for seamless loop
     for (let copy = 0; copy < 2; copy++) {
-      for (const lesson of lessons) {
+      for (const [, subjectLessons] of subjectGroups.entries()) {
         const tickerItem = document.createElement('div');
-        tickerItem.className = 'ticker-item lesson-content';
+        tickerItem.className = 'ticker-item';
 
         // Set item width as percentage of track
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
+        tickerItem.style.position = 'relative';
+        tickerItem.style.height = '100%';
 
-        // Apply lesson type styling
-        if (lessonType === 'cancelled') {
-          tickerItem.classList.add('lesson-cancelled-split');
-        } else if (lessonType === 'irregular') {
-          tickerItem.classList.add('lesson-replacement');
-        } else {
-          tickerItem.classList.add('lesson-regular');
-        }
+        // Calculate overall time range for this subject group
+        const groupStartMin = Math.min(...subjectLessons.map((l) => l.startMin));
+        const groupEndMin = Math.max(...subjectLessons.map((l) => l.endMin));
+        const totalGroupMinutes = groupEndMin - groupStartMin;
 
-        if (isPast) tickerItem.classList.add('past');
-        if (hasExam) tickerItem.classList.add('has-exam');
+        // Create a sub-element for each lesson in this subject group (positioned absolutely)
+        for (const lesson of subjectLessons) {
+          const lessonDiv = document.createElement('div');
+          lessonDiv.className = 'lesson-content';
 
-        tickerItem.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+          // Calculate absolute position and height within the group's time range
+          const lessonStartOffset = lesson.startMin - groupStartMin;
+          const lessonDuration = lesson.endMin - lesson.startMin;
 
-        if (checkHomeworkMatch(lesson, homeworks)) {
-          addHomeworkIcon(tickerItem);
+          let topPercent;
+          let heightPercent;
+
+          if (totalGroupMinutes === 0) {
+            // Degenerate case: no time span in this group (e.g. zero-length lesson).
+            // Render the lesson as occupying the full height.
+            topPercent = 0;
+            heightPercent = 100;
+          } else {
+            topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
+            heightPercent = (lessonDuration / totalGroupMinutes) * 100;
+          }
+
+          lessonDiv.style.position = 'absolute';
+          lessonDiv.style.top = `${topPercent}%`;
+          lessonDiv.style.height = `${heightPercent}%`;
+          lessonDiv.style.left = '0';
+          lessonDiv.style.right = '0';
+
+          // Apply lesson type styling based on individual lesson
+          const lessonCode = lesson.code || '';
+          if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
+            lessonDiv.classList.add('lesson-cancelled-split');
+          } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
+            lessonDiv.classList.add('lesson-replacement');
+          } else {
+            lessonDiv.classList.add('lesson-regular');
+          }
+
+          if (isPast) lessonDiv.classList.add('past');
+          if (hasExam) lessonDiv.classList.add('has-exam');
+
+          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+
+          if (checkHomeworkMatch(lesson, homeworks)) {
+            addHomeworkIcon(lessonDiv);
+          }
+
+          tickerItem.appendChild(lessonDiv);
         }
 
         tickerTrack.appendChild(tickerItem);
@@ -654,15 +756,15 @@ function getNowLineState(ctx) {
 
     tickerWrapper.appendChild(tickerTrack);
 
-    // Calculate animation duration based on number of lessons (longer for more items)
-    const duration = Math.max(10, itemCount * 3); // 3s per item, min 10s
+    // Calculate animation duration based on number of subject groups (longer for more items)
+    const duration = Math.max(10, itemCount * 3); // 3s per subject group, min 10s
     tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
 
     container.appendChild(tickerWrapper);
   }
 
   function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
-    const { leftInner, rightInner, bothInner } = containers;
+    const { bothInner } = containers;
 
     // Group lessons by time slot
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
@@ -680,13 +782,14 @@ function getNowLineState(ctx) {
     for (const [, lessons] of timeSlotGroups.entries()) {
       if (!lessons || lessons.length === 0) continue;
 
-      // Use first lesson for positioning
-      const firstLesson = lessons[0];
-      let sMin = firstLesson.startMin;
-      let eMin = firstLesson.endMin;
+      // For overlapping lessons, use the entire time range (earliest start to latest end)
+      let sMin = Math.min(...lessons.map((l) => l.startMin));
+      let eMin = Math.max(...lessons.map((l) => l.endMin));
       sMin = Math.max(sMin, allStart);
       eMin = Math.min(eMin, allEnd);
       if (eMin <= sMin) continue;
+
+      const firstLesson = lessons[0];
 
       const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
       const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
@@ -699,80 +802,35 @@ function getNowLineState(ctx) {
         if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
       }
 
-      // Analyze slot: separate cancelled, irregular, and regular lessons
-      const cancelled = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
-      const irregular = lessons.filter((l) => l.code === 'irregular' || l.status === 'SUBSTITUTION');
-      const regular = lessons.filter((l) => !l.code || l.code === '' || (l.code !== 'cancelled' && l.code !== 'irregular'));
-
       const hasExam = lessons.some((l) => lessonHasExam(l));
 
-      // RULE 1: Regular lessons -> full width (bothInner)
-      if (regular.length > 0) {
-        if (regular.length === 1) {
-          const lesson = regular[0];
-          const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+      // RULE 1: Multiple overlapping lessons -> ticker (includes ALL lessons, even cancelled)
+      if (lessons.length > 1) {
+        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
+      }
+      // RULE 2: Single lesson -> full width cell
+      else if (lessons.length === 1) {
+        const lesson = lessons[0];
+        const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+
+        const lessonCode = lesson.code || '';
+        if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
+          bothCell.classList.add('lesson-cancelled-split');
+        } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
+          bothCell.classList.add('lesson-replacement');
+        } else {
           bothCell.classList.add('lesson-regular');
-          if (hasExam) bothCell.classList.add('has-exam');
-          if (isPast) bothCell.classList.add('past');
-          bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
-
-          if (checkHomeworkMatch(lesson, homeworks)) {
-            addHomeworkIcon(bothCell);
-          }
-
-          bothInner.appendChild(bothCell);
-        } else {
-          // Multiple regular lessons -> ticker animation in bothInner
-          createTickerAnimation(regular, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks, 'regular');
         }
-      }
 
-      // RULE 2: Cancelled lessons -> right side (rightInner)
-      if (cancelled.length > 0) {
-        if (cancelled.length === 1) {
-          const lesson = cancelled[0];
-          const rightCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
-          rightCell.classList.add('lesson-cancelled-split');
-          if (hasExam) rightCell.classList.add('has-exam');
-          if (isPast) rightCell.classList.add('past');
-          rightCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+        if (hasExam) bothCell.classList.add('has-exam');
+        if (isPast) bothCell.classList.add('past');
+        bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
 
-          if (checkHomeworkMatch(lesson, homeworks)) {
-            addHomeworkIcon(rightCell);
-          }
-
-          rightInner.appendChild(rightCell);
-        } else {
-          // Multiple cancelled lessons -> ticker animation in rightInner
-          createTickerAnimation(cancelled, topPx, heightPx, rightInner, ctx, escapeHtml, hasExam, isPast, homeworks, 'cancelled');
+        if (checkHomeworkMatch(lesson, homeworks)) {
+          addHomeworkIcon(bothCell);
         }
-      }
 
-      // RULE 3: Irregular/Substitution lessons
-      // -> left side IF there's a regular or cancelled lesson to replace
-      // -> full width IF no replacement (standalone irregular)
-      if (irregular.length > 0) {
-        const hasReplacement = regular.length > 0 || cancelled.length > 0;
-
-        if (irregular.length === 1) {
-          const lesson = irregular[0];
-          const targetContainer = hasReplacement ? leftInner : bothInner;
-          const cell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
-          cell.classList.add('lesson-replacement');
-          if (hasExam) cell.classList.add('has-exam');
-          if (isPast) cell.classList.add('past');
-          cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
-
-          if (checkHomeworkMatch(lesson, homeworks)) {
-            addHomeworkIcon(cell);
-          }
-
-          targetContainer.appendChild(cell);
-        } else {
-          // Multiple irregular lessons -> ticker animation
-          const targetContainer = hasReplacement ? leftInner : bothInner;
-          createTickerAnimation(irregular, topPx, heightPx, targetContainer, ctx, escapeHtml, hasExam, isPast, homeworks, 'irregular');
-        }
+        bothInner.appendChild(bothCell);
       }
     }
   }
