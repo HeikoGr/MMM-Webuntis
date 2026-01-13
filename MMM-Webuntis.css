@@ -20,6 +20,8 @@
   --wu-ticker-item-gap: 1px;
   --wu-homework-icon-top: 2px;
   --wu-homework-icon-right: 0px;
+  --wu-homework-padding: 2px;
+  --wu-exam-border-width: 6px;
   max-width: 31.25rem;
   width: 100%;
   box-sizing: border-box;
@@ -160,7 +162,7 @@
   grid-template-columns: minmax(5.625rem, auto) 1fr;
   gap: 0.125rem;
   background: var(--wu-bg);
-  border-radius: 4px;
+  border-radius: var(--wu-lesson-radius);
   overflow: hidden;
   position: relative;
 }
@@ -207,8 +209,8 @@
 }
 
 .MMM-Webuntis .grid-combined .grid-lesson.has-exam {
-  border-left: 6px solid var(--wu-exam-bar);
-  padding-left: 2px;
+  border-left: var(--wu-exam-border-width) solid var(--wu-exam-bar);
+  padding-left: var(--wu-homework-padding);
 }
 
 .MMM-Webuntis .day-column-inner.is-today {
@@ -328,7 +330,7 @@
 
 .MMM-Webuntis .grid-combined .lesson {
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: var(--wu-lesson-radius);
   text-align: left;
 }
 
@@ -358,7 +360,7 @@
 .MMM-Webuntis .grid-combined .grid-lesson .full {
   width: 100%;
   box-sizing: border-box;
-  padding: 4px;
+  padding: var(--wu-lesson-radius);
   overflow: hidden;
 }
 
