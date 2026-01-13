@@ -712,7 +712,7 @@ function getNowLineState(ctx) {
           let topPercent;
           let heightPercent;
 
-          if (totalGroupMinutes <= 0) {
+          if (totalGroupMinutes === 0) {
             // Degenerate case: no time span in this group (e.g. zero-length lesson).
             // Render the lesson as occupying the full height.
             topPercent = 0;
