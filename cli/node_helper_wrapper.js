@@ -189,93 +189,6 @@ function getModuleConfig(config) {
 }
 
 /**
- * Load defaults dynamically from MMM-Webuntis.js
- * This ensures defaults are always in sync with the module definition
- */
-function loadModuleDefaults() {
-  try {
-    const mmmPath = path.join(__dirname, '..', 'MMM-Webuntis.js');
-    // Read the file to extract defaults object
-    const content = fs.readFileSync(mmmPath, 'utf8');
-
-    // Use regex to find the defaults object
-    // Match defaults: beginning with "{" to the closing "}" before getStyles()
-    const match = content.match(/defaults:\s*\{([\s\S]*?)\n\s*\},\s*getStyles/);
-    if (!match) {
-      throw new Error('Could not find defaults object in MMM-Webuntis.js');
-    }
-
-    // Build a valid JavaScript object string
-    const defaultsStr = `({${match[1]}\n})`;
-
-    // Use Function constructor instead of eval (safer) - still isolated
-    // Since we control the source file, this is safe for our use case
-    const moduleDefaults = new Function(`return ${defaultsStr}`)();
-
-    return moduleDefaults;
-  } catch (err) {
-    // Fallback to hardcoded defaults if dynamic load fails
-    console.warn(`Warning: Could not load defaults from MMM-Webuntis.js: ${err.message}`);
-    return {
-      header: 'MMM-Webuntis',
-      fetchIntervalMs: 15 * 60 * 1000,
-      logLevel: 'none',
-      displayMode: 'list',
-      mode: 'verbose',
-      daysToShow: 7,
-      pastDaysToShow: 0,
-      showStartTime: false,
-      showRegular: true,
-      showTeacherMode: 'full',
-      useShortSubject: false,
-      showSubstitution: false,
-      daysAhead: 21,
-      showSubject: true,
-      showTeacher: true,
-      mergeGap: 15,
-      maxLessons: 0,
-      showNowLine: true,
-      pastDays: 21,
-      nextDays: 7,
-      dateFormat: 'dd.MM.',
-      examDateFormat: 'dd.MM.',
-      homeworkDateFormat: 'dd.MM.',
-      useClassTimetable: false,
-      dumpBackendPayloads: false,
-      students: [],
-    };
-  }
-}
-
-// Cache the defaults on first load
-let cachedDefaults = null;
-
-/**
- * Load defaults from MMM-Webuntis.js and merge with module config
- * Ensures all expected fields have values (either from config or defaults)
- */
-function mergeWithModuleDefaults(moduleConfig) {
-  // Load defaults once and cache them
-  if (cachedDefaults === null) {
-    cachedDefaults = loadModuleDefaults();
-  }
-
-  // Deep merge: defaults first, then override with config values
-  // Widget namespaces need deep merge, not shallow merge
-  const merged = { ...cachedDefaults, ...moduleConfig };
-
-  // Deep merge widget namespaces
-  const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-  widgetNamespaces.forEach((widget) => {
-    if (cachedDefaults[widget] || moduleConfig[widget]) {
-      merged[widget] = { ...cachedDefaults[widget], ...moduleConfig[widget] };
-    }
-  });
-
-  return merged;
-}
-
-/**
  * Fetch data for a single student
  * Now accepts mergedConfig directly to avoid file-based lookup
  */
@@ -459,58 +372,51 @@ async function cmdFetch(flags) {
   if (verbose) setLogLevel('debug');
 
   try {
+    // Clear all caches before fetch to ensure fresh data
+    if (nodeHelper.cacheManager) {
+      nodeHelper.cacheManager.clearAll();
+      Log.wrapper_info('🔄 Cleared all caches for fresh data');
+    }
+
     Log.wrapper_info('Loading configuration...');
     const { config, filePath } = loadConfig(configPath);
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
-    let moduleConfig = getModuleConfig(config);
+    // Simulate INIT_MODULE: load and validate config (same as browser init)
+    const cliIdentifier = 'cli-wrapper';
+    const cliSessionId = 'cli-session';
+    const initPayload = {
+      ...getModuleConfig(config),
+      id: cliIdentifier,
+      sessionId: cliSessionId,
+      debugApi: debugApi,
+    };
 
-    // Apply legacy config normalization FIRST to detect deprecated keys and show warnings
-    // This must happen before merging defaults, otherwise legacy values won't be mapped
-    moduleConfig = nodeHelper._normalizeLegacyConfig(moduleConfig);
+    // Call _handleInitModule to set up config properly (like browser does)
+    // This validates config, discovers students, sets up AuthService
+    await nodeHelper._handleInitModule(initPayload);
 
-    // Then merge with module defaults to ensure all options have values
-    moduleConfig = mergeWithModuleDefaults(moduleConfig);
+    // After init, get the initialized config from storage
+    const sessionKey = `${cliIdentifier}:${cliSessionId}`;
+    if (!nodeHelper._configsByIdentifier.has(cliIdentifier)) {
+      throw new Error('Config initialization failed - no config stored after _handleInitModule');
+    }
 
-    await nodeHelper._ensureStudentsFromAppData(moduleConfig);
-    // Emulate MagicMirror socket payload: set id, config and per-student fallbacks
-    moduleConfig.id = moduleConfig.id || 'wrapper-cli';
-    moduleConfig.debugApi = debugApi;
-    nodeHelper.config = moduleConfig;
-    const defaultProps = [
-      'daysToShow',
-      'pastDaysToShow',
-      'showStartTime',
-      'useClassTimetable',
-      'showTeacherMode',
-      'useShortSubject',
-      'showSubstitution',
-      'daysAhead',
-      'showSubject',
-      'showTeacher',
-      'logLevel',
-    ];
+    const moduleConfig = nodeHelper._configsByIdentifier.get(cliIdentifier);
+
+    // Apply widget namespace defaults and per-student config merging
+    // (This is needed for CLI specifically to handle older config formats)
     const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-    moduleConfig.students.forEach((stu) => {
-      defaultProps.forEach((prop) => {
-        if (stu[prop] === undefined) stu[prop] = moduleConfig[prop];
+    if (Array.isArray(moduleConfig.students)) {
+      moduleConfig.students.forEach((stu) => {
+        // Copy widget namespace configs from module to student if not already set
+        widgetNamespaces.forEach((widget) => {
+          if (!stu[widget] && moduleConfig[widget]) {
+            stu[widget] = { ...moduleConfig[widget] };
+          }
+        });
       });
-      // Copy widget namespace configs from module to student if not already set
-      widgetNamespaces.forEach((widget) => {
-        if (!stu[widget] && moduleConfig[widget]) {
-          stu[widget] = { ...moduleConfig[widget] };
-        }
-      });
-      if (stu.daysToShow < 0 || stu.daysToShow > 10 || isNaN(stu.daysToShow)) {
-        stu.daysToShow = 1;
-      }
-      if (stu.pastDaysToShow === undefined || isNaN(stu.pastDaysToShow)) {
-        stu.pastDaysToShow = moduleConfig.pastDaysToShow || 0;
-      }
-      if (stu.displayMode == 'list') {
-        stu.displayMode = 'lessons,exams';
-      }
-    });
+    }
 
     // Decide which students to iterate
     let studentIndices = [];
@@ -522,12 +428,16 @@ async function cmdFetch(flags) {
       // All students explicitly requested
       studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
     } else {
-      // Default: all students (changed from first-only for better UX)
+      // Default: all students
       studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
     }
 
     Log.wrapper_info(`\n📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
     Log.wrapper_info(`Testing student(s): [${studentIndices.join(', ')}]`);
+
+    // Execute fetch directly (skip coalescing timer since CLI doesn't need it)
+    // This simulates what _executeFetchForSession does, but synchronously
+    await nodeHelper._executeFetchForSession(sessionKey);
 
     // Fetch data for each selected student
     let successCount = 0;

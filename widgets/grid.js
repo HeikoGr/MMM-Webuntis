@@ -434,7 +434,7 @@ function getNowLineState(ctx) {
         ctx,
         'debug',
         `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+        `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
       );
     }
 
@@ -804,8 +804,42 @@ function getNowLineState(ctx) {
 
       const hasExam = lessons.some((l) => lessonHasExam(l));
 
-      // RULE 1: Multiple overlapping lessons -> ticker (includes ALL lessons, even cancelled)
-      if (lessons.length > 1) {
+      // RULE 1a: Exactly 2 lessons - one cancelled, one irregular -> split view (regular substitution)
+      // This is the typical case: original lesson cancelled, replacement lesson irregular
+      if (lessons.length === 2) {
+        const cancelledLesson = lessons.find((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
+        const irregularLesson = lessons.find((l) => l.code === 'irregular' || l.status === 'SUBSTITUTION');
+
+        if (cancelledLesson && irregularLesson) {
+          // Use split view: irregular left, cancelled right
+          const { leftInner, rightInner } = containers;
+
+          const leftCell = createLessonCell(topPx, heightPx, irregularLesson.dateStr, eMin);
+          leftCell.classList.add('lesson-replacement');
+          if (hasExam) leftCell.classList.add('has-exam');
+          if (isPast) leftCell.classList.add('past');
+          leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml);
+          if (checkHomeworkMatch(irregularLesson, homeworks)) {
+            addHomeworkIcon(leftCell);
+          }
+          leftInner.appendChild(leftCell);
+
+          const rightCell = createLessonCell(topPx, heightPx, cancelledLesson.dateStr, eMin);
+          rightCell.classList.add('lesson-cancelled-split');
+          if (hasExam) rightCell.classList.add('has-exam');
+          if (isPast) rightCell.classList.add('past');
+          rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml);
+          if (checkHomeworkMatch(cancelledLesson, homeworks)) {
+            addHomeworkIcon(rightCell);
+          }
+          rightInner.appendChild(rightCell);
+        } else {
+          // Two lessons but not the cancelled+irregular pattern -> use ticker
+          createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
+        }
+      }
+      // RULE 1b: More than 2 overlapping lessons -> ticker
+      else if (lessons.length > 2) {
         createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
       }
       // RULE 2: Single lesson -> full width cell
@@ -857,12 +891,12 @@ function getNowLineState(ctx) {
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
       ? (() => {
-          const s = String(ctx._currentTodayYmd);
-          const by = parseInt(s.substring(0, 4), 10);
-          const bm = parseInt(s.substring(4, 6), 10) - 1;
-          const bd = parseInt(s.substring(6, 8), 10);
-          return new Date(by, bm, bd);
-        })()
+        const s = String(ctx._currentTodayYmd);
+        const by = parseInt(s.substring(0, 4), 10);
+        const bm = parseInt(s.substring(4, 6), 10) - 1;
+        const bd = parseInt(s.substring(6, 8), 10);
+        return new Date(by, bm, bd);
+      })()
       : new Date();
     const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 

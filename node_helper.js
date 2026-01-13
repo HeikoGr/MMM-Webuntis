@@ -57,6 +57,8 @@ module.exports = NodeHelper.create({
     // Session-based coalescing: each session gets its own timer
     this._coalescingTimerBySession = new Map();
     this._coalescingDelay = 2000; // 2 seconds window to coalesce requests
+    // Track which identifiers have completed student auto-discovery
+    this._studentsDiscovered = {};
   },
 
   /**
@@ -701,9 +703,59 @@ module.exports = NodeHelper.create({
           // ignore validation errors
         }
 
+        // Merge module-level defaults into configured students
+        // This ensures every student has all config fields (displayMode, nextDays, etc.)
+        // so fetchData() doesn't need to fall back to module-level config
+        if (!moduleConfig._moduleDefaultsMerged) {
+          const defNoStudents = { ...(moduleConfig || {}) };
+          delete defNoStudents.students;
+          // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
+          delete defNoStudents.username;
+          delete defNoStudents.password;
+          delete defNoStudents.school;
+          delete defNoStudents.server;
+
+          const allStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
+          const mergedStudents = allStudents.map((s) => {
+            // Apply legacy mappings to student config (converts old keys to new structure)
+            const { normalizedConfig: normalizedStudent } = applyLegacyMappings(s || {}, {
+              warnCallback: (msg) => this._mmLog('warn', null, msg),
+            });
+            // Merge with module defaults, preserving nested objects like grid, homework, absences
+            // Start with defaults, then layer in student-specific overrides
+            const merged = {
+              ...defNoStudents,
+              ...normalizedStudent,
+              // Preserve nested grid config from defaults if not overridden
+              grid: { ...defNoStudents.grid, ...normalizedStudent.grid },
+              // Preserve nested homework config from defaults if not overridden
+              homework: {
+                ...defNoStudents.homework,
+                ...normalizedStudent.homework,
+              },
+              // Preserve nested absences config from defaults if not overridden
+              absences: {
+                ...defNoStudents.absences,
+                ...normalizedStudent.absences,
+              },
+              // Preserve nested exams config from defaults if not overridden
+              exams: { ...defNoStudents.exams, ...normalizedStudent.exams },
+            };
+            // Ensure displayMode is lowercase
+            if (typeof merged.displayMode === 'string') {
+              merged.displayMode = merged.displayMode.toLowerCase();
+            }
+            return merged;
+          });
+
+          moduleConfig.students = mergedStudents;
+          moduleConfig._moduleDefaultsMerged = true;
+          this._mmLog('debug', null, `✓ Module defaults merged into ${mergedStudents.length} configured student(s)`);
+        }
         return;
       }
 
+      // Auto-discover students from app/data (when no students manually configured)
       const server = moduleConfig.server || 'webuntis.com';
       const { appData } = await moduleConfig._authService.getAuth({
         school: moduleConfig.school,
@@ -733,7 +785,33 @@ module.exports = NodeHelper.create({
         delete defNoStudents.school;
         delete defNoStudents.server;
         const normalizedAutoStudents = autoStudents.map((s) => {
-          const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
+          // Apply legacy mappings to auto-discovered student (if any legacy keys present)
+          const { normalizedConfig: normalizedStudent } = applyLegacyMappings(
+            { ...s, _autoDiscovered: true },
+            {
+              warnCallback: (msg) => this._mmLog('warn', null, msg),
+            }
+          );
+          // Merge with module defaults, preserving nested objects like grid, homework, absences
+          // Start with defaults, then layer in student-specific overrides
+          const merged = {
+            ...defNoStudents,
+            ...normalizedStudent,
+            // Preserve nested grid config from defaults if not overridden
+            grid: { ...defNoStudents.grid, ...normalizedStudent.grid },
+            // Preserve nested homework config from defaults if not overridden
+            homework: {
+              ...defNoStudents.homework,
+              ...normalizedStudent.homework,
+            },
+            // Preserve nested absences config from defaults if not overridden
+            absences: {
+              ...defNoStudents.absences,
+              ...normalizedStudent.absences,
+            },
+            // Preserve nested exams config from defaults if not overridden
+            exams: { ...defNoStudents.exams, ...normalizedStudent.exams },
+          };
           // Ensure displayMode is lowercase
           if (typeof merged.displayMode === 'string') {
             merged.displayMode = merged.displayMode.toLowerCase();
@@ -743,6 +821,7 @@ module.exports = NodeHelper.create({
 
         moduleConfig.students = normalizedAutoStudents;
         moduleConfig._autoStudentsAssigned = true;
+        moduleConfig._moduleDefaultsMerged = true; // Also mark that defaults have been merged
 
         // Log all discovered students with their IDs in a prominent way
         const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
@@ -1193,7 +1272,7 @@ module.exports = NodeHelper.create({
 
   /**
    * Handle socket notifications sent by the frontend module.
-   * Currently listens for `FETCH_DATA` which contains the module config.
+   * Listens for `INIT_MODULE` (initialization) and `FETCH_DATA` (data refresh).
    *
    * @param {string} notification - Notification name
    * @param {any} payload - Notification payload
@@ -1201,139 +1280,167 @@ module.exports = NodeHelper.create({
   async socketNotificationReceived(notification, payload) {
     this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
 
-    if (notification === 'FETCH_DATA') {
-      // Track if this is a config update (for browser reload detection)
-      let normalizedConfig; // Declare outside try so it's accessible after catch
-      let sessionKey; // Declare outside try for use in coalescing logic
-      let configChanged = false; // Declare outside try for use in coalescing logic
-
-      // Validate configuration and return errors to frontend if invalid
-      try {
-        // Create a deep copy of payload first to prevent modifying the original config
-        // This prevents auto-discovery changes from affecting the frontend's config object
-        const payloadCopy = JSON.parse(JSON.stringify(payload));
-
-        // Apply legacy mappings to convert old keys to new structure (includes normalization)
-        const result = applyLegacyMappings(payloadCopy, {
-          warnCallback: (msg) => this._mmLog('warn', null, msg),
-        });
-        normalizedConfig = result.normalizedConfig;
-        const legacyUsed = result.legacyUsed;
-
-        const identifier = normalizedConfig.id || 'default';
-        const sessionId = payload.sessionId || 'unknown';
-
-        // Store config per session for isolation (each browser window keeps its own config)
-        sessionKey = `${identifier}:${sessionId}`;
-        this._configsBySession.set(sessionKey, normalizedConfig);
-        this._mmLog('debug', null, `[FETCH_DATA] Config stored for session=${sessionKey}`);
-
-        // Persist debugDate: save it if present in current config, otherwise use the persisted one
-        if (normalizedConfig.debugDate) {
-          this._persistedDebugDate = normalizedConfig.debugDate;
-          this._mmLog('debug', null, `[FETCH_DATA] Received debugDate="${normalizedConfig.debugDate}"`);
-        } else if (this._persistedDebugDate) {
-          // No debugDate in current request, use the persisted one from previous request
-          normalizedConfig.debugDate = this._persistedDebugDate;
-          this._mmLog('debug', null, `[FETCH_DATA] Using persisted debugDate="${this._persistedDebugDate}"`);
-        } else {
-          this._mmLog('debug', null, `[FETCH_DATA] No debugDate configured`);
-        }
-
-        // Ensure displayMode is lowercase (part of normalization)
-        if (typeof normalizedConfig.displayMode === 'string') {
-          normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
-        }
-
-        const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
-        const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
-
-        // Generate detailed deprecation warnings for any legacy keys used
-        const detailedWarnings = legacyUsed && legacyUsed.length > 0 ? generateDeprecationWarnings(legacyUsed) : [];
-        const combinedWarnings = [...(warnings || []), ...detailedWarnings];
-        if (!valid) {
-          this.sendSocketNotification('CONFIG_ERROR', {
-            errors,
-            warnings: combinedWarnings,
-            severity: 'ERROR',
-            message: 'Configuration validation failed',
-          });
-          return;
-        }
-        if (combinedWarnings.length > 0) {
-          // Only send CONFIG_WARNING once per helper lifecycle to avoid repeated warnings
-          if (!this._configWarningsSent) {
-            this.sendSocketNotification('CONFIG_WARNING', {
-              warnings: combinedWarnings,
-              severity: 'WARN',
-              message: 'Configuration has warnings (deprecated fields detected)',
-            });
-            this._configWarningsSent = true;
-          } else {
-            this._mmLog('debug', null, 'CONFIG_WARNING suppressed (already sent)');
-          }
-        }
-
-        // Store validated config per identifier for multi-instance support
-        // Always update config, even if a timer is already running, to ensure
-        // the latest config is used for the next execution (e.g., after browser reload)
-        const existingConfig = this._configsByIdentifier.get(identifier);
-        configChanged = existingConfig !== undefined; // true if config already existed (update scenario)
-        this._configsByIdentifier.set(identifier, normalizedConfig);
-        // Also set as global config for backward compatibility (use most recent)
-        this.config = normalizedConfig;
-
-        // Log if config was updated for an existing identifier
-        if (configChanged) {
-          this._mmLog('debug', null, `[FETCH_DATA] Config updated for identifier=${identifier} (likely browser reload)`);
-        }
-
-        this._mmLog(
-          'debug',
-          null,
-          `Data request received (FETCH_DATA identifier=${identifier}, students=${Array.isArray(normalizedConfig.students) ? normalizedConfig.students.length : 0})`
-        );
-
-        // Debug: show which interval keys frontend sent (updateInterval preferred)
-        this._mmLog(
-          'debug',
-          null,
-          `Received intervals: updateInterval=${normalizedConfig.updateInterval} fetchIntervalMs=${normalizedConfig.fetchIntervalMs}`
-        );
-      } catch (e) {
-        this._mmLog('error', null, `Config validation failed: ${this._formatErr(e)}`);
-        return;
-      }
-
-      // If config was updated (browser reload), cancel the existing timer for this session and start fresh
-      // This ensures the new config is used immediately instead of waiting for the next interval
-      const shouldFetchImmediately = configChanged;
-      if (this._coalescingTimerBySession.has(sessionKey) && shouldFetchImmediately) {
-        this._mmLog(
-          'debug',
-          null,
-          `[FETCH_DATA] Cancelling existing timer for session ${sessionKey} to apply new config immediately (configChanged=${configChanged})`
-        );
-        clearTimeout(this._coalescingTimerBySession.get(sessionKey));
-        this._coalescingTimerBySession.delete(sessionKey);
-      }
-
-      // Debounce and coalesce requests per session
-      // If this session already has a timer running, just queue the config and wait
-      if (this._coalescingTimerBySession.has(sessionKey)) {
-        this._mmLog('debug', null, `[FETCH_DATA] Request queued for coalescing (session=${sessionKey})`);
-        return;
-      }
-
-      // Start session-specific coalescing timer
-      const timer = setTimeout(async () => {
-        this._coalescingTimerBySession.delete(sessionKey);
-        await this._executeFetchForSession(sessionKey);
-      }, this._coalescingDelay);
-
-      this._coalescingTimerBySession.set(sessionKey, timer);
-      this._mmLog('debug', null, `[FETCH_DATA] Coalescing timer started for session ${sessionKey} (${this._coalescingDelay}ms window)`);
+    if (notification === 'INIT_MODULE') {
+      await this._handleInitModule(payload);
+      return;
     }
+
+    if (notification === 'FETCH_DATA') {
+      await this._handleFetchData(payload);
+      return;
+    }
+  },
+
+  /**
+   * Handle INIT_MODULE notification - performs one-time module initialization
+   * Validates config, sets up authentication, discovers students, and notifies frontend when ready
+   *
+   * @param {Object} payload - Module configuration from frontend
+   */
+  async _handleInitModule(payload) {
+    this._mmLog('debug', null, '[INIT_MODULE] Initializing module');
+
+    let normalizedConfig;
+    let identifier;
+    let sessionKey;
+
+    try {
+      // Create a deep copy of payload to prevent modifying the original config
+      const payloadCopy = JSON.parse(JSON.stringify(payload));
+
+      // Apply legacy mappings to convert old keys to new structure
+      const result = applyLegacyMappings(payloadCopy, {
+        warnCallback: (msg) => this._mmLog('warn', null, msg),
+      });
+      normalizedConfig = result.normalizedConfig;
+      const legacyUsed = result.legacyUsed;
+
+      identifier = normalizedConfig.id || 'default';
+      const sessionId = payload.sessionId || 'unknown';
+      sessionKey = `${identifier}:${sessionId}`;
+
+      // Store config per session for isolation
+      this._configsBySession.set(sessionKey, normalizedConfig);
+      this._mmLog('debug', null, `[INIT_MODULE] Config stored for session=${sessionKey}`);
+
+      // Persist debugDate for this session
+      if (normalizedConfig.debugDate) {
+        this._persistedDebugDate = normalizedConfig.debugDate;
+        this._mmLog('debug', null, `[INIT_MODULE] Received debugDate="${normalizedConfig.debugDate}"`);
+      }
+
+      // Ensure displayMode is lowercase
+      if (typeof normalizedConfig.displayMode === 'string') {
+        normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
+      }
+
+      // Validate configuration
+      const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
+      const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
+
+      // Generate detailed deprecation warnings
+      const detailedWarnings = legacyUsed && legacyUsed.length > 0 ? generateDeprecationWarnings(legacyUsed) : [];
+      const combinedWarnings = [...(warnings || []), ...detailedWarnings];
+
+      if (!valid) {
+        this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
+        this.sendSocketNotification('INIT_ERROR', {
+          id: identifier,
+          errors,
+          warnings: combinedWarnings,
+          severity: 'ERROR',
+          message: 'Configuration validation failed',
+        });
+        return;
+      }
+
+      // Store validated config per identifier
+      this._configsByIdentifier.set(identifier, normalizedConfig);
+      this.config = normalizedConfig;
+
+      // Get or create AuthService for this identifier
+      normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
+
+      // Auto-discover students if needed (one-time during init)
+      this._mmLog('debug', null, `[INIT_MODULE] Auto-discovering students for ${identifier}`);
+      await this._ensureStudentsFromAppData(normalizedConfig);
+
+      // Mark students as discovered for this identifier
+      this._studentsDiscovered = this._studentsDiscovered || {};
+      this._studentsDiscovered[identifier] = true;
+
+      this._mmLog('info', null, `[INIT_MODULE] Module ${identifier} initialized successfully`);
+
+      // Send success notification to frontend
+      this.sendSocketNotification('MODULE_INITIALIZED', {
+        id: identifier,
+        warnings: combinedWarnings,
+        students: normalizedConfig.students || [],
+      });
+    } catch (error) {
+      this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
+      this.sendSocketNotification('INIT_ERROR', {
+        id: identifier || 'unknown',
+        errors: [error.message || 'Unknown initialization error'],
+        warnings: [],
+        severity: 'ERROR',
+        message: 'Module initialization failed',
+      });
+    }
+  },
+
+  /**
+   * Handle FETCH_DATA notification - performs data refresh for already initialized module
+   * Uses cached config and authentication, only fetches fresh data from WebUntis
+   *
+   * @param {Object} payload - Fetch request from frontend
+  /**
+   * Handle FETCH_DATA notification - performs data refresh for already initialized module
+   * Uses cached config and authentication, only fetches fresh data from WebUntis
+   *
+   * @param {Object} payload - Fetch request from frontend
+   */
+  async _handleFetchData(payload) {
+    this._mmLog('debug', null, '[FETCH_DATA] Handling data fetch request');
+
+    const identifier = payload.id || 'default';
+    const sessionId = payload.sessionId || 'unknown';
+    const sessionKey = `${identifier}:${sessionId}`;
+
+    // Verify module is initialized
+    if (!this._configsByIdentifier.has(identifier)) {
+      this._mmLog('warn', null, `[FETCH_DATA] Module ${identifier} not initialized - ignoring fetch request`);
+      return;
+    }
+
+    // Get the initialized config
+    let normalizedConfig = this._configsByIdentifier.get(identifier);
+
+    // Update session-specific config if provided (e.g., debugDate changes)
+    if (payload.debugDate !== undefined) {
+      normalizedConfig = { ...normalizedConfig, debugDate: payload.debugDate };
+      this._configsBySession.set(sessionKey, normalizedConfig);
+      this._configsByIdentifier.set(identifier, normalizedConfig);
+      if (payload.debugDate) {
+        this._persistedDebugDate = payload.debugDate;
+        this._mmLog('debug', null, `[FETCH_DATA] Updated debugDate="${payload.debugDate}"`);
+      }
+    }
+
+    // Debounce and coalesce requests per session
+    if (this._coalescingTimerBySession.has(sessionKey)) {
+      this._mmLog('debug', null, `[FETCH_DATA] Request queued for coalescing (session=${sessionKey})`);
+      return;
+    }
+
+    // Start session-specific coalescing timer
+    const timer = setTimeout(async () => {
+      this._coalescingTimerBySession.delete(sessionKey);
+      await this._executeFetchForSession(sessionKey);
+    }, this._coalescingDelay);
+
+    this._coalescingTimerBySession.set(sessionKey, timer);
+    this._mmLog('debug', null, `[FETCH_DATA] Coalescing timer started for session ${sessionKey} (${this._coalescingDelay}ms window)`);
   },
 
   /**
@@ -1353,54 +1460,12 @@ module.exports = NodeHelper.create({
     // Extract identifier from sessionKey (format: identifier:sessionId)
     const sessionIdentifier = sessionKey.split(':')[0];
 
-    // Store AuthService in config object to avoid race conditions with parallel requests
-    // Each config gets its own AuthService reference
+    // Get AuthService reference (already initialized during INIT_MODULE)
     config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
 
     try {
-      // Auto-discover students from app/data when parent credentials are provided but students[] is missing
-      await this._ensureStudentsFromAppData(config);
-
-      // If after normalization there are still no students configured, attempt to build
-      // the students array internally from app/data so the rest of the flow can proceed.
-      if (!Array.isArray(config.students) || config.students.length === 0) {
-        try {
-          const server = config.server || 'webuntis.com';
-          const creds = { username: config.username, password: config.password, school: config.school };
-          if (creds.username && creds.password && creds.school) {
-            const { appData } = await config._authService.getAuth({
-              school: creds.school,
-              username: creds.username,
-              password: creds.password,
-              server,
-              options: this._getStandardAuthOptions({ cacheKey: `parent:${creds.username}@${server}` }),
-            });
-            const autoStudents = config._authService.deriveStudentsFromAppData(appData);
-            if (autoStudents && autoStudents.length > 0) {
-              if (!config._autoStudentsAssigned) {
-                const defNoStudents = { ...(config || {}) };
-                delete defNoStudents.students;
-                const normalized = autoStudents.map((s) => {
-                  const merged = { ...defNoStudents, ...(s || {}), _autoDiscovered: true };
-                  // Ensure displayMode is lowercase
-                  if (typeof merged.displayMode === 'string') {
-                    merged.displayMode = merged.displayMode.toLowerCase();
-                  }
-                  return merged;
-                });
-                config.students = normalized;
-                config._autoStudentsAssigned = true;
-                const studentList = normalized.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-                this._mmLog('info', null, `Auto-built students array from app/data: ${normalized.length} students:\n  ${studentList}`);
-              } else {
-                this._mmLog('debug', null, 'Auto-built students already assigned; skipping');
-              }
-            }
-          }
-        } catch (e) {
-          this._mmLog('debug', null, `Auto-build students from app/data failed: ${this._formatErr(e)}`);
-        }
-      }
+      // Note: Auto-discovery and config validation already done during INIT_MODULE
+      // This is pure data fetch - config is already normalized and students are discovered
 
       // Group students by credential so we can reuse the same untis session
       const groups = new Map();
@@ -1561,10 +1626,10 @@ module.exports = NodeHelper.create({
       // For parent login, show both parent personId and child studentId
       return `parent (parentId=${ownPersonId}, childId=${t.studentId})`;
     };
-    const className = student.class || student.className || config?.class || null;
+    const className = student.class || student.className || null;
 
-    // Use student-specific displayMode if available, otherwise fall back to module-level
-    const effectiveDisplayMode = student.displayMode ?? config?.displayMode;
+    // displayMode is now guaranteed to be set during INIT_MODULE
+    const effectiveDisplayMode = student.displayMode;
 
     const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
@@ -1603,19 +1668,18 @@ module.exports = NodeHelper.create({
     let rangeEnd = new Date(baseNow);
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
-    // Use per-student `pastDays` / `nextDays` (preferred). Fall back to legacy keys.
-    const pastDaysValue = Number(student.pastDays ?? student.pastDaysToShow ?? config?.pastDays ?? config?.pastDaysToShow ?? 0);
-    // Prefer explicit `nextDays` (student), then module-level `nextDays`,
-    // then fall back to legacy `daysToShow` values.
-    const nextDaysValue = Number(student.nextDays ?? config?.nextDays ?? student.daysToShow ?? config?.daysToShow ?? 2);
+    // All config fields are normalized and merged into student during INIT_MODULE
+    // Legacy keys are converted during applyLegacyMappings
+    const pastDaysValue = Number(student.pastDays ?? 0);
+    const nextDaysValue = Number(student.nextDays ?? 2);
 
     // For timetable/grid, also check grid-specific nextDays/pastDays
     // If grid.nextDays is set, use max(global nextDays, grid.nextDays) to ensure we fetch enough data
     let gridNextDays = nextDaysValue;
     let gridPastDays = pastDaysValue;
     if (wantsGridWidget) {
-      const gridNext = Number(student.grid?.nextDays ?? config?.grid?.nextDays ?? 0);
-      const gridPast = Number(student.grid?.pastDays ?? config?.grid?.pastDays ?? 0);
+      const gridNext = Number(student.grid?.nextDays ?? 0);
+      const gridPast = Number(student.grid?.pastDays ?? 0);
       // Validate: prevent NaN, ensure non-negative
       gridNextDays = Math.max(0, Number.isFinite(gridNext) ? gridNext : 0, Number.isFinite(nextDaysValue) ? nextDaysValue : 0);
       gridPastDays = Math.max(0, Number.isFinite(gridPast) ? gridPast : 0, Number.isFinite(pastDaysValue) ? pastDaysValue : 0);
@@ -1630,17 +1694,13 @@ module.exports = NodeHelper.create({
     logger(
       `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${gridPastDays}, nextDays=${gridNextDays}`
     );
-    // Compute absences-specific start and end dates (allow per-student override or global config)
+    // Absences-specific start and end dates are now in student config (merged from module defaults during INIT)
     const absPast = Number.isFinite(Number(student.absences?.pastDays ?? student.absencesPastDays))
       ? Number(student.absences?.pastDays ?? student.absencesPastDays)
-      : Number.isFinite(Number(config?.absences?.pastDays ?? config?.absencesPastDays))
-        ? Number(config?.absences?.pastDays ?? config?.absencesPastDays)
-        : 0;
+      : 0;
     const absFuture = Number.isFinite(Number(student.absences?.nextDays ?? student.absencesFutureDays))
       ? Number(student.absences?.nextDays ?? student.absencesFutureDays)
-      : Number.isFinite(Number(config?.absences?.nextDays ?? config?.absencesFutureDays))
-        ? Number(config?.absences?.nextDays ?? config?.absencesFutureDays)
-        : 0;
+      : 0;
 
     const absencesRangeStart = new Date(baseNow);
     absencesRangeStart.setDate(absencesRangeStart.getDate() - absPast);
@@ -1709,14 +1769,7 @@ module.exports = NodeHelper.create({
       grid = this._extractTimegridFromTimetable(timetable);
       logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable (fallback)\n`);
     }
-    const examsNextDays =
-      student.exams?.nextDays ??
-      student.examsDaysAhead ??
-      student.exams?.daysAhead ??
-      config?.exams?.nextDays ??
-      config?.examsDaysAhead ??
-      config?.exams?.daysAhead ??
-      0;
+    const examsNextDays = student.exams?.nextDays ?? student.examsDaysAhead ?? student.exams?.daysAhead ?? 0;
     if (fetchExams && examsNextDays > 0) {
       // Validate the number of days
       let validatedDays = examsNextDays;
@@ -1725,7 +1778,7 @@ module.exports = NodeHelper.create({
       }
 
       rangeStart = new Date(baseNow);
-      rangeStart.setDate(rangeStart.getDate() - (student.pastDaysToShow ?? student.pastDays ?? config?.pastDays ?? 0));
+      rangeStart.setDate(rangeStart.getDate() - (student.pastDays ?? 0));
       rangeEnd = new Date(baseNow);
       rangeEnd.setDate(rangeEnd.getDate() + validatedDays);
 
@@ -1765,8 +1818,7 @@ module.exports = NodeHelper.create({
 
         // Exams range
         if (fetchExams && examsNextDays > 0) {
-          const examsPastDays =
-            student.exams?.pastDays ?? student.pastDaysToShow ?? student.pastDays ?? config?.exams?.pastDays ?? config?.pastDays ?? 0;
+          const examsPastDays = student.exams?.pastDays ?? student.pastDays ?? 0;
           allRanges.push({ pastDays: examsPastDays, futureDays: examsNextDays });
         }
 
@@ -1821,10 +1873,8 @@ module.exports = NodeHelper.create({
 
       // Filter homework by dueDate based on homework widget config (pastDays / nextDays)
       if (hwResult && Array.isArray(hwResult) && hwResult.length > 0) {
-        const hwNextDays = Number(
-          student.homework?.nextDays ?? student.homework?.daysAhead ?? config?.homework?.nextDays ?? config?.homework?.daysAhead ?? 999 // Default: show all if not configured
-        );
-        const hwPastDays = Number(student.homework?.pastDays ?? config?.homework?.pastDays ?? 999);
+        const hwNextDays = Number(student.homework?.nextDays ?? student.homework?.daysAhead ?? 999); // Default: show all if not configured
+        const hwPastDays = Number(student.homework?.pastDays ?? 999);
 
         // Only filter if explicitly configured
         if (hwNextDays < 999 || hwPastDays < 999) {

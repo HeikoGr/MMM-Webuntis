@@ -568,6 +568,7 @@ Module.register('MMM-Webuntis', {
     this.moduleWarningsSet = new Set();
     this._domUpdateTimer = null;
     this._lastFetchTime = 0; // Debounce rapid FETCH_DATA requests
+    this._initialized = false; // Track initialization status
 
     this._paused = false;
     this._startNowLineUpdater();
@@ -611,12 +612,10 @@ Module.register('MMM-Webuntis', {
       this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     }
 
-    // Send a sanitized copy to the backend where each student inherits module
-    // defaults and legacy keys have been mapped. The backend (node_helper)
-    // expects normalized student objects in a closed system.
-    this._sendFetchData('startup');
+    // Initialize module with backend (separate from data fetching)
+    this._sendInit();
 
-    this._log('info', 'MMM-Webuntis started with config:', this.config);
+    this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
 
   _startNowLineUpdater() {
@@ -648,7 +647,18 @@ Module.register('MMM-Webuntis', {
     }, interval);
   },
 
+  _sendInit() {
+    this._log('debug', '[INIT] Sending INIT_MODULE to backend');
+    this.sendSocketNotification('INIT_MODULE', this._buildSendConfig());
+  },
+
   _sendFetchData(reason = 'manual') {
+    // Prevent fetch before initialization is complete
+    if (!this._initialized) {
+      this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch - module not yet initialized`);
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLastFetch = now - this._lastFetchTime;
     const minInterval = 5000; // Minimum 5 seconds between FETCH_DATA requests
@@ -859,8 +869,6 @@ Module.register('MMM-Webuntis', {
         this._log('warn', 'Please update your config.js to use the new configuration format.');
         this._log('warn', 'See the module documentation for migration details.');
       }
-
-      this._startFetchTimer();
     }
   },
 
@@ -869,6 +877,42 @@ Module.register('MMM-Webuntis', {
     // All instances receive the broadcast, but only the matching one processes it
     if (payload && payload.id && this.identifier !== payload.id) {
       this._log('debug', `[socketNotificationReceived] Ignoring data for different id (ours: ${this.identifier}, received: ${payload.id})`);
+      return;
+    }
+
+    // Handle initialization response
+    if (notification === 'MODULE_INITIALIZED') {
+      this._log('info', 'Module initialized successfully');
+      this._initialized = true;
+
+      // Process initialization warnings if present
+      if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+        this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+        payload.warnings.forEach((w) => {
+          if (!this.moduleWarningsSet.has(w)) {
+            this.moduleWarningsSet.add(w);
+            this._log('warn', `Init warning: ${w}`);
+          }
+        });
+      }
+
+      // Start periodic fetching after successful initialization
+      this._sendFetchData('post-init');
+      this._startFetchTimer();
+      return;
+    }
+
+    // Handle initialization errors
+    if (notification === 'INIT_ERROR') {
+      this._log('error', 'Module initialization failed:', payload.message || 'Unknown error');
+      if (Array.isArray(payload.errors)) {
+        payload.errors.forEach((err) => this._log('error', `  - ${err}`));
+      }
+      if (Array.isArray(payload.warnings)) {
+        payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
+      }
+      this._initialized = false;
+      this.updateDom();
       return;
     }
 
