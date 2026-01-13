@@ -43,7 +43,7 @@
   text-align: left;
 }
 
-.MMM-Webuntis>.wu-widget-container:last-child {
+.MMM-Webuntis > .wu-widget-container:last-child {
   margin-bottom: 0;
 }
 
@@ -175,7 +175,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell>div {
+.MMM-Webuntis .grid-combined .grid-timecell > div {
   margin: 0;
   padding: 0;
   line-height: 1;
@@ -306,7 +306,6 @@
 
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-pair,
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-container {
-
   border: none;
   background: transparent;
 }
@@ -464,7 +463,6 @@
 }
 
 @keyframes pulse-warning {
-
   0%,
   100% {
     opacity: 1;

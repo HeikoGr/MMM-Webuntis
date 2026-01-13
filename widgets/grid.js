@@ -694,8 +694,8 @@ function getNowLineState(ctx) {
         tickerItem.style.height = '100%';
 
         // Calculate overall time range for this subject group
-        const groupStartMin = Math.min(...subjectLessons.map(l => l.startMin));
-        const groupEndMin = Math.max(...subjectLessons.map(l => l.endMin));
+        const groupStartMin = Math.min(...subjectLessons.map((l) => l.startMin));
+        const groupEndMin = Math.max(...subjectLessons.map((l) => l.endMin));
         const totalGroupMinutes = groupEndMin - groupStartMin;
 
         // Create a sub-element for each lesson in this subject group (positioned absolutely)
@@ -752,7 +752,7 @@ function getNowLineState(ctx) {
   }
 
   function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
-    const { rightInner, bothInner } = containers;
+    const { bothInner } = containers;
 
     // Group lessons by time slot
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
@@ -789,11 +789,6 @@ function getNowLineState(ctx) {
       } else if (lessonYmd === nowYmd) {
         if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
       }
-
-      // Analyze slot: separate cancelled, irregular, and regular lessons
-      const cancelled = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
-      const irregular = lessons.filter((l) => l.code === 'irregular' || l.status === 'SUBSTITUTION');
-      const regular = lessons.filter((l) => !l.code || l.code === '' || (l.code !== 'cancelled' && l.code !== 'irregular'));
 
       const hasExam = lessons.some((l) => lessonHasExam(l));
 
