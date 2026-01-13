@@ -56,28 +56,28 @@ graph TB
     FE <-->|FETCH_DATA / GOT_DATA| NH
     FE --> Widgets
     Widgets --> Util
-    
+
     NH --> Config
     NH --> Validators
     NH --> API
     NH --> Compact
     NH --> Errors
     NH --> Cache
-    
+
     API --> RestClient
     API --> Auth
     API --> Transform
-    
+
     Auth --> HttpClient
     Auth --> FetchC
     Auth --> Cache
-    
+
     HttpClient --> JSONRPC
     HttpClient --> CookieJ
-    
+
     FetchC --> REST
     RestClient --> FetchC
-    
+
     DateTime -.-> NH
     DateTime -.-> API
     Logger -.-> NH
@@ -86,7 +86,7 @@ graph TB
     classDef critical fill:#ffcdd2
     classDef high fill:#fff9c4
     classDef service fill:#e3f2fd
-    
+
     class NH critical
     class API,Auth high
     class HttpClient,FetchC,RestClient,Transform,Compact service
@@ -198,7 +198,7 @@ The module uses a **service-oriented architecture** with specialized modules in 
 
 ### 1. **Initialization Phase**
 
-**Key Files**: 
+**Key Files**:
 - Frontend: [`MMM-Webuntis.js#start()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L528)
 - Backend: [`node_helper.js#socketNotificationReceived()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1201)
 - Backend: [`node_helper.js#fetchData()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536)
@@ -288,7 +288,7 @@ sequenceDiagram
         REST-->>API: absences[]
         API->>API: dataTransformer.transformAbsencesData() L137
         API-->>NH: normalized absences
-        
+
         NH->>API: getMessagesOfDay() L304
         API->>REST: GET /messagesofday
         REST-->>API: messages[]
@@ -339,7 +339,7 @@ graph LR
 
 ### 3. **Widget Rendering Pipeline**
 
-**Main Functions**: 
+**Main Functions**:
 - [`MMM-Webuntis.js#getDom()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L700) - Main render entry
 - [`MMM-Webuntis.js#_renderWidgetTableRows()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L283) - Render helper
 
@@ -359,7 +359,7 @@ graph TD
     --> DOM["getDom() L700"]:::render
     --> WRN["render module warnings<br/>(above all widgets)"]:::warn
     --> RW["_renderWidgetTableRows() L283<br/>for each widget type"]:::loop
-    
+
     RW --> W1["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js#L26'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
     W1 --> W1B["uses: lessons.nextDays<br/>lessons.dateFormat<br/>timetableRange[]<br/>holidayByDate{}"]:::config
 
@@ -374,7 +374,7 @@ graph TD
 
     RW --> W5["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/absences.js#L27'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
     W5 --> W5B["uses: absences.pastDays<br/>absences.dateFormat<br/>absences[]"]:::config
-    
+
     RW --> W6["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/messagesofday.js#L23'>messagesofday.js</a><br/>renderMessagesForStudent()"]:::widget
     W6 --> W6B["uses: messagesofday.dateFormat<br/>messages[]"]:::config
 
@@ -431,7 +431,7 @@ sequenceDiagram
     RC-->>API: return data[]
     API->>API: dataTransformer.transformTimeTableData() L25
     API-->>FD: return normalized timetable[]
-    
+
     Note over FD: Repeat for exams, homework, absences, messages<br/>(SEQUENTIAL - see ISSUES.md CRIT-1 for parallel solution)
 ```
 
@@ -458,7 +458,7 @@ graph TB
 
     Use1 --> APICall["Perform REST request<br/>(timetable/exams/etc)"]:::api
     Fetch1 --> APICall
-    
+
     APICall --> Return["Return data to frontend"]:::output
 
     classDef key fill:#fff9c4

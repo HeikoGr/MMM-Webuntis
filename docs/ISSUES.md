@@ -21,7 +21,7 @@
 
 ### 🔴 CRIT-1: Monster Function `fetchData()` (461 lines)
 
-**Location**: [`node_helper.js#L1536-L1997`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536-L1997)  
+**Location**: [`node_helper.js#L1536-L1997`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536-L1997)
 
 **Problem**:
 The `fetchData()` function violates the Single Responsibility Principle by handling:
@@ -121,8 +121,8 @@ async fetchData(config, identifier) {
 
 ### 🔴 CRIT-2: Inconsistent Error Handling Patterns
 
-**Location**: Throughout backend (all [`lib/`](https://github.com/HeikoGr/MMM-Webuntis/tree/master/lib) modules and [`node_helper.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js))  
-**Severity**: Critical  
+**Location**: Throughout backend (all [`lib/`](https://github.com/HeikoGr/MMM-Webuntis/tree/master/lib) modules and [`node_helper.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js))
+**Severity**: Critical
 **Impact**: Reliability, User Experience
 
 **Problem**:
@@ -335,7 +335,7 @@ describe('Full data flow', () => {
 
 ### 🟠 HIGH-1: Widget Code Duplication (~400 lines)
 
-**Location**: All 6 widget renderers  
+**Location**: All 6 widget renderers
 - [`widgets/lessons.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js)
 - [`widgets/grid.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js)
 - [`widgets/exams.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/exams.js)
@@ -483,7 +483,7 @@ export function renderLessonsForStudent(table, data, studentConfig, util) {
 
 ### 🟠 HIGH-2: Missing JSDoc Documentation (60% functions)
 
-**Location**: Most lib/ modules lack documentation  
+**Location**: Most lib/ modules lack documentation
 - [`lib/authService.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/authService.js) - 15 functions, 0 documented
 - [`lib/webuntisApiService.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/webuntisApiService.js) - 8 functions, 0 documented
 - [`lib/dataTransformer.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/dataTransformer.js) - 12 functions, 0 documented
@@ -556,8 +556,8 @@ export function addDays(dateInteger, days) {
 
 ### 🟠 HIGH-3: Grid Widget Complexity (1,300+ lines)
 
-**Location**: [`widgets/grid.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js)  
-**Severity**: High  
+**Location**: [`widgets/grid.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js)
+**Severity**: High
 **Impact**: Maintainability, Readability
 
 **Problem**:
@@ -596,11 +596,11 @@ widgets/
 
 ### 🟠 HIGH-4: Verstreute Console-Ausgaben
 
-**Location**: Direct console calls bypass centralized logging  
+**Location**: Direct console calls bypass centralized logging
 - [`MMM-Webuntis.js#L224-L227`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L224-L227)
 - [`MMM-Webuntis.js#L671`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L671)
 
-**Severity**: High  
+**Severity**: High
 **Impact**: Logging Consistency
 
 **Problem**:
@@ -628,7 +628,7 @@ _createLogger() {
   const logLevel = this.config.logLevel || 'none';
   const levels = { none: 0, error: 1, warn: 2, info: 3, debug: 4 };
   const currentLevel = levels[logLevel] || 0;
-  
+
   return (level, ...args) => {
     if (levels[level] <= currentLevel) {
       console[level]('[MMM-Webuntis]', ...args);
@@ -641,7 +641,7 @@ this._mmLog('warn', 'Warning message');
 this._mmLog('debug', 'Debug info');
 ```
 
-**Estimated Effort**: 1 hour  
+**Estimated Effort**: 1 hour
 **Benefits**:
 - Consistent logging across frontend/backend
 - Respects user's logLevel config
@@ -651,8 +651,8 @@ this._mmLog('debug', 'Debug info');
 
 ### 🟠 HIGH-5: Fehlende Fehlerbehandlung in `_renderStudentWidgets()`
 
-**Location**: [`MMM-Webuntis.js#L803-L928`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L803-L928)  
-**Severity**: High  
+**Location**: [`MMM-Webuntis.js#L803-L928`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L803-L928)
+**Severity**: High
 **Impact**: User Experience
 
 **Problem**:
@@ -662,7 +662,7 @@ No error boundaries in widget rendering - if one widget crashes, entire module b
 // MMM-Webuntis.js:850-900 (simplified)
 _renderStudentWidgets(container, data, config) {
   const widgets = this._getDisplayWidgets(config);
-  
+
   widgets.forEach(widgetType => {
     const table = this._invokeWidgetRenderer(widgetType, data, config);
     container.appendChild(table);
@@ -677,14 +677,14 @@ Add error boundaries:
 ```javascript
 _renderStudentWidgets(container, data, config) {
   const widgets = this._getDisplayWidgets(config);
-  
+
   widgets.forEach(widgetType => {
     try {
       const table = this._invokeWidgetRenderer(widgetType, data, config);
       container.appendChild(table);
     } catch (error) {
       this._mmLog('error', `Failed to render ${widgetType}: ${error.message}`);
-      
+
       // Show error placeholder instead of crashing
       const errorDiv = document.createElement('div');
       errorDiv.className = 'widget-error dimmed';
@@ -695,7 +695,7 @@ _renderStudentWidgets(container, data, config) {
 }
 ```
 
-**Estimated Effort**: 2 hours  
+**Estimated Effort**: 2 hours
 **Benefits**:
 - Resilient UI (one widget failure doesn't break others)
 - Better user feedback
@@ -705,7 +705,7 @@ _renderStudentWidgets(container, data, config) {
 
 ### 🟠 HIGH-6: Globaler Payload-Cache Race Condition
 
-**Location**: [`MMM-Webuntis.js#L671`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L671)  
+**Location**: [`MMM-Webuntis.js#L671`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L671)
 
 **Problem**:
 `lastRenderedPayload` is stored globally, causing race conditions with multiple module instances:
@@ -756,8 +756,8 @@ socketNotificationReceived(notification, payload) {
 
 ### 🟠 HIGH-7: Sequenzielles API-Fetching (Performance)
 
-**Location**: [`node_helper.js#L1430-L1609`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1430-L1609)  
-**Severity**: High  
+**Location**: [`node_helper.js#L1430-L1609`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1430-L1609)
+**Severity**: High
 **Impact**: Performance
 
 **Problem**:
@@ -789,7 +789,7 @@ const [timetable, exams, homework, absences, messages] = await Promise.all([
 // Improvement: 2.7x faster!
 ```
 
-**Estimated Effort**: 2 hours  
+**Estimated Effort**: 2 hours
 **Benefits**:
 - 2.7x faster initial load
 - Better user experience
@@ -799,7 +799,7 @@ const [timetable, exams, homework, absences, messages] = await Promise.all([
 
 ### 🟠 HIGH-8: Fehlende Config-Schema-Validierung
 
-**Location**: [`lib/configValidator.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js)  
+**Location**: [`lib/configValidator.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js)
 
 **Problem**:
 Config validation is basic - doesn't check:
