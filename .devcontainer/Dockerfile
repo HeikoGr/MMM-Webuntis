@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
+    jq \
     ca-certificates \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
