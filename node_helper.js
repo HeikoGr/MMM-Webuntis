@@ -1744,6 +1744,7 @@ module.exports = NodeHelper.create({
         fetchTimetable,
         activeHoliday,
         moduleConfig: config,
+        currentFetchWarnings: this._currentFetchWarnings,
         compactTimegrid: this._compactTimegrid.bind(this),
         checkEmptyDataWarning: this._checkEmptyDataWarning.bind(this),
         mmLog: this._mmLog.bind(this),
