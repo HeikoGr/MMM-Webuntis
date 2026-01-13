@@ -434,7 +434,7 @@ function getNowLineState(ctx) {
         ctx,
         'debug',
         `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-        `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
       );
     }
 
@@ -891,12 +891,12 @@ function getNowLineState(ctx) {
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
       ? (() => {
-        const s = String(ctx._currentTodayYmd);
-        const by = parseInt(s.substring(0, 4), 10);
-        const bm = parseInt(s.substring(4, 6), 10) - 1;
-        const bd = parseInt(s.substring(6, 8), 10);
-        return new Date(by, bm, bd);
-      })()
+          const s = String(ctx._currentTodayYmd);
+          const by = parseInt(s.substring(0, 4), 10);
+          const bm = parseInt(s.substring(4, 6), 10) - 1;
+          const bd = parseInt(s.substring(6, 8), 10);
+          return new Date(by, bm, bd);
+        })()
       : new Date();
     const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
 
