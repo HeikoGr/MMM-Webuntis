@@ -1617,7 +1617,7 @@ module.exports = NodeHelper.create({
     };
 
     const className = student.class || student.className || null;
-    const effectiveDisplayMode = student.displayMode;
+    const effectiveDisplayMode = student.displayMode || config.displayMode;
 
     const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
