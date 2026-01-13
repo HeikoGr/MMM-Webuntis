@@ -646,14 +646,31 @@ module.exports = NodeHelper.create({
               }
 
               // If title is present but no studentId, suggest candidate ids based on title match
+              // If there's exactly one match, auto-assign it for convenience
               if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
                 const titleLower = String(configStudent.title).toLowerCase();
                 const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
                 const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
-                const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
-                configStudent.__warnings = configStudent.__warnings || [];
-                configStudent.__warnings.push(msg);
-                this._mmLog('warn', configStudent, msg);
+
+                if (candidateIds.length === 1) {
+                  // Auto-assign the only match
+                  configStudent.studentId = candidateIds[0];
+                  configStudent._autoDiscovered = true;
+                  // Remove own credentials that might have been inherited from module config
+                  // to ensure parent-mode authentication is used
+                  delete configStudent.username;
+                  delete configStudent.password;
+                  delete configStudent.school;
+                  delete configStudent.server;
+                  const msg = `Auto-assigned studentId=${candidateIds[0]} for "${configStudent.title}" (only match found)`;
+                  this._mmLog('info', configStudent, msg);
+                } else {
+                  // Multiple or no matches - show warning
+                  const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
+                  configStudent.__warnings = configStudent.__warnings || [];
+                  configStudent.__warnings.push(msg);
+                  this._mmLog('warn', configStudent, msg);
+                }
                 return;
               }
             });
@@ -750,7 +767,8 @@ module.exports = NodeHelper.create({
     const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
-    const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin;
+    const hasParentCredentials = moduleConfig && moduleConfig.username && moduleConfig.password && moduleConfig.school;
+    const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin && hasParentCredentials;
 
     // Get identifier-specific AuthService to prevent cache cross-contamination
     const authService = this._getAuthServiceForIdentifier(identifier);
@@ -776,7 +794,7 @@ module.exports = NodeHelper.create({
     }
 
     // Mode 1: Parent Account (studentId + parent credentials from moduleConfig)
-    if (isParentMode && moduleConfig && moduleConfig.username && moduleConfig.password) {
+    if (isParentMode) {
       const school = sample.school || moduleConfig.school;
       const server = sample.server || moduleConfig.server || 'webuntis.com';
       this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
@@ -1341,7 +1359,7 @@ module.exports = NodeHelper.create({
 
     try {
       // Auto-discover students from app/data when parent credentials are provided but students[] is missing
-      await this._ensureStudentsFromAppData(this.config);
+      await this._ensureStudentsFromAppData(config);
 
       // If after normalization there are still no students configured, attempt to build
       // the students array internally from app/data so the rest of the flow can proceed.
@@ -1536,8 +1554,13 @@ module.exports = NodeHelper.create({
     // Use AuthService from config parameter
     const authService = config._authService;
     const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData);
-    const describeTarget = (t) =>
-      t.mode === 'qr' ? `QR login${t.studentId ? ` (id=${t.studentId})` : ''}` : `parent (studentId=${t.studentId})`;
+    const describeTarget = (t) => {
+      if (t.mode === 'qr') {
+        return `QR login${t.studentId ? ` (id=${t.studentId})` : ''}`;
+      }
+      // For parent login, show both parent personId and child studentId
+      return `parent (parentId=${ownPersonId}, childId=${t.studentId})`;
+    };
     const className = student.class || student.className || config?.class || null;
 
     // Use student-specific displayMode if available, otherwise fall back to module-level

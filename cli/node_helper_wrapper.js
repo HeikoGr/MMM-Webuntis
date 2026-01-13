@@ -299,9 +299,14 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     const authSession = await nodeHelper._createAuthSession(student, mergedConfig);
     const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
 
+    // Ensure authService is initialized for this config
+    if (!mergedConfig._authService) {
+      mergedConfig._authService = nodeHelper._getAuthServiceForIdentifier('cli-wrapper');
+    }
+
     // Resolve actual studentId using buildRestTargets (matches fetchData behavior)
     const appData = authSession.appData;
-    const restTargets = nodeHelper.authService.buildRestTargets(
+    const restTargets = mergedConfig._authService.buildRestTargets(
       student,
       mergedConfig,
       authSession.school,
@@ -366,7 +371,7 @@ async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, 
     const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
     const compactHolidays = nodeHelper._extractAndCompactHolidays(authSession, shouldFetchHolidays);
 
-    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey, compactHolidays);
+    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey, compactHolidays, mergedConfig);
 
     // Restore original displayMode
     mergedConfig.displayMode = originalDisplayMode;
