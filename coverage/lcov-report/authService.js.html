@@ -1,60 +1,68 @@
+
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <title>Code coverage report for authService.js</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="prettify.css" />
     <link rel="stylesheet" href="base.css" />
     <link rel="shortcut icon" type="image/x-icon" href="favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style type="text/css">
-      .coverage-summary .sorter {
-        background-image: url(sort-arrow-sprite.png);
-      }
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(sort-arrow-sprite.png);
+        }
     </style>
-  </head>
-
-  <body>
-    <div class="wrapper">
-      <div class="pad1">
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
         <h1><a href="index.html">All files</a> authService.js</h1>
-        <div class="clearfix">
-          <div class="fl pad1y space-right2">
-            <span class="strong">6.19% </span>
-            <span class="quiet">Statements</span>
-            <span class="fraction">13/210</span>
-          </div>
-
-          <div class="fl pad1y space-right2">
-            <span class="strong">2.31% </span>
-            <span class="quiet">Branches</span>
-            <span class="fraction">5/216</span>
-          </div>
-
-          <div class="fl pad1y space-right2">
-            <span class="strong">12.5% </span>
-            <span class="quiet">Functions</span>
-            <span class="fraction">2/16</span>
-          </div>
-
-          <div class="fl pad1y space-right2">
-            <span class="strong">5.88% </span>
-            <span class="quiet">Lines</span>
-            <span class="fraction">12/204</span>
-          </div>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">25.42% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>165/649</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">75% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>21/28</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">42.85% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>6/14</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">25.42% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>165/649</span>
+            </div>
+        
+            
         </div>
         <p class="quiet">
-          Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
         </p>
         <template id="filterTemplate">
-          <div class="quiet">
-            Filter:
-            <input type="search" id="fileSearch" />
-          </div>
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
         </template>
-      </div>
-      <div class="status-line low"></div>
-      <pre><table class="coverage">
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
 <a name='L3'></a><a href='#L3'>3</a>
@@ -702,516 +710,208 @@
 <a name='L645'></a><a href='#L645'>645</a>
 <a name='L646'></a><a href='#L646'>646</a>
 <a name='L647'></a><a href='#L647'>647</a>
-<a name='L648'></a><a href='#L648'>648</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L648'></a><a href='#L648'>648</a>
+<a name='L649'></a><a href='#L649'>649</a>
+<a name='L650'></a><a href='#L650'>650</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -1219,135 +919,447 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">/**
  * Authentication Service for WebUntis
@@ -1359,8 +1371,8 @@ const { URL } = require('url');
 const HttpClient = require('./httpClient');
 &nbsp;
 class AuthService {
-  constructor(options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
-    this.logger = options.logger || <span class="branch-1 cbranch-no" title="branch not covered" >console.log;</span>
+  constructor(options = {}) {
+    this.logger = options.logger<span class="branch-0 cbranch-no" title="branch not covered" > || console.log;</span>
     this.httpClient = new HttpClient({ logger: this.logger });
     this._authCache = new Map(); // cacheKey -&gt; { token, cookieString, tenantId, schoolYearId, appData, expiresAt }
     this._pendingAuth = new Map(); // cacheKey -&gt; Promise (for race condition protection)
@@ -1372,20 +1384,20 @@ class AuthService {
    * @returns {number|null} person_id from token payload, or null if not found
    */
   extractPersonIdFromToken(token) {
-    <span class="missing-if-branch" title="if path not taken" >I</span>if (!token || typeof token !== 'string') <span class="cstat-no" title="statement not covered" >return null;</span>
+    if (!token || typeof token !== 'string') return null;
 &nbsp;
     try {
       const parts = token.split('.');
-      <span class="missing-if-branch" title="else path not taken" >E</span>if (parts.length !== 3) return null;
+      if (parts.length !== 3) return null;
 &nbsp;
-      const payload = <span class="cstat-no" title="statement not covered" >JSON.parse(Buffer.from(parts[1], 'base64').toString());</span>
-      const personId = <span class="cstat-no" title="statement not covered" >Number(payload.person_id);</span>
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      const personId = Number(payload.person_id);
 &nbsp;
-<span class="cstat-no" title="statement not covered" >      return Number.isFinite(personId) ? personId : null;</span>
-    } catch (error) {
+      return Number.isFinite(personId) ? personId : null;
+    } <span class="branch-0 cbranch-no" title="branch not covered" >catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', `[AuthService] Failed to extract person_id from token: ${error.message}`);</span>
 <span class="cstat-no" title="statement not covered" >      return null;</span>
-    }
+<span class="cstat-no" title="statement not covered" >    }</span>
   }
 &nbsp;
   /**
@@ -1394,127 +1406,127 @@ class AuthService {
    * @param {Object} options - Additional options (cacheKey)
    * @returns {Promise&lt;Object&gt;} { token, cookieString, tenantId, schoolYearId, appData, personId, school, server }
    */
-<span class="fstat-no" title="function not covered" >  as</span>ync getAuthFromQRCode(qrCodeUrl, options = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
-    const { cacheKey } = <span class="cstat-no" title="statement not covered" >options;</span>
-    const effectiveCacheKey = <span class="cstat-no" title="statement not covered" >cacheKey || `qrcode:${qrCodeUrl}`;</span>
-&nbsp;
-    // Check cache
-    const cached = <span class="cstat-no" title="statement not covered" >this._authCache.get(effectiveCacheKey);</span>
-    // Use token if it has at least 2 minutes remaining (instead of 1 minute)
-    // This gives more buffer before actual expiration
+<span class="fstat-no" title="function not covered" >  async getAuthFromQRCode(qrCodeUrl, options = {}) {</span>
+<span class="cstat-no" title="statement not covered" >    const { cacheKey } = options;</span>
+<span class="cstat-no" title="statement not covered" >    const effectiveCacheKey = cacheKey || `qrcode:${qrCodeUrl}`;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Check cache</span>
+<span class="cstat-no" title="statement not covered" >    const cached = this._authCache.get(effectiveCacheKey);</span>
+<span class="cstat-no" title="statement not covered" >    // Use token if it has at least 2 minutes remaining (instead of 1 minute)</span>
+<span class="cstat-no" title="statement not covered" >    // This gives more buffer before actual expiration</span>
 <span class="cstat-no" title="statement not covered" >    if (cached &amp;&amp; cached.expiresAt &gt; Date.now() + 120000) {</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        token: cached.token,
-        cookieString: cached.cookieString,
-        tenantId: cached.tenantId,
-        schoolYearId: cached.schoolYearId,
-        personId: cached.personId,
-        school: cached.school,
-        server: cached.server,
-        appData: cached.appData || null, // Include appData from cache (needed for holidays and timegrid)
-      };
-    }
-&nbsp;
-    // Race condition protection: if auth is already in progress, wait for it
+<span class="cstat-no" title="statement not covered" >        token: cached.token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString: cached.cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: cached.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: cached.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        personId: cached.personId,</span>
+<span class="cstat-no" title="statement not covered" >        school: cached.school,</span>
+<span class="cstat-no" title="statement not covered" >        server: cached.server,</span>
+<span class="cstat-no" title="statement not covered" >        appData: cached.appData || null, // Include appData from cache (needed for holidays and timegrid)</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Race condition protection: if auth is already in progress, wait for it</span>
 <span class="cstat-no" title="statement not covered" >    if (this._pendingAuth.has(effectiveCacheKey)) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', '[AuthService] Authentication already in progress, waiting...');</span>
 <span class="cstat-no" title="statement not covered" >      return await this._pendingAuth.get(effectiveCacheKey);</span>
-    }
-&nbsp;
-    // Create a promise for this auth request
-    const authPromise = <span class="cstat-no" title="statement not covered" >this._performQRAuth(effectiveCacheKey, qrCodeUrl, cached);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Create a promise for this auth request</span>
+<span class="cstat-no" title="statement not covered" >    const authPromise = this._performQRAuth(effectiveCacheKey, qrCodeUrl, cached);</span>
 <span class="cstat-no" title="statement not covered" >    this._pendingAuth.set(effectiveCacheKey, authPromise);</span>
-&nbsp;
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      const result = <span class="cstat-no" title="statement not covered" >await authPromise;</span>
+<span class="cstat-no" title="statement not covered" >      const result = await authPromise;</span>
 <span class="cstat-no" title="statement not covered" >      return result;</span>
-    } finally {
-      // Clean up pending auth after completion
+<span class="cstat-no" title="statement not covered" >    } finally {</span>
+<span class="cstat-no" title="statement not covered" >      // Clean up pending auth after completion</span>
 <span class="cstat-no" title="statement not covered" >      this._pendingAuth.delete(effectiveCacheKey);</span>
-    }
-  }
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Perform QR code authentication (internal method)
    * @private
    */
-<span class="fstat-no" title="function not covered" >  as</span>ync _performQRAuth(effectiveCacheKey, qrCodeUrl, cached) {
-    // If we have cached cookies but token expired, try to refresh token with existing cookies
+<span class="fstat-no" title="function not covered" >  async _performQRAuth(effectiveCacheKey, qrCodeUrl, cached) {</span>
+<span class="cstat-no" title="statement not covered" >    // If we have cached cookies but token expired, try to refresh token with existing cookies</span>
 <span class="cstat-no" title="statement not covered" >    if (cached &amp;&amp; cached.cookieString &amp;&amp; cached.server) {</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('info', '[AuthService] Token expired, refreshing with existing cookies...');</span>
-        const token = <span class="cstat-no" title="statement not covered" >await this.httpClient.getBearerToken(cached.server, cached.cookieString);</span>
-&nbsp;
-        // Update cache with new token but keep everything else
+<span class="cstat-no" title="statement not covered" >        const token = await this.httpClient.getBearerToken(cached.server, cached.cookieString);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Update cache with new token but keep everything else</span>
 <span class="cstat-no" title="statement not covered" >        this._authCache.set(effectiveCacheKey, {</span>
-          token,
-          cookieString: cached.cookieString,
-          tenantId: cached.tenantId,
-          schoolYearId: cached.schoolYearId,
-          personId: cached.personId,
-          school: cached.school,
-          server: cached.server,
-          appData: cached.appData, // Preserve appData in cache
-          expiresAt: Date.now() + 14 * 60 * 1000,
-        });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >          token,</span>
+<span class="cstat-no" title="statement not covered" >          cookieString: cached.cookieString,</span>
+<span class="cstat-no" title="statement not covered" >          tenantId: cached.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >          schoolYearId: cached.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >          personId: cached.personId,</span>
+<span class="cstat-no" title="statement not covered" >          school: cached.school,</span>
+<span class="cstat-no" title="statement not covered" >          server: cached.server,</span>
+<span class="cstat-no" title="statement not covered" >          appData: cached.appData, // Preserve appData in cache</span>
+<span class="cstat-no" title="statement not covered" >          expiresAt: Date.now() + 14 * 60 * 1000,</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >        this.logger('info', '[AuthService] Token refresh successful');</span>
 <span class="cstat-no" title="statement not covered" >        return {</span>
-          token,
-          cookieString: cached.cookieString,
-          tenantId: cached.tenantId,
-          schoolYearId: cached.schoolYearId,
-          personId: cached.personId,
-          school: cached.school,
-          server: cached.server,
-          appData: cached.appData || null, // Include appData from cache (needed for holidays and timegrid)
-        };
-      } catch (refreshError) {
+<span class="cstat-no" title="statement not covered" >          token,</span>
+<span class="cstat-no" title="statement not covered" >          cookieString: cached.cookieString,</span>
+<span class="cstat-no" title="statement not covered" >          tenantId: cached.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >          schoolYearId: cached.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >          personId: cached.personId,</span>
+<span class="cstat-no" title="statement not covered" >          school: cached.school,</span>
+<span class="cstat-no" title="statement not covered" >          server: cached.server,</span>
+<span class="cstat-no" title="statement not covered" >          appData: cached.appData || null, // Include appData from cache (needed for holidays and timegrid)</span>
+<span class="cstat-no" title="statement not covered" >        };</span>
+<span class="cstat-no" title="statement not covered" >      } catch (refreshError) {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('warn', `[AuthService] Token refresh failed, will re-authenticate: ${refreshError.message}`);</span>
-        // Fall through to full re-authentication
-      }
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        // Fall through to full re-authentication</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      // Authenticate with QR code
-      const authResult = <span class="cstat-no" title="statement not covered" >await this.httpClient.authenticateWithQRCode(qrCodeUrl);</span>
-      const { cookies, personId, school, server } = <span class="cstat-no" title="statement not covered" >authResult;</span>
-&nbsp;
-      // Get Bearer token
-      const token = <span class="cstat-no" title="statement not covered" >await this.httpClient.getBearerToken(server, cookies);</span>
-&nbsp;
-      // Fetch app/data to get tenantId and schoolYearId
-      const metadata = <span class="cstat-no" title="statement not covered" >await this._fetchAppData(server, cookies, token);</span>
-&nbsp;
-      // Cache the result (include compacted appData for holidays and timegrid extraction)
+<span class="cstat-no" title="statement not covered" >      // Authenticate with QR code</span>
+<span class="cstat-no" title="statement not covered" >      const authResult = await this.httpClient.authenticateWithQRCode(qrCodeUrl);</span>
+<span class="cstat-no" title="statement not covered" >      const { cookies, personId, school, server } = authResult;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Get Bearer token</span>
+<span class="cstat-no" title="statement not covered" >      const token = await this.httpClient.getBearerToken(server, cookies);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Fetch app/data to get tenantId and schoolYearId</span>
+<span class="cstat-no" title="statement not covered" >      const metadata = await this._fetchAppData(server, cookies, token);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Cache the result (include compacted appData for holidays and timegrid extraction)</span>
 <span class="cstat-no" title="statement not covered" >      this._authCache.set(effectiveCacheKey, {</span>
-        token,
-        cookieString: cookies,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        personId,
-        school,
-        server,
-        appData: metadata.appData, // Already compacted by _fetchAppData
-        expiresAt: Date.now() + 14 * 60 * 1000,
-      });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString: cookies,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >        school,</span>
+<span class="cstat-no" title="statement not covered" >        server,</span>
+<span class="cstat-no" title="statement not covered" >        appData: metadata.appData, // Already compacted by _fetchAppData</span>
+<span class="cstat-no" title="statement not covered" >        expiresAt: Date.now() + 14 * 60 * 1000,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', '[AuthService] QR code authentication successful');</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        token,
-        cookieString: cookies,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        personId,
-        school,
-        server,
-        appData: metadata.appData, // Include appData for holidays and timegrid
-      };
-    } catch (error) {
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString: cookies,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >        school,</span>
+<span class="cstat-no" title="statement not covered" >        server,</span>
+<span class="cstat-no" title="statement not covered" >        appData: metadata.appData, // Include appData for holidays and timegrid</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('error', `[AuthService] QR code authentication failed: ${error.message}`);</span>
 <span class="cstat-no" title="statement not covered" >      throw error;</span>
-    }
-  }
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Get REST API authentication (bearer token + cookies)
@@ -1526,227 +1538,229 @@ class AuthService {
    * @param {Object} params.options - Additional options (cacheKey, untisClient)
    * @returns {Promise&lt;Object&gt;} { token, cookieString, tenantId, schoolYearId, appData }
    */
-<span class="fstat-no" title="function not covered" >  as</span>ync getAuth({ school, username, password, server, options = <span class="branch-0 cbranch-no" title="branch not covered" >{} </span>}) {
-    const { cacheKey } = <span class="cstat-no" title="statement not covered" >options;</span>
-    const effectiveCacheKey = <span class="cstat-no" title="statement not covered" >cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;</span>
-&nbsp;
-    // Check cache
-    const cached = <span class="cstat-no" title="statement not covered" >this._authCache.get(effectiveCacheKey);</span>
-    // Use token if it has at least 2 minutes remaining (instead of 1 minute)
-    // This gives more buffer before actual expiration
+<span class="fstat-no" title="function not covered" >  async getAuth({ school, username, password, server, options = {} }) {</span>
+<span class="cstat-no" title="statement not covered" >    const { cacheKey } = options;</span>
+<span class="cstat-no" title="statement not covered" >    const effectiveCacheKey = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Check cache</span>
+<span class="cstat-no" title="statement not covered" >    const cached = this._authCache.get(effectiveCacheKey);</span>
+<span class="cstat-no" title="statement not covered" >    // Use token if it has at least 2 minutes remaining (instead of 1 minute)</span>
+<span class="cstat-no" title="statement not covered" >    // This gives more buffer before actual expiration</span>
 <span class="cstat-no" title="statement not covered" >    if (cached &amp;&amp; cached.expiresAt &gt; Date.now() + 120000) {</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        token: cached.token,
-        cookieString: cached.cookieString,
-        tenantId: cached.tenantId,
-        schoolYearId: cached.schoolYearId,
-        appData: cached.appData,
-        personId: cached.personId,
-      };
-    }
-&nbsp;
-    // Race condition protection: if auth is already in progress, wait for it
+<span class="cstat-no" title="statement not covered" >        token: cached.token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString: cached.cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: cached.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: cached.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        appData: cached.appData,</span>
+<span class="cstat-no" title="statement not covered" >        personId: cached.personId,</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Race condition protection: if auth is already in progress, wait for it</span>
 <span class="cstat-no" title="statement not covered" >    if (this._pendingAuth.has(effectiveCacheKey)) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', '[AuthService] Authentication already in progress, waiting...');</span>
 <span class="cstat-no" title="statement not covered" >      return await this._pendingAuth.get(effectiveCacheKey);</span>
-    }
-&nbsp;
-    // Create a promise for this auth request
-    const authPromise = <span class="cstat-no" title="statement not covered" >this._performAuth(effectiveCacheKey, school, username, password, server, options);</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Create a promise for this auth request</span>
+<span class="cstat-no" title="statement not covered" >    const authPromise = this._performAuth(effectiveCacheKey, school, username, password, server, options);</span>
 <span class="cstat-no" title="statement not covered" >    this._pendingAuth.set(effectiveCacheKey, authPromise);</span>
-&nbsp;
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      const result = <span class="cstat-no" title="statement not covered" >await authPromise;</span>
+<span class="cstat-no" title="statement not covered" >      const result = await authPromise;</span>
 <span class="cstat-no" title="statement not covered" >      return result;</span>
-    } finally {
-      // Clean up pending auth after completion
+<span class="cstat-no" title="statement not covered" >    } finally {</span>
+<span class="cstat-no" title="statement not covered" >      // Clean up pending auth after completion</span>
 <span class="cstat-no" title="statement not covered" >      this._pendingAuth.delete(effectiveCacheKey);</span>
-    }
-  }
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Perform authentication (internal method)
    * @private
    */
-<span class="fstat-no" title="function not covered" >  as</span>ync _performAuth(effectiveCacheKey, school, username, password, server, options) {
-    const { untisClient, authSession, qrCodeUrl } = <span class="cstat-no" title="statement not covered" >options;</span>
-&nbsp;
-    let appData = <span class="cstat-no" title="statement not covered" >null;</span>
-&nbsp;
-    // If authSession is provided (from QR or existing session), try to refresh it if needed
+<span class="fstat-no" title="function not covered" >  async _performAuth(effectiveCacheKey, school, username, password, server, options) {</span>
+<span class="cstat-no" title="statement not covered" >    const { untisClient, authSession, qrCodeUrl } = options;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    let appData = null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // If authSession is provided (from QR or existing session), try to refresh it if needed</span>
 <span class="cstat-no" title="statement not covered" >    if (authSession &amp;&amp; authSession.token &amp;&amp; authSession.cookieString) {</span>
-      // If cache was invalidated but authSession still provided, the token might be expired
-      // Try to refresh the token with existing cookies before using the old session
+<span class="cstat-no" title="statement not covered" >      // If cache was invalidated but authSession still provided, the token might be expired</span>
+<span class="cstat-no" title="statement not covered" >      // Try to refresh the token with existing cookies before using the old session</span>
 <span class="cstat-no" title="statement not covered" >      if (authSession.server &amp;&amp; authSession.cookieString) {</span>
 <span class="cstat-no" title="statement not covered" >        try {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('info', '[AuthService] authSession provided - refreshing token with cookies...');</span>
-          const newToken = <span class="cstat-no" title="statement not covered" >await this.httpClient.getBearerToken(authSession.server, authSession.cookieString);</span>
-&nbsp;
-          // Use the refreshed token instead of the old one
+<span class="cstat-no" title="statement not covered" >          const newToken = await this.httpClient.getBearerToken(authSession.server, authSession.cookieString);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >          // Use the refreshed token instead of the old one</span>
 <span class="cstat-no" title="statement not covered" >          authSession.token = newToken;</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('info', '[AuthService] Token refreshed successfully from authSession cookies');</span>
-        } catch (refreshError) {
+<span class="cstat-no" title="statement not covered" >        } catch (refreshError) {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('warn', `[AuthService] Token refresh from authSession failed: ${refreshError.message}`);</span>
-          // If we have a QR code URL, re-authenticate with it
+<span class="cstat-no" title="statement not covered" >          // If we have a QR code URL, re-authenticate with it</span>
 <span class="cstat-no" title="statement not covered" >          if (qrCodeUrl) {</span>
 <span class="cstat-no" title="statement not covered" >            this.logger('info', '[AuthService] Re-authenticating with QR code after token refresh failure...');</span>
 <span class="cstat-no" title="statement not covered" >            return await this.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey });</span>
-          }
-          // Don't use the old authSession if token refresh failed and no QR code available
+<span class="cstat-no" title="statement not covered" >          }</span>
+<span class="cstat-no" title="statement not covered" >          // Don't use the old authSession if token refresh failed and no QR code available</span>
 <span class="cstat-no" title="statement not covered" >          authSession.token = null;</span>
-        }
-      }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      if (authSession.token) {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('debug', '[AuthService] Using existing authSession');</span>
-&nbsp;
-        // Fetch app/data to get tenantId and schoolYearId if not already present
-        const metadata = <span class="cstat-no" title="statement not covered" >authSession.appData</span>
-          ? { tenantId: authSession.tenantId, schoolYearId: authSession.schoolYearId, appData: authSession.appData }
-          : await this._fetchAppData(server || authSession.server, authSession.cookieString, authSession.token);
-&nbsp;
-        // Extract personId from appData if not already present
-        const personId = <span class="cstat-no" title="statement not covered" >authSession.personId || metadata.appData?.user?.person?.id || null;</span>
-&nbsp;
-        const result = <span class="cstat-no" title="statement not covered" >{</span>
-          token: authSession.token,
-          cookieString: authSession.cookieString,
-          tenantId: metadata.tenantId,
-          schoolYearId: metadata.schoolYearId,
-          appData: metadata.appData,
-          personId,
-        };
-&nbsp;
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Fetch app/data to get tenantId and schoolYearId if not already present</span>
+<span class="cstat-no" title="statement not covered" >        const metadata = authSession.appData</span>
+<span class="cstat-no" title="statement not covered" >          ? { tenantId: authSession.tenantId, schoolYearId: authSession.schoolYearId, appData: authSession.appData }</span>
+<span class="cstat-no" title="statement not covered" >          : await this._fetchAppData(server || authSession.server, authSession.cookieString, authSession.token);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        // Extract personId from appData if not already present</span>
+<span class="cstat-no" title="statement not covered" >        const personId = authSession.personId || metadata.appData?.user?.person?.id || null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >        const result = {</span>
+<span class="cstat-no" title="statement not covered" >          token: authSession.token,</span>
+<span class="cstat-no" title="statement not covered" >          cookieString: authSession.cookieString,</span>
+<span class="cstat-no" title="statement not covered" >          tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >          schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >          appData: metadata.appData,</span>
+<span class="cstat-no" title="statement not covered" >          personId,</span>
+<span class="cstat-no" title="statement not covered" >        };</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >        this._authCache.set(effectiveCacheKey, {</span>
-          ...result,
-          expiresAt: Date.now() + 14 * 60 * 1000,
-        });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >          ...result,</span>
+<span class="cstat-no" title="statement not covered" >          expiresAt: Date.now() + 14 * 60 * 1000,</span>
+<span class="cstat-no" title="statement not covered" >        });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >        return result;</span>
-      }
-    }
-&nbsp;
-    // Prefer an already logged-in Untis client (QR or parent login) to avoid duplicate logins
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Prefer an already logged-in Untis client (QR or parent login) to avoid duplicate logins</span>
 <span class="cstat-no" title="statement not covered" >    if (untisClient &amp;&amp; typeof untisClient._buildCookies === 'function') {</span>
-      const cookieString = <span class="cstat-no" title="statement not covered" >untisClient._buildCookies();</span>
+<span class="cstat-no" title="statement not covered" >      const cookieString = untisClient._buildCookies();</span>
 <span class="cstat-no" title="statement not covered" >      if (!cookieString) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('No session cookies available from existing login');</span>
-      }
-&nbsp;
-      let token = <span class="cstat-no" title="statement not covered" >null;</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      let token = null;</span>
 <span class="cstat-no" title="statement not covered" >      if (typeof untisClient._getJWT === 'function') {</span>
 <span class="cstat-no" title="statement not covered" >        try {</span>
 <span class="cstat-no" title="statement not covered" >          token = await untisClient._getJWT(false);</span>
-        } catch (err) {
+<span class="cstat-no" title="statement not covered" >        } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('debug', `[REST] JWT via existing session failed: ${err.message}`);</span>
-        }
-      }
-&nbsp;
-      // If token retrieval failed, get it via httpClient
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // If token retrieval failed, get it via httpClient</span>
 <span class="cstat-no" title="statement not covered" >      if (!token) {</span>
 <span class="cstat-no" title="statement not covered" >        try {</span>
 <span class="cstat-no" title="statement not covered" >          token = await this.httpClient.getBearerToken(server, cookieString);</span>
-        } catch (err) {
+<span class="cstat-no" title="statement not covered" >        } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('debug', `[REST] Bearer token via httpClient failed: ${err.message}`);</span>
-        }
-      }
-&nbsp;
-      // Fetch app/data to get tenantId and schoolYearId
-      const metadata = <span class="cstat-no" title="statement not covered" >await this._fetchAppData(server, cookieString, token);</span>
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Fetch app/data to get tenantId and schoolYearId</span>
+<span class="cstat-no" title="statement not covered" >      const metadata = await this._fetchAppData(server, cookieString, token);</span>
 <span class="cstat-no" title="statement not covered" >      appData = metadata.appData;</span>
-&nbsp;
-      // Extract personId from appData
-      const personId = <span class="cstat-no" title="statement not covered" >appData?.user?.person?.id || null;</span>
-&nbsp;
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Extract personId from appData</span>
+<span class="cstat-no" title="statement not covered" >      const personId = appData?.user?.person?.id || null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      this._authCache.set(effectiveCacheKey, {</span>
-        token,
-        cookieString,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        personId,
-        expiresAt: Date.now() + 14 * 60 * 1000,
-      });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        appData: metadata.appData,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >        expiresAt: Date.now() + 14 * 60 * 1000,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        token,
-        cookieString,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        appData,
-        personId,
-      };
-    }
-&nbsp;
-    // If no username provided and no authSession/untisClient, throw error
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        appData,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // If no username provided and no authSession/untisClient, throw error</span>
 <span class="cstat-no" title="statement not covered" >    if (!username) {</span>
 <span class="cstat-no" title="statement not covered" >      throw new Error('No username specified and no existing session available');</span>
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      // Step 1: Authenticate via httpClient to get session cookies
-      const authResult = <span class="cstat-no" title="statement not covered" >await this.httpClient.authenticateWithCredentials({</span>
-        school,
-        username,
-        password,
-        server,
-      });
-&nbsp;
-      const cookieString = <span class="cstat-no" title="statement not covered" >authResult.cookies;</span>
+<span class="cstat-no" title="statement not covered" >      // Step 1: Authenticate via httpClient to get session cookies</span>
+<span class="cstat-no" title="statement not covered" >      const authResult = await this.httpClient.authenticateWithCredentials({</span>
+<span class="cstat-no" title="statement not covered" >        school,</span>
+<span class="cstat-no" title="statement not covered" >        username,</span>
+<span class="cstat-no" title="statement not covered" >        password,</span>
+<span class="cstat-no" title="statement not covered" >        server,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      const cookieString = authResult.cookies;</span>
 <span class="cstat-no" title="statement not covered" >      if (!cookieString) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error('No session cookies received');</span>
-      }
-&nbsp;
-      // Step 2: Get Bearer Token using the session cookies
-      const token = <span class="cstat-no" title="statement not covered" >await this.httpClient.getBearerToken(server, cookieString);</span>
-&nbsp;
-      // Step 3: Fetch app/data to get tenantId and schoolYearId
-      const metadata = <span class="cstat-no" title="statement not covered" >await this._fetchAppData(server, cookieString, token);</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Step 2: Get Bearer Token using the session cookies</span>
+<span class="cstat-no" title="statement not covered" >      const token = await this.httpClient.getBearerToken(server, cookieString);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Step 3: Fetch app/data to get tenantId and schoolYearId</span>
+<span class="cstat-no" title="statement not covered" >      const metadata = await this._fetchAppData(server, cookieString, token);</span>
 <span class="cstat-no" title="statement not covered" >      appData = metadata.appData;</span>
-&nbsp;
-      // Extract personId from appData (for direct student login)
-      const personId = <span class="cstat-no" title="statement not covered" >appData?.user?.person?.id || null;</span>
-&nbsp;
-      // Cache the token (expires in 900 seconds, with buffer we cache for 14 minutes)
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Extract personId from appData (for direct student login)</span>
+<span class="cstat-no" title="statement not covered" >      const personId = appData?.user?.person?.id || null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Cache the token (expires in 900 seconds, with buffer we cache for 14 minutes)</span>
 <span class="cstat-no" title="statement not covered" >      this._authCache.set(effectiveCacheKey, {</span>
-        token,
-        cookieString,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        personId,
-        expiresAt: Date.now() + 14 * 60 * 1000,
-      });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        appData: metadata.appData,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >        expiresAt: Date.now() + 14 * 60 * 1000,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', '[AuthService] REST auth token obtained successfully');</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
-        token,
-        cookieString,
-        tenantId: metadata.tenantId,
-        schoolYearId: metadata.schoolYearId,
-        appData,
-        personId,
-      };
-    } catch (error) {
+<span class="cstat-no" title="statement not covered" >        token,</span>
+<span class="cstat-no" title="statement not covered" >        cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        tenantId: metadata.tenantId,</span>
+<span class="cstat-no" title="statement not covered" >        schoolYearId: metadata.schoolYearId,</span>
+<span class="cstat-no" title="statement not covered" >        appData,</span>
+<span class="cstat-no" title="statement not covered" >        personId,</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" >    } catch (error) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('error', `[AuthService] REST auth failed: ${error.message}`);</span>
 <span class="cstat-no" title="statement not covered" >      throw error;</span>
-    }
-  }
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Invalidate cached authentication for a specific cache key
    * Used when token expires or authentication fails
    * @param {string} cacheKey - Cache key to invalidate
    */
-<span class="fstat-no" title="function not covered" >  in</span>validateCache(cacheKey) {
-<span class="cstat-no" title="statement not covered" >    if (!cacheKey) {</span>
+  invalidateCache(cacheKey) {
+    if (!cacheKey) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('warn', `[AuthService] invalidateCache called with empty cacheKey: ${cacheKey}`);</span>
 <span class="cstat-no" title="statement not covered" >      return false;</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+    if (this._authCache.has(cacheKey)) {
+      this._authCache.delete(cacheKey);
+      this.logger('info', `[AuthService] Invalidating expired token cache for key: ${cacheKey}`);
+      return true;
     }
-<span class="cstat-no" title="statement not covered" >    if (this._authCache.has(cacheKey)) {</span>
-<span class="cstat-no" title="statement not covered" >      this._authCache.delete(cacheKey);</span>
-<span class="cstat-no" title="statement not covered" >      this.logger('info', `[AuthService] Invalidating expired token cache for key: ${cacheKey}`);</span>
-<span class="cstat-no" title="statement not covered" >      return true;</span>
-    }
-<span class="cstat-no" title="statement not covered" >    return false;</span>
+    return false;
   }
 &nbsp;
   /**
@@ -1758,62 +1772,62 @@ class AuthService {
    * @param {Object} appData - Full appData from API
    * @returns {Object} Compacted appData with only necessary fields
    */
-<span class="fstat-no" title="function not covered" >  _c</span>ompactAppData(appData) {
-<span class="cstat-no" title="statement not covered" >    if (!appData) <span class="cstat-no" title="statement not covered" >return null;</span></span>
-&nbsp;
+<span class="fstat-no" title="function not covered" >  _compactAppData(appData) {</span>
+<span class="cstat-no" title="statement not covered" >    if (!appData) return null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    return {</span>
-      holidays: appData.holidays || [],
-      currentSchoolYear: appData.currentSchoolYear
-        ? {
-            id: appData.currentSchoolYear.id,
-            timeGrid: appData.currentSchoolYear.timeGrid || null,
-          }
-        : null,
-      user: appData.user?.students
-        ? {
-            students: appData.user.students,
-          }
-        : null,
-      tenant: appData.tenant
-        ? {
-            id: appData.tenant.id,
-          }
-        : null,
-    };
-  }
+<span class="cstat-no" title="statement not covered" >      holidays: appData.holidays || [],</span>
+<span class="cstat-no" title="statement not covered" >      currentSchoolYear: appData.currentSchoolYear</span>
+<span class="cstat-no" title="statement not covered" >        ? {</span>
+<span class="cstat-no" title="statement not covered" >            id: appData.currentSchoolYear.id,</span>
+<span class="cstat-no" title="statement not covered" >            timeGrid: appData.currentSchoolYear.timeGrid || null,</span>
+<span class="cstat-no" title="statement not covered" >          }</span>
+<span class="cstat-no" title="statement not covered" >        : null,</span>
+<span class="cstat-no" title="statement not covered" >      user: appData.user?.students</span>
+<span class="cstat-no" title="statement not covered" >        ? {</span>
+<span class="cstat-no" title="statement not covered" >            students: appData.user.students,</span>
+<span class="cstat-no" title="statement not covered" >          }</span>
+<span class="cstat-no" title="statement not covered" >        : null,</span>
+<span class="cstat-no" title="statement not covered" >      tenant: appData.tenant</span>
+<span class="cstat-no" title="statement not covered" >        ? {</span>
+<span class="cstat-no" title="statement not covered" >            id: appData.tenant.id,</span>
+<span class="cstat-no" title="statement not covered" >          }</span>
+<span class="cstat-no" title="statement not covered" >        : null,</span>
+<span class="cstat-no" title="statement not covered" >    };</span>
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
-<span class="fstat-no" title="function not covered" >  as</span>ync _fetchAppData(server, cookieString, token) {
-    let tenantId = <span class="cstat-no" title="statement not covered" >null;</span>
-    let schoolYearId = <span class="cstat-no" title="statement not covered" >null;</span>
-    let appData = <span class="cstat-no" title="statement not covered" >null;</span>
-&nbsp;
+<span class="fstat-no" title="function not covered" >  async _fetchAppData(server, cookieString, token) {</span>
+<span class="cstat-no" title="statement not covered" >    let tenantId = null;</span>
+<span class="cstat-no" title="statement not covered" >    let schoolYearId = null;</span>
+<span class="cstat-no" title="statement not covered" >    let appData = null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    try {</span>
-      const headers = <span class="cstat-no" title="statement not covered" >{</span>
-        Cookie: cookieString,
-        Accept: 'application/json',
-      };
-&nbsp;
-      // Add bearer token if available
+<span class="cstat-no" title="statement not covered" >      const headers = {</span>
+<span class="cstat-no" title="statement not covered" >        Cookie: cookieString,</span>
+<span class="cstat-no" title="statement not covered" >        Accept: 'application/json',</span>
+<span class="cstat-no" title="statement not covered" >      };</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      // Add bearer token if available</span>
 <span class="cstat-no" title="statement not covered" >      if (token) {</span>
 <span class="cstat-no" title="statement not covered" >        headers.Authorization = `Bearer ${token}`;</span>
-      }
-&nbsp;
-      const appDataResp = <span class="cstat-no" title="statement not covered" >await fetchClient.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {</span>
-        headers,
-        timeout: 15000,
-      });
-&nbsp;
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >      const appDataResp = await fetchClient.get(`https://${server}/WebUntis/api/rest/view/v1/app/data`, {</span>
+<span class="cstat-no" title="statement not covered" >        headers,</span>
+<span class="cstat-no" title="statement not covered" >        timeout: 15000,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >      if (appDataResp.status === 200 &amp;&amp; appDataResp.data) {</span>
 <span class="cstat-no" title="statement not covered" >        appData = appDataResp.data;</span>
 <span class="cstat-no" title="statement not covered" >        tenantId = appDataResp.data?.tenant?.id;</span>
 <span class="cstat-no" title="statement not covered" >        schoolYearId = appDataResp.data?.currentSchoolYear?.id;</span>
-      }
-    } catch (err) {
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', `[AuthService] Failed to fetch app/data: ${err.message}`);</span>
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    return { tenantId, schoolYearId, appData: this._compactAppData(appData) };</span>
-  }
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Resolve school and server from student config and QR code
@@ -1821,31 +1835,31 @@ class AuthService {
    * @param {Object} moduleConfig - Module configuration
    * @returns {Object} { school, server }
    */
-<span class="fstat-no" title="function not covered" >  re</span>solveSchoolAndServer(student, moduleConfig = <span class="branch-0 cbranch-no" title="branch not covered" >{})</span> {
-    let school = <span class="cstat-no" title="statement not covered" >student.school || moduleConfig?.school || null;</span>
-    let server = <span class="cstat-no" title="statement not covered" >student.server || moduleConfig?.server || null;</span>
-&nbsp;
+<span class="fstat-no" title="function not covered" >  resolveSchoolAndServer(student, moduleConfig = {}) {</span>
+<span class="cstat-no" title="statement not covered" >    let school = student.school || moduleConfig?.school || null;</span>
+<span class="cstat-no" title="statement not covered" >    let server = student.server || moduleConfig?.server || null;</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    if ((!school || !server) &amp;&amp; student.qrcode) {</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
-        const qrUrl = <span class="cstat-no" title="statement not covered" >new URL(student.qrcode);</span>
+<span class="cstat-no" title="statement not covered" >        const qrUrl = new URL(student.qrcode);</span>
 <span class="cstat-no" title="statement not covered" >        school = school || qrUrl.searchParams.get('school');</span>
 <span class="cstat-no" title="statement not covered" >        server = server || qrUrl.searchParams.get('url');</span>
-      } catch (err) {
+<span class="cstat-no" title="statement not covered" >      } catch (err) {</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('error', `Failed to parse QR code for school/server: ${err.message}`);</span>
-      }
-    }
-&nbsp;
-    // Normalize server host if a full URL was provided
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Normalize server host if a full URL was provided</span>
 <span class="cstat-no" title="statement not covered" >    if (server &amp;&amp; server.startsWith('http')) {</span>
 <span class="cstat-no" title="statement not covered" >      try {</span>
 <span class="cstat-no" title="statement not covered" >        server = new URL(server).hostname;</span>
-      } catch {
-        // leave as-is
-      }
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >      } catch {</span>
+<span class="cstat-no" title="statement not covered" >        // leave as-is</span>
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    return { school, server };</span>
-  }
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Build REST targets for a student depending on login mode (QR vs. parent account)
@@ -1858,128 +1872,128 @@ class AuthService {
    * @param {Object} appData - App data with user.students[] for parent account child mapping
    * @returns {Array} Array of target objects { mode, school, server, username, password, studentId }
    */
-<span class="fstat-no" title="function not covered" >  bu</span>ildRestTargets(student, moduleConfig, school, server, ownPersonId, bearerToken = <span class="branch-0 cbranch-no" title="branch not covered" >null,</span> appData = <span class="branch-0 cbranch-no" title="branch not covered" >null)</span> {
-    const targets = <span class="cstat-no" title="statement not covered" >[];</span>
-    const useQrLogin = <span class="cstat-no" title="statement not covered" >Boolean(student.qrcode);</span>
-    const hasOwnCredentials = <span class="cstat-no" title="statement not covered" >Boolean(student.username &amp;&amp; student.password &amp;&amp; student.school &amp;&amp; student.server);</span>
-    const hasManualStudentId = <span class="cstat-no" title="statement not covered" >student.studentId &amp;&amp; Number.isFinite(Number(student.studentId)) &amp;&amp; !student._autoDiscovered;</span>
-    const hasAutoDiscoveredStudentId = <span class="cstat-no" title="statement not covered" >student.studentId &amp;&amp; Number.isFinite(Number(student.studentId)) &amp;&amp; student._autoDiscovered;</span>
-    const manualStudentId = <span class="cstat-no" title="statement not covered" >hasManualStudentId ? Number(student.studentId) : null;</span>
-    const hasParentCreds = <span class="cstat-no" title="statement not covered" >Boolean(moduleConfig?.username &amp;&amp; moduleConfig?.password);</span>
-&nbsp;
-    // Determine actual login mode used for THIS student
-    // (not just what credentials are available in moduleConfig)
-    const isParentLogin = <span class="cstat-no" title="statement not covered" >!useQrLogin &amp;&amp; !hasOwnCredentials &amp;&amp; hasParentCreds;</span>
-&nbsp;
-    // CRITICAL: personId (login user) ≠ studentId (timetable target)
-    // Priority for studentId determination:
-    // 1. Manual studentId (highest priority - explicit config)
-    // 2. Auto-discovered studentId (from parent account child list)
-    // 3. For PARENT login: map parent personId → child studentId via appData.user.students[]
-    // 4. For STUDENT login (QR or direct): personId = studentId (same person)
-    // 5. JWT token person_id as final fallback
-    let effectiveStudentId = <span class="cstat-no" title="statement not covered" >manualStudentId;</span>
+<span class="fstat-no" title="function not covered" >  buildRestTargets(student, moduleConfig, school, server, ownPersonId, bearerToken = null, appData = null) {</span>
+<span class="cstat-no" title="statement not covered" >    const targets = [];</span>
+<span class="cstat-no" title="statement not covered" >    const useQrLogin = Boolean(student.qrcode);</span>
+<span class="cstat-no" title="statement not covered" >    const hasOwnCredentials = Boolean(student.username &amp;&amp; student.password &amp;&amp; student.school &amp;&amp; student.server);</span>
+<span class="cstat-no" title="statement not covered" >    const hasManualStudentId = student.studentId &amp;&amp; Number.isFinite(Number(student.studentId)) &amp;&amp; !student._autoDiscovered;</span>
+<span class="cstat-no" title="statement not covered" >    const hasAutoDiscoveredStudentId = student.studentId &amp;&amp; Number.isFinite(Number(student.studentId)) &amp;&amp; student._autoDiscovered;</span>
+<span class="cstat-no" title="statement not covered" >    const manualStudentId = hasManualStudentId ? Number(student.studentId) : null;</span>
+<span class="cstat-no" title="statement not covered" >    const hasParentCreds = Boolean(moduleConfig?.username &amp;&amp; moduleConfig?.password);</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // Determine actual login mode used for THIS student</span>
+<span class="cstat-no" title="statement not covered" >    // (not just what credentials are available in moduleConfig)</span>
+<span class="cstat-no" title="statement not covered" >    const isParentLogin = !useQrLogin &amp;&amp; !hasOwnCredentials &amp;&amp; hasParentCreds;</span>
+<span class="cstat-no" title="statement not covered" ></span>
+<span class="cstat-no" title="statement not covered" >    // CRITICAL: personId (login user) ≠ studentId (timetable target)</span>
+<span class="cstat-no" title="statement not covered" >    // Priority for studentId determination:</span>
+<span class="cstat-no" title="statement not covered" >    // 1. Manual studentId (highest priority - explicit config)</span>
+<span class="cstat-no" title="statement not covered" >    // 2. Auto-discovered studentId (from parent account child list)</span>
+<span class="cstat-no" title="statement not covered" >    // 3. For PARENT login: map parent personId → child studentId via appData.user.students[]</span>
+<span class="cstat-no" title="statement not covered" >    // 4. For STUDENT login (QR or direct): personId = studentId (same person)</span>
+<span class="cstat-no" title="statement not covered" >    // 5. JWT token person_id as final fallback</span>
+<span class="cstat-no" title="statement not covered" >    let effectiveStudentId = manualStudentId;</span>
 <span class="cstat-no" title="statement not covered" >    if (effectiveStudentId) {</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', `[AuthService] Using manual studentId=${effectiveStudentId} (highest priority - from config)`);</span>
-    }
+<span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >    if (!effectiveStudentId &amp;&amp; hasAutoDiscoveredStudentId) {</span>
 <span class="cstat-no" title="statement not covered" >      effectiveStudentId = Number(student.studentId);</span>
 <span class="cstat-no" title="statement not covered" >      this.logger('debug', `[AuthService] Using auto-discovered studentId=${effectiveStudentId} (from parent account)`);</span>
-    }
+<span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >    if (!effectiveStudentId &amp;&amp; ownPersonId) {</span>
-      // Check if this is ACTUAL parent login (not just parent creds existing)
+<span class="cstat-no" title="statement not covered" >      // Check if this is ACTUAL parent login (not just parent creds existing)</span>
 <span class="cstat-no" title="statement not covered" >      if (isParentLogin &amp;&amp; appData?.user?.students &amp;&amp; Array.isArray(appData.user.students)) {</span>
-        const children = <span class="cstat-no" title="statement not covered" >appData.user.students;</span>
+<span class="cstat-no" title="statement not covered" >        const children = appData.user.students;</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('debug', `[AuthService] Parent login detected: personId=${ownPersonId}, children count=${children.length}`);</span>
 <span class="cstat-no" title="statement not covered" >        if (children.length &gt; 0) {</span>
-          // Auto-select: try to match by student.title, otherwise use first child
-          const matchedChild =
-<span class="cstat-no" title="statement not covered" >            children.find(<span class="fstat-no" title="function not covered" >(c</span>) =&gt; <span class="cstat-no" title="statement not covered" >student.title &amp;&amp; (c.displayName?.includes(student.title) || c.name?.includes(student.title)))</span> ||</span>
-            children[0];
+<span class="cstat-no" title="statement not covered" >          // Auto-select: try to match by student.title, otherwise use first child</span>
+<span class="cstat-no" title="statement not covered" >          const matchedChild =</span>
+<span class="cstat-no" title="statement not covered" >            children.find((c) =&gt; student.title &amp;&amp; (c.displayName?.includes(student.title) || c.name?.includes(student.title))) ||</span>
+<span class="cstat-no" title="statement not covered" >            children[0];</span>
 <span class="cstat-no" title="statement not covered" >          effectiveStudentId = Number(matchedChild.id || matchedChild.studentId || matchedChild.personId);</span>
 <span class="cstat-no" title="statement not covered" >          this.logger(</span>
-            'debug',
-            `[AuthService] Parent account: mapped personId=${ownPersonId} → child studentId=${effectiveStudentId} (${matchedChild.displayName || matchedChild.name})${student.title ? ` [matched title: ${student.title}]` : ' [first child]'}`
-          );
-        } else {
+<span class="cstat-no" title="statement not covered" >            'debug',</span>
+<span class="cstat-no" title="statement not covered" >            `[AuthService] Parent account: mapped personId=${ownPersonId} → child studentId=${effectiveStudentId} (${matchedChild.displayName || matchedChild.name})${student.title ? ` [matched title: ${student.title}]` : ' [first child]'}`</span>
+<span class="cstat-no" title="statement not covered" >          );</span>
+<span class="cstat-no" title="statement not covered" >        } else {</span>
 <span class="cstat-no" title="statement not covered" >          this.logger('warn', `[AuthService] Parent account (personId=${ownPersonId}) has no children in appData.user.students`);</span>
-        }
-      } else <span class="cstat-no" title="statement not covered" >if (!isParentLogin) {</span>
-        // Direct student login (QR or username/password): personId = studentId (same person)
+<span class="cstat-no" title="statement not covered" >        }</span>
+<span class="cstat-no" title="statement not covered" >      } else if (!isParentLogin) {</span>
+<span class="cstat-no" title="statement not covered" >        // Direct student login (QR or username/password): personId = studentId (same person)</span>
 <span class="cstat-no" title="statement not covered" >        effectiveStudentId = ownPersonId;</span>
-        const loginType = <span class="cstat-no" title="statement not covered" >useQrLogin ? 'QR code' : 'direct credentials';</span>
+<span class="cstat-no" title="statement not covered" >        const loginType = useQrLogin ? 'QR code' : 'direct credentials';</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('debug', `[AuthService] Student login (${loginType}): personId=${ownPersonId} = studentId (same person)`);</span>
-      } else {
-        // Parent creds but no appData or students array - this is a problem
+<span class="cstat-no" title="statement not covered" >      } else {</span>
+<span class="cstat-no" title="statement not covered" >        // Parent creds but no appData or students array - this is a problem</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('warn', `[AuthService] Parent credentials detected but no appData.user.students available (personId=${ownPersonId})`);</span>
-      }
-    }
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
 <span class="cstat-no" title="statement not covered" >    if (!effectiveStudentId &amp;&amp; bearerToken) {</span>
-      const tokenPersonId = <span class="cstat-no" title="statement not covered" >this.extractPersonIdFromToken(bearerToken);</span>
+<span class="cstat-no" title="statement not covered" >      const tokenPersonId = this.extractPersonIdFromToken(bearerToken);</span>
 <span class="cstat-no" title="statement not covered" >      if (tokenPersonId) {</span>
 <span class="cstat-no" title="statement not covered" >        effectiveStudentId = tokenPersonId;</span>
 <span class="cstat-no" title="statement not covered" >        this.logger('debug', `[AuthService] Using person_id from JWT token: ${tokenPersonId}`);</span>
-      }
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >      }</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    if (useQrLogin &amp;&amp; school &amp;&amp; server) {</span>
 <span class="cstat-no" title="statement not covered" >      targets.push({</span>
-        mode: 'qr',
-        school,
-        server,
-        username: null,
-        password: null,
-        studentId: effectiveStudentId || null,
-      });
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        mode: 'qr',</span>
+<span class="cstat-no" title="statement not covered" >        school,</span>
+<span class="cstat-no" title="statement not covered" >        server,</span>
+<span class="cstat-no" title="statement not covered" >        username: null,</span>
+<span class="cstat-no" title="statement not covered" >        password: null,</span>
+<span class="cstat-no" title="statement not covered" >        studentId: effectiveStudentId || null,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    if (!useQrLogin &amp;&amp; hasParentCreds &amp;&amp; effectiveStudentId !== null) {</span>
 <span class="cstat-no" title="statement not covered" >      targets.push({</span>
-        mode: 'parent',
-        school: school || moduleConfig.school,
-        server: server || moduleConfig.server || 'webuntis.com',
-        username: moduleConfig.username,
-        password: moduleConfig.password,
-        studentId: effectiveStudentId,
-      });
-    }
-&nbsp;
+<span class="cstat-no" title="statement not covered" >        mode: 'parent',</span>
+<span class="cstat-no" title="statement not covered" >        school: school || moduleConfig.school,</span>
+<span class="cstat-no" title="statement not covered" >        server: server || moduleConfig.server || 'webuntis.com',</span>
+<span class="cstat-no" title="statement not covered" >        username: moduleConfig.username,</span>
+<span class="cstat-no" title="statement not covered" >        password: moduleConfig.password,</span>
+<span class="cstat-no" title="statement not covered" >        studentId: effectiveStudentId,</span>
+<span class="cstat-no" title="statement not covered" >      });</span>
+<span class="cstat-no" title="statement not covered" >    }</span>
+<span class="cstat-no" title="statement not covered" ></span>
 <span class="cstat-no" title="statement not covered" >    return targets;</span>
-  }
+<span class="cstat-no" title="statement not covered" >  }</span>
 &nbsp;
   /**
    * Derive students from app/data response (parent account mode)
    * @param {Object} appData - App data response from WebUntis API
    * @returns {Array} Array of derived student objects
    */
-<span class="fstat-no" title="function not covered" >  de</span>riveStudentsFromAppData(appData) {
-<span class="cstat-no" title="statement not covered" >    if (!appData || !appData.user || !Array.isArray(appData.user.students)) <span class="cstat-no" title="statement not covered" >return [];</span></span>
+  deriveStudentsFromAppData(appData) {
+    if (!appData || !appData.user || !Array.isArray(appData.user.students)) return [];
 &nbsp;
-    const derived = <span class="cstat-no" title="statement not covered" >[];</span>
-<span class="cstat-no" title="statement not covered" >    appData.user.students.forEach(<span class="fstat-no" title="function not covered" >(s</span>t, idx) =&gt; {</span>
-      const sid = <span class="cstat-no" title="statement not covered" >Number(st?.id ?? st?.studentId ?? st?.personId);</span>
-<span class="cstat-no" title="statement not covered" >      if (!Number.isFinite(sid)) <span class="cstat-no" title="statement not covered" >return;</span></span>
+    const derived = [];
+    appData.user.students.forEach((st, idx) =&gt; {
+      const sid = Number(st?.id<span class="branch-0 cbranch-no" title="branch not covered" > ?? st?.studentId<span class="branch-0 cbranch-no" title="branch not covered" > </span>?? st?.personId)</span>;
+      if (!Number.isFinite(sid)) <span class="branch-0 cbranch-no" title="branch not covered" >return;</span>
 &nbsp;
-      const title = <span class="cstat-no" title="statement not covered" >st?.displayName || st?.name || `Student ${idx + 1}`;</span>
-<span class="cstat-no" title="statement not covered" >      derived.push({</span>
+      const title = st?.displayName || st?.name || `Student ${idx + 1}`;
+      derived.push({
         title,
         studentId: sid,
         imageUrl: st?.imageUrl || null,
       });
     });
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    return derived;</span>
+    return derived;
   }
 &nbsp;
   /**
    * Clear authentication cache
    * @param {string} cacheKey - Optional specific key to clear, or clear all if not provided
    */
-<span class="fstat-no" title="function not covered" >  cl</span>earCache(cacheKey = <span class="branch-0 cbranch-no" title="branch not covered" >null)</span> {
-<span class="cstat-no" title="statement not covered" >    if (cacheKey) {</span>
+  clearCache(cacheKey = null) {
+    if (cacheKey) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 <span class="cstat-no" title="statement not covered" >      this._authCache.delete(cacheKey);</span>
     } else {
-<span class="cstat-no" title="statement not covered" >      this._authCache.clear();</span>
+      this._authCache.clear();
     }
   }
 &nbsp;
@@ -1987,8 +2001,8 @@ class AuthService {
    * Get cache statistics
    * @returns {Object} { size, keys }
    */
-<span class="fstat-no" title="function not covered" >  ge</span>tCacheStats() {
-<span class="cstat-no" title="statement not covered" >    return {</span>
+  getCacheStats() {
+    return {
       size: this._authCache.size,
       keys: Array.from(this._authCache.keys()),
     };
@@ -1998,22 +2012,21 @@ class AuthService {
 module.exports = AuthService;
 &nbsp;</pre></td></tr></table></pre>
 
-      <div class="push"></div>
-      <!-- for sticky footer -->
-    </div>
-    <!-- /wrapper -->
-    <div class="footer quiet pad2 space-top1 center small">
-      Code coverage generated by
-      <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-      at 2026-01-12T20:45:32.633Z
-    </div>
-    <script src="prettify.js"></script>
-    <script>
-      window.onload = function () {
-        prettyPrint();
-      };
-    </script>
-    <script src="sorter.js"></script>
-    <script src="block-navigation.js"></script>
-  </body>
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-01-13T10:39:45.403Z
+            </div>
+        <script src="prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="sorter.js"></script>
+        <script src="block-navigation.js"></script>
+    </body>
 </html>
+    
