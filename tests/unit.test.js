@@ -21,7 +21,7 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    authService = new AuthService({ logger: () => { } });
+    authService = new AuthService({ logger: () => {} });
   });
 
   describe('Token Extraction', () => {
@@ -157,7 +157,7 @@ describe('CacheManager', () => {
   let cacheManager;
 
   beforeEach(() => {
-    cacheManager = new CacheManager(() => { });
+    cacheManager = new CacheManager(() => {});
   });
 
   describe('TTL Support', () => {
