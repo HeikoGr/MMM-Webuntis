@@ -12,3 +12,4 @@ config/config.js
 config/custom.css
 
 temp/*
+coverage/
