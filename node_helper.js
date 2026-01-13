@@ -1376,6 +1376,7 @@ module.exports = NodeHelper.create({
       // Send success notification to frontend
       this.sendSocketNotification('MODULE_INITIALIZED', {
         id: identifier,
+        config: normalizedConfig,
         warnings: combinedWarnings,
         students: normalizedConfig.students || [],
       });
@@ -1646,13 +1647,17 @@ module.exports = NodeHelper.create({
       } catch {
         // fall through to real now
       }
-      return new Date(Date.now());
+      // Use local timezone date (important for schools in non-UTC timezones)
+      // This ensures date calculations match the school's local day
+      const now = new Date(Date.now());
+      const localDate = new Date(now.toLocaleString('en-US', { timeZone: config.timezone || 'Europe/Berlin' }));
+      return localDate;
     }.call(this);
 
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
     // ===== STEP 1: Calculate date ranges using dateRangeCalculator module =====
-    const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences);
+    const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences, logger);
     logger(
       `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${dateRanges.timetable.pastDays}, nextDays=${dateRanges.timetable.nextDays}`
     );

@@ -1,4 +1,7 @@
 Module.register('MMM-Webuntis', {
+  // Version marker to force browser cache refresh (increment when making changes)
+  _cacheVersion: '2.0.1',
+
   // Simple frontend logger factory (lightweight, avoids bundler require() issues)
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
     // Use only console methods allowed by linting rules (warn, error)
@@ -36,6 +39,7 @@ Module.register('MMM-Webuntis', {
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
     debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
+    timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
@@ -72,7 +76,7 @@ Module.register('MMM-Webuntis', {
     },
 
     grid: {
-      nextDays: 2, // widget-specific days ahead
+      nextDays: 4, // widget-specific days ahead (shows school week Mon-Fri if today is Monday)
       pastDays: 0, // widget-specific days past
       dateFormat: 'EEE dd.MM.', // format for grid dates
       showNowLine: true, // show current time line
@@ -364,6 +368,18 @@ Module.register('MMM-Webuntis', {
     const defNoStudents = { ...(this.config || {}) };
     delete defNoStudents.students;
 
+    // Deep merge widget defaults from this.defaults into defNoStudents
+    // MagicMirror only does shallow merge, so nested widget configs need manual merging
+    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+    widgetKeys.forEach((widget) => {
+      if (this.defaults[widget]) {
+        // Start with module defaults
+        defNoStudents[widget] = { ...this.defaults[widget], ...(defNoStudents[widget] || {}) };
+      }
+    });
+
+    this._log('debug', `[_buildSendConfig] defNoStudents.grid.nextDays = ${defNoStudents.grid?.nextDays}`);
+
     // Always include the persisted debugDate if it was configured, to ensure it persists
     // across multiple FETCH_DATA requests. This allows time-based testing to work correctly.
     if (this._persistedDebugDate) {
@@ -372,7 +388,35 @@ Module.register('MMM-Webuntis', {
     }
 
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
-    const mergedStudents = rawStudents.map((s) => ({ ...defNoStudents, ...(s || {}) }));
+
+    // Use merged students from GOT_DATA if available (preserves widget defaults across FETCH_DATA calls)
+    const studentsToMerge =
+      this._mergedStudents && this._mergedStudents.size > 0
+        ? rawStudents.map((s) => {
+            const title = s?.title;
+            if (title && this._mergedStudents.has(title)) {
+              // Use the previously merged config from GOT_DATA
+              return this._mergedStudents.get(title);
+            }
+            return s;
+          })
+        : rawStudents;
+
+    const mergedStudents = studentsToMerge.map((s) => {
+      const merged = { ...defNoStudents, ...(s || {}) };
+      // Deep merge student-level widget configs
+      widgetKeys.forEach((widget) => {
+        if (s && s[widget]) {
+          merged[widget] = { ...defNoStudents[widget], ...s[widget] };
+        } else if (!merged[widget]) {
+          // Ensure widget defaults are present even if student doesn't have them
+          merged[widget] = { ...defNoStudents[widget] };
+        }
+      });
+      return merged;
+    });
+
+    this._log('debug', `[_buildSendConfig] mergedStudents[0].grid.nextDays = ${mergedStudents[0]?.grid?.nextDays}`);
 
     const sendConfig = {
       ...this.config,
@@ -885,6 +929,13 @@ Module.register('MMM-Webuntis', {
       this._log('info', 'Module initialized successfully');
       this._initialized = true;
 
+      // CRITICAL: Store normalized config from backend to preserve widget defaults
+      // This ensures all subsequent FETCH_DATA calls use the correct defaults
+      if (payload.config) {
+        this.config = payload.config;
+        this._log('debug', 'Stored normalized config from backend');
+      }
+
       // Process initialization warnings if present
       if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
         this.moduleWarningsSet = this.moduleWarningsSet || new Set();
@@ -938,7 +989,24 @@ Module.register('MMM-Webuntis', {
 
     const title = payload.title;
     const cfg = payload.config || {};
+
+    // Deep merge widget defaults into the received config
+    // Backend sends student config which may be missing defaults
+    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+    widgetKeys.forEach((widget) => {
+      if (this.defaults[widget]) {
+        cfg[widget] = { ...this.defaults[widget], ...(cfg[widget] || {}) };
+      }
+    });
+
     this.configByStudent[title] = cfg;
+
+    // Store the merged student config back into this.config.students
+    // This ensures _buildSendConfig() uses the correct config on next FETCH_DATA
+    if (!this._mergedStudents) {
+      this._mergedStudents = new Map();
+    }
+    this._mergedStudents.set(title, cfg);
 
     // Update persisted debugDate if it's included in the response, to handle any backend changes
     if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
