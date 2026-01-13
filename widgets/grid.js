@@ -651,12 +651,14 @@ function getNowLineState(ctx) {
     };
 
     const subjectGroups = new Map();
-    for (const lesson of lessons) {
-      const subject = getSubjectName(lesson) || `unknown_${lesson.id}`;
-      if (!subjectGroups.has(subject)) {
-        subjectGroups.set(subject, []);
+    for (let index = 0; index < lessons.length; index++) {
+      const lesson = lessons[index];
+      const subject = getSubjectName(lesson);
+      const groupKey = subject || `unknown_${lesson.id ?? index}`;
+      if (!subjectGroups.has(groupKey)) {
+        subjectGroups.set(groupKey, []);
       }
-      subjectGroups.get(subject).push(lesson);
+      subjectGroups.get(groupKey).push(lesson);
     }
 
     // Create ticker wrapper - minimal container without lesson styling
@@ -707,8 +709,18 @@ function getNowLineState(ctx) {
           const lessonStartOffset = lesson.startMin - groupStartMin;
           const lessonDuration = lesson.endMin - lesson.startMin;
 
-          const topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
-          const heightPercent = (lessonDuration / totalGroupMinutes) * 100;
+          let topPercent;
+          let heightPercent;
+
+          if (totalGroupMinutes === 0) {
+            // Degenerate case: no time span in this group (e.g. zero-length lesson).
+            // Render the lesson as occupying the full height.
+            topPercent = 0;
+            heightPercent = 100;
+          } else {
+            topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
+            heightPercent = (lessonDuration / totalGroupMinutes) * 100;
+          }
 
           lessonDiv.style.position = 'absolute';
           lessonDiv.style.top = `${topPercent}%`;
