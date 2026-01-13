@@ -95,6 +95,26 @@
         }
       },
       "problemMatcher": []
+    },
+    {
+      "label": "pm2: restart & logs (clean)",
+      "type": "shell",
+      "command": "clear && pm2 restart all && pm2 flush && pm2 logs",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "isBackground": false,
+      "options": {
+        "statusbar": {
+          "label": "$(refresh) Restart & Logs",
+          "color": "#9C27B0",
+          "detail": "Restart all PM2 processes, flush logs and show new logs"
+        }
+      },
+      "problemMatcher": []
     }
   ]
 }
