@@ -189,11 +189,11 @@ async fetchData(authSession, student, identifier, credKey, compactHolidays, conf
 
 ```bash
 # Linting and formatting
-npm run lint             # ✅ PASS
+node --run lint          # ✅ PASS
 npx prettier --check .   # ✅ PASS
 
 # Unit tests
-npm test                 # ✅ 25/25 tests pass
+node --run test          # ✅ 25/25 tests pass
 
 # Integration test
 node --run debug         # ✅ Module loads without errors

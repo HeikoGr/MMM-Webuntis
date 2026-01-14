@@ -136,7 +136,7 @@ console.warn('[feature] Warning:', error);
 
 - **Lint code**: `node --run lint` (or `node --run lint:fix` to auto-fix)
 - **Test**: `npm test` (runs linting)
-- **Unit tests**: `npm run test:unit`
+- **Unit tests**: `node --run test:unit`
 - **Spell check**: `node --run test:spelling`
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)

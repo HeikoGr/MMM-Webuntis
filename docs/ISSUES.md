@@ -154,7 +154,7 @@ Implemented 4-tier error utility framework in `lib/errorUtils.js`:
 **Current State**:
 ```bash
 $ npm test
-> eslint . --max-warnings=0
+> eslint --max-warnings=0
 
 ✔ No linting errors
 
@@ -1585,11 +1585,11 @@ end_of_line = lf
 **LOW-4: package.json Scripts**
 ```json
 "scripts": {
-  "test": "npm run lint && npm run test:unit",
+  "test": "node --run lint && node --run test:unit",
   "test:unit": "jest",
   "test:e2e": "...",
-  "lint": "eslint .",
-  "lint:fix": "eslint . --fix"
+  "lint": "eslint",
+  "lint:fix": "eslint --fix"
 }
 ```
 
