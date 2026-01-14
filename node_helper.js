@@ -704,7 +704,7 @@ module.exports = NodeHelper.create({
                   delete configStudent.school;
                   delete configStudent.server;
                   const msg = `Auto-assigned studentId=${candidateIds[0]} for "${configStudent.title}" (only match found)`;
-                  this._mmLog('info', configStudent, msg);
+                  this._mmLog('debug', configStudent, msg);
                 } else {
                   // Multiple or no matches - show warning
                   const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
@@ -1413,7 +1413,7 @@ module.exports = NodeHelper.create({
       this._studentsDiscovered = this._studentsDiscovered || {};
       this._studentsDiscovered[identifier] = true;
 
-      this._mmLog('info', null, `[INIT_MODULE] Module ${identifier} initialized successfully`);
+      this._mmLog('debug', null, `[INIT_MODULE] Module ${identifier} initialized successfully`);
 
       // Send success notification to frontend
       this.sendSocketNotification('MODULE_INITIALIZED', {
