@@ -597,8 +597,7 @@ Module.register('MMM-Webuntis', {
     this.holidayMapByStudent = {};
     this.preprocessedByStudent = {};
     this.moduleWarningsSet = new Set();
-    this._domUpdateTimer = null;
-    this._lastFetchTime = 0; // Debounce rapid FETCH_DATA requests
+    this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
 
     this._paused = false;
@@ -608,13 +607,13 @@ Module.register('MMM-Webuntis', {
     const storageKey = `MMM-Webuntis_sessionId_${this.identifier}`;
     if (typeof localStorage !== 'undefined' && localStorage.getItem(storageKey)) {
       this._sessionId = localStorage.getItem(storageKey);
-      this._log('debug', `[start] Retrieved persisted session ID from localStorage: ${this._sessionId}`);
+      this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (from localStorage)`);
     } else {
       this._sessionId = Math.random().toString(36).substring(2, 11);
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(storageKey, this._sessionId);
       }
-      this._log('debug', `[start] Generated new session ID: ${this._sessionId}`);
+      this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (newly generated)`);
     }
 
     // Initialize module-level today value. If `debugDate` is configured, use it
@@ -687,20 +686,15 @@ Module.register('MMM-Webuntis', {
     // Prevent fetch before initialization is complete
     if (!this._initialized) {
       this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch - module not yet initialized`);
+      // Store pending resume request to execute after initialization
+      if (reason === 'resume') {
+        this._pendingResumeRequest = true;
+        this._log('debug', '[FETCH_DATA] Stored pending resume request for after initialization');
+      }
       return;
     }
 
-    const now = Date.now();
-    const timeSinceLastFetch = now - this._lastFetchTime;
-    const minInterval = 5000; // Minimum 5 seconds between FETCH_DATA requests
-
-    // Debounce: skip if too soon after last fetch
-    if (timeSinceLastFetch < minInterval) {
-      this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch (${timeSinceLastFetch}ms since last)`);
-      return;
-    }
-
-    this._lastFetchTime = now;
+    this._log('debug', `[FETCH_DATA] Sending FETCH_DATA (reason: ${reason})`);
     this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
   },
 
@@ -711,29 +705,48 @@ Module.register('MMM-Webuntis', {
     }
   },
 
-  _scheduleDomUpdate(delayMs = 500) {
-    if (this._domUpdateTimer) {
-      clearTimeout(this._domUpdateTimer);
-    }
-    this._domUpdateTimer = setTimeout(() => {
-      this._domUpdateTimer = null;
-      this.updateDom();
-    }, delayMs);
-  },
-
   suspend() {
+    this._log('debug', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
-    if (this._domUpdateTimer) {
-      clearTimeout(this._domUpdateTimer);
-      this._domUpdateTimer = null;
+    // Clear update dom timer
+    if (this._updateDomTimer) {
+      clearTimeout(this._updateDomTimer);
+      this._updateDomTimer = null;
+    }
+    // Clear any pending resume timers
+    if (this._resumeFallbackTimer) {
+      clearTimeout(this._resumeFallbackTimer);
+      this._resumeFallbackTimer = null;
     }
   },
 
   resume() {
+    this._log('debug', '[resume] Module resumed');
     this._paused = false;
+
+    // Store timestamp to detect if data arrives within reasonable time
+    const resumeTimestamp = Date.now();
+    this._lastResumeTime = resumeTimestamp;
+
+    // Immediately try to fetch data
     this._sendFetchData('resume');
+
+    // Fallback: If no data arrives within 3 seconds, retry fetch
+    // This handles cases where the resume fetch was skipped or failed silently
+    if (this._resumeFallbackTimer) {
+      clearTimeout(this._resumeFallbackTimer);
+    }
+    this._resumeFallbackTimer = setTimeout(() => {
+      this._resumeFallbackTimer = null;
+      // Only retry if we still haven't received data since resume
+      if (this._lastResumeTime === resumeTimestamp && this._initialized) {
+        this._log('debug', '[resume] Fallback: No data received after resume, retrying fetch');
+        this._sendFetchData('resume-fallback');
+      }
+    }, 3000);
+
     this._startFetchTimer();
     this._startNowLineUpdater();
   },
@@ -957,17 +970,38 @@ Module.register('MMM-Webuntis', {
   },
 
   socketNotificationReceived(notification, payload) {
-    // Filter by id to ensure data goes to the correct module instance
-    // All instances receive the broadcast, but only the matching one processes it
-    if (payload && payload.id && this.identifier !== payload.id) {
-      this._log('debug', `[socketNotificationReceived] Ignoring data for different id (ours: ${this.identifier}, received: ${payload.id})`);
+    // Filter by sessionId (preferred) or id (fallback) to ensure data goes to correct instance
+    // This allows multi-instance support without requiring explicit identifiers in config
+    this._log('debug', `[socketNotificationReceived] ${notification} - ours: id=${this.identifier}, sessionId=${this._sessionId} | received: id=${payload?.id}, sessionId=${payload?.sessionId}`);
+
+    if (payload && payload.sessionId && this._sessionId !== payload.sessionId) {
+      this._log('debug', `[socketNotificationReceived] ❌ FILTERED: sessionId mismatch (ours: ${this._sessionId}, received: ${payload.sessionId})`);
       return;
     }
+    // Fallback to id filtering if sessionId is not present (backward compatibility)
+    if (payload && payload.id && !payload.sessionId && this.identifier !== payload.id) {
+      this._log('debug', `[socketNotificationReceived] ❌ FILTERED: id mismatch (ours: ${this.identifier}, received: ${payload.id})`);
+      return;
+    }
+
+    this._log('debug', `[socketNotificationReceived] ✓ ACCEPTED: ${notification}`);
 
     // Handle initialization response
     if (notification === 'MODULE_INITIALIZED') {
       this._log('info', 'Module initialized successfully');
       this._initialized = true;
+
+      // Execute pending resume request if module was resumed before initialization completed
+      if (this._pendingResumeRequest) {
+        this._log('debug', '[MODULE_INITIALIZED] Executing pending resume request');
+        this._pendingResumeRequest = false;
+        // Small delay to ensure initialization is fully complete
+        setTimeout(() => {
+          if (!this._paused) {
+            this._sendFetchData('resume-after-init');
+          }
+        }, 100);
+      }
 
       // Process initialization warnings if present
       if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
@@ -1022,6 +1056,15 @@ Module.register('MMM-Webuntis', {
 
     const title = payload.title;
     const cfg = payload.config || {};
+
+    // Cancel resume fallback timer since we received data
+    if (this._resumeFallbackTimer) {
+      clearTimeout(this._resumeFallbackTimer);
+      this._resumeFallbackTimer = null;
+      this._log('debug', '[GOT_DATA] Cancelled resume fallback timer - data received');
+    }
+    // Reset resume timestamp to prevent fallback retry
+    this._lastResumeTime = null;
 
     this.configByStudent[title] = cfg;
 
@@ -1103,8 +1146,12 @@ Module.register('MMM-Webuntis', {
       'debug',
       `[GOT_DATA] holidays: ${this.holidaysByStudent[title].length}, holidayMap keys: ${Object.keys(this.holidayMapByStudent[title] || {}).length}`
     );
-    this._log('debug', `[GOT_DATA] Calling _scheduleDomUpdate()`);
-    this._scheduleDomUpdate();
-    this._log('debug', `[GOT_DATA] _scheduleDomUpdate() called`);
+    // Update DOM immediately; debounce removed to reflect data as soon as it arrives
+    if (this._updateDomTimer) {
+      clearTimeout(this._updateDomTimer);
+      this._updateDomTimer = null;
+    }
+    this._log('debug', '[GOT_DATA] Executing immediate updateDom()');
+    this.updateDom();
   },
 });

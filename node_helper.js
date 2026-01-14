@@ -879,9 +879,10 @@ module.exports = NodeHelper.create({
    *
    * @param {Object} sample - Student configuration sample
    * @param {Object} moduleConfig - Module configuration
-   * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
-   */
-  async _createAuthSession(sample, moduleConfig, identifier) {
+  * @param {string} cacheKeyOverride - Optional explicit cache key (ensures alignment with credKey)
+  * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
+  */
+  async _createAuthSession(sample, moduleConfig, identifier, cacheKeyOverride = null) {
     const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
@@ -894,8 +895,9 @@ module.exports = NodeHelper.create({
     // Mode 0: QR Code Login (student)
     if (useQrLogin) {
       this._mmLog('debug', sample, 'Getting QR code authentication (cached or new)');
+      const cacheKey = cacheKeyOverride || `qrcode:${sample.qrcode}`;
       const authResult = await authService.getAuthFromQRCode(sample.qrcode, {
-        cacheKey: `qrcode:${sample.qrcode}`,
+        cacheKey,
       });
       return {
         school: authResult.school,
@@ -915,13 +917,14 @@ module.exports = NodeHelper.create({
     if (isParentMode) {
       const school = sample.school || moduleConfig.school;
       const server = sample.server || moduleConfig.server || 'webuntis.com';
+      const cacheKey = cacheKeyOverride || `parent:${moduleConfig.username}@${server}/${school}`;
       this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
       const authResult = await authService.getAuth({
         school,
         username: moduleConfig.username,
         password: moduleConfig.password,
         server,
-        options: { cacheKey: `parent:${moduleConfig.username}@${server}` },
+        options: { cacheKey },
       });
       return {
         school,
@@ -939,12 +942,13 @@ module.exports = NodeHelper.create({
     // Mode 2: Direct Student Login (own credentials)
     if (hasOwnCredentials) {
       this._mmLog('debug', sample, `Authenticating with direct login (school=${sample.school}, server=${sample.server})`);
+      const cacheKey = cacheKeyOverride || `direct:${sample.username}@${sample.server}`;
       const authResult = await authService.getAuth({
         school: sample.school,
         username: sample.username,
         password: sample.password,
         server: sample.server,
-        options: { cacheKey: `direct:${sample.username}@${sample.server}` },
+        options: { cacheKey },
       });
       return {
         school: sample.school,
@@ -1191,7 +1195,7 @@ module.exports = NodeHelper.create({
         // Create/get authSession - authService handles caching internally
         // If credentials were recently used, authService will return cached result
         // Use identifier-specific AuthService to prevent cache cross-contamination
-        authSession = await this._createAuthSession(sample, config, identifier);
+        authSession = await this._createAuthSession(sample, config, identifier, credKey);
       } catch (err) {
         const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
         this._mmLog('error', null, msg);
@@ -1205,6 +1209,7 @@ module.exports = NodeHelper.create({
           this.sendSocketNotification('GOT_DATA', {
             title: student.title,
             id: identifier,
+            sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
             config: student,
             warnings: groupWarnings,
             timeUnits: [],
@@ -1212,7 +1217,6 @@ module.exports = NodeHelper.create({
             exams: [],
             homeworks: [],
             absences: [],
-            sessionKey: sessionKey, // Add session info for filtering
           });
         }
         return;
@@ -1286,9 +1290,10 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to identifier ${identifier}`);
 
       for (const payload of studentPayloads) {
-        // Send to ALL module instances with this identifier (via the id field)
-        // Frontend filters by id, not sessionKey, so all instances receive the data
+        // Send to ALL module instances, but include both id and sessionId for filtering
+        // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
         payload.id = identifier;
+        payload.sessionId = sessionKey.split(':')[1]; // Extract sessionId from "identifier:sessionId"
         this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
@@ -1503,7 +1508,7 @@ module.exports = NodeHelper.create({
       for (const student of studentsList) {
         // Apply legacy config mapping to student-level config
         const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-        const credKey = this._getCredentialKey(normalizedStudent, config);
+        const credKey = this._getCredentialKey(normalizedStudent, config, sessionIdentifier);
         if (!groups.has(credKey)) groups.set(credKey, []);
         groups.get(credKey).push(normalizedStudent);
       }
@@ -1546,20 +1551,22 @@ module.exports = NodeHelper.create({
    * @param {Object} student - Student credential object
    * @returns {string} credential key
    */
-  _getCredentialKey(student, moduleConfig) {
+  _getCredentialKey(student, moduleConfig, identifier = 'default') {
+    const scope = moduleConfig?.carouselId || identifier || 'default';
+    const scopePrefix = scope ? `${scope}::` : '';
     const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
     const hasOwnCredentials = student.qrcode || (student.username && student.password && student.school && student.server);
     const isParentMode = hasStudentId && !hasOwnCredentials;
 
     // Parent account mode: group by module-level parent credentials
     if (isParentMode && moduleConfig) {
-      return `parent:${moduleConfig.username || 'undefined'}@${moduleConfig.server || 'webuntis.com'}/${moduleConfig.school || 'undefined'}`;
+      return `${scopePrefix}parent:${moduleConfig.username || 'undefined'}@${moduleConfig.server || 'webuntis.com'}/${moduleConfig.school || 'undefined'}`;
     }
 
     // Direct student login: group by student credentials
-    if (student.qrcode) return `qrcode:${student.qrcode}`;
+    if (student.qrcode) return `${scopePrefix}qrcode:${student.qrcode}`;
     const server = student.server || 'default';
-    return `user:${student.username}@${server}/${student.school}`;
+    return `${scopePrefix}user:${student.username}@${server}/${student.school}`;
   },
 
   /**

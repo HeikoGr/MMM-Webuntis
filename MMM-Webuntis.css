@@ -46,7 +46,7 @@
   text-align: left;
 }
 
-.MMM-Webuntis > .wu-widget-container:last-child {
+.MMM-Webuntis>.wu-widget-container:last-child {
   margin-bottom: 0;
 }
 
@@ -196,7 +196,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell > div {
+.MMM-Webuntis .grid-combined .grid-timecell>div {
   margin: 0;
   padding: 0;
   line-height: 1;
@@ -417,7 +417,7 @@
   width: 66%;
   min-width: 40px;
   border-radius: var(--wu-lesson-radius) 0 0 var(--wu-lesson-radius);
-  background: linear-gradient(to left, rgba(255, 100, 100, 0.7), rgba(255, 100, 100, 0.3));
+  background: rgba(255, 100, 100, 0.5);
   border-left: 2px solid rgba(255, 100, 100, 0.8);
   pointer-events: auto;
   z-index: 2;
@@ -432,17 +432,17 @@
 
 .MMM-Webuntis .grid-combined .grid-absence-overlay:hover {
   width: 38%;
-  background: linear-gradient(to left, rgba(255, 100, 100, 0.85), rgba(255, 100, 100, 0.4));
+  background: rgba(255, 100, 100, 0.65);
   border-left-color: rgba(255, 100, 100, 1);
 }
 
 .MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay {
-  background: linear-gradient(to left, rgba(255, 80, 80, 0.8), rgba(255, 80, 80, 0.35));
+  background: rgba(255, 80, 80, 0.6);
   border-left-color: rgba(255, 80, 80, 0.9);
 }
 
 .MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay:hover {
-  background: linear-gradient(to left, rgba(255, 80, 80, 0.95), rgba(255, 80, 80, 0.45));
+  background: rgba(255, 80, 80, 0.7);
   border-left-color: rgba(255, 80, 80, 1);
 }
 
@@ -554,6 +554,7 @@
 }
 
 @keyframes pulse-warning {
+
   0%,
   100% {
     opacity: 1;
@@ -630,8 +631,17 @@
 }
 
 /* Apply styling to ticker items based on lesson type */
-.MMM-Webuntis .lesson-ticker-wrapper .ticker-item.past {
-  opacity: 0.5;
+.MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0 8px, rgba(0, 0, 0, 0.12) 8px 18px);
+  opacity: 0.72;
+  pointer-events: none;
+  border-radius: var(--wu-lesson-radius);
 }
 
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item.has-exam::before {
