@@ -972,10 +972,16 @@ Module.register('MMM-Webuntis', {
   socketNotificationReceived(notification, payload) {
     // Filter by sessionId (preferred) or id (fallback) to ensure data goes to correct instance
     // This allows multi-instance support without requiring explicit identifiers in config
-    this._log('debug', `[socketNotificationReceived] ${notification} - ours: id=${this.identifier}, sessionId=${this._sessionId} | received: id=${payload?.id}, sessionId=${payload?.sessionId}`);
+    this._log(
+      'debug',
+      `[socketNotificationReceived] ${notification} - ours: id=${this.identifier}, sessionId=${this._sessionId} | received: id=${payload?.id}, sessionId=${payload?.sessionId}`
+    );
 
     if (payload && payload.sessionId && this._sessionId !== payload.sessionId) {
-      this._log('debug', `[socketNotificationReceived] ❌ FILTERED: sessionId mismatch (ours: ${this._sessionId}, received: ${payload.sessionId})`);
+      this._log(
+        'debug',
+        `[socketNotificationReceived] ❌ FILTERED: sessionId mismatch (ours: ${this._sessionId}, received: ${payload.sessionId})`
+      );
       return;
     }
     // Fallback to id filtering if sessionId is not present (backward compatibility)

@@ -879,9 +879,9 @@ module.exports = NodeHelper.create({
    *
    * @param {Object} sample - Student configuration sample
    * @param {Object} moduleConfig - Module configuration
-  * @param {string} cacheKeyOverride - Optional explicit cache key (ensures alignment with credKey)
-  * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
-  */
+   * @param {string} cacheKeyOverride - Optional explicit cache key (ensures alignment with credKey)
+   * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
+   */
   async _createAuthSession(sample, moduleConfig, identifier, cacheKeyOverride = null) {
     const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
