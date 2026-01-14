@@ -50,6 +50,24 @@
   margin-bottom: 0;
 }
 
+/* Widget Error Boundary */
+.MMM-Webuntis .widget-error {
+  display: block;
+  grid-column: 1 / -1;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0.5rem 0;
+  background-color: #ffebee;
+  border-left: 4px solid #d32f2f;
+  border-radius: 2px;
+  color: #b71c1c;
+  font-weight: 500;
+  text-align: left;
+}
+
+.MMM-Webuntis .widget-error.dimmed {
+  opacity: 0.7;
+}
+
 /* Widget Row (replaces tr) - now transparent container */
 .MMM-Webuntis .wu-row {
   display: contents;
@@ -277,9 +295,20 @@
   color: var(--wu-replacement-text);
 }
 
-.MMM-Webuntis .grid-combined .lesson-replacement {
+.MMM-Webuntis .grid-combined .lesson-replacement.split-left {
+  left: 0;
+  right: auto;
+  width: 50%;
   border-right: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
+}
+
+.MMM-Webuntis .grid-combined .lesson-cancelled-split.split-right {
+  left: auto;
+  right: 0;
+  width: 50%;
+  background-color: var(--wu-cancelled-bg);
+  color: var(--wu-cancelled-text);
 }
 
 .MMM-Webuntis .grid-combined .lesson-substitution {
@@ -379,6 +408,65 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre-line;
+}
+
+/* Absence Overlay - Vertical bar on right side, ~1/3 width */
+.MMM-Webuntis .grid-combined .grid-absence-overlay {
+  position: absolute;
+  right: 0;
+  width: 66%;
+  min-width: 40px;
+  border-radius: var(--wu-lesson-radius) 0 0 var(--wu-lesson-radius);
+  background: linear-gradient(to left, rgba(255, 100, 100, 0.7), rgba(255, 100, 100, 0.3));
+  border-left: 2px solid rgba(255, 100, 100, 0.8);
+  pointer-events: auto;
+  z-index: 2;
+  cursor: help;
+  transition: all 200ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.MMM-Webuntis .grid-combined .grid-absence-overlay:hover {
+  width: 38%;
+  background: linear-gradient(to left, rgba(255, 100, 100, 0.85), rgba(255, 100, 100, 0.4));
+  border-left-color: rgba(255, 100, 100, 1);
+}
+
+.MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay {
+  background: linear-gradient(to left, rgba(255, 80, 80, 0.8), rgba(255, 80, 80, 0.35));
+  border-left-color: rgba(255, 80, 80, 0.9);
+}
+
+.MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay:hover {
+  background: linear-gradient(to left, rgba(255, 80, 80, 0.95), rgba(255, 80, 80, 0.45));
+  border-left-color: rgba(255, 80, 80, 1);
+}
+
+/* Absence overlay icon and text */
+.MMM-Webuntis .grid-combined .grid-absence-overlay .absence-icon {
+  font-size: 1.2em;
+  line-height: 1;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.3));
+}
+
+.MMM-Webuntis .grid-combined .grid-absence-overlay .absence-reason {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: rgba(100, 0, 0, 0.9);
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
+  text-align: center;
+  word-break: break-word;
+  padding: 2px 4px;
+  line-height: 1.2;
+}
+
+.MMM-Webuntis .grid-combined .grid-absence-overlay:hover .absence-reason {
+  color: rgba(100, 0, 0, 1);
 }
 
 .MMM-Webuntis .grid-holiday-notice {

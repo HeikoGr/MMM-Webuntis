@@ -1,6 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   function renderExamsForStudent(ctx, container, studentCellTitle, studentConfig, exams) {
     try {
@@ -14,14 +14,14 @@
       const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
       const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
 
-      // Determine mode (normalized from student config)
-      const mode = studentConfig?.mode ?? 'compact';
-      const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+      // Use widget context helper to reduce config duplication
+      const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {});
+      const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
       // Header is already added by main module if studentCellTitle is empty
-      if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
+      if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
-      // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-      const rangeEnd = Number(getWidgetConfig(studentConfig, 'exams', 'nextDays') ?? 7);
+      // Read widget-specific config using context helper
+      const rangeEnd = Number(widgetCtx.getConfig('nextDays', 7));
 
       if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;

@@ -9,7 +9,8 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addHeader, getWidgetConfig, formatDate, formatTime, toMinutes } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addHeader, getWidgetConfig, formatDate, formatTime, toMinutes, createWidgetContext } =
+    root.util?.initWidget?.(root) || {};
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -221,7 +222,6 @@ function getNowLineState(ctx) {
     const cols = ['minmax(80px,auto)'];
     for (let d = 0; d < totalDisplayDays; d++) {
       cols.push('1fr');
-      cols.push('1fr');
     }
     header.style.gridTemplateColumns = cols.join(' ');
 
@@ -240,9 +240,8 @@ function getNowLineState(ctx) {
         : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
 
       dayLabel.innerText = dayLabelText;
-      const startCol = 2 + d * 2;
-      const endCol = startCol + 2;
-      dayLabel.style.gridColumn = `${startCol} / ${endCol}`;
+      const col = 2 + d;
+      dayLabel.style.gridColumn = `${col}`;
       header.appendChild(dayLabel);
     }
 
@@ -457,24 +456,6 @@ function getNowLineState(ctx) {
   // ============================================================================
   // DOM CREATION - DAY COLUMNS
   // ============================================================================
-
-  function createDayColumn(colIndex, totalHeight, isToday) {
-    const wrap = document.createElement('div');
-    wrap.style.gridColumn = `${colIndex}`;
-    wrap.style.gridRow = '1';
-
-    const inner = document.createElement('div');
-    inner.className = 'day-column-inner';
-    inner.style.height = `${totalHeight}px`;
-    inner.style.position = 'relative';
-
-    if (isToday) {
-      inner.classList.add('is-today');
-    }
-
-    wrap.appendChild(inner);
-    return { wrap, inner };
-  }
 
   function addHourLinesToColumn(inner, timeUnits, allStart, allEnd, totalMinutes, totalHeight) {
     try {
@@ -811,28 +792,28 @@ function getNowLineState(ctx) {
         const irregularLesson = lessons.find((l) => l.code === 'irregular' || l.status === 'SUBSTITUTION');
 
         if (cancelledLesson && irregularLesson) {
-          // Use split view: irregular left, cancelled right
-          const { leftInner, rightInner } = containers;
+          // Use split view: irregular left, cancelled right (using position absolute)
+          const { bothInner } = containers;
 
           const leftCell = createLessonCell(topPx, heightPx, irregularLesson.dateStr, eMin);
-          leftCell.classList.add('lesson-replacement');
+          leftCell.classList.add('lesson-replacement', 'split-left');
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml);
           if (checkHomeworkMatch(irregularLesson, homeworks)) {
             addHomeworkIcon(leftCell);
           }
-          leftInner.appendChild(leftCell);
+          bothInner.appendChild(leftCell);
 
           const rightCell = createLessonCell(topPx, heightPx, cancelledLesson.dateStr, eMin);
-          rightCell.classList.add('lesson-cancelled-split');
+          rightCell.classList.add('lesson-cancelled-split', 'split-right');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
           rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml);
           if (checkHomeworkMatch(cancelledLesson, homeworks)) {
             addHomeworkIcon(rightCell);
           }
-          rightInner.appendChild(rightCell);
+          bothInner.appendChild(rightCell);
         } else {
           // Two lessons but not the cancelled+irregular pattern -> use ticker
           createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
@@ -870,10 +851,88 @@ function getNowLineState(ctx) {
   }
 
   // ============================================================================
+  // ABSENCE OVERLAY RENDERING
+  // ============================================================================
+
+  function createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence) {
+    const overlay = document.createElement('div');
+    overlay.className = 'grid-absence-overlay';
+    overlay.style.top = `${topPx}px`;
+    overlay.style.height = `${heightPx}px`;
+    overlay.setAttribute('data-date', dateStr);
+
+    const excusedLabel = absence.excused ? ctx.translate('excused') : ctx.translate('unexcused');
+    const reasonText = absence.reason || ctx.translate('no_reason');
+    const absenceLabel = ctx.translate('absence_label');
+
+    overlay.setAttribute('title', `${absenceLabel}: ${reasonText} (${excusedLabel})`);
+
+    // Add icon and reason text
+    const icon = document.createElement('span');
+    icon.className = 'absence-icon';
+    icon.textContent = '⚡';
+    overlay.appendChild(icon);
+
+    if (absence.reason) {
+      const reasonText = document.createElement('span');
+      reasonText.className = 'absence-reason';
+      reasonText.textContent = absence.reason;
+      overlay.appendChild(reasonText);
+    }
+
+    return overlay;
+  }
+
+  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
+    log('debug', `[grid] addAbsenceOverlays called with ${dayAbsences.length} absences`);
+
+    if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
+      return;
+    }
+
+    try {
+      for (const absence of dayAbsences) {
+        // Convert HHMM (1330 = 13:30) to minutes (810 minutes)
+        const startMin = ctx._toMinutes(absence?.startTime) || 0;
+        const endMin = ctx._toMinutes(absence?.endTime) || 0;
+        log(
+          'debug',
+          `[grid] Rendering absence: ${absence?.reason}, startMin=${startMin}, endMin=${endMin}, allStart=${allStart}, allEnd=${allEnd}`
+        );
+
+        if (startMin >= allEnd || endMin <= allStart) {
+          // Absence is outside the visible time range
+          log('debug', `[grid] Absence outside range, skipping`);
+          continue;
+        }
+
+        // Clamp to visible range
+        const clampedStart = Math.max(startMin, allStart);
+        const clampedEnd = Math.min(endMin, allEnd);
+
+        if (clampedStart >= clampedEnd) {
+          log('debug', `[grid] Clamped range invalid, skipping`);
+          continue;
+        }
+
+        const topPx = Math.round(((clampedStart - allStart) / totalMinutes) * totalHeight);
+        const heightPx = Math.round(((clampedEnd - clampedStart) / totalMinutes) * totalHeight);
+        const dateStr = String(absence?.date || '');
+
+        log('debug', `[grid] Creating overlay: topPx=${topPx}, heightPx=${heightPx}, dateStr=${dateStr}`);
+        const overlay = createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence);
+        bothInner.appendChild(overlay);
+      }
+    } catch (e) {
+      log('debug', 'failed to render absence overlays', e);
+    }
+  }
+
+  // ============================================================================
   // MAIN ORCHESTRATION FUNCTION
   // ============================================================================
 
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits) {
+  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
     // 1. Validate and extract configuration
     const config = validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks);
 
@@ -903,9 +962,9 @@ function getNowLineState(ctx) {
     // 4. Create wrapper and add student title header for verbose mode
     const wrapper = document.createElement('div');
 
-    // Add student title header if in verbose mode
-    const mode = studentConfig?.mode ?? 'compact';
-    if (mode === 'verbose' && studentTitle && typeof addHeader === 'function') {
+    // Add student title header if in verbose mode using helper
+    const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {});
+    if (widgetCtx.isVerbose && studentTitle && typeof addHeader === 'function') {
       // Create a separate container for the header with the standard widget styling
       const headerContainer = document.createElement('div');
       headerContainer.className = 'wu-widget-container bright small light';
@@ -955,16 +1014,12 @@ function getNowLineState(ctx) {
       // Filter by max periods and time cutoff
       const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
 
-      // Create day columns
-      const colLeft = 2 + d * 2;
-      const colRight = colLeft + 1;
+      // Create day column (single column per day)
+      const col = 2 + d;
       const isToday = dateStr === todayDateStr;
 
-      const { wrap: leftWrap, inner: leftInner } = createDayColumn(colLeft, totalHeight, isToday);
-      const { wrap: rightWrap, inner: rightInner } = createDayColumn(colRight, totalHeight, isToday);
-
       const bothWrap = document.createElement('div');
-      bothWrap.style.gridColumn = `${colLeft} / ${colRight + 1}`;
+      bothWrap.style.gridColumn = `${col}`;
       bothWrap.style.gridRow = '1';
       const bothInner = document.createElement('div');
       bothInner.className = 'day-column-inner';
@@ -981,8 +1036,6 @@ function getNowLineState(ctx) {
 
       // Add to grid
       grid.appendChild(bothWrap);
-      grid.appendChild(leftWrap);
-      grid.appendChild(rightWrap);
 
       // Add hour lines
       addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
@@ -1010,17 +1063,16 @@ function getNowLineState(ctx) {
         }
       } else {
         // Render lesson cells
-        renderLessonCells(
-          lessonsToRender,
-          { leftInner, rightInner, bothInner },
-          allStart,
-          allEnd,
-          totalMinutes,
-          totalHeight,
-          homeworks,
-          ctx,
-          escapeHtml
-        );
+        renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml);
+      }
+
+      // Add absence overlays if any
+      if (Array.isArray(absences) && absences.length > 0) {
+        const dayAbsences = absences.filter((ab) => String(ab?.date) === dateStr);
+        log('debug', `[grid] Day ${dateStr}: found ${dayAbsences.length} absences (total=${absences.length})`);
+        if (dayAbsences.length > 0) {
+          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx);
+        }
       }
     }
 

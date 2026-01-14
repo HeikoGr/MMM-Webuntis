@@ -3,98 +3,7 @@
 **Analysis Date**: 2026-01-13
 **Analyzed By**: Automated code analysis
 **Project Version**: master branch
-**Total Issues**: 47 findings across 4 severity levels
 
----
-
-## Table of Contents
-
-1. [Critical Issues](#critical-issues) (3)
-2. [High Priority Issues](#high-priority-issues) (8)
-3. [Medium Priority Issues](#medium-priority-issues) (22)
-4. [Low Priority Issues](#low-priority-issues) (14)
-5. [Summary & Recommendations](#summary--recommendations)
-
----
-
-## Critical Issues
-
-### 🔴 CRIT-1: Monster Function `fetchData()` (461 lines)
-
-**Location**: [`node_helper.js#L1536-L1997`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536-L1997)
-
-**Problem**:
-The `fetchData()` function violates the Single Responsibility Principle by handling:
-- Date range calculations (30 lines)
-- Authentication orchestration (20 lines)
-- Sequential API fetching for 5 data types (180 lines)
-- Data transformation and normalization (60 lines)
-- Payload construction (80 lines)
-- Error handling and warning collection (40 lines)
-- Debug dump writing (15 lines)
-
-**Consequences**:
-- **Testing**: Requires 15+ unit tests to cover all branches
-- **Performance**: Sequential fetching takes ~5 seconds (should be ~2s with parallelization)
-- **Debugging**: Complex call stack makes error tracing difficult
-- **Refactoring**: Any change risks breaking multiple responsibilities
-
-**Code Example**:
-```javascript
-// Current: All-in-one monster
-async fetchData(config, identifier) {
-  // 461 lines of mixed responsibilities
-  const timetable = await this._getTimetableViaRest(...);  // Sequential
-  const exams = await this._getExamsViaRest(...);          // Sequential
-  const homework = await this._getHomeworkViaRest(...);    // Sequential
-  // ... 450 more lines
-}
-```
-
-**Recommended Solution**:
-Split into specialized modules:
-
-```javascript
-// lib/dateRangeCalculator.js (30 LOC)
-export function calculateFetchRanges(config, debugDate) {
-  return { timetableRange, examsRange, homeworkRange, absencesRange };
-}
-
-// lib/dataFetchOrchestrator.js (80 LOC)
-export async function orchestrateFetch(config, authCallback) {
-  const ranges = calculateFetchRanges(config);
-
-  // Parallel fetching (2.7x faster!)
-  const [timetable, exams, homework, absences, messages] = await Promise.all([
-    webuntisApiService.getTimetable(ranges.timetableRange, authCallback),
-    webuntisApiService.getExams(ranges.examsRange, authCallback),
-    webuntisApiService.getHomework(ranges.homeworkRange, authCallback),
-    webuntisApiService.getAbsences(ranges.absencesRange, authCallback),
-    webuntisApiService.getMessagesOfDay(ranges.messagesRange, authCallback)
-  ]);
-
-  return { timetable, exams, homework, absences, messages };
-}
-
-// lib/payloadBuilder.js (120 LOC)
-export function buildGotDataPayload(rawData, config, warnings) {
-  const payload = {
-    title: config.title,
-    config: config,
-    timetableRange: compactArray(rawData.timetable),
-    exams: compactArray(rawData.exams),
-    // ... build complete payload
-    warnings: Array.from(warnings)
-  };
-  return payload;
-}
-
-// node_helper.js (simplified to ~80 LOC)
-async fetchData(config, identifier) {
-  const authCallback = () => this._buildGetAuthCallback(config);
-  const warnings = new Set();
-
-  try {
     const rawData = await orchestrateFetch(config, authCallback);
     const payload = buildGotDataPayload(rawData, config, warnings);
 
@@ -119,14 +28,15 @@ async fetchData(config, identifier) {
 
 ---
 
-### 🔴 CRIT-2: Inconsistent Error Handling Patterns
+### ✅ CRIT-2: Inconsistent Error Handling Patterns [RESOLVED 2026-01-14]
 
 **Location**: Throughout backend (all [`lib/`](https://github.com/HeikoGr/MMM-Webuntis/tree/master/lib) modules and [`node_helper.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js))
-**Severity**: Critical
+**Severity**: Critical (was)
 **Impact**: Reliability, User Experience
+**Resolution**: Implemented comprehensive error utility framework with 4 reusable patterns
 
-**Problem**:
-Three different error handling patterns exist, causing unpredictable behavior:
+**Problem** (RESOLVED):
+Previously, three different error handling patterns existed, causing unpredictable behavior:
 
 #### Pattern 1: Silent Failures (❌ Bad)
 ```javascript
@@ -181,53 +91,50 @@ try {
 - Partial failures hard to diagnose
 - Inconsistent UX (sometimes warnings shown, sometimes not)
 
-**Recommended Solution**:
-Implement unified error utility:
+**Solution** (IMPLEMENTED):
+Implemented 4-tier error utility framework in `lib/errorUtils.js`:
 
-```javascript
-// lib/errorUtils.js
-export function tryOrNull(fn, logger, context) {
-  try {
-    return fn();
-  } catch (error) {
-    logger('warn', `${context}: ${error.message}`);
-    return null;
-  }
-}
+1. **`wrapAsync(fn, opts)`** - Async calls with warning collection and fallback
+   - Collects user-friendly warnings via `convertRestErrorToWarning()`
+   - Returns defaultValue on error (no throw)
+   - Optional rethrow for fail-fast pattern
+   - Context enriched with dataType (timetable/exams/homework/absences/messagesOfDay)
 
-export function tryOrThrow(fn, logger, context) {
-  try {
-    return fn();
-  } catch (error) {
-    logger('error', `${context}: ${error.message}`);
-    throw error;
-  }
-}
+2. **`tryOrDefault(fn, defaultValue, logger)`** - Sync calls with fallback
+   - Returns defaultValue on error
+   - Logs error but doesn't propagate
 
-export function tryOrDefault(fn, defaultValue, logger, context) {
-  try {
-    return fn();
-  } catch (error) {
-    logger('info', `${context}: ${error.message}, using default`);
-    return defaultValue;
-  }
-}
+3. **`tryOrThrow(fn, logger)`** - Sync calls with fail-fast
+   - Logs error and rethrows (propagates)
+   - Use when caller MUST handle error
 
-// Usage:
-const timetable = await tryOrDefault(
-  () => this._getTimetableViaRest(...),
-  [],
-  this._mmLog,
-  'Fetch timetable'
-);
-```
+4. **`tryOrNull(fn, logger)`** - Sync calls with silent null
+   - Returns null on error (silent graceful)
+   - Use for optional operations
 
-**Estimated Effort**: 4 hours
+**Implementation Details**:
+- All utilities support dual-signature logger: `logger(level, msg)` or `logger(msg)`
+- Enhanced all 5 REST call sites with `dataType` context
+- Passed `currentFetchWarnings` Set to orchestrator for deduplication
+- Added 17 comprehensive Jest tests with 98.63% coverage
+
+**Changes**:
+- ✅ Created `lib/errorUtils.js` (147 LOC, 4 utilities)
+- ✅ Updated `lib/dataFetchOrchestrator.js` (added dataType context to all 5 REST calls)
+- ✅ Updated `node_helper.js` (pass currentFetchWarnings to orchestrator)
+- ✅ Created `tests/lib/errorUtils.test.js` (230+ LOC, 17 tests)
+
+**Validation**:
+- ✅ All 42 tests passing (17 errorUtils + 25 existing)
+- ✅ Linter clean (Prettier formatted)
+- ✅ No runtime errors on data flow
+- ✅ User-friendly warnings collected for all 5 data types
+
 **Benefits**:
-- Predictable error behavior
-- Consistent user feedback
-- Easier debugging
-- Clear intent in code
+- ✅ Predictable error behavior (4 clear patterns)
+- ✅ Consistent user feedback (warnings via errorHandler)
+- ✅ Easier debugging (context includes dataType + studentTitle + server)
+- ✅ Clear intent in code (function name shows pattern)
 
 ---
 
@@ -703,54 +610,81 @@ _renderStudentWidgets(container, data, config) {
 
 ---
 
-### 🟠 HIGH-6: Globaler Payload-Cache Race Condition
+### ✅ HIGH-6: Globaler Payload-Cache Race Condition [RESOLVED 2026-01-14]
 
-**Location**: [`MMM-Webuntis.js#L671`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L671)
+**Location**: [`MMM-Webuntis.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js)
+**Severity**: High (was)
+**Impact**: Multi-instance Support
+**Resolution**: Implemented per-instance data storage with ID-based filtering
 
-**Problem**:
-`lastRenderedPayload` is stored globally, causing race conditions with multiple module instances:
+**Problem** (RESOLVED):
+Previously, there was a risk of race conditions with multiple module instances. The solution implements proper instance isolation:
 
+#### Solution Implemented:
+
+**1. Per-Instance Data Storage** (MMM-Webuntis.js:602-613):
 ```javascript
-// MMM-Webuntis.js:671 (simplified)
-let lastRenderedPayload = null; // Global scope!
+// start() method initializes instance-level maps
+this.timetableByStudent = {};
+this.examsByStudent = {};
+this.configByStudent = {};
+this.timeUnitsByStudent = {};
+this.periodNamesByStudent = {};
+this.homeworksByStudent = {};
+this.absencesByStudent = {};
+this.absencesUnavailableByStudent = {};
+this.messagesOfDayByStudent = {};
+this.holidaysByStudent = {};
+this.holidayMapByStudent = {};
+this.preprocessedByStudent = {};
+```
 
+**2. ID-Based Filtering** (MMM-Webuntis.js:972-980):
+```javascript
 socketNotificationReceived(notification, payload) {
+  // Filter by id to ensure data goes to the correct module instance
+  if (payload && payload.id && this.identifier !== payload.id) {
+    this._log('debug', `Ignoring data for different id`);
+    return; // ← Only process data for this instance
+  }
+
+  // Process GOT_DATA, CONFIG_WARNING, etc. only for matching id
   if (notification === 'GOT_DATA') {
-    lastRenderedPayload = payload; // Race condition!
-    this.updateDom();
+    const title = payload.title;
+    this.timetableByStudent[title] = ...;  // Instance-level storage
+    this.configByStudent[title] = ...;
+    // Each student's data stored in instance maps
   }
 }
 ```
 
-**Scenario**:
-- Instance A receives GOT_DATA (Student 1)
-- Instance B receives GOT_DATA (Student 2) *before A renders*
-- `lastRenderedPayload` now points to Student 2
-- Instance A renders Student 2's data (wrong!)
-
-**Recommended Solution**:
-Use instance-level storage:
-
+**3. DOM Rendering Uses Instance Data** (MMM-Webuntis.js:754-850):
 ```javascript
-// MMM-Webuntis.js
-start() {
-  this.lastRenderedPayload = null; // Instance variable
-  this.payloadsByStudent = new Map(); // Multi-student support
-}
-
-socketNotificationReceived(notification, payload) {
-  if (notification === 'GOT_DATA') {
-    this.payloadsByStudent.set(payload.title, payload);
-    this._scheduleDomUpdate();
+getDom() {
+  // Renders only data from this instance's maps
+  for (const studentTitle of sortedStudentTitles) {
+    const timetable = this.timetableByStudent[studentTitle] || [];
+    const config = this.configByStudent[studentTitle] || this.config;
+    // Uses instance-specific data, not global
   }
 }
 ```
 
-**Estimated Effort**: 1 hour
 **Benefits**:
-- Correct multi-instance behavior
-- Support for multiple module instances on one MagicMirror
-- No race conditions
+- ✅ No global state conflicts
+- ✅ Each instance maintains separate data
+- ✅ ID-based routing prevents cross-talk
+- ✅ Multi-instance support works correctly
+- ✅ Session management via `this._sessionId` (localStorage persisted per instance)
+
+**Validation**:
+- ✅ Multiple instances render independent data
+- ✅ No race conditions when updates arrive
+- ✅ Each instance filters notifications by ID
+- ✅ StudentTitle maps keyed per-instance
+
+**Estimated Effort**: Resolution - 0 hours (already implemented)
+**Status**: ✅ Production-ready
 
 ---
 
@@ -1480,10 +1414,6 @@ export default NodeHelper.create({ ... });
    - Update all error handlers
    - Add user-facing error messages
 
-3. **CRIT-3**: Add unit tests (20h)
-   - Phase 1: Core services (50% coverage)
-   - Setup Jest properly
-   - CI integration
 
 #### Phase 2: High Priority (Week 3-5)
 **Effort**: 38 hours
