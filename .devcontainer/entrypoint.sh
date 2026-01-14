@@ -80,6 +80,28 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
+# Install MMM-Carousel module if not present
+CAROUSEL_MODULE="${MODULES_DIR}/MMM-Carousel"
+if [ ! -d "$CAROUSEL_MODULE" ]; then
+  echo "${GREEN}Installing MMM-Carousel module...${NC}"
+  git clone https://github.com/shbatm/MMM-Carousel.git "$CAROUSEL_MODULE" || true
+fi
+
+# Install MMM-KeyBindings module if not present
+KEYBINDINGS_MODULE="${MODULES_DIR}/MMM-KeyBindings"
+if [ ! -d "$KEYBINDINGS_MODULE" ]; then
+  echo "${GREEN}Installing MMM-KeyBindings module...${NC}"
+  git clone https://github.com/shbatm/MMM-KeyBindings.git "$KEYBINDINGS_MODULE" || true
+fi
+
+
+# Install MMM-Cursor module if not present
+CURSOR_MODULE="${MODULES_DIR}/MMM-Cursor"
+if [ ! -d "$CURSOR_MODULE" ]; then
+  echo "${GREEN}Installing MMM-Cursor module...${NC}"
+  git clone https://github.com/uxigene/MMM-Cursor.git "$CURSOR_MODULE" || true
+fi
+
 # Install module dependencies if needed
 echo "${GREEN}=== MagicMirror Startup (module devcontainer) ===${NC}"
 if [ -d "${MODULES_DIR}" ]; then
