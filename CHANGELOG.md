@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Nothing yet. 🚧
+
+## 0.6.0
+
+### ✅ Reliability & Auth
+
+- QR login now refreshes cleanly after expiry (per-instance cache keys and forced re-auth on refresh failures) to avoid empty payloads after the 14-minute TTL.
+- Better isolation in mixed environments (parent + QR + direct logins): tokens and cache entries stay separated, so instances no longer interfere with each other.
+
+### 🖥️ User Experience
+
+- Immediate UI updates after new data (debounce removed) — no slide switching or waiting needed to see fresh data.
+- Quieter logs: QR re-auth, init success, and auto-assign messages are now debug-level.
+- Absence overlay in widgets: absences now render as overlays alongside timetable/grid so missed lessons are visible without switching views.
+
 ### 🏗️ Architecture Improvements
 
 - **Separated Socket Communication**: Split initialization (`INIT_MODULE`) from data fetching (`FETCH_DATA`) for cleaner architecture
