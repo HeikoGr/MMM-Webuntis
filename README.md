@@ -88,24 +88,22 @@ By default, each instance automatically generates a unique identifier based on:
 This means **multiple instances will work out-of-the-box without any additional configuration**:
 
 ```javascript
-modules: [
-  {
-    module: 'MMM-Webuntis',
-    position: 'top_left',
-    config: {
-      header: 'Alice',
-      students: [{ title: 'Alice', qrcode: 'untis://...' }],
-    },
+{
+  module: 'MMM-Webuntis',
+  position: 'top_left',
+  config: {
+    header: 'Alice',
+    students: [{ title: 'Alice', qrcode: 'untis://...' }],
   },
-  {
-    module: 'MMM-Webuntis',
-    position: 'top_right',
-    config: {
-      header: 'Bob',
-      students: [{ title: 'Bob', qrcode: 'untis://...' }],
-    },
+},
+{
+  module: 'MMM-Webuntis',
+  position: 'top_right',
+  config: {
+    header: 'Bob',
+    students: [{ title: 'Bob', qrcode: 'untis://...' }],
   },
-]
+},
 ```
 
 #### Explicit Instance IDs (Optional)
@@ -113,20 +111,18 @@ modules: [
 For more control or predictable instance identifiers, add an `identifier` field to your module config:
 
 ```javascript
-modules: [
-  {
-    module: 'MMM-Webuntis',
-    position: 'top_left',
-    identifier: 'student_alice',  // Unique, stable identifier
-    config: { /* ... */ },
-  },
-  {
-    module: 'MMM-Webuntis',
-    position: 'top_right',
-    identifier: 'student_bob',    // Different identifier
-    config: { /* ... */ },
-  },
-]
+{
+  module: 'MMM-Webuntis',
+  position: 'top_left',
+  identifier: 'student_alice',  // Unique, stable identifier
+  config: { /* ... */ },
+},
+{
+  module: 'MMM-Webuntis',
+  position: 'top_right',
+  identifier: 'student_bob',    // Different identifier
+  config: { /* ... */ },
+},
 ```
 
 **Why might you use explicit identifiers?**

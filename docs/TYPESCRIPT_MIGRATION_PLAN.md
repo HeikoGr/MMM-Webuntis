@@ -101,7 +101,7 @@ Add scripts:
     "type-check": "tsc --noEmit",
     "lint": "eslint --ext .js,.ts && prettier --check .",
     "lint:fix": "eslint --fix --ext .js,.ts && prettier --write .",
-    "prebuild": "npm run type-check"
+    "prebuild": "node --run type-check"
   }
 }
 ```
@@ -963,7 +963,7 @@ Migrating to TypeScript is an **investment in the future** of the project:
 ### Risk 2: Build Complexity
 **Mitigation**:
 - Provide pre-built JavaScript in npm package
-- Simple `npm run build` for development
+- Simple `node --run build` for development
 - Clear documentation
 
 ### Risk 3: Learning Curve for Contributors

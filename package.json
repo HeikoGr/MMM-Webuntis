@@ -22,7 +22,7 @@
   "scripts": {
     "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
-    "test": "npm run lint && jest",
+    "test": "node --run lint && jest",
     "test:unit": "jest",
     "test:spelling": "cspell .",
     "check": "node cli/node_helper_wrapper.js || true",
