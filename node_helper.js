@@ -12,15 +12,52 @@ const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = req
 const { createBackendLogger } = require('./lib/logger');
 const webuntisApiService = require('./lib/webuntisApiService');
 const AuthService = require('./lib/authService');
-const dataTransformer = require('./lib/dataTransformer');
+const {
+  calculateFetchRanges,
+  mapRestStatusToLegacyCode,
+  sanitizeHtmlText,
+  normalizeDateToInteger,
+  normalizeTimeToMinutes,
+} = require('./lib/dataOrchestration');
 const CacheManager = require('./lib/cacheManager');
 const errorHandler = require('./lib/errorHandler');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
 
 // Refactored modules for fetchData simplification (CRIT-1 from ISSUES.md)
-const { calculateFetchRanges } = require('./lib/dateRangeCalculator');
 const { orchestrateFetch } = require('./lib/dataFetchOrchestrator');
 const { buildGotDataPayload } = require('./lib/payloadBuilder');
+
+/**
+ * ERROR HANDLING STRATEGY:
+ *
+ * node_helper.js uses try/catch blocks selectively for specific patterns:
+ *
+ * 1. CLEANUP PATTERNS (try/finally):
+ *    - Lines ~1490-1506: Pending fetch cleanup via _pendingFetchByCredKey
+ *    - Ensures proper state management even if errors occur
+ *    - Correctly uses try/finally (not try/catch) for guaranteed cleanup
+ *
+ * 2. GRACEFUL DEGRADATION (try/catch with logging):
+ *    - Lines ~99-130: Config processing & JSON.stringify (non-critical)
+ *    - Lines ~193-220: Debug dump cleanup (low-priority file ops)
+ *    - Lines ~1030-1050: Data extraction with optional fallback
+ *    - Errors logged but don't block main flow
+ *    - Appropriate because these are non-blocking operations
+ *
+ * 3. API ERROR HANDLING (already wrapped via dataFetchOrchestrator):
+ *    - Lines ~345-376: REST API calls
+ *    - Lines ~603-839: Auto-discovery logic
+ *    - Lines ~1262-1275: processGroup() orchestration
+ *    - These are called from orchestrateFetch() which uses wrapAsync()
+ *    - Error collection/warnings handled at higher level via errorUtils
+ *    - No need to refactor inner try/catch (already wrapped)
+ *
+ * Decision: Keep existing try/catch patterns as-is because:
+ * - Cleanup code requires try/finally (not errorUtils pattern)
+ * - Non-critical ops appropriately use silent error handling
+ * - API calls already wrapped by higher-level orchestrator (wrapAsync)
+ * - Massive refactoring would increase risk for minimal gain
+ */
 
 // Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
 // Create a NodeHelper module
@@ -173,10 +210,10 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Map REST API status to legacy JSON-RPC code format (delegated to dataTransformer)
+   * Map REST API status to legacy JSON-RPC code format
    */
   _mapRestStatusToLegacyCode(status, substitutionText) {
-    return dataTransformer.mapRestStatusToLegacyCode(status, substitutionText);
+    return mapRestStatusToLegacyCode(status, substitutionText);
   },
 
   /**
@@ -963,24 +1000,24 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Sanitize HTML text (delegated to dataTransformer)
+   * Sanitize HTML text
    */
   _sanitizeHtmlText(text, preserveLineBreaks = true) {
-    return dataTransformer.sanitizeHtmlText(text, preserveLineBreaks);
+    return sanitizeHtmlText(text, preserveLineBreaks);
   },
 
   /**
-   * Normalize date format (delegated to dataTransformer)
+   * Normalize date format
    */
   _normalizeDateToInteger(date) {
-    return dataTransformer.normalizeDateToInteger(date);
+    return normalizeDateToInteger(date);
   },
 
   /**
-   * Normalize time format (delegated to dataTransformer)
+   * Normalize time format
    */
   _normalizeTimeToMinutes(time) {
-    return dataTransformer.normalizeTimeToMinutes(time);
+    return normalizeTimeToMinutes(time);
   },
 
   _compactHolidays(rawHolidays) {
@@ -1631,7 +1668,7 @@ module.exports = NodeHelper.create({
     const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
     const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
     const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
-    const fetchAbsences = Boolean(wantsAbsencesWidget);
+    const fetchAbsences = Boolean(wantsGridWidget || wantsAbsencesWidget);
     const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
     const fetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
 
@@ -1699,6 +1736,7 @@ module.exports = NodeHelper.create({
       logger,
       describeTarget,
       className,
+      currentFetchWarnings: this._currentFetchWarnings,
     });
 
     const timetable = fetchResults.timetable;

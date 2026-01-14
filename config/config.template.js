@@ -34,6 +34,7 @@ let config = {
         logLevel: 'none', // 'none', 'error', 'warn', 'info', 'debug'
         debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
         dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
+        timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
 
         // === DISPLAY OPTIONS ===
         displayMode: 'lessons, exams', // comma-separated list: lessons, exams, grid, homework, absences, messagesofday

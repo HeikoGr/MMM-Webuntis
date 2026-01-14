@@ -1,6 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   function renderLessonsForStudent(ctx, container, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
@@ -57,11 +57,10 @@
 
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    // Determine mode (student-config has priority)
-    const mode = studentConfig?.mode ?? 'compact';
-    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
-    // Header is already added by main module if studentCellTitle is empty
-    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    // Determine mode using helper
+    const widgetCtx = createWidgetContext('lessons', studentConfig, root.util || {});
+    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     // Determine lessons date format
     const lessonsDateFormat = getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
@@ -131,7 +130,7 @@
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         if (
           (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
-          (isPast && (entry.code || '') !== 'error' && (studentConfig.logLevel ?? 'info') !== 'debug')
+          (isPast && (entry.code || '') !== 'error' && (ctx.config.logLevel ?? 'info') !== 'debug')
         ) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
           continue;

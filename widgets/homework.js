@@ -1,15 +1,15 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 
-    // Determine mode and handle header
-    const mode = studentConfig?.mode ?? 'compact';
-    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
+    // Use widget context helper to reduce config duplication
+    const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {});
+    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
     // Header is already added by main module if studentCellTitle is empty
-    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
       log('debug', `[homework] no data`);
@@ -19,9 +19,9 @@
 
     log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
-    const dateFormat = getWidgetConfig(studentConfig, 'homework', 'dateFormat') ?? 'dd.MM.';
-    const showSubject = getWidgetConfig(studentConfig, 'homework', 'showSubject') ?? true;
-    const showText = getWidgetConfig(studentConfig, 'homework', 'showText') ?? true;
+    const dateFormat = widgetCtx.getConfig('dateFormat', 'dd.MM.');
+    const showSubject = widgetCtx.getConfig('showSubject', true);
+    const showText = widgetCtx.getConfig('showText', true);
 
     const sorted = homeworks
       .slice()

@@ -234,6 +234,29 @@
       addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => {},
       createElement: typeof dom.createElement === 'function' ? dom.createElement : () => document.createElement('div'),
       createContainer: typeof dom.createContainer === 'function' ? dom.createContainer : () => document.createElement('div'),
+      createWidgetContext:
+        typeof util.createWidgetContext === 'function'
+          ? util.createWidgetContext
+          : () => ({ isVerbose: false, getConfig: () => undefined }),
+    };
+  }
+
+  /**
+   * Create a widget instance configuration wrapper.
+   * Provides convenient config access for all widgets.
+   *
+   * @param {string} widgetName - Widget name (e.g., 'lessons', 'exams')
+   * @param {Object} studentConfig - Student configuration
+   * @param {Object} util - Utility functions
+   * @returns {Object} Widget config wrapper with helper methods
+   */
+  function createWidgetContext(widgetName, studentConfig, util) {
+    return {
+      name: widgetName,
+      config: studentConfig,
+      isVerbose: (studentConfig?.mode ?? 'compact') === 'verbose',
+      getConfig: (key, defaultValue) => getWidgetConfig(studentConfig, widgetName, key) ?? defaultValue,
+      log: (level, msg) => util?.log?.(level, msg),
     };
   }
 
@@ -251,6 +274,7 @@
     _log: log, // backward compatibility alias
     getWidgetConfig,
     initWidget,
+    createWidgetContext,
   };
 
   root.dom = {

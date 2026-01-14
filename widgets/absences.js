@@ -1,15 +1,15 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime, createWidgetContext } =
+    root.util?.initWidget?.(root) || {};
 
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 
-    // Determine mode and handle header
-    const mode = studentConfig?.mode ?? 'compact';
-    const studentCell = mode === 'verbose' ? '' : studentCellTitle;
-    // Header is already added by main module if studentCellTitle is empty
-    if (mode === 'verbose' && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    // Determine mode and handle header using helper
+    const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {});
+    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(absences) || absences.length === 0) {
       log('debug', `[absences] no data`);
