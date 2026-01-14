@@ -389,20 +389,7 @@ Module.register('MMM-Webuntis', {
 
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
 
-    // Use merged students from GOT_DATA if available (preserves widget defaults across FETCH_DATA calls)
-    const studentsToMerge =
-      this._mergedStudents && this._mergedStudents.size > 0
-        ? rawStudents.map((s) => {
-            const title = s?.title;
-            if (title && this._mergedStudents.has(title)) {
-              // Use the previously merged config from GOT_DATA
-              return this._mergedStudents.get(title);
-            }
-            return s;
-          })
-        : rawStudents;
-
-    const mergedStudents = studentsToMerge.map((s) => {
+    const mergedStudents = rawStudents.map((s) => {
       const merged = { ...defNoStudents, ...(s || {}) };
       // Deep merge student-level widget configs
       widgetKeys.forEach((widget) => {
@@ -982,13 +969,6 @@ Module.register('MMM-Webuntis', {
       this._log('info', 'Module initialized successfully');
       this._initialized = true;
 
-      // CRITICAL: Store normalized config from backend to preserve widget defaults
-      // This ensures all subsequent FETCH_DATA calls use the correct defaults
-      if (payload.config) {
-        this.config = payload.config;
-        this._log('debug', 'Stored normalized config from backend');
-      }
-
       // Process initialization warnings if present
       if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
         this.moduleWarningsSet = this.moduleWarningsSet || new Set();
@@ -1043,23 +1023,7 @@ Module.register('MMM-Webuntis', {
     const title = payload.title;
     const cfg = payload.config || {};
 
-    // Deep merge widget defaults into the received config
-    // Backend sends student config which may be missing defaults
-    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-    widgetKeys.forEach((widget) => {
-      if (this.defaults[widget]) {
-        cfg[widget] = { ...this.defaults[widget], ...(cfg[widget] || {}) };
-      }
-    });
-
     this.configByStudent[title] = cfg;
-
-    // Store the merged student config back into this.config.students
-    // This ensures _buildSendConfig() uses the correct config on next FETCH_DATA
-    if (!this._mergedStudents) {
-      this._mergedStudents = new Map();
-    }
-    this._mergedStudents.set(title, cfg);
 
     // Update persisted debugDate if it's included in the response, to handle any backend changes
     if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
