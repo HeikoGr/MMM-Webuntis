@@ -141,6 +141,29 @@ console.warn('[feature] Warning:', error);
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)
 
+### Debugger: Node & Chrome
+
+- The devcontainer's `entrypoint.sh` starts PM2 with `--node-args="--inspect-brk"` and `--watch` by default, enabling live debugging and auto-restart on file changes.
+
+- VS Code debugging is already configured in `.vscode/launch.json` with two predefined configurations:
+  - **Attach to node process** (port 9229) — Debug the backend Node.js process via `node_helper.js`.
+  - **Launch MagicMirror² in Chrome with MMM-Webuntis** — Debug the frontend, opens `http://localhost:8080` in Chrome with DevTools.
+
+- To debug:
+  1. Press `Ctrl+Shift+D` (or click the Debug icon in the sidebar).
+  2. Select either "Attach to node process" or the Chrome launch config from the dropdown.
+  3. Click the play button (or press `F5`) to start debugging.
+  4. Set breakpoints in the editor; execution will pause when hit.
+  5. Use the Debug Console to inspect variables and step through code.
+
+- VS Code automatically handles port forwarding from the devcontainer — no manual port configuration needed.
+
+- Notes:
+  - `--inspect-brk` pauses execution until a debugger attaches; use `--inspect` (no `-brk`) if you do not want this behavior.
+  - Debug breakpoints on Node will pause the entire process — ideal for step-through debugging, but can slow interactive testing.
+  - Use `console.log()` / `logger()` for non-blocking debugging, especially during development cycles.
+
+
 ### Logging and Troubleshooting
 
 **Backend Logs:**
