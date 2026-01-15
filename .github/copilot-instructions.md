@@ -282,6 +282,36 @@ If you're uncertain whether something is an issue, don't comment. False positive
 - ❌ `tail -f /path/to/logfile` → same issue, indefinite follow
 - ❌ `pm2 logs --lines 0` → infinite output, blocks indefinitely
 
+### Playwright (node) frontend capture
+
+- **Purpose:** Capture the MagicMirror frontend console and a full-page screenshot non-interactively.
+- **Install (once):**
+  - `npm install --save-dev playwright`
+- **Run capture script:**
+  - `npm run capture:console`
+- **Output:** `debug_dumps/magicmirror_playwright.png` and `debug_dumps/magicmirror_console_logs.json`
+
+This script runs a headless Chromium session, navigates to `http://localhost:8080`, waits for network idle, captures console messages and a screenshot, and writes results to `debug_dumps/`.
+
+### Playwright MCP (interactive) — Notes
+
+In addition to the non‑interactive capture script, we now support Playwright MCP (Managed Capture Protocol) for interactive access to the MagicMirror browser. MCP enables:
+- Interactive DOM exploration: use `page.$`, `page.$$eval`, and `page.evaluate()` to read and modify HTML/JS.
+- Automation patterns: click sequences, form filling, navigation, and request mocking/interception.
+- Enhanced forensics: combine screenshots, console logs, network traces and accessibility snapshots in a single session.
+
+Startup / environment options:
+- Recommended (isolated): `npx @playwright/mcp@latest --isolated` or configure via `.vscode/mcp.json` (see repo).
+- Running Chromium as root (e.g. in Codespaces) requires `--no-sandbox`. Set `PLAYWRIGHT_CHROMIUM_ARGS="--no-sandbox"` or export that environment variable before launching.
+- Use a separate user data directory for parallel runs: `PLAYWRIGHT_CHROMIUM_USER_DATA_DIR=$(mktemp -d)`.
+
+Migration guidance for the existing `scripts/playwright_capture_console.js`:
+- The capture script remains useful as a non‑interactive fallback (CI, cron), but MCP can replace it for interactive investigations.
+- If you adopt MCP for interactive work, you may either keep the capture script as a lightweight CLI wrapper or remove it after transition.
+
+Security note:
+- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/payloadBuilder.js`).
+
 ### Testing Changes
 
 **Backend Only** (what the AI agent can verify):

@@ -34,6 +34,7 @@ let config = {
         logLevel: 'none', // 'none', 'error', 'warn', 'info', 'debug'
         debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
         dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
+        dumpRawApiResponses: false, // when true, save raw REST API responses to ./debug_dumps/raw_api_*.json
         timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
 
         // === DISPLAY OPTIONS ===

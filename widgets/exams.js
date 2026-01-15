@@ -6,7 +6,6 @@
     try {
       let addedRows = 0;
       if (!Array.isArray(exams)) {
-        log('debug', `[exams] no data (not array)`);
         return 0;
       }
 
@@ -20,17 +19,8 @@
       // Header is already added by main module if studentCellTitle is empty
       if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
-      // Read widget-specific config using context helper
-      const rangeEnd = Number(widgetCtx.getConfig('nextDays', 7));
-
-      if (ctx._currentTodayYmd) log('debug', `[exams] using debugDate ${ctx._currentTodayYmd}`);
       const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;
       const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? true;
-
-      log(
-        'debug',
-        `[exams] render start | entries: ${exams.length} | range: ${rangeEnd}d | show: subject=${showSubject}, teacher=${showTeacher}`
-      );
 
       exams
         .slice()
@@ -74,10 +64,7 @@
         });
 
       if (addedRows === 0) {
-        log('debug', `[exams] no entries to display`);
         addRow(container, 'examRowEmpty', studentCell, ctx.translate('no_exams'));
-      } else {
-        log('debug', `[exams] render complete | rows: ${addedRows}`);
       }
 
       return addedRows;

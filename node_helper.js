@@ -507,6 +507,7 @@ module.exports = NodeHelper.create({
       logger: this._mmLog.bind(this),
       mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
       debugApi: options.debugApi || false,
+      dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
@@ -540,6 +541,7 @@ module.exports = NodeHelper.create({
       normalizeTime: this._normalizeTimeToMinutes.bind(this),
       sanitizeHtml: this._sanitizeHtmlText.bind(this),
       debugApi: options.debugApi || false,
+      dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
@@ -570,6 +572,7 @@ module.exports = NodeHelper.create({
       studentId,
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
+      dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
@@ -600,6 +603,7 @@ module.exports = NodeHelper.create({
       studentId,
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
+      dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
@@ -628,6 +632,7 @@ module.exports = NodeHelper.create({
       date,
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
+      dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
@@ -1256,7 +1261,6 @@ module.exports = NodeHelper.create({
           }
 
           // Fetch fresh data for this student
-          this._mmLog('debug', student, `Fetching data for ${student.title}...`);
           const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
@@ -1287,8 +1291,6 @@ module.exports = NodeHelper.create({
       }
 
       // Send all collected payloads at once to minimize DOM redraws
-      this._mmLog('debug', null, `Sending batched GOT_DATA for ${studentPayloads.length} student(s) to identifier ${identifier}`);
-
       for (const payload of studentPayloads) {
         // Send to ALL module instances, but include both id and sessionId for filtering
         // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
@@ -1322,8 +1324,6 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
-    this._mmLog('debug', null, `[socketNotificationReceived] Notification: ${notification}`);
-
     if (notification === 'INIT_MODULE') {
       await this._handleInitModule(payload);
       return;
@@ -1342,8 +1342,6 @@ module.exports = NodeHelper.create({
    * @param {Object} payload - Module configuration from frontend
    */
   async _handleInitModule(payload) {
-    this._mmLog('debug', null, '[INIT_MODULE] Initializing module');
-
     let normalizedConfig;
     let identifier;
     let sessionKey;
@@ -1446,8 +1444,6 @@ module.exports = NodeHelper.create({
    * @param {Object} payload - Fetch request from frontend
    */
   async _handleFetchData(payload) {
-    this._mmLog('debug', null, '[FETCH_DATA] Handling data fetch request');
-
     const identifier = payload.id || 'default';
     const sessionId = payload.sessionId || 'unknown';
     const sessionKey = `${identifier}:${sessionId}`;
@@ -1487,8 +1483,6 @@ module.exports = NodeHelper.create({
     }
 
     const config = this._configsBySession.get(sessionKey);
-
-    this._mmLog('debug', null, `Processing session: ${sessionKey}`);
 
     // Extract identifier from sessionKey (format: identifier:sessionId)
     const sessionIdentifier = sessionKey.split(':')[0];
@@ -1536,8 +1530,6 @@ module.exports = NodeHelper.create({
           this._pendingFetchByCredKey.delete(credKey);
         }
       }
-
-      this._mmLog('debug', null, `Successfully fetched data for session ${sessionKey}`);
     } catch (error) {
       this._mmLog('error', null, `Error loading Untis data for session ${sessionKey}: ${error}`);
     }
@@ -1646,6 +1638,14 @@ module.exports = NodeHelper.create({
       restOptions.qrCodeUrl = authSession.qrCodeUrl;
     }
     restOptions.authService = config._authService;
+    // Allow optional raw API dumps when enabled in module config
+    restOptions.dumpRawApiResponses = Boolean(config.dumpRawApiResponses);
+    // Debug: log whether raw API dumping is enabled for this student fetch
+    try {
+      this._mmLog('debug', student, `restOptions.dumpRawApiResponses=${restOptions.dumpRawApiResponses}`);
+    } catch (e) {
+      this._mmLog('debug', null, `restOptions.dumpRawApiResponses logging failed: ${e && e.message ? e.message : e}`);
+    }
 
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
@@ -1677,7 +1677,6 @@ module.exports = NodeHelper.create({
     const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
     const fetchAbsences = Boolean(wantsGridWidget || wantsAbsencesWidget);
     const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
-    const fetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
 
     // Calculate base date (with optional debugDate support)
     const baseNow = function () {
@@ -1701,10 +1700,7 @@ module.exports = NodeHelper.create({
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
     // ===== STEP 1: Calculate date ranges using dateRangeCalculator module =====
-    const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences, logger);
-    logger(
-      `Computed timetable range params: base=${baseNow.toISOString().split('T')[0]}, pastDays=${dateRanges.timetable.pastDays}, nextDays=${dateRanges.timetable.nextDays}`
-    );
+    const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences);
 
     // Get Timegrid from appData if available
     let grid = [];
@@ -1716,7 +1712,6 @@ module.exports = NodeHelper.create({
           startTime: u.startTime || 0,
           endTime: u.endTime || 0,
         }));
-        logger(`✓ Timegrid: extracted ${grid.length} time slots from appData.currentSchoolYear.timeGrid\n`);
       }
     }
 
@@ -1755,16 +1750,6 @@ module.exports = NodeHelper.create({
     // Extract timegrid from timetable data if not available from appData
     if (fetchTimegrid && grid.length === 0 && timetable.length > 0) {
       grid = this._extractTimegridFromTimetable(timetable);
-      logger(`✓ Timegrid: extracted ${grid.length} time slots from timetable (fallback)\n`);
-    }
-
-    // Log holiday status
-    if (fetchHolidays && compactHolidays.length > 0) {
-      logger(`Holidays: using ${compactHolidays.length} pre-extracted periods`);
-    } else if (fetchHolidays) {
-      logger(`Holidays: no data available`);
-    } else {
-      logger(`Holidays: skipped`);
     }
 
     // Find active holiday for today
