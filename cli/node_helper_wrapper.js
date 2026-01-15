@@ -30,11 +30,55 @@ const stripModuleTag = (str) => {
   return str;
 };
 
+/**
+ * Extract caller info from stack trace to show actual source file and line.
+ * Walks up the stack to find the first frame outside node_helper_wrapper.js
+ */
+function getCallerInfo() {
+  const stack = new Error().stack.split('\n');
+  // stack[0] = "Error"
+  // stack[1] = getCallerInfo
+  // stack[2] = Log.debug/info/warn/error
+  // stack[3+] = actual callers
+  for (let i = 3; i < stack.length; i++) {
+    const line = stack[i];
+    // Skip frames from wrapper itself
+    if (line.includes('node_helper_wrapper.js')) continue;
+
+    // Extract file:line:column from "at functionName (file:line:column)"
+    const match = line.match(/\(([^)]+?):(\d+):(\d+)\)/);
+    if (match) {
+      const filePath = match[1];
+      const lineNum = match[2];
+      // Return shortened path (e.g., "lib/authService.js:123" instead of full path)
+      const shortPath = filePath.split('/').slice(-2).join('/');
+      return `${shortPath}:${lineNum}`;
+    }
+  }
+  return null;
+}
+
 const Log = {
-  debug: (...args) => console.log(` > ${ANSI.dim}${ANSI.cyan}[DEBUG]${ANSI.reset}`, ...args.map(stripModuleTag)),
-  info: (...args) => console.log(` > ${ANSI.green}[INFO] ${ANSI.reset}`, ...args.map(stripModuleTag)),
-  warn: (...args) => console.log(` > ${ANSI.yellow}[WARN] ${ANSI.reset}`, ...args.map(stripModuleTag)),
-  error: (...args) => console.error(` > ${ANSI.red}[ERROR]${ANSI.reset}`, ...args.map(stripModuleTag)),
+  debug: (...args) => {
+    const source = getCallerInfo();
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    console.log(` > ${ANSI.dim}${ANSI.cyan}[DEBUG]${ANSI.reset}${sourceStr}`, ...args.map(stripModuleTag));
+  },
+  info: (...args) => {
+    const source = getCallerInfo();
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    console.log(` > ${ANSI.green}[INFO]${ANSI.reset}${sourceStr} `, ...args.map(stripModuleTag));
+  },
+  warn: (...args) => {
+    const source = getCallerInfo();
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    console.log(` > ${ANSI.yellow}[WARN]${ANSI.reset}${sourceStr} `, ...args.map(stripModuleTag));
+  },
+  error: (...args) => {
+    const source = getCallerInfo();
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    console.error(` > ${ANSI.red}[ERROR]${ANSI.reset}${sourceStr}`, ...args.map(stripModuleTag));
+  },
   wrapper_info: (...args) => console.log(`${ANSI.reset}[INFO] `, ...args),
 };
 
