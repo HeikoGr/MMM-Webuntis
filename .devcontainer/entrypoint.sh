@@ -142,10 +142,9 @@ echo "${GREEN}Starting MagicMirror under PM2...${NC}"
 npx playwright install chrome || true
 
 if command -v pm2-runtime >/dev/null 2>&1; then
-  # Always start pm2-runtime with inspect+watch for dev debugging
-  PM2_CMD="pm2-runtime start /opt/magic_mirror/ecosystem.config.js --node-args=\"--inspect-brk\" --watch --error /tmp/pm2-error.log"
-  echo "Running: $PM2_CMD"
-  eval "$PM2_CMD" || {
+  # Use exec to replace this shell process with pm2-runtime
+  # Add error handling to catch pm2-runtime startup failures
+  exec pm2-runtime start /opt/magic_mirror/ecosystem.config.js --error /tmp/pm2-error.log || {
     PM2_EXIT=$?
     echo "${RED}ERROR: PM2 failed to start (exit code: $PM2_EXIT)${NC}"
     if [ -f /tmp/pm2-error.log ]; then
