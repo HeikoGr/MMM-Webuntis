@@ -27,6 +27,7 @@
     "test:spelling": "cspell .",
     "check": "node cli/node_helper_wrapper.js || true",
     "debug": "node cli/node_helper_wrapper.js",
+    "capture:console": "node scripts/playwright_capture_console.js",
     "preinstall:check": "node -e \"process.exit(require('fs').existsSync('node_modules') ? 0 : 1)\" && echo 'node_modules exists' || echo 'npm install needed'",
     "install:check": "npm list --depth=0 2>&1 | grep -q 'missing:' && echo 'Missing dependencies - run: npm install' || echo 'All dependencies installed'",
     "deps:check": "node scripts/check-deps.js"
@@ -48,7 +49,8 @@
     "globals": "^17.0.0",
     "jest": "^30.2.0",
     "lint-staged": "^16.2.7",
-    "prettier": "^3.8.0"
+    "prettier": "^3.8.0",
+    "playwright": "^1.57.0"
   },
   "overrides": {
     "glob": "^10.4.5"

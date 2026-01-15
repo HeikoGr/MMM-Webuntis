@@ -39,6 +39,7 @@ Module.register('MMM-Webuntis', {
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
     debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
+    dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
     timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
 
     // === DISPLAY OPTIONS ===
@@ -378,13 +379,10 @@ Module.register('MMM-Webuntis', {
       }
     });
 
-    this._log('debug', `[_buildSendConfig] defNoStudents.grid.nextDays = ${defNoStudents.grid?.nextDays}`);
-
     // Always include the persisted debugDate if it was configured, to ensure it persists
     // across multiple FETCH_DATA requests. This allows time-based testing to work correctly.
     if (this._persistedDebugDate) {
       defNoStudents.debugDate = this._persistedDebugDate;
-      this._log('debug', `[_buildSendConfig] Persisting debugDate="${this._persistedDebugDate}"`);
     }
 
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
@@ -402,8 +400,6 @@ Module.register('MMM-Webuntis', {
       });
       return merged;
     });
-
-    this._log('debug', `[_buildSendConfig] mergedStudents[0].grid.nextDays = ${mergedStudents[0]?.grid?.nextDays}`);
 
     const sendConfig = {
       ...this.config,
@@ -685,16 +681,13 @@ Module.register('MMM-Webuntis', {
   _sendFetchData(reason = 'manual') {
     // Prevent fetch before initialization is complete
     if (!this._initialized) {
-      this._log('debug', `[FETCH_DATA] Skipped ${reason} fetch - module not yet initialized`);
       // Store pending resume request to execute after initialization
       if (reason === 'resume') {
         this._pendingResumeRequest = true;
-        this._log('debug', '[FETCH_DATA] Stored pending resume request for after initialization');
       }
       return;
     }
 
-    this._log('debug', `[FETCH_DATA] Sending FETCH_DATA (reason: ${reason})`);
     this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
   },
 
@@ -706,7 +699,6 @@ Module.register('MMM-Webuntis', {
   },
 
   suspend() {
-    this._log('debug', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
@@ -742,7 +734,6 @@ Module.register('MMM-Webuntis', {
       this._resumeFallbackTimer = null;
       // Only retry if we still haven't received data since resume
       if (this._lastResumeTime === resumeTimestamp && this._initialized) {
-        this._log('debug', '[resume] Fallback: No data received after resume, retrying fetch');
         this._sendFetchData('resume-fallback');
       }
     }, 3000);
@@ -752,15 +743,10 @@ Module.register('MMM-Webuntis', {
   },
 
   getDom() {
-    this._log('debug', `[getDom] Called - generating DOM`);
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
 
     const sortedStudentTitles = this._getSortedStudentTitles();
-    this._log(
-      'debug',
-      `getDom: sortedStudentTitles=${JSON.stringify(sortedStudentTitles)}, timetableByStudent keys=${Object.keys(this.timetableByStudent || {})}`
-    );
 
     // Render any module-level warnings once, above all widgets
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
@@ -796,26 +782,15 @@ Module.register('MMM-Webuntis', {
           const exams = this.examsByStudent?.[studentTitle] || [];
           const holidays = this.holidaysByStudent?.[studentTitle] || [];
 
-          this._log('debug', `[grid-prep] homeworks for ${studentTitle}: ${homeworks.length} items`);
-          if (homeworks.length > 0) {
-            this._log('debug', `  First hw: dueDate=${homeworks[0].dueDate}, su=${JSON.stringify(homeworks[0].su)}`);
-          }
-
           // Render grid if we have timeUnits OR holidays
           // This ensures the grid is shown even during holidays when there are no lessons/timeUnits
           const hasHolidays = holidays.length > 0;
-          this._log('debug', `[grid-check] timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays}, holidays.length=${holidays.length}`);
           if (timeUnits.length > 0 || hasHolidays) {
-            this._log('debug', `[grid-render] Rendering grid for ${studentTitle}`);
             try {
               const absences = this.absencesByStudent?.[studentTitle] || [];
-              this._log('debug', `[grid-render] absences for ${studentTitle}: ${absences.length}`);
               const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
               if (gridElem) {
-                this._log('debug', `[grid-append] Grid element created, appending to wrapper`);
                 wrapper.appendChild(gridElem);
-              } else {
-                this._log('debug', `[grid-skip] Grid element was null/undefined`);
               }
             } catch (error) {
               this._log('error', `Failed to render grid widget for ${studentTitle}: ${error.message}`);
@@ -824,15 +799,12 @@ Module.register('MMM-Webuntis', {
               errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Grid' })}`;
               wrapper.appendChild(errorDiv);
             }
-          } else {
-            this._log('debug', `[grid-skip] Condition not met (timeUnits=${timeUnits.length}, hasHolidays=${hasHolidays})`);
           }
         }
         continue;
       }
 
       if (widget === 'lessons') {
-        this._log('debug', '[lessons-check] Rendering lessons widget');
         try {
           const lessonsContainer = this._renderWidgetTableRows(
             sortedStudentTitles,
@@ -840,18 +812,11 @@ Module.register('MMM-Webuntis', {
               const timetable = this.timetableByStudent[studentTitle] || [];
               const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
               const holidays = this.holidaysByStudent?.[studentTitle] || [];
-              this._log(
-                'debug',
-                `[lessons-check] ${studentTitle}: timetable=${timetable.length}, holidays=${holidays.length}, holidayMap=${Object.keys(this.holidayMapByStudent?.[studentTitle] || {}).length}`
-              );
               return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
             }
           );
           if (lessonsContainer) {
-            this._log('debug', '[lessons-check] Appending lessons container to wrapper');
             wrapper.appendChild(lessonsContainer);
-          } else {
-            this._log('debug', '[lessons-check] No lessons container returned');
           }
         } catch (error) {
           this._log('error', `Failed to render lessons widget: ${error.message}`);
@@ -972,25 +937,13 @@ Module.register('MMM-Webuntis', {
   socketNotificationReceived(notification, payload) {
     // Filter by sessionId (preferred) or id (fallback) to ensure data goes to correct instance
     // This allows multi-instance support without requiring explicit identifiers in config
-    this._log(
-      'debug',
-      `[socketNotificationReceived] ${notification} - ours: id=${this.identifier}, sessionId=${this._sessionId} | received: id=${payload?.id}, sessionId=${payload?.sessionId}`
-    );
-
     if (payload && payload.sessionId && this._sessionId !== payload.sessionId) {
-      this._log(
-        'debug',
-        `[socketNotificationReceived] ❌ FILTERED: sessionId mismatch (ours: ${this._sessionId}, received: ${payload.sessionId})`
-      );
       return;
     }
     // Fallback to id filtering if sessionId is not present (backward compatibility)
     if (payload && payload.id && !payload.sessionId && this.identifier !== payload.id) {
-      this._log('debug', `[socketNotificationReceived] ❌ FILTERED: id mismatch (ours: ${this.identifier}, received: ${payload.id})`);
       return;
     }
-
-    this._log('debug', `[socketNotificationReceived] ✓ ACCEPTED: ${notification}`);
 
     // Handle initialization response
     if (notification === 'MODULE_INITIALIZED') {
@@ -999,7 +952,6 @@ Module.register('MMM-Webuntis', {
 
       // Execute pending resume request if module was resumed before initialization completed
       if (this._pendingResumeRequest) {
-        this._log('debug', '[MODULE_INITIALIZED] Executing pending resume request');
         this._pendingResumeRequest = false;
         // Small delay to ensure initialization is fully complete
         setTimeout(() => {
@@ -1137,7 +1089,6 @@ Module.register('MMM-Webuntis', {
     const hw = payload.homeworks;
     const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
     this.homeworksByStudent[title] = hwNorm;
-    this._log('debug', `[GOT_DATA] Assigned ${hwNorm.length} homeworks to student "${title}"`);
 
     this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
 
@@ -1148,16 +1099,11 @@ Module.register('MMM-Webuntis', {
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
     this.holidayMapByStudent[title] = payload.holidayByDate || {};
 
-    this._log(
-      'debug',
-      `[GOT_DATA] holidays: ${this.holidaysByStudent[title].length}, holidayMap keys: ${Object.keys(this.holidayMapByStudent[title] || {}).length}`
-    );
     // Update DOM immediately; debounce removed to reflect data as soon as it arrives
     if (this._updateDomTimer) {
       clearTimeout(this._updateDomTimer);
       this._updateDomTimer = null;
     }
-    this._log('debug', '[GOT_DATA] Executing immediate updateDom()');
     this.updateDom();
   },
 });

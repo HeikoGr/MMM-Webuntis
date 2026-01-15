@@ -109,7 +109,7 @@ if [ -d "${MODULES_DIR}" ]; then
     if [ -f "$MOD/package.json" ]; then
       if [ ! -d "$MOD/node_modules" ] || [ -z "$(ls -A "$MOD/node_modules" 2>/dev/null)" ]; then
         echo "${YELLOW}Installing dependencies: $(basename "$MOD")${NC}"
-        npm --prefix "$MOD" install --omit=dev || true
+        npm --prefix "$MOD" install || true
       fi
     fi
   done
@@ -138,6 +138,8 @@ node -e "try { require('$CONFIG_FILE'); console.log('Config OK'); } catch(e) { c
 # Start MagicMirror
 cd "$MAGICMIRROR_PATH"
 echo "${GREEN}Starting MagicMirror under PM2...${NC}"
+
+npx playwright install chrome || true
 
 if command -v pm2-runtime >/dev/null 2>&1; then
   # Use exec to replace this shell process with pm2-runtime

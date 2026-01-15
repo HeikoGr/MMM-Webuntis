@@ -1,6 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
@@ -12,12 +12,9 @@
     if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
-      log('debug', `[homework] no data`);
       addRow(container, 'homeworkRowEmpty', studentCell, ctx.translate('no_homework'));
       return 1;
     }
-
-    log('debug', `[homework] render start | entries: ${homeworks.length}`);
 
     const dateFormat = widgetCtx.getConfig('dateFormat', 'dd.MM.');
     const showSubject = widgetCtx.getConfig('showSubject', true);
@@ -44,7 +41,6 @@
       addedRows++;
     }
 
-    log('debug', `[homework] render complete | rows: ${addedRows}`);
     return addedRows;
   }
 

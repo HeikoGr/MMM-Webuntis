@@ -18,8 +18,6 @@ function getNowLineState(ctx) {
     const state = getNowLineState(ctx);
     if (state.timer || state.initialTimeout) return;
 
-    log('debug', '[grid] Starting now-line updater');
-
     const tick = () => {
       try {
         const nowLocal = new Date();
@@ -29,7 +27,6 @@ function getNowLineState(ctx) {
         if (!isDebugMode) {
           if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
           if (nowYmd !== ctx._currentTodayYmd) {
-            log('debug', `[grid] Date changed from ${ctx._currentTodayYmd} to ${nowYmd}, refreshing data`);
             try {
               // Use the debounced _sendFetchData if available, otherwise direct socket call
               if (typeof ctx._sendFetchData === 'function') {
@@ -67,7 +64,6 @@ function getNowLineState(ctx) {
         tick();
         state.timer = setInterval(tick, 60 * 1000);
         state.initialTimeout = null;
-        log('debug', '[grid] Now-line updater initialized');
       },
       Math.max(0, msToNextMinute)
     );
@@ -86,14 +82,13 @@ function getNowLineState(ctx) {
       clearTimeout(state.initialTimeout);
       state.initialTimeout = null;
     }
-    log('debug', '[grid] Now-line updater stopped');
   }
 
   // ============================================================================
   // CONFIGURATION & VALIDATION
   // ============================================================================
 
-  function validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks) {
+  function validateAndExtractGridConfig(ctx, studentConfig) {
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
     const configuredNext = getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
     const configuredPast = getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
@@ -103,12 +98,6 @@ function getNowLineState(ctx) {
     const totalDisplayDays = pastDays + 1 + daysToShow;
     const gridDateFormat = getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
     const maxGridLessons = Math.max(0, Math.floor(Number(getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
-
-    log(
-      ctx,
-      'debug',
-      `[grid] render start | student: "${studentTitle}" | entries: ${Array.isArray(timetable) ? timetable.length : 0} | days: ${totalDisplayDays}/${pastDays} | homeworks: ${Array.isArray(homeworks) ? homeworks.length : 0}`
-    );
 
     return {
       daysToShow,
@@ -156,7 +145,7 @@ function getNowLineState(ctx) {
     return { allStart, allEnd };
   }
 
-  function applyMaxLessonsLimit(allStart, allEnd, maxGridLessons, timeUnits, studentTitle, ctx) {
+  function applyMaxLessonsLimit(allStart, allEnd, maxGridLessons, timeUnits) {
     if (maxGridLessons >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
       const targetIndex = Math.min(timeUnits.length - 1, maxGridLessons - 1);
       let cutoff = timeUnits[targetIndex].endMin;
@@ -180,11 +169,6 @@ function getNowLineState(ctx) {
       }
 
       if (cutoff !== undefined && cutoff !== null && cutoff > allStart && cutoff < allEnd) {
-        log(
-          ctx,
-          'debug',
-          `Grid: vertical range limited to first ${maxGridLessons} timeUnit(s) (cutoff ${cutoff}) for student ${studentTitle}`
-        );
         return cutoff;
       }
     }
@@ -884,8 +868,6 @@ function getNowLineState(ctx) {
   }
 
   function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
-    log('debug', `[grid] addAbsenceOverlays called with ${dayAbsences.length} absences`);
-
     if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
       return;
     }
@@ -895,14 +877,9 @@ function getNowLineState(ctx) {
         // Convert HHMM (1330 = 13:30) to minutes (810 minutes)
         const startMin = ctx._toMinutes(absence?.startTime) || 0;
         const endMin = ctx._toMinutes(absence?.endTime) || 0;
-        log(
-          'debug',
-          `[grid] Rendering absence: ${absence?.reason}, startMin=${startMin}, endMin=${endMin}, allStart=${allStart}, allEnd=${allEnd}`
-        );
 
         if (startMin >= allEnd || endMin <= allStart) {
           // Absence is outside the visible time range
-          log('debug', `[grid] Absence outside range, skipping`);
           continue;
         }
 
@@ -911,7 +888,6 @@ function getNowLineState(ctx) {
         const clampedEnd = Math.min(endMin, allEnd);
 
         if (clampedStart >= clampedEnd) {
-          log('debug', `[grid] Clamped range invalid, skipping`);
           continue;
         }
 
@@ -919,7 +895,6 @@ function getNowLineState(ctx) {
         const heightPx = Math.round(((clampedEnd - clampedStart) / totalMinutes) * totalHeight);
         const dateStr = String(absence?.date || '');
 
-        log('debug', `[grid] Creating overlay: topPx=${topPx}, heightPx=${heightPx}, dateStr=${dateStr}`);
         const overlay = createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence);
         bothInner.appendChild(overlay);
       }
@@ -934,13 +909,13 @@ function getNowLineState(ctx) {
 
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
     // 1. Validate and extract configuration
-    const config = validateAndExtractGridConfig(ctx, studentConfig, studentTitle, timetable, homeworks);
+    const config = validateAndExtractGridConfig(ctx, studentConfig);
 
     // 2. Calculate time range
     const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
     const fullDayEnd = allEnd; // Store original end time for holiday overlays
-    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits, studentTitle, ctx);
+    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
     const pxPerMinute = 0.75;
@@ -1005,8 +980,6 @@ function getNowLineState(ctx) {
           .filter((el) => String(el.date) === dateStr)
           .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
-      log('debug', `[grid] Day ${dateStr}: found ${sourceForDay.length} lessons`);
-
       // Extract and normalize lessons
       let dayLessons = extractDayLessons(sourceForDay, ctx);
       dayLessons = validateAndNormalizeLessons(dayLessons, log);
@@ -1046,13 +1019,7 @@ function getNowLineState(ctx) {
       // Add "more" badge if lessons were hidden
       const hiddenCount = dayLessons.length - lessonsToRender.length;
       if (hiddenCount > 0) {
-        log('debug', `[grid] Day ${dateStr}: ${hiddenCount} lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown)`);
         addMoreBadge(bothInner, hiddenCount, ctx);
-      } else if (config.maxGridLessons && dayLessons.length > 0) {
-        log(
-          'debug',
-          `[grid] Day ${dateStr}: no lessons hidden (${dayLessons.length} total, ${lessonsToRender.length} shown, maxLessons=${config.maxGridLessons})`
-        );
       }
 
       // Add "no lessons" notice if empty and not a holiday
@@ -1069,7 +1036,6 @@ function getNowLineState(ctx) {
       // Add absence overlays if any
       if (Array.isArray(absences) && absences.length > 0) {
         const dayAbsences = absences.filter((ab) => String(ab?.date) === dateStr);
-        log('debug', `[grid] Day ${dateStr}: found ${dayAbsences.length} absences (total=${absences.length})`);
         if (dayAbsences.length > 0) {
           addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx);
         }

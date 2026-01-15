@@ -1,6 +1,6 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime, createWidgetContext } =
+  const { escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime, createWidgetContext } =
     root.util?.initWidget?.(root) || {};
 
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
@@ -12,12 +12,9 @@
     if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
     if (!Array.isArray(absences) || absences.length === 0) {
-      log('debug', `[absences] no data`);
       addRow(container, 'absenceRowEmpty', studentCell, ctx.translate('no_absences'));
       return 1;
     }
-
-    log('debug', `[absences] render start | entries: ${absences.length}`);
 
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
     const maxItems = getWidgetConfig(studentConfig, 'absences', 'maxItems') ?? null;
@@ -31,12 +28,6 @@
     const rangeStart = getWidgetConfig(studentConfig, 'absences', 'pastDays') ?? 30;
     const rangeEnd = getWidgetConfig(studentConfig, 'absences', 'futureDays') ?? 7;
     const dateFormat = getWidgetConfig(studentConfig, 'absences', 'dateFormat') ?? 'dd.MM.';
-
-    log(
-      ctx,
-      'debug',
-      `[absences] config: range=${rangeStart}d_past/${rangeEnd}d_future | max=${maxItems} | show: date=${showDate}, excused=${showExcused}, reason=${showReason}`
-    );
 
     const sorted = absences
       .slice()
@@ -123,7 +114,6 @@
       visibleCount++;
     }
 
-    log('debug', `[absences] final: addedRows=${addedRows}`);
     return addedRows;
   }
 

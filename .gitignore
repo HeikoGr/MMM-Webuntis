@@ -5,6 +5,7 @@ npm-debug.log*
 # Dependency directory
 node_modules
 debug_dumps/*
+.playwright-mcp/*
 
 # Local MagicMirror overrides (generate from *.template files)
 config/.env
