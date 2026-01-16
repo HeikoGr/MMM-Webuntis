@@ -163,19 +163,19 @@
         const teacherMode = studentConfig.showTeacherMode ?? ctx.config.showTeacherMode;
         if (teacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
-          if (teacherInitial !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherInitial)})`;
+          if (teacherInitial !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherInitial)})</span>`;
         } else if (teacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
-          if (teacherFull !== '') subjectStr += '&nbsp;' + `(${escapeHtml(teacherFull)})`;
+          if (teacherFull !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherFull)})</span>`;
         }
 
         if ((studentConfig.lessons?.showSubstitution ?? studentConfig?.showSubstitution ?? false) && (entry.substText || '') !== '') {
-          subjectStr += `<br/><span class='xsmall dimmed'>${escapeHtml(entry.substText)}</span>`;
+          subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(entry.substText)}</span>`;
         }
 
         if ((entry.lstext || '') !== '') {
           if (subjectStr.trim() !== '') subjectStr += '<br/>';
-          subjectStr += `<span class='xsmall dimmed'>${escapeHtml(entry.lstext)}</span>`;
+          subjectStr += `<span class='lesson-info-text'>${escapeHtml(entry.lstext)}</span>`;
         }
 
         let addClass = '';

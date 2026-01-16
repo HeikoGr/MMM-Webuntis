@@ -53,11 +53,11 @@
 
           if (showTeacher) {
             const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
-            if (teacher) nameCell += '&nbsp;' + `(${escapeHtml(teacher)})`;
+            if (teacher) nameCell += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacher)})</span>`;
           }
 
           if (exam.text) {
-            nameCell += `<br/><span class="xsmall dimmed">${escapeHtml(exam.text)}</span>`;
+            nameCell += `<br/><span class="exam-description">${escapeHtml(exam.text)}</span>`;
           }
 
           addRow(container, 'examRow', studentCell, dateTimeCell, nameCell);

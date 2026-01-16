@@ -145,19 +145,6 @@
 
 /* Widget rows */
 .MMM-Webuntis .examRow,
-.MMM-Webuntis .examRowEmpty,
-.MMM-Webuntis .lessonRow,
-.MMM-Webuntis .lessonRowEmpty,
-.MMM-Webuntis .homeworkRow,
-.MMM-Webuntis .homeworkRowEmpty,
-.MMM-Webuntis .absenceRow,
-.MMM-Webuntis .absenceRowEmpty,
-.MMM-Webuntis .messageRow,
-.MMM-Webuntis .messageRowEmpty {
-  /* Row-specific styling can go here */
-}
-
-.MMM-Webuntis .examRow,
 .MMM-Webuntis .examRowEmpty {
   color: rgb(0, 255, 255);
 }
@@ -289,13 +276,13 @@
 }
 
 /* Common styling for lessons in grid and ticker */
-.MMM-Webuntis .grid-combined .lesson-replacement,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-replacement {
+.MMM-Webuntis .grid-combined .lesson-substitution,
+.MMM-Webuntis .ticker-item .lesson-content.lesson-substitution {
   background-color: var(--wu-replacement-bg);
   color: var(--wu-replacement-text);
 }
 
-.MMM-Webuntis .grid-combined .lesson-replacement.split-left {
+.MMM-Webuntis .grid-combined .lesson-substitution.split-left {
   left: 0;
   right: auto;
   width: 50%;
@@ -303,7 +290,7 @@
   overflow: hidden;
 }
 
-.MMM-Webuntis .grid-combined .lesson-cancelled-split.split-right {
+.MMM-Webuntis .grid-combined .lesson-cancelled.split-right {
   left: auto;
   right: 0;
   width: 50%;
@@ -311,16 +298,8 @@
   color: var(--wu-cancelled-text);
 }
 
-.MMM-Webuntis .grid-combined .lesson-substitution {
-  background-color: var(--wu-substitution-bg, rgba(255, 165, 0, 0.1));
-  border-right: 1px solid rgba(255, 165, 0, 0.3);
-  color: var(--wu-substitution-text, #ffa500);
-  overflow: hidden;
-  font-weight: bold;
-}
-
-.MMM-Webuntis .grid-combined .lesson-cancelled-split,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-cancelled-split {
+.MMM-Webuntis .grid-combined .lesson-cancelled,
+.MMM-Webuntis .ticker-item .lesson-content.lesson-cancelled {
   background-color: var(--wu-cancelled-bg);
   color: var(--wu-cancelled-text);
 }
@@ -518,6 +497,7 @@
 .MMM-Webuntis .grid-daylabel,
 .MMM-Webuntis .wu-col-meta {
   /* text-transform: uppercase; */
+  text-align: left;
 }
 
 .MMM-Webuntis .absence-unexcused {
@@ -651,4 +631,60 @@
   bottom: 0;
   width: 4px;
   background: var(--wu-exam-bar, #ffeb3b);
+}
+
+/* Semantic CSS Classes for Accessibility */
+
+/* Lesson Subject (Grid & Lessons) */
+.MMM-Webuntis .lesson-subject {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* Lesson Teacher (Grid & Lessons) */
+.MMM-Webuntis .lesson-teacher {
+  font-size: 0.65rem;
+  color: #888;
+  font-weight: 400;
+}
+
+/* Teacher Name (inline in Lessons/Exams widgets) */
+.MMM-Webuntis .teacher-name {
+  color: #888;
+  font-weight: 400;
+  font-size: inherit;
+}
+
+/* Substitution Text (yellow/orange) */
+.MMM-Webuntis .lesson-substitution-text {
+  font-size: 0.75rem;
+  color: #ff8800;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* General Lesson Info Text (lstext field) */
+.MMM-Webuntis .lesson-info-text {
+  font-size: 0.75rem;
+  color: #999;
+  font-style: italic;
+}
+
+/* Exam Description */
+.MMM-Webuntis .exam-description {
+  font-size: 0.8rem;
+  color: #ff6600;
+  font-weight: 600;
+}
+
+/* Message Subject */
+.MMM-Webuntis .message-subject {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Message Text */
+.MMM-Webuntis .message-text {
+  font-size: 0.9rem;
+  color: #ddd;
 }

@@ -516,10 +516,13 @@ function getNowLineState(ctx) {
   }
 
   function makeLessonInnerHTML(lesson, escapeHtml) {
-    const base = `<b>${escapeHtml(lesson.subjectShort || lesson.subject)}</b><br>${escapeHtml(lesson.teacherInitial || lesson.teacher)}`;
-    const subst = lesson.substText ? `<br><span class='xsmall dimmed'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>` : '';
-    const txt = lesson.text ? `<br><span class='xsmall dimmed'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
-    return `<div class='lesson-content'>${base + subst + txt}</div>`;
+    const subject = escapeHtml(lesson.subjectShort || lesson.subject);
+    const teacher = escapeHtml(lesson.teacherInitial || lesson.teacher);
+    const subst = lesson.substText
+      ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
+      : '';
+    const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+    return `<div class='lesson-content'><span class='lesson-subject'>${subject}</span><br><span class='lesson-teacher'>${teacher}</span>${subst}${txt}</div>`;
   }
 
   function checkHomeworkMatch(lesson, homeworks) {
@@ -696,9 +699,9 @@ function getNowLineState(ctx) {
           // Apply lesson type styling based on individual lesson
           const lessonCode = lesson.code || '';
           if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-            lessonDiv.classList.add('lesson-cancelled-split');
+            lessonDiv.classList.add('lesson-cancelled');
           } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-            lessonDiv.classList.add('lesson-replacement');
+            lessonDiv.classList.add('lesson-substitution');
           } else {
             lessonDiv.classList.add('lesson-regular');
           }
@@ -780,7 +783,7 @@ function getNowLineState(ctx) {
           const { bothInner } = containers;
 
           const leftCell = createLessonCell(topPx, heightPx, irregularLesson.dateStr, eMin);
-          leftCell.classList.add('lesson-replacement', 'split-left');
+          leftCell.classList.add('lesson-substitution', 'split-left');
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml);
@@ -790,7 +793,7 @@ function getNowLineState(ctx) {
           bothInner.appendChild(leftCell);
 
           const rightCell = createLessonCell(topPx, heightPx, cancelledLesson.dateStr, eMin);
-          rightCell.classList.add('lesson-cancelled-split', 'split-right');
+          rightCell.classList.add('lesson-cancelled', 'split-right');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
           rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml);
@@ -814,9 +817,9 @@ function getNowLineState(ctx) {
 
         const lessonCode = lesson.code || '';
         if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-          bothCell.classList.add('lesson-cancelled-split');
+          bothCell.classList.add('lesson-cancelled');
         } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-          bothCell.classList.add('lesson-replacement');
+          bothCell.classList.add('lesson-substitution');
         } else {
           bothCell.classList.add('lesson-regular');
         }
