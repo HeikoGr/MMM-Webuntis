@@ -25,11 +25,13 @@
       const isExpanded = msg?.isExpanded === true;
 
       // Subject as bold prefix, followed by text on the same line or next line
-      const subjectHtml = subject ? `<strong>${escapeHtml(subject)}</strong>` : '';
+      const subjectHtml = subject ? `<span class="message-subject">${escapeHtml(subject)}</span>` : '';
       const contentText = text || ctx.translate('no_text');
 
       // Combine subject and text
-      const fullContent = subjectHtml ? `${subjectHtml}<br/>${contentText}` : contentText;
+      const fullContent = subjectHtml
+        ? `${subjectHtml}<br/><span class="message-text">${contentText}</span>`
+        : `<span class="message-text">${contentText}</span>`;
 
       // Build the row classes
       let rowClasses = 'messageRow';

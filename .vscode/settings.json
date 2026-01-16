@@ -1,67 +1,65 @@
 {
-    "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "explicit"
-    },
-    "editor.rulers": [
-        100
-    ],
-    "editor.trimAutoWhitespace": true,
-    "editor.insertSpaces": true,
-    "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.rulers": [100],
+  "editor.trimAutoWhitespace": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/debug_dumps": true,
+    "**/coverage": true
+  },
+  "search.exclude": {
+    "**/debug_dumps": true,
+    "**/coverage": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules": true,
+    "**/debug_dumps": true,
+    "**/coverage": true,
+    "**/.git": true
+  },
+  "debug.console.fontSize": 13,
+  "debug.console.wordWrap": true,
+  "terminal.integrated.scrollback": 5000,
+  "git.autofetch": true,
+  "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "files.exclude": {
-        "**/node_modules": true,
-        "**/debug_dumps": true,
-        "**/coverage": true
-    },
-    "search.exclude": {
-        "**/debug_dumps": true,
-        "**/coverage": true
-    },
-    "files.watcherExclude": {
-        "**/node_modules": true,
-        "**/debug_dumps": true,
-        "**/coverage": true,
-        "**/.git": true
-    },
-    "debug.console.fontSize": 13,
-    "debug.console.wordWrap": true,
-    "terminal.integrated.scrollback": 5000,
-    "git.autofetch": true,
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "[json]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "chat.mcp.serverSampling": {
-        "MMM-Webuntis/.vscode/mcp.json: microsoft/playwright-mcp": {
-            "allowedModels": [
-                "copilot/claude-sonnet-4.5",
-                "copilot/auto",
-                "copilot/claude-haiku-4.5",
-                "copilot/claude-opus-4.5",
-                "copilot/claude-sonnet-4",
-                "copilot/gemini-2.5-pro",
-                "copilot/gemini-3-flash-preview",
-                "copilot/gemini-3-pro-preview",
-                "copilot/gpt-4.1",
-                "copilot/gpt-4o",
-                "copilot/gpt-5",
-                "copilot/gpt-5-mini",
-                "copilot/gpt-5-codex",
-                "copilot/gpt-5.1",
-                "copilot/gpt-5.1-codex",
-                "copilot/gpt-5.1-codex-max",
-                "copilot/gpt-5.1-codex-mini",
-                "copilot/gpt-5.2",
-                "copilot/gpt-5.2-codex",
-                "copilot/grok-code-fast-1",
-                "copilot/oswe-vscode-prime"
-            ]
-        }
+    "editor.formatOnSave": true
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "chat.mcp.serverSampling": {
+    "MMM-Webuntis/.vscode/mcp.json: microsoft/playwright-mcp": {
+      "allowedModels": [
+        "copilot/claude-sonnet-4.5",
+        "copilot/auto",
+        "copilot/claude-haiku-4.5",
+        "copilot/claude-opus-4.5",
+        "copilot/claude-sonnet-4",
+        "copilot/gemini-2.5-pro",
+        "copilot/gemini-3-flash-preview",
+        "copilot/gemini-3-pro-preview",
+        "copilot/gpt-4.1",
+        "copilot/gpt-4o",
+        "copilot/gpt-5",
+        "copilot/gpt-5-mini",
+        "copilot/gpt-5-codex",
+        "copilot/gpt-5.1",
+        "copilot/gpt-5.1-codex",
+        "copilot/gpt-5.1-codex-max",
+        "copilot/gpt-5.1-codex-mini",
+        "copilot/gpt-5.2",
+        "copilot/gpt-5.2-codex",
+        "copilot/grok-code-fast-1",
+        "copilot/oswe-vscode-prime"
+      ]
     }
+  }
 }

@@ -717,3 +717,32 @@ Issues found:
 
 🔧 Action required: Run npm install
 ```
+
+---
+
+## CSS Customization (Accessibility & Styling)
+
+MMM-Webuntis provides extensive CSS customization options for users with visual impairments or custom styling preferences. All visual elements can be targeted via CSS classes.
+
+**Quick Start:**
+```bash
+cp config/custom.template.css config/custom.css
+# Edit config/custom.css with your styles
+```
+
+- All available CSS variables and classes
+- High contrast themes
+- Color blindness support (Protanopia, Deuteranopia)
+- Common customization examples
+- Accessibility best practices
+
+**Example - Strike-through cancelled lessons:**
+```css
+/* config/custom.css */
+.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-subject,
+.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-teacher {
+  text-decoration: line-through;
+}
+```
+
+---

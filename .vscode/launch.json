@@ -1,17 +1,17 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "type": "node",
-            "request": "attach",
-            "name": "Attach to node process",
-            "port": 9229
-        },
-        {
-            "type": "chrome",
-            "request": "launch",
-            "name": "Launch MagicMirror² in Chrome with MMM-Webuntis",
-            "url": "http://localhost:8080"
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to node process",
+      "port": 9229
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch MagicMirror² in Chrome with MMM-Webuntis",
+      "url": "http://localhost:8080"
+    }
+  ]
 }
