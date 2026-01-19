@@ -456,10 +456,11 @@ module.exports = NodeHelper.create({
     server,
     rangeStart,
     rangeEnd,
-    studentId,
+    personId,
     options = {},
     useClassTimetable = false,
-    className = null
+    className = null,
+    resourceType = null
   ) {
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
     let classId = options.classId;
@@ -474,7 +475,7 @@ module.exports = NodeHelper.create({
         rangeStart,
         rangeEnd,
         className || options.className || null,
-        { ...options, studentId }
+        { ...options, personId }
       );
     }
 
@@ -501,9 +502,10 @@ module.exports = NodeHelper.create({
       server,
       rangeStart,
       rangeEnd,
-      studentId,
+      personId,
       useClassTimetable: wantsClass,
       classId,
+      resourceType: resourceType || null,
       logger: this._mmLog.bind(this),
       mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
       debugApi: options.debugApi || false,
@@ -511,7 +513,7 @@ module.exports = NodeHelper.create({
     });
   },
 
-  async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+  async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -535,7 +537,7 @@ module.exports = NodeHelper.create({
       server,
       rangeStart,
       rangeEnd,
-      studentId,
+      personId,
       logger: this._mmLog.bind(this),
       normalizeDate: this._normalizeDateToInteger.bind(this),
       normalizeTime: this._normalizeTimeToMinutes.bind(this),
@@ -545,7 +547,7 @@ module.exports = NodeHelper.create({
     });
   },
 
-  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -569,14 +571,14 @@ module.exports = NodeHelper.create({
       server,
       rangeStart,
       rangeEnd,
-      studentId,
+      personId,
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
   },
 
-  async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, studentId, options = {}) {
+  async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -600,7 +602,7 @@ module.exports = NodeHelper.create({
       server,
       rangeStart,
       rangeEnd,
-      studentId,
+      personId,
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
@@ -908,6 +910,7 @@ module.exports = NodeHelper.create({
         school: authResult.school,
         server: authResult.server,
         personId: authResult.personId,
+        role: authResult.role || null,
         cookieString: authResult.cookieString, // Changed 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
@@ -935,6 +938,7 @@ module.exports = NodeHelper.create({
         school,
         server,
         personId: authResult.personId, // Parent's personId (used for auto-discovery)
+        role: authResult.role || null,
         cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
@@ -959,6 +963,7 @@ module.exports = NodeHelper.create({
         school: sample.school,
         server: sample.server,
         personId: authResult.personId,
+        role: authResult.role || null,
         cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
         token: authResult.token,
         tenantId: authResult.tenantId,
@@ -1440,7 +1445,7 @@ module.exports = NodeHelper.create({
       });
 
       // Automatically trigger initial data fetch after successful initialization
-      // This eliminates the need for frontend to send FETCH_DATA immediately after MODULE_INITIALIZED
+      // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
       this._mmLog('debug', null, `[INIT_MODULE] Auto-triggering initial data fetch for ${identifier}, sessionId=${payload.sessionId}`);
       await this._handleFetchData({
         id: identifier,
@@ -1690,14 +1695,15 @@ module.exports = NodeHelper.create({
     const ownPersonId = authSession.personId;
     const bearerToken = authSession.token;
     const appData = authSession.appData;
+    const role = authSession.role || null;
     const authService = config._authService;
-    const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData);
+    const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData, role);
 
     // DEBUG: Log restTargets to understand why they might be empty
     this._mmLog(
       'debug',
       student,
-      `Built ${restTargets ? restTargets.length : 0} REST targets (school=${school}, server=${server}, personId=${ownPersonId})`
+      `Built ${restTargets ? restTargets.length : 0} REST targets (school=${school}, server=${server}${restTargets && restTargets.length > 0 ? `, personId=${restTargets[0].personId}, role=${restTargets[0].role}` : ''})`
     );
     if (!restTargets || restTargets.length === 0) {
       this._mmLog('warn', student, `No REST targets built - cannot fetch data! Check authentication and credentials.`);
@@ -1705,9 +1711,9 @@ module.exports = NodeHelper.create({
 
     const describeTarget = (t) => {
       if (t.mode === 'qr') {
-        return `QR login${t.studentId ? ` (id=${t.studentId})` : ''}`;
+        return `QR login${t.personId ? ` (id=${t.personId})` : ''}`;
       }
-      return `parent (parentId=${ownPersonId}, childId=${t.studentId})`;
+      return `parent (parentId=${ownPersonId}, childId=${t.personId})`;
     };
 
     const className = student.class || student.className || null;
