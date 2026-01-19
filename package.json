@@ -20,6 +20,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepare": "simple-git-hooks",
     "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
     "test:spelling": "cspell .",
