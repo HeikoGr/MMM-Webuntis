@@ -89,11 +89,10 @@ module.exports = NodeHelper.create({
     this.payloadCompactor = { compactArray };
     // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
-    // Persist debugDate across FETCH_DATA requests to ensure consistent date-based testing
-    this._persistedDebugDate = null;
     // Multi-instance support: store config per identifier
     this._configsByIdentifier = new Map();
     // Session-based config isolation: each browser window keeps its own config
+    // debugDate is now stored session-specifically in _configsBySession, not globally
     this._configsBySession = new Map();
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     // Track which identifiers have completed student auto-discovery
@@ -1385,10 +1384,9 @@ module.exports = NodeHelper.create({
       this._configsBySession.set(sessionKey, normalizedConfig);
       this._mmLog('debug', null, `[INIT_MODULE] Config stored for session=${sessionKey}`);
 
-      // Persist debugDate for this session
+      // Log debugDate if present (stored in normalizedConfig, not global)
       if (normalizedConfig.debugDate) {
-        this._persistedDebugDate = normalizedConfig.debugDate;
-        this._mmLog('debug', null, `[INIT_MODULE] Received debugDate="${normalizedConfig.debugDate}"`);
+        this._mmLog('debug', null, `[INIT_MODULE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
       }
 
       // Ensure displayMode is lowercase
@@ -1470,11 +1468,6 @@ module.exports = NodeHelper.create({
    * Uses cached config and authentication, only fetches fresh data from WebUntis
    *
    * @param {Object} payload - Fetch request from frontend
-  /**
-   * Handle FETCH_DATA notification - performs data refresh for already initialized module
-   * Uses cached config and authentication, only fetches fresh data from WebUntis
-   *
-   * @param {Object} payload - Fetch request from frontend
    */
   async _handleFetchData(payload) {
     const identifier = payload.id || 'default';
@@ -1492,23 +1485,26 @@ module.exports = NodeHelper.create({
     );
     this._lastFetchTimestamp = fetchTimestamp;
 
-    // Verify module is initialized
-    if (!this._configsByIdentifier.has(identifier)) {
-      this._mmLog('warn', null, `[FETCH_DATA] Module ${identifier} not initialized - ignoring fetch request`);
+    // Verify module is initialized (per session preferred, fall back to identifier)
+    const hasSessionConfig = this._configsBySession.has(sessionKey);
+    const baseConfig = this._configsByIdentifier.get(identifier);
+    if (!hasSessionConfig && !baseConfig) {
+      this._mmLog('warn', null, `[FETCH_DATA] Module ${identifier} not initialized for session ${sessionId} - ignoring fetch request`);
       return;
     }
 
-    // Get the initialized config
-    let normalizedConfig = this._configsByIdentifier.get(identifier);
+    // Start from session-specific config; if missing, clone identifier config for this session
+    let normalizedConfig = hasSessionConfig ? this._configsBySession.get(sessionKey) : { ...baseConfig };
+    if (!this._configsBySession.has(sessionKey) && normalizedConfig) {
+      this._configsBySession.set(sessionKey, normalizedConfig);
+    }
 
     // Update session-specific config if provided (e.g., debugDate changes)
     if (payload.debugDate !== undefined) {
       normalizedConfig = { ...normalizedConfig, debugDate: payload.debugDate };
       this._configsBySession.set(sessionKey, normalizedConfig);
-      this._configsByIdentifier.set(identifier, normalizedConfig);
       if (payload.debugDate) {
-        this._persistedDebugDate = payload.debugDate;
-        this._mmLog('debug', null, `[FETCH_DATA] Updated debugDate="${payload.debugDate}"`);
+        this._mmLog('debug', null, `[FETCH_DATA] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
       }
     }
 
@@ -1736,7 +1732,7 @@ module.exports = NodeHelper.create({
     // Calculate base date (with optional debugDate support)
     const baseNow = function () {
       try {
-        const dbg = (typeof config?.debugDate === 'string' && this.config.debugDate) || null;
+        const dbg = (typeof config?.debugDate === 'string' && config.debugDate) || null;
         if (dbg) {
           const s = String(dbg).trim();
           if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');

@@ -379,11 +379,7 @@ Module.register('MMM-Webuntis', {
       }
     });
 
-    // Always include the persisted debugDate if it was configured, to ensure it persists
-    // across multiple FETCH_DATA requests. This allows time-based testing to work correctly.
-    if (this._persistedDebugDate) {
-      defNoStudents.debugDate = this._persistedDebugDate;
-    }
+    // NOTE: debugDate is never persisted - always use config.debugDate as-is (or null)
 
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
 
@@ -407,11 +403,6 @@ Module.register('MMM-Webuntis', {
       id: this.identifier,
       sessionId: this._sessionId, // Include session ID for config isolation
     };
-
-    // Ensure debugDate persists in the send config
-    if (this._persistedDebugDate) {
-      sendConfig.debugDate = this._persistedDebugDate;
-    }
 
     // Note: legacy config normalization is performed server-side in node_helper.js.
     // Keep client-side bundle minimal and rely on backend normalization for compatibility.
@@ -618,23 +609,21 @@ Module.register('MMM-Webuntis', {
 
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
-    // Store debugDate separately so it persists across fetch cycles.
-    this._persistedDebugDate = null;
+    // NOTE: debugDate is never persisted across fetch cycles - always read from config
     if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
       const s = String(this.config.debugDate).trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         const d = new Date(s + 'T00:00:00');
         this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-        this._persistedDebugDate = s;
-        this._log('debug', `[start] Set _persistedDebugDate="${s}"`);
+        this._log('debug', `[start] debugDate="${s}" (frozen test mode)`);
       } else if (/^\d{8}$/.test(s)) {
         const by = parseInt(s.substring(0, 4), 10);
         const bm = parseInt(s.substring(4, 6), 10) - 1;
         const bd = parseInt(s.substring(6, 8), 10);
         const d = new Date(by, bm, bd);
         this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-        this._persistedDebugDate = `${String(by).padStart(4, '0')}-${String(bm + 1).padStart(2, '0')}-${String(bd).padStart(2, '0')}`;
-        this._log('debug', `[start] Set _persistedDebugDate="${this._persistedDebugDate}"`);
+        const normalizedDate = `${String(by).padStart(4, '0')}-${String(bm + 1).padStart(2, '0')}-${String(bd).padStart(2, '0')}`;
+        this._log('debug', `[start] debugDate="${normalizedDate}" (frozen test mode)`);
       }
     }
     if (!this._currentTodayYmd) {
@@ -720,8 +709,21 @@ Module.register('MMM-Webuntis', {
   },
 
   resume() {
-    this._log('debug', '[resume] Module resumed');
+    this._log('debug', `[resume] Module resumed, _currentTodayYmd=${this._currentTodayYmd}, config.debugDate=${this.config?.debugDate}`);
     this._paused = false;
+
+    // If the module was suspended across midnight, reset the cached day so filtering uses the current date
+    // Only reset if debugDate is not configured (i.e., using real time, not frozen test date)
+    if (!this.config?.debugDate) {
+      const now = new Date();
+      const realTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+      if (this._currentTodayYmd !== realTodayYmd) {
+        this._log('debug', `[resume] Detected day change while suspended (${this._currentTodayYmd || 'unset'} -> ${realTodayYmd})`);
+        this._currentTodayYmd = realTodayYmd;
+      }
+    } else {
+      this._log('debug', `[resume] debugDate is configured, NOT resetting _currentTodayYmd`);
+    }
 
     // Store timestamp to detect if data arrives within reasonable time
     const resumeTimestamp = Date.now();
@@ -1055,10 +1057,20 @@ Module.register('MMM-Webuntis', {
 
     this.configByStudent[title] = cfg;
 
-    // Update persisted debugDate if it's included in the response, to handle any backend changes
+    // IMPORTANT: Update _currentTodayYmd BEFORE filtering timetable, so the filter uses the correct date
+    // debugDate comes from backend response (session-specific, set during INIT_MODULE)
+    this._log('debug', `[GOT_DATA] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
     if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
-      this._persistedDebugDate = cfg.debugDate;
-      this._log('debug', `[GOT_DATA] Updated _persistedDebugDate="${cfg.debugDate}"`);
+      this._log('debug', `[GOT_DATA] Using debugDate="${cfg.debugDate}" from backend`);
+      // Keep _currentTodayYmd aligned with the active debugDate so filtering and grid base date stay in sync after resume
+      const dbg = String(cfg.debugDate).trim();
+      const dbgNum = Number(dbg.replace(/-/g, ''));
+      if (Number.isFinite(dbgNum) && dbgNum > 0) {
+        this._currentTodayYmd = dbgNum;
+        this._log('debug', `[GOT_DATA] Updated _currentTodayYmd=${dbgNum} (before timetable filtering)`);
+      }
+    } else {
+      this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
 
     // Collect module-level warnings (deduped) and log newly seen ones to console
@@ -1097,6 +1109,10 @@ Module.register('MMM-Webuntis', {
 
     const timetableRange = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
     this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
+    this._log(
+      'debug',
+      `[GOT_DATA] Timetable filtered: ${payload.timetableRange?.length || 0} total -> ${this.timetableByStudent[title]?.length || 0} after filter`
+    );
 
     const groupedRaw = {};
     (this.timetableByStudent[title] || []).forEach((el) => {
