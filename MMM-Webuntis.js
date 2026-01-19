@@ -607,6 +607,10 @@ Module.register('MMM-Webuntis', {
       this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (newly generated)`);
     }
 
+    // Track when data was last received to optimize resume() behavior
+    // (prevents unnecessary API calls during rapid carousel page switches)
+    this._lastDataReceivedAt = null;
+
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
     // NOTE: debugDate is never persisted across fetch cycles - always read from config
@@ -745,6 +749,25 @@ Module.register('MMM-Webuntis', {
       this._log('debug', '[resume] Skipping resume fetch - backend auto-triggered fetch recently');
       this._startNowLineUpdater();
       return;
+    }
+
+    // Optimization: Skip fetch if data is fresh enough (within updateInterval)
+    // This prevents unnecessary API calls during rapid carousel page switches
+    if (this._lastDataReceivedAt) {
+      const dataAge = Date.now() - this._lastDataReceivedAt;
+      const interval = this.config?.updateInterval || 5 * 60 * 1000; // Default: 5 minutes
+      if (dataAge < interval) {
+        this._log(
+          'debug',
+          `[resume] Skipping fetch - data is fresh (age=${Math.round(dataAge / 1000)}s < interval=${Math.round(interval / 1000)}s)`
+        );
+        this._startNowLineUpdater();
+        return;
+      }
+      this._log(
+        'debug',
+        `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s >= interval=${Math.round(interval / 1000)}s), fetching...`
+      );
     }
 
     // Immediately try to fetch data
@@ -1045,6 +1068,9 @@ Module.register('MMM-Webuntis', {
     const cfg = payload.config || {};
 
     this._log('debug', `[GOT_DATA] Received for student=${title}, sessionId=${payload?.sessionId}`);
+
+    // Track when data was last received for resume freshness check
+    this._lastDataReceivedAt = Date.now();
 
     // Cancel resume fallback timer since we received data
     if (this._resumeFallbackTimer) {
