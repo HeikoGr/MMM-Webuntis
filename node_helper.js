@@ -1211,6 +1211,11 @@ module.exports = NodeHelper.create({
         }
         // Send error payload to frontend with warnings
         for (const student of students) {
+          this._mmLog(
+            'debug',
+            null,
+            `[sendSocketNotification] GOT_DATA (error) for ${identifier}, sessionId=${sessionKey.split(':')[1]}, student=${student.title}`
+          );
           this.sendSocketNotification('GOT_DATA', {
             title: student.title,
             id: identifier,
@@ -1296,6 +1301,11 @@ module.exports = NodeHelper.create({
         // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
         payload.id = identifier;
         payload.sessionId = sessionKey.split(':')[1]; // Extract sessionId from "identifier:sessionId"
+        this._mmLog(
+          'debug',
+          null,
+          `[sendSocketNotification] GOT_DATA for ${identifier}, sessionId=${payload.sessionId}, student=${payload.title}`
+        );
         this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
@@ -1324,12 +1334,17 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
+    const sessionId = payload?.sessionId || 'unknown';
+    const identifier = payload?.id || 'default';
+
     if (notification === 'INIT_MODULE') {
+      this._mmLog('debug', null, `[socketNotificationReceived] INIT_MODULE for ${identifier}, sessionId=${sessionId}`);
       await this._handleInitModule(payload);
       return;
     }
 
     if (notification === 'FETCH_DATA') {
+      this._mmLog('debug', null, `[socketNotificationReceived] FETCH_DATA for ${identifier}, sessionId=${sessionId}`);
       await this._handleFetchData(payload);
       return;
     }
@@ -1388,6 +1403,7 @@ module.exports = NodeHelper.create({
         this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
         this.sendSocketNotification('INIT_ERROR', {
           id: identifier,
+          sessionId: payload.sessionId,
           errors,
           warnings: combinedWarnings,
           severity: 'ERROR',
@@ -1411,19 +1427,31 @@ module.exports = NodeHelper.create({
       this._studentsDiscovered = this._studentsDiscovered || {};
       this._studentsDiscovered[identifier] = true;
 
-      this._mmLog('debug', null, `[INIT_MODULE] Module ${identifier} initialized successfully`);
+      this._mmLog('debug', null, `[INIT_MODULE] Module ${identifier} initialized successfully, sessionId=${payload.sessionId}`);
 
       // Send success notification to frontend
+      this._mmLog('debug', null, `[sendSocketNotification] MODULE_INITIALIZED for ${identifier}, sessionId=${payload.sessionId}`);
       this.sendSocketNotification('MODULE_INITIALIZED', {
         id: identifier,
+        sessionId: payload.sessionId,
         config: normalizedConfig,
         warnings: combinedWarnings,
         students: normalizedConfig.students || [],
+      });
+
+      // Automatically trigger initial data fetch after successful initialization
+      // This eliminates the need for frontend to send FETCH_DATA immediately after MODULE_INITIALIZED
+      this._mmLog('debug', null, `[INIT_MODULE] Auto-triggering initial data fetch for ${identifier}, sessionId=${payload.sessionId}`);
+      await this._handleFetchData({
+        id: identifier,
+        sessionId: payload.sessionId,
+        ...normalizedConfig,
       });
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
       this.sendSocketNotification('INIT_ERROR', {
         id: identifier || 'unknown',
+        sessionId: payload?.sessionId,
         errors: [error.message || 'Unknown initialization error'],
         warnings: [],
         severity: 'ERROR',
@@ -1447,6 +1475,17 @@ module.exports = NodeHelper.create({
     const identifier = payload.id || 'default';
     const sessionId = payload.sessionId || 'unknown';
     const sessionKey = `${identifier}:${sessionId}`;
+
+    // Track FETCH_DATA requests to debug duplicate calls
+    const fetchTimestamp = Date.now();
+    const lastFetch = this._lastFetchTimestamp || 0;
+    const timeSinceLastFetch = fetchTimestamp - lastFetch;
+    this._mmLog(
+      'debug',
+      null,
+      `[FETCH_DATA] Received for ${identifier}, sessionId=${sessionId} (${timeSinceLastFetch}ms since last fetch)`
+    );
+    this._lastFetchTimestamp = fetchTimestamp;
 
     // Verify module is initialized
     if (!this._configsByIdentifier.has(identifier)) {
@@ -1653,6 +1692,16 @@ module.exports = NodeHelper.create({
     const appData = authSession.appData;
     const authService = config._authService;
     const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData);
+
+    // DEBUG: Log restTargets to understand why they might be empty
+    this._mmLog(
+      'debug',
+      student,
+      `Built ${restTargets ? restTargets.length : 0} REST targets (school=${school}, server=${server}, personId=${ownPersonId})`
+    );
+    if (!restTargets || restTargets.length === 0) {
+      this._mmLog('warn', student, `No REST targets built - cannot fetch data! Check authentication and credentials.`);
+    }
 
     const describeTarget = (t) => {
       if (t.mode === 'qr') {

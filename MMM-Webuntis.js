@@ -588,6 +588,10 @@ Module.register('MMM-Webuntis', {
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
     this.absencesUnavailableByStudent = {};
+
+    // Track if module has been resumed at least once (MagicMirror calls resume() on all modules at startup)
+    // We want to skip the initial resume() call to avoid duplicate FETCH_DATA with post-init
+    this._hasBeenResumedOnce = false;
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.holidayMapByStudent = {};
@@ -699,6 +703,7 @@ Module.register('MMM-Webuntis', {
   },
 
   suspend() {
+    this._log('debug', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
@@ -721,6 +726,24 @@ Module.register('MMM-Webuntis', {
     // Store timestamp to detect if data arrives within reasonable time
     const resumeTimestamp = Date.now();
     this._lastResumeTime = resumeTimestamp;
+
+    // Skip initial resume() call (MagicMirror calls resume on all modules at startup)
+    // Only fetch on resume if module was actually suspended before (e.g., by MMM-Carousel)
+    if (!this._hasBeenResumedOnce) {
+      this._hasBeenResumedOnce = true;
+      this._log('debug', '[resume] Skipping initial resume() - post-init will trigger fetch and timer');
+      this._startNowLineUpdater();
+      // Note: Timer is already started by MODULE_INITIALIZED handler
+      return;
+    }
+
+    // Also skip resume fetch if module was just initialized (backend auto-triggers fetch)
+    // This prevents duplicate FETCH_DATA immediately after initialization
+    if (this._initialized && Date.now() - this._initializedAt < 5000) {
+      this._log('debug', '[resume] Skipping resume fetch - backend auto-triggered fetch recently');
+      this._startNowLineUpdater();
+      return;
+    }
 
     // Immediately try to fetch data
     this._sendFetchData('resume');
@@ -947,18 +970,20 @@ Module.register('MMM-Webuntis', {
 
     // Handle initialization response
     if (notification === 'MODULE_INITIALIZED') {
-      this._log('info', 'Module initialized successfully');
-      this._initialized = true;
+      // Prevent duplicate initialization (backend might send MODULE_INITIALIZED twice due to race conditions)
+      if (this._initialized) {
+        this._log('debug', `[MODULE_INITIALIZED] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
+        return;
+      }
 
-      // Execute pending resume request if module was resumed before initialization completed
+      this._log('info', `Module initialized successfully, sessionId=${payload?.sessionId}`);
+      this._initialized = true;
+      this._initializedAt = Date.now(); // Track initialization time for resume() logic
+
+      // Clear pending resume request (backend auto-triggers initial fetch, no need for frontend to send FETCH_DATA)
       if (this._pendingResumeRequest) {
+        this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
         this._pendingResumeRequest = false;
-        // Small delay to ensure initialization is fully complete
-        setTimeout(() => {
-          if (!this._paused) {
-            this._sendFetchData('resume-after-init');
-          }
-        }, 100);
       }
 
       // Process initialization warnings if present
@@ -972,15 +997,17 @@ Module.register('MMM-Webuntis', {
         });
       }
 
-      // Start periodic fetching after successful initialization
-      this._sendFetchData('post-init');
+      // Start periodic fetching timer
+      // Note: Backend automatically triggers initial data fetch after MODULE_INITIALIZED,
+      // so no need to send FETCH_DATA here (eliminates 1 roundtrip)
+      this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
       this._startFetchTimer();
       return;
     }
 
     // Handle initialization errors
     if (notification === 'INIT_ERROR') {
-      this._log('error', 'Module initialization failed:', payload.message || 'Unknown error');
+      this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
       if (Array.isArray(payload.errors)) {
         payload.errors.forEach((err) => this._log('error', `  - ${err}`));
       }
@@ -1014,6 +1041,8 @@ Module.register('MMM-Webuntis', {
 
     const title = payload.title;
     const cfg = payload.config || {};
+
+    this._log('debug', `[GOT_DATA] Received for student=${title}, sessionId=${payload?.sessionId}`);
 
     // Cancel resume fallback timer since we received data
     if (this._resumeFallbackTimer) {
