@@ -311,7 +311,7 @@ If you're uncertain whether something is an issue, don't comment. False positive
 - **Install (once):**
   - `npm install --save-dev playwright`
 - **Run capture script:**
-  - `npm run capture:console`
+  - `node --run capture:console`
 - **Output:** `debug_dumps/magicmirror_playwright.png` and `debug_dumps/magicmirror_console_logs.json`
 
 This script runs a headless Chromium session, navigates to `http://localhost:8080`, waits for network idle, captures console messages and a screenshot, and writes results to `debug_dumps/`.
