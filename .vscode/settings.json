@@ -9,9 +9,7 @@
   "editor.tabSize": 2,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "files.exclude": {
-    "**/node_modules": true,
-    "**/debug_dumps": true,
-    "**/coverage": true
+    "**/node_modules": true
   },
   "search.exclude": {
     "**/debug_dumps": true,
@@ -19,8 +17,6 @@
   },
   "files.watcherExclude": {
     "**/node_modules": true,
-    "**/debug_dumps": true,
-    "**/coverage": true,
     "**/.git": true
   },
   "debug.console.fontSize": 13,
