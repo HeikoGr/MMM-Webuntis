@@ -52,7 +52,7 @@ Module.register('MMM-Webuntis', {
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
     // password: 'your password', // WebUntis password (leave empty if using studentId/qrcode)
-    // school: 'your school',     // WebUntis school name (most likley subdomain)
+    // school: 'your school',     // WebUntis school name (most likely subdomain)
     // server: 'schoolserver.webuntis.com',  // WebUntis server URL (usually subdomain.webuntis.com)
 
     // === STUDENTS ===

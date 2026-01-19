@@ -5,7 +5,7 @@ import pluginN from 'eslint-plugin-n';
 
 export default defineConfig([
   {
-    ignores: ['**/node_modules/**', '**/*.png', '**/*.md'],
+    ignores: ['**/node_modules/**', '**/*.png', '**/*.md', '**/.mm-module-checker/**'],
   },
   js.configs.recommended,
   {
@@ -95,17 +95,6 @@ export default defineConfig([
       sourceType: 'module',
       globals: {
         ...globals.node,
-      },
-    },
-  },
-  {
-    files: ['tests/**/*.js'],
-    languageOptions: {
-      ecmaVersion: 2021,
-      sourceType: 'commonjs',
-      globals: {
-        ...globals.node,
-        ...globals.jest,
       },
     },
   },
