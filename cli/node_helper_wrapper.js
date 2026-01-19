@@ -50,9 +50,9 @@ function getCallerInfo() {
     if (match) {
       const filePath = match[1];
       const lineNum = match[2];
-      // Return shortened path (e.g., "lib/authService.js:123" instead of full path)
-      const shortPath = filePath.split('/').slice(-2).join('/');
-      return `${shortPath}:${lineNum}`;
+      // Return filename only for brevity (e.g., "node_helper.js:123")
+      const fileName = filePath.split('/').pop();
+      return `${fileName}:${lineNum}`;
     }
   }
   return null;
@@ -87,8 +87,18 @@ function setLogLevel() {
   // Keep function for API compatibility
 }
 
+// ============================================================================
+// Load real node_helper with mocked dependencies
+// ============================================================================
+
 const NodeHelper = {
-  create: (moduleImpl) => moduleImpl,
+  create: (moduleImpl) => ({
+    ...moduleImpl,
+    sendSocketNotification: (name, payload) => {
+      // Stub: in CLI we don't have a frontend; just log
+      Log.debug(`[sendSocketNotification] ${name} for ${payload?.id || 'unknown'}`);
+    },
+  }),
 };
 
 function loadNodeHelper() {
@@ -101,96 +111,25 @@ function loadNodeHelper() {
     return originalRequire.apply(this, arguments);
   };
 
-  try {
-    const nodeHelperPath = path.join(__dirname, '..', 'node_helper.js');
-    delete require.cache[require.resolve(nodeHelperPath)];
-    const helperModule = require(nodeHelperPath);
-    Module.prototype.require = originalRequire;
-    return helperModule;
-  } catch (err) {
-    Module.prototype.require = originalRequire;
-    throw err;
-  }
-}
+  const nodeHelper = require('../node_helper.js');
 
-let nodeHelper;
-try {
-  nodeHelper = loadNodeHelper();
-  if (nodeHelper.start) {
+  // Restore original require
+  Module.prototype.require = originalRequire;
+  // Initialize node helper lifecycle
+  if (typeof nodeHelper.start === 'function') {
     nodeHelper.start();
   }
-  // Mock sendSocketNotification for wrapper mode
-  if (!nodeHelper.sendSocketNotification) {
-    nodeHelper.sendSocketNotification = () => {};
-  }
-} catch (err) {
-  console.error('Failed to load node_helper.js:', err.message);
-  if (process.argv.includes('--verbose')) {
-    console.error(err.stack);
-  }
-  process.exit(1);
+  return nodeHelper;
 }
 
+const nodeHelper = loadNodeHelper();
+
 // ============================================================================
-// CLI Utilities
+// Arg parsing & config loading helpers
 // ============================================================================
 
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const result = { command: null, flags: {} };
-
-  let startIdx = 0;
-
-  // Check if first arg is a command (doesn't start with -)
-  if (args.length > 0 && !args[0].startsWith('-')) {
-    result.command = args[0];
-    startIdx = 1;
-  }
-
-  // Parse flags starting from startIdx
-  for (let i = startIdx; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const nextArg = args[i + 1];
-      if (nextArg && !nextArg.startsWith('--') && !nextArg.startsWith('-')) {
-        result.flags[key] = nextArg;
-        i++;
-      } else {
-        result.flags[key] = true;
-      }
-    } else if (arg.startsWith('-') && arg !== '-') {
-      // Handle short flags like -v, -d, -s, -c, -a, -h
-      const shortFlags = arg.slice(1);
-      for (let j = 0; j < shortFlags.length; j++) {
-        const char = shortFlags[j];
-        if (char === 'c' || char === 's' || char === 'a') {
-          // These flags take values
-          const nextArg = args[i + 1];
-          if (nextArg && !nextArg.startsWith('-')) {
-            result.flags[char] = nextArg;
-            i++;
-          }
-        } else if (char === 'h') {
-          // Help flag
-          result.command = 'help';
-        } else {
-          // Boolean flags: v, d, x
-          result.flags[char] = true;
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
- * Load configuration from config.js
- */
 function loadConfig(configPath) {
   if (!configPath) {
-    // Try common locations
     const candidates = ['./config/config.js', '../config/config.js', '../../config/config.js'];
     for (const candidate of candidates) {
       const abs = path.resolve(candidate);
@@ -206,13 +145,11 @@ function loadConfig(configPath) {
   }
 
   const abs = path.isAbsolute(configPath) ? configPath : path.resolve(configPath);
-
   if (!fs.existsSync(abs)) {
     throw new Error(`Config file not found: ${abs}`);
   }
 
   delete require.cache[require.resolve(abs)];
-
   const config = require(abs);
   if (!config || typeof config !== 'object') {
     throw new Error(`Config did not export an object: ${abs}`);
@@ -221,187 +158,12 @@ function loadConfig(configPath) {
   return { config, filePath: abs };
 }
 
-/**
- * Get MMM-Webuntis module config
- */
-function getModuleConfig(config) {
-  const moduleConfig = config.modules?.find((m) => m.module === 'MMM-Webuntis')?.config;
-  if (!moduleConfig) {
+function getAllWebuntisModules(config) {
+  const modules = config.modules?.filter((m) => m.module === 'MMM-Webuntis') || [];
+  if (modules.length === 0) {
     throw new Error('MMM-Webuntis module configuration not found in config file');
   }
-  return moduleConfig;
-}
-
-/**
- * Fetch data for a single student
- * Now accepts mergedConfig directly to avoid file-based lookup
- */
-async function fetchStudentData(mergedConfig, studentIndex, action, shouldDump, verbose) {
-  const students = mergedConfig.students || [];
-
-  if (studentIndex < 0 || studentIndex >= students.length) {
-    throw new Error(`Student index ${studentIndex} out of range (0-${students.length - 1})`);
-  }
-
-  const student = students[studentIndex];
-  const qrcode = student.qrcode;
-  const school = student.school || mergedConfig.school;
-  const title = student.title || `Student ${studentIndex}`;
-
-  Log.wrapper_info(`\n📚 Student ${studentIndex}: "${title}"`);
-  Log.wrapper_info(`  School: ${school}`);
-  Log.wrapper_info(`  Mode: ${qrcode ? 'qrcode' : 'username/password'}`);
-
-  try {
-    const authSession = await nodeHelper._createAuthSession(student, mergedConfig);
-    const credKey = nodeHelper._getCredentialKey(student, mergedConfig);
-
-    // Ensure authService is initialized for this config
-    if (!mergedConfig._authService) {
-      mergedConfig._authService = nodeHelper._getAuthServiceForIdentifier('cli-wrapper');
-    }
-
-    // Resolve actual studentId using buildRestTargets (matches fetchData behavior)
-    const appData = authSession.appData;
-    const restTargets = mergedConfig._authService.buildRestTargets(
-      student,
-      mergedConfig,
-      authSession.school,
-      authSession.server,
-      authSession.personId,
-      authSession.token,
-      appData
-    );
-
-    // Display personId vs studentId distinction
-    if (authSession.personId) {
-      Log.wrapper_info(`  👤 Login PersonId: ${authSession.personId}`);
-    }
-
-    // Show resolved studentId from buildRestTargets
-    const resolvedStudentId = restTargets.length > 0 ? restTargets[0].studentId : null;
-
-    // Check if studentId was manually configured in original config or auto-discovered
-    const wasAutoDiscovered = mergedConfig._autoStudentsAssigned === true;
-    const configuredStudentId = student.studentId;
-
-    if (resolvedStudentId) {
-      if (resolvedStudentId === authSession.personId) {
-        Log.wrapper_info(`  📊 Timetable StudentId: ${resolvedStudentId} (same as personId - direct student login)`);
-      } else {
-        Log.wrapper_info(`  📊 Timetable StudentId: ${resolvedStudentId} (child account - parent login)`);
-      }
-
-      // Show source of studentId
-      if (configuredStudentId && wasAutoDiscovered) {
-        Log.wrapper_info(`  🔍 Source: Auto-discovered from parent account (${student.title || 'unnamed'})`);
-      } else if (configuredStudentId && !wasAutoDiscovered) {
-        Log.wrapper_info(`  ⚙️  Source: Manual studentId in config (overrides auto-discovery)`);
-      }
-    } else {
-      Log.wrapper_info(`  ⚠️  No valid studentId resolved (check config)`);
-    }
-
-    // Enable dumping if requested
-    if (shouldDump) {
-      mergedConfig.dumpBackendPayloads = true;
-    }
-
-    // Override displayMode based on action to fetch only requested data
-    const originalDisplayMode = mergedConfig.displayMode;
-    const originalStudentDisplayMode = student.displayMode;
-
-    if (action && action !== 'all' && action !== 'auth') {
-      // Action corresponds to widget name(s)
-      const limitedDisplayMode = action;
-      mergedConfig.displayMode = limitedDisplayMode;
-      student.displayMode = limitedDisplayMode;
-
-      if (verbose) {
-        Log.wrapper_info(`  🎯 Limiting fetch to widget(s): ${limitedDisplayMode}`);
-      }
-    }
-
-    // Extract holidays once (matches processGroup behavior)
-    const wantsGridWidget = nodeHelper._wantsWidget('grid', mergedConfig?.displayMode);
-    const wantsLessonsWidget = nodeHelper._wantsWidget('lessons', mergedConfig?.displayMode);
-    const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
-    const compactHolidays = nodeHelper._extractAndCompactHolidays(authSession, shouldFetchHolidays);
-
-    const payload = await nodeHelper.fetchData(authSession, { ...student }, 'wrapper-fetch', credKey, compactHolidays, mergedConfig);
-
-    // Restore original displayMode
-    mergedConfig.displayMode = originalDisplayMode;
-    student.displayMode = originalStudentDisplayMode;
-
-    const results = {
-      timetable: payload?.timetableRange?.length || 0,
-      exams: payload?.exams?.length || 0,
-      homework: payload?.homeworks?.length || 0,
-      absences: payload?.absences?.length || 0,
-      messagesofday: payload?.messagesOfDay?.length || 0,
-    };
-
-    if (action === 'auth') {
-      Log.wrapper_info('  ✓ Auth: login ok');
-    } else if (action === 'all') {
-      Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
-      Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
-      Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
-      Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
-      Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
-
-      // Show messages of day content if present
-      if (payload?.messagesOfDay?.length > 0) {
-        Log.wrapper_info('\n  📢 Messages of Day:');
-        payload.messagesOfDay.forEach((msg, idx) => {
-          const subject = msg.subject ? `[${msg.subject}]` : '';
-          const text = (msg.text || '').trim();
-
-          // Text comes pre-sanitized from backend with \n from <br> tags
-          const lines = text.split('\n').filter((l) => l.trim());
-
-          if (lines.length > 0) {
-            const title = subject || `Message ${idx + 1}`;
-            Log.wrapper_info(`     ${title}`);
-            lines.forEach((line) => {
-              Log.wrapper_info(`       ${line.trim()}`);
-            });
-          }
-        });
-      }
-    } else {
-      // Map widget action to result key
-      const widgetToResult = {
-        lessons: 'timetable',
-        grid: 'timetable',
-        exams: 'exams',
-        homework: 'homework',
-        absences: 'absences',
-        messagesofday: 'messagesofday',
-      };
-      const resultKey = widgetToResult[action] || action;
-      const count = results[resultKey] || 0;
-      Log.wrapper_info(`  ✓ ${action.charAt(0).toUpperCase() + action.slice(1)}: ${count}`);
-    }
-
-    if (shouldDump) {
-      try {
-        const dumpsDir = path.join(__dirname, '..', 'debug_dumps');
-        const files = fs.readdirSync(dumpsDir).sort().reverse();
-        const recentDumps = files.filter((f) => f.includes(title) || f.includes(String(Date.now()).slice(0, 7))).slice(0, 1);
-        if (recentDumps.length > 0) {
-          Log.wrapper_info(`  📄 Dump: debug_dumps/${recentDumps[0]}`);
-        }
-      } catch {
-        // ignore if can't find dumps dir
-      }
-    }
-  } catch (err) {
-    Log.error(`  ✗ Student ${studentIndex} fetch failed: ${err.message}`);
-    if (verbose) console.error(err.stack);
-    throw err;
-  }
+  return modules;
 }
 
 async function cmdFetch(flags) {
@@ -409,7 +171,7 @@ async function cmdFetch(flags) {
   const studentIndexFlag = flags.student || flags.s;
   const action = flags.action || flags.a || 'all';
   const verbose = flags.verbose || flags.v;
-  const shouldDump = flags.dump || flags.d;
+  // CLI summarizes from debug dumps; no separate dump flag used
   const debugApi = flags['debug-api'] || flags.x;
   const allStudents = flags.all || flags.a_all; // Special flag to iterate all students
 
@@ -426,79 +188,198 @@ async function cmdFetch(flags) {
     const { config, filePath } = loadConfig(configPath);
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
-    // Simulate INIT_MODULE: load and validate config (same as browser init)
-    const cliIdentifier = 'cli-wrapper';
-    const cliSessionId = 'cli-session';
-    const initPayload = {
-      ...getModuleConfig(config),
-      id: cliIdentifier,
-      sessionId: cliSessionId,
-      debugApi: debugApi,
-    };
+    // Get all MMM-Webuntis modules (enabled and disabled)
+    const webuntisModules = getAllWebuntisModules(config);
+    Log.wrapper_info(`\n📋 Found ${webuntisModules.length} MMM-Webuntis module(s) in config`);
 
-    // Call _handleInitModule to set up config properly (like browser does)
-    // This validates config, discovers students, sets up AuthService
-    await nodeHelper._handleInitModule(initPayload);
-
-    // After init, get the initialized config from storage
-    const sessionKey = `${cliIdentifier}:${cliSessionId}`;
-    if (!nodeHelper._configsByIdentifier.has(cliIdentifier)) {
-      throw new Error('Config initialization failed - no config stored after _handleInitModule');
-    }
-
-    const moduleConfig = nodeHelper._configsByIdentifier.get(cliIdentifier);
-
-    // Apply widget namespace defaults and per-student config merging
-    // (This is needed for CLI specifically to handle older config formats)
-    const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-    if (Array.isArray(moduleConfig.students)) {
-      moduleConfig.students.forEach((stu) => {
-        // Copy widget namespace configs from module to student if not already set
-        widgetNamespaces.forEach((widget) => {
-          if (!stu[widget] && moduleConfig[widget]) {
-            stu[widget] = { ...moduleConfig[widget] };
-          }
-        });
-      });
-    }
-
-    // Decide which students to iterate
-    let studentIndices = [];
-    if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== '') {
-      // Specific student requested
-      const idx = parseInt(studentIndexFlag, 10);
-      studentIndices = [idx];
-    } else if (allStudents) {
-      // All students explicitly requested
-      studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
-    } else {
-      // Default: all students
-      studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
-    }
-
-    Log.wrapper_info(`\n📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
-    Log.wrapper_info(`Testing student(s): [${studentIndices.join(', ')}]`);
-
-    // Execute fetch directly (skip coalescing timer since CLI doesn't need it)
-    // This simulates what _executeFetchForSession does, but synchronously
-    await nodeHelper._executeFetchForSession(sessionKey);
-
-    // Fetch data for each selected student
+    // Process each module (skip disabled ones)
     let successCount = 0;
     let failureCount = 0;
+    let disabledCount = 0;
 
-    for (const idx of studentIndices) {
+    for (let moduleIdx = 0; moduleIdx < webuntisModules.length; moduleIdx++) {
+      const moduleEntry = webuntisModules[moduleIdx];
+      const header = moduleEntry.header || `Module ${moduleIdx}`;
+
+      // Check if module is disabled
+      if (moduleEntry.disabled === true) {
+        Log.wrapper_info(`\n⊘ [${header}] - DISABLED (skipped)`);
+        disabledCount++;
+        continue;
+      }
+
+      Log.wrapper_info(`\n📍 [${header}] Processing...`);
+
       try {
-        await fetchStudentData(moduleConfig, idx, action, shouldDump, verbose);
-        successCount++;
-      } catch {
+        // Simulate INIT_MODULE: load and validate config (same as browser init)
+        const cliIdentifier = `cli-wrapper-${moduleIdx}`;
+        const cliSessionId = `cli-session-${moduleIdx}`;
+        const initPayload = {
+          ...moduleEntry.config,
+          id: cliIdentifier,
+          sessionId: cliSessionId,
+          debugApi: debugApi,
+        };
+
+        // Call _handleInitModule to set up config properly (like browser does)
+        // This validates config, discovers students, sets up AuthService
+        await nodeHelper._handleInitModule(initPayload);
+
+        if (!nodeHelper._configsByIdentifier.has(cliIdentifier)) {
+          throw new Error('Config initialization failed - no config stored after _handleInitModule');
+        }
+
+        const moduleConfig = nodeHelper._configsByIdentifier.get(cliIdentifier);
+
+        // Apply widget namespace defaults and per-student config merging
+        // (This is needed for CLI specifically to handle older config formats)
+        const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+        if (Array.isArray(moduleConfig.students)) {
+          moduleConfig.students.forEach((stu) => {
+            // Copy widget namespace configs from module to student if not already set
+            widgetNamespaces.forEach((widget) => {
+              if (!stu[widget] && moduleConfig[widget]) {
+                stu[widget] = { ...moduleConfig[widget] };
+              }
+            });
+          });
+        }
+
+        // Decide which students to iterate
+        let studentIndices = [];
+        if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== '') {
+          // Specific student requested
+          const idx = parseInt(studentIndexFlag, 10);
+          studentIndices = [idx];
+        } else if (allStudents) {
+          // All students explicitly requested
+          studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
+        } else {
+          // Default: all students
+          studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
+        }
+
+        Log.wrapper_info(`  📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
+        Log.wrapper_info(`  Testing student(s): [${studentIndices.join(', ')}]`);
+
+        // Clean up old dumps to avoid clutter (keep only latest 3 per student)
+        const dumpsDir = path.join(__dirname, '..', 'debug_dumps');
+        if (fs.existsSync(dumpsDir)) {
+          const allFiles = fs.readdirSync(dumpsDir).filter((f) => f.endsWith('_api.json'));
+          const filesByStudent = new Map();
+
+          // Group files by student name
+          allFiles.forEach((f) => {
+            const match = f.match(/^\d+_(.+)_api\.json$/);
+            if (match) {
+              const studentName = match[1];
+              if (!filesByStudent.has(studentName)) filesByStudent.set(studentName, []);
+              filesByStudent.get(studentName).push(f);
+            }
+          });
+
+          // Delete old dumps (keep only latest 3 per student)
+          filesByStudent.forEach((files) => {
+            const sorted = files.sort().reverse();
+            const toDelete = sorted.slice(3);
+            toDelete.forEach((f) => {
+              try {
+                fs.unlinkSync(path.join(dumpsDir, f));
+                Log.wrapper_info(`  🗑️  Deleted old dump: ${f}`);
+              } catch (err) {
+                // ignore deletion errors
+              }
+            });
+          });
+        }
+
+        // Summarize results for each selected student based on latest debug dump
+        for (const idx of studentIndices) {
+          try {
+            const stu = moduleConfig.students[idx] || {};
+            const title = stu.title || `Student ${idx}`;
+            // Sanitize title same way as payloadBuilder.js does for dump filenames
+            const safeTitle = title.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+            // Locate latest dump file for this student
+            const files = fs.existsSync(dumpsDir) ? fs.readdirSync(dumpsDir).sort().reverse() : [];
+            const dumpFile = files.find((f) => f.includes(safeTitle) && f.endsWith('_api.json'));
+
+            if (!dumpFile) {
+              Log.warn(`  ⚠️ No debug dump found for ${title}.`);
+              failureCount++;
+              continue;
+            }
+
+            const dumpPath = path.join(dumpsDir, dumpFile);
+            const dumpJson = JSON.parse(fs.readFileSync(dumpPath, 'utf-8'));
+
+            const results = {
+              timetable: Array.isArray(dumpJson?.timetableRange) ? dumpJson.timetableRange.length : 0,
+              exams: Array.isArray(dumpJson?.exams) ? dumpJson.exams.length : 0,
+              homework: Array.isArray(dumpJson?.homeworks) ? dumpJson.homeworks.length : 0,
+              absences: Array.isArray(dumpJson?.absences) ? dumpJson.absences.length : 0,
+              messagesofday: Array.isArray(dumpJson?.messagesOfDay) ? dumpJson.messagesOfDay.length : 0,
+            };
+
+            if (action === 'auth') {
+              Log.wrapper_info('  ✓ Auth: login ok');
+            } else if (action === 'all') {
+              Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
+              Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
+              Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
+              Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
+              Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
+            } else {
+              const widgetToResult = {
+                lessons: 'timetable',
+                grid: 'timetable',
+                exams: 'exams',
+                homework: 'homework',
+                absences: 'absences',
+                messagesofday: 'messagesofday',
+              };
+              // Support comma-separated actions like "lessons,grid"
+              const actions = String(action || '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              const actionsToReport = actions.length ? actions : ['all'];
+
+              for (const act of actionsToReport) {
+                if (act === 'all') {
+                  Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
+                  Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
+                  Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
+                  Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
+                  Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
+                } else {
+                  const key = widgetToResult[act] || act;
+                  const count = results[key] || 0;
+                  Log.wrapper_info(`  ✓ ${act.charAt(0).toUpperCase() + act.slice(1)}: ${count}`);
+                }
+              }
+            }
+
+            // Show dump file
+            Log.wrapper_info(`  📄 Dump: debug_dumps/${dumpFile}`);
+            successCount++;
+          } catch (err) {
+            Log.error(`  ✗ Student ${idx} summary failed: ${err.message}`);
+            if (verbose) console.error(err.stack);
+            failureCount++;
+          }
+        }
+      } catch (err) {
+        Log.error(`  ✗ Module processing failed: ${err.message}`);
+        if (verbose) console.error(err.stack);
         failureCount++;
       }
     }
 
-    Log.wrapper_info(`\n✓ Completed: ${successCount} successful, ${failureCount} failed`);
+    Log.wrapper_info(`\n✓ Summary: ${successCount} successful, ${failureCount} failed, ${disabledCount} disabled (skipped)`);
     if (failureCount > 0) {
-      throw new Error(`${failureCount} student(s) failed`);
+      throw new Error(`${failureCount} module(s) or student(s) failed`);
     }
   } catch (err) {
     Log.error(`✗ Command failed: ${err.message}`);
@@ -569,7 +450,49 @@ EXAMPLES:
 // ============================================================================
 
 async function main() {
-  const { command, flags } = parseArgs(process.argv);
+  // Inline argument parsing
+  const args = process.argv;
+  const flags = {};
+  let command = null;
+  const startIdx = 2;
+
+  for (let i = startIdx; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith('-')) {
+      command = arg;
+      break;
+    }
+  }
+
+  for (let i = startIdx; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--')) {
+      const key = arg.slice(2);
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('--') && !nextArg.startsWith('-')) {
+        flags[key] = nextArg;
+        i++;
+      } else {
+        flags[key] = true;
+      }
+    } else if (arg.startsWith('-') && arg !== '-') {
+      const shortFlags = arg.slice(1);
+      for (let j = 0; j < shortFlags.length; j++) {
+        const char = shortFlags[j];
+        if (char === 'c' || char === 's' || char === 'a') {
+          const nextArg = args[i + 1];
+          if (nextArg && !nextArg.startsWith('-')) {
+            flags[char] = nextArg;
+            i++;
+          }
+        } else if (char === 'h') {
+          command = 'help';
+        } else {
+          flags[char] = true;
+        }
+      }
+    }
+  }
 
   try {
     // Handle help requests
