@@ -2,6 +2,7 @@
 logs
 *.log
 npm-debug.log*
+
 # Dependency directory
 node_modules
 debug_dumps/*
@@ -12,5 +13,6 @@ config/.env
 config/config.js
 config/custom.css
 
-temp/*
-coverage/
+# MagicMirror module checker
+.mm-module-checker/
+magicmirror-check-results.md

@@ -5,7 +5,7 @@
     "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
   "version": "0.6.0",
-  "description": "MagicMirror module to access Webunits school timetables.",
+  "description": "MagicMirror module to access Webuntis school timetables.",
   "main": "MMM-Webuntis.js",
   "keywords": [
     "MagicMirror",
@@ -22,15 +22,9 @@
   "scripts": {
     "lint": "eslint --ext .js && prettier --check .",
     "lint:fix": "eslint --fix && prettier --write .",
-    "test": "node --run lint && jest",
-    "test:unit": "jest",
     "test:spelling": "cspell .",
-    "check": "node cli/node_helper_wrapper.js || true",
     "debug": "node cli/node_helper_wrapper.js",
-    "capture:console": "node scripts/playwright_capture_console.js",
-    "preinstall:check": "node -e \"process.exit(require('fs').existsSync('node_modules') ? 0 : 1)\" && echo 'node_modules exists' || echo 'npm install needed'",
-    "install:check": "npm list --depth=0 2>&1 | grep -q 'missing:' && echo 'Missing dependencies - run: npm install' || echo 'All dependencies installed'",
-    "deps:check": "node scripts/check-deps.js"
+    "check:mm": "node scripts/magicmirror-check.mjs"
   },
   "lint-staged": {
     "*": [
@@ -47,10 +41,12 @@
     "eslint": "^9.39.2",
     "eslint-plugin-n": "^17.23.2",
     "globals": "^17.0.0",
-    "jest": "^30.2.0",
     "lint-staged": "^16.2.7",
-    "playwright": "^1.57.0",
-    "prettier": "^3.8.0"
+    "prettier": "^3.8.0",
+    "simple-git-hooks": "^2.13.1"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx --no-install lint-staged"
   },
   "overrides": {
     "glob": "^10.4.5"
