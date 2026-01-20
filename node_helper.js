@@ -463,6 +463,7 @@ module.exports = NodeHelper.create({
   ) {
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
     let classId = options.classId;
+    const authRefreshTracker = options.authRefreshTracker || null;
 
     // Resolve class ID if needed
     if (wantsClass && !classId) {
@@ -497,7 +498,10 @@ module.exports = NodeHelper.create({
           server,
           options: authOptions,
         }),
-      onAuthError: () => authService.invalidateCache(cacheKey),
+      onAuthError: () => {
+        if (authRefreshTracker) authRefreshTracker.refreshed = true;
+        return authService.invalidateCache(cacheKey);
+      },
       server,
       rangeStart,
       rangeEnd,
@@ -516,6 +520,7 @@ module.exports = NodeHelper.create({
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
+    const authRefreshTracker = options.authRefreshTracker || null;
 
     // Get AuthService from options (set in fetchData)
     const authService = options.authService;
@@ -532,7 +537,10 @@ module.exports = NodeHelper.create({
           server,
           options: authOptions,
         }),
-      onAuthError: () => authService.invalidateCache(cacheKey),
+      onAuthError: () => {
+        if (authRefreshTracker) authRefreshTracker.refreshed = true;
+        return authService.invalidateCache(cacheKey);
+      },
       server,
       rangeStart,
       rangeEnd,
@@ -550,6 +558,7 @@ module.exports = NodeHelper.create({
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
+    const authRefreshTracker = options.authRefreshTracker || null;
 
     // Get AuthService from options (set in fetchData)
     const authService = options.authService;
@@ -566,7 +575,10 @@ module.exports = NodeHelper.create({
           server,
           options: authOptions,
         }),
-      onAuthError: () => authService.invalidateCache(cacheKey),
+      onAuthError: () => {
+        if (authRefreshTracker) authRefreshTracker.refreshed = true;
+        return authService.invalidateCache(cacheKey);
+      },
       server,
       rangeStart,
       rangeEnd,
@@ -581,6 +593,7 @@ module.exports = NodeHelper.create({
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
+    const authRefreshTracker = options.authRefreshTracker || null;
 
     // Get AuthService from options (set in fetchData)
     const authService = options.authService;
@@ -597,7 +610,10 @@ module.exports = NodeHelper.create({
           server,
           options: authOptions,
         }),
-      onAuthError: () => authService.invalidateCache(cacheKey),
+      onAuthError: () => {
+        if (authRefreshTracker) authRefreshTracker.refreshed = true;
+        return authService.invalidateCache(cacheKey);
+      },
       server,
       rangeStart,
       rangeEnd,
@@ -612,6 +628,7 @@ module.exports = NodeHelper.create({
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
+    const authRefreshTracker = options.authRefreshTracker || null;
 
     // Get AuthService from options (set in fetchData)
     const authService = options.authService;
@@ -628,7 +645,10 @@ module.exports = NodeHelper.create({
           server,
           options: authOptions,
         }),
-      onAuthError: () => authService.invalidateCache(cacheKey),
+      onAuthError: () => {
+        if (authRefreshTracker) authRefreshTracker.refreshed = true;
+        return authService.invalidateCache(cacheKey);
+      },
       server,
       date,
       logger: this._mmLog.bind(this),
@@ -1696,7 +1716,8 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', student, typeof msg === 'string' ? msg : JSON.stringify(msg));
     };
 
-    const restOptions = { cacheKey: credKey, authSession };
+    const authRefreshTracker = { refreshed: false };
+    const restOptions = { cacheKey: credKey, authSession, authRefreshTracker };
     if (authSession.qrCodeUrl) {
       restOptions.qrCodeUrl = authSession.qrCodeUrl;
     }
@@ -1787,6 +1808,7 @@ module.exports = NodeHelper.create({
       baseNow,
       restTargets,
       restOptions,
+      authRefreshTracker,
       fetchFlags: {
         fetchTimetable,
         fetchExams,
