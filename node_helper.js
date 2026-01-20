@@ -107,7 +107,7 @@ module.exports = NodeHelper.create({
    */
   _getAuthServiceForIdentifier(identifier) {
     if (!this._authServicesByIdentifier.has(identifier)) {
-      this._mmLog('debug', null, `Creating new AuthService instance for identifier=${identifier}`);
+      // Creating AuthService silently
       this._authServicesByIdentifier.set(identifier, new AuthService({ logger: this._libLogger }));
     }
     return this._authServicesByIdentifier.get(identifier);
@@ -642,17 +642,23 @@ module.exports = NodeHelper.create({
       if (!moduleConfig || typeof moduleConfig !== 'object') return;
 
       const configuredStudentsRaw = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-      // Treat students array as "not configured" when it contains no real credentials
+      // Treat students array as "not configured" when it contains no real credentials OR title
+      // Students with only title (and no credentials) are considered "partially configured"
+      // and will benefit from auto-discovery to fill in missing studentId
       const configuredStudents = configuredStudentsRaw.filter((s) => {
         if (!s || typeof s !== 'object') return false;
         const hasStudentId = s.studentId !== undefined && s.studentId !== null && String(s.studentId).trim() !== '';
         const hasQr = Boolean(s.qrcode);
         const hasCreds = Boolean(s.username && s.password);
-        return hasStudentId || hasQr || hasCreds;
+        const hasTitle = Boolean(s.title && String(s.title).trim() !== '');
+        // Include student if they have ANY of: studentId, qrcode, credentials, or title
+        // Title-only students will get auto-assigned studentId later
+        return hasStudentId || hasQr || hasCreds || hasTitle;
       });
       let autoStudents = null;
 
-      const hasParentCreds = Boolean(moduleConfig.username && moduleConfig.password && moduleConfig.school);
+      // Parent credentials can be either username/password/school OR qrcode (LEGAL_GUARDIAN)
+      const hasParentCreds = Boolean((moduleConfig.username && moduleConfig.password && moduleConfig.school) || moduleConfig.qrcode);
       if (!hasParentCreds) return;
 
       // Only auto-discover if NO students with real credentials are configured at all
@@ -662,14 +668,24 @@ module.exports = NodeHelper.create({
         // try to fetch auto-discovered data to fill in the missing titles
         const server = moduleConfig.server || 'webuntis.com';
         try {
-          const { appData } = await moduleConfig._authService.getAuth({
-            school: moduleConfig.school,
-            username: moduleConfig.username,
-            password: moduleConfig.password,
-            server,
-            options: this._getStandardAuthOptions(),
-          });
-          autoStudents = moduleConfig._authService.deriveStudentsFromAppData(appData);
+          let authResult;
+
+          // Use QR code auth if available (LEGAL_GUARDIAN), otherwise username/password
+          if (moduleConfig.qrcode) {
+            authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
+              cacheKey: `parent-qr:${moduleConfig.qrcode}`,
+            });
+          } else {
+            authResult = await moduleConfig._authService.getAuth({
+              school: moduleConfig.school,
+              username: moduleConfig.username,
+              password: moduleConfig.password,
+              server,
+              options: this._getStandardAuthOptions(),
+            });
+          }
+
+          autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
           if (autoStudents && autoStudents.length > 0) {
             // For each configured student try to improve the configured data:
@@ -806,14 +822,24 @@ module.exports = NodeHelper.create({
 
       // Auto-discover students from app/data (when no students manually configured)
       const server = moduleConfig.server || 'webuntis.com';
-      const { appData } = await moduleConfig._authService.getAuth({
-        school: moduleConfig.school,
-        username: moduleConfig.username,
-        password: moduleConfig.password,
-        server,
-        options: this._getStandardAuthOptions({ cacheKey: `parent:${moduleConfig.username}@${server}` }),
-      });
-      autoStudents = moduleConfig._authService.deriveStudentsFromAppData(appData);
+      let authResult;
+
+      // Use QR code auth if available (LEGAL_GUARDIAN), otherwise username/password
+      if (moduleConfig.qrcode) {
+        authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
+          cacheKey: `parent-qr:${moduleConfig.qrcode}`,
+        });
+      } else {
+        authResult = await moduleConfig._authService.getAuth({
+          school: moduleConfig.school,
+          username: moduleConfig.username,
+          password: moduleConfig.password,
+          server,
+          options: this._getStandardAuthOptions({ cacheKey: `parent:${moduleConfig.username}@${server}` }),
+        });
+      }
+
+      autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
       if (!autoStudents || autoStudents.length === 0) {
         this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
@@ -893,86 +919,70 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
    */
   async _createAuthSession(sample, moduleConfig, identifier, cacheKeyOverride = null) {
-    const hasStudentId = sample.studentId && Number.isFinite(Number(sample.studentId));
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
     const hasParentCredentials = moduleConfig && moduleConfig.username && moduleConfig.password && moduleConfig.school;
-    const isParentMode = hasStudentId && !hasOwnCredentials && !useQrLogin && hasParentCredentials;
+    const hasParentQr = moduleConfig && moduleConfig.qrcode;
 
     // Get identifier-specific AuthService to prevent cache cross-contamination
     const authService = this._getAuthServiceForIdentifier(identifier);
 
-    // Mode 0: QR Code Login (student)
-    if (useQrLogin) {
-      this._mmLog('debug', sample, 'Getting QR code authentication (cached or new)');
-      const cacheKey = cacheKeyOverride || `qrcode:${sample.qrcode}`;
-      const authResult = await authService.getAuthFromQRCode(sample.qrcode, {
+    // Determine which credentials to use: student's own or parent's
+    const useStudentQr = useQrLogin && sample.qrcode;
+    const useParentQr = !useQrLogin && hasParentQr && moduleConfig.qrcode;
+    const useParentCreds = !useQrLogin && !useParentQr && hasParentCredentials;
+
+    // QR Code Authentication (student or parent)
+    if (useStudentQr || useParentQr) {
+      const qrCode = useStudentQr ? sample.qrcode : moduleConfig.qrcode;
+      const cacheKey = cacheKeyOverride || `qrcode:${qrCode}`;
+      const authResult = await authService.getAuthFromQRCode(qrCode, {
         cacheKey,
       });
       return {
         school: authResult.school,
         server: authResult.server,
         personId: authResult.personId,
-        role: authResult.role || null,
-        cookieString: authResult.cookieString, // Changed 'cookies' to 'cookieString'
+        role: authResult.role || null, // STUDENT, LEGAL_GUARDIAN, TEACHER, etc.
+        cookieString: authResult.cookieString,
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData || null, // May be undefined if from cache
-        mode: 'qr',
-        qrCodeUrl: sample.qrcode, // Store QR code URL for re-authentication
+        appData: authResult.appData || null,
+        qrCodeUrl: qrCode, // Store for re-authentication
       };
     }
 
-    // Mode 1: Parent Account (studentId + parent credentials from moduleConfig)
-    if (isParentMode) {
-      const school = sample.school || moduleConfig.school;
-      const server = sample.server || moduleConfig.server || 'webuntis.com';
-      const cacheKey = cacheKeyOverride || `parent:${moduleConfig.username}@${server}/${school}`;
-      this._mmLog('debug', sample, `Authenticating with parent account (school=${school}, server=${server})`);
-      const authResult = await authService.getAuth({
-        school,
-        username: moduleConfig.username,
-        password: moduleConfig.password,
-        server,
-        options: { cacheKey },
-      });
-      return {
-        school,
-        server,
-        personId: authResult.personId, // Parent's personId (used for auto-discovery)
-        role: authResult.role || null,
-        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
-        token: authResult.token,
-        tenantId: authResult.tenantId,
-        schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData || null, // May be undefined if from cache
-        mode: 'parent',
-      };
-    }
+    // Username/Password Authentication (student or parent)
+    if (useParentCreds || hasOwnCredentials) {
+      // Determine which credentials to use
+      const useStudentCreds = hasOwnCredentials;
+      const school = useStudentCreds ? sample.school : sample.school || moduleConfig.school;
+      const server = useStudentCreds ? sample.server : sample.server || moduleConfig.server || 'webuntis.com';
+      const username = useStudentCreds ? sample.username : moduleConfig.username;
+      const password = useStudentCreds ? sample.password : moduleConfig.password;
 
-    // Mode 2: Direct Student Login (own credentials)
-    if (hasOwnCredentials) {
-      this._mmLog('debug', sample, `Authenticating with direct login (school=${sample.school}, server=${sample.server})`);
-      const cacheKey = cacheKeyOverride || `direct:${sample.username}@${sample.server}`;
+      const cacheKey = cacheKeyOverride || `${useStudentCreds ? 'student' : 'parent'}:${username}@${server}/${school}`;
+
       const authResult = await authService.getAuth({
-        school: sample.school,
-        username: sample.username,
-        password: sample.password,
-        server: sample.server,
+        school,
+        username,
+        password,
+        server,
         options: { cacheKey },
       });
+
       return {
-        school: sample.school,
-        server: sample.server,
+        school,
+        server,
         personId: authResult.personId,
-        role: authResult.role || null,
-        cookieString: authResult.cookieString, // Changed from 'cookies' to 'cookieString'
+        role: authResult.role || null, // STUDENT, LEGAL_GUARDIAN, TEACHER, etc.
+        cookieString: authResult.cookieString,
         token: authResult.token,
         tenantId: authResult.tenantId,
         schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData || null, // May be undefined if from cache
-        mode: 'direct',
+        appData: authResult.appData || null,
+        username, // Store for re-authentication
       };
     }
 
@@ -1224,11 +1234,7 @@ module.exports = NodeHelper.create({
         }
         // Send error payload to frontend with warnings
         for (const student of students) {
-          this._mmLog(
-            'debug',
-            null,
-            `[sendSocketNotification] GOT_DATA (error) for ${identifier}, sessionId=${sessionKey.split(':')[1]}, student=${student.title}`
-          );
+          // Sending error to frontend silently
           this.sendSocketNotification('GOT_DATA', {
             title: student.title,
             id: identifier,
@@ -1314,11 +1320,7 @@ module.exports = NodeHelper.create({
         // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
         payload.id = identifier;
         payload.sessionId = sessionKey.split(':')[1]; // Extract sessionId from "identifier:sessionId"
-        this._mmLog(
-          'debug',
-          null,
-          `[sendSocketNotification] GOT_DATA for ${identifier}, sessionId=${payload.sessionId}, student=${payload.title}`
-        );
+        // Sending data to frontend silently
         this.sendSocketNotification('GOT_DATA', payload);
       }
     } catch (error) {
@@ -1347,17 +1349,14 @@ module.exports = NodeHelper.create({
    * @param {any} payload - Notification payload
    */
   async socketNotificationReceived(notification, payload) {
-    const sessionId = payload?.sessionId || 'unknown';
-    const identifier = payload?.id || 'default';
+    // Processing socket notifications silently (no logging for cleaner output)
 
     if (notification === 'INIT_MODULE') {
-      this._mmLog('debug', null, `[socketNotificationReceived] INIT_MODULE for ${identifier}, sessionId=${sessionId}`);
       await this._handleInitModule(payload);
       return;
     }
 
     if (notification === 'FETCH_DATA') {
-      this._mmLog('debug', null, `[socketNotificationReceived] FETCH_DATA for ${identifier}, sessionId=${sessionId}`);
       await this._handleFetchData(payload);
       return;
     }
@@ -1391,7 +1390,7 @@ module.exports = NodeHelper.create({
 
       // Store config per session for isolation
       this._configsBySession.set(sessionKey, normalizedConfig);
-      this._mmLog('debug', null, `[INIT_MODULE] Config stored for session=${sessionKey}`);
+      // Config stored silently
 
       // Log debugDate if present (stored in normalizedConfig, not global)
       if (normalizedConfig.debugDate) {
@@ -1404,7 +1403,7 @@ module.exports = NodeHelper.create({
       }
 
       // Validate configuration
-      const validatorLogger = this.logger || { log: (level, msg) => this._mmLog(level, null, msg) };
+      const validatorLogger = { log: () => {} }; // Silent logger - only errors are sent to frontend
       const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
 
       // Generate detailed deprecation warnings
@@ -1432,17 +1431,15 @@ module.exports = NodeHelper.create({
       normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
 
       // Auto-discover students if needed (one-time during init)
-      this._mmLog('debug', null, `[INIT_MODULE] Auto-discovering students for ${identifier}`);
       await this._ensureStudentsFromAppData(normalizedConfig);
 
       // Mark students as discovered for this identifier
       this._studentsDiscovered = this._studentsDiscovered || {};
       this._studentsDiscovered[identifier] = true;
 
-      this._mmLog('debug', null, `[INIT_MODULE] Module ${identifier} initialized successfully, sessionId=${payload.sessionId}`);
+      // Module initialized successfully (no log needed)
 
       // Send success notification to frontend
-      this._mmLog('debug', null, `[sendSocketNotification] MODULE_INITIALIZED for ${identifier}, sessionId=${payload.sessionId}`);
       this.sendSocketNotification('MODULE_INITIALIZED', {
         id: identifier,
         sessionId: payload.sessionId,
@@ -1453,7 +1450,6 @@ module.exports = NodeHelper.create({
 
       // Automatically trigger initial data fetch after successful initialization
       // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
-      this._mmLog('debug', null, `[INIT_MODULE] Auto-triggering initial data fetch for ${identifier}, sessionId=${payload.sessionId}`);
       await this._handleFetchData({
         id: identifier,
         sessionId: payload.sessionId,
@@ -1483,15 +1479,8 @@ module.exports = NodeHelper.create({
     const sessionId = payload.sessionId || 'unknown';
     const sessionKey = `${identifier}:${sessionId}`;
 
-    // Track FETCH_DATA requests to debug duplicate calls
+    // Track FETCH_DATA requests to debug duplicate calls (silently)
     const fetchTimestamp = Date.now();
-    const lastFetch = this._lastFetchTimestamp || 0;
-    const timeSinceLastFetch = fetchTimestamp - lastFetch;
-    this._mmLog(
-      'debug',
-      null,
-      `[FETCH_DATA] Received for ${identifier}, sessionId=${sessionId} (${timeSinceLastFetch}ms since last fetch)`
-    );
     this._lastFetchTimestamp = fetchTimestamp;
 
     // Verify module is initialized (per session preferred, fall back to identifier)
@@ -1713,12 +1702,7 @@ module.exports = NodeHelper.create({
     restOptions.authService = config._authService;
     // Allow optional raw API dumps when enabled in module config
     restOptions.dumpRawApiResponses = Boolean(config.dumpRawApiResponses);
-    // Debug: log whether raw API dumping is enabled for this student fetch
-    try {
-      this._mmLog('debug', student, `restOptions.dumpRawApiResponses=${restOptions.dumpRawApiResponses}`);
-    } catch (e) {
-      this._mmLog('debug', null, `restOptions.dumpRawApiResponses logging failed: ${e && e.message ? e.message : e}`);
-    }
+    // restOptions configured silently
 
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
@@ -1728,21 +1712,17 @@ module.exports = NodeHelper.create({
     const authService = config._authService;
     const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData, role);
 
-    // DEBUG: Log restTargets to understand why they might be empty
-    this._mmLog(
-      'debug',
-      student,
-      `Built ${restTargets ? restTargets.length : 0} REST targets (school=${school}, server=${server}${restTargets && restTargets.length > 0 ? `, personId=${restTargets[0].personId}, role=${restTargets[0].role}` : ''})`
-    );
+    // REST targets built silently (removed debug log for cleaner output)
     if (!restTargets || restTargets.length === 0) {
       this._mmLog('warn', student, `No REST targets built - cannot fetch data! Check authentication and credentials.`);
     }
 
     const describeTarget = (t) => {
-      if (t.mode === 'qr') {
-        return `QR login${t.personId ? ` (id=${t.personId})` : ''}`;
+      const roleLabel = t.role || 'unknown';
+      if (t.role === 'LEGAL_GUARDIAN') {
+        return `${roleLabel} (parentId=${ownPersonId}, childId=${t.personId})`;
       }
-      return `parent (parentId=${ownPersonId}, childId=${t.personId})`;
+      return `${roleLabel}${t.personId ? ` (id=${t.personId})` : ''}`;
     };
 
     const className = student.class || student.className || null;
