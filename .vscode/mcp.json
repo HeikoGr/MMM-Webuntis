@@ -3,14 +3,7 @@
     "microsoft/playwright-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@playwright/mcp@latest", "--isolated", "--no-sandbox"],
-      "env": {
-        "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
-        "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu --no-first-run --no-default-browser-check --disable-extensions --disable-component-extensions-with-background-pages"
-      },
-      "gallery": "https://api.mcp.github.com",
-      "version": "0.0.1-seed"
+      "args": ["@playwright/mcp@latest", "--viewport-size=1920x1080", "--isolated", "--no-sandbox"]
     }
-  },
-  "inputs": []
+  }
 }

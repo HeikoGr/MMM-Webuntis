@@ -13,7 +13,7 @@
   "containerEnv": {
     "IN_DEVCONTAINER": "1",
     "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
-    "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-extensions --disable-dev-shm-usage --disable-gpu --no-first-run --no-default-browser-check"
+    "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu"
   },
   "forwardPorts": [8080],
   "customizations": {
@@ -26,5 +26,5 @@
     }
   },
   "postCreateCommand": "/bin/sh .devcontainer/postCreate.sh",
-  "postStartCommand": "echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
+  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo 'Playwright MCP started (logs: /tmp/playwright-mcp.log)'; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
 }
