@@ -286,7 +286,7 @@ async function cmdFetch(flags) {
               try {
                 fs.unlinkSync(path.join(dumpsDir, f));
                 Log.wrapper_info(`  🗑️  Deleted old dump: ${f}`);
-              } catch (err) {
+              } catch {
                 // ignore deletion errors
               }
             });
