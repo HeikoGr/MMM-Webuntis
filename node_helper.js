@@ -1248,6 +1248,15 @@ module.exports = NodeHelper.create({
           ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
           : `Authentication failed for ${credKey}: ${errorMsg}`;
         this._mmLog('error', null, msg);
+
+        // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
+        // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
+        const authService = this._getAuthServiceForIdentifier(identifier);
+        if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
+          authService.invalidateAllCachesForSession(sessionKey);
+          this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
+        }
+
         // Record and mark this warning for the current fetch cycle
         if (!this._currentFetchWarnings.has(msg)) {
           groupWarnings.push(msg);
@@ -1559,6 +1568,13 @@ module.exports = NodeHelper.create({
     try {
       // Note: Auto-discovery and config validation already done during INIT_MODULE
       // This is pure data fetch - config is already normalized and students are discovered
+
+      // AGGRESSIVE REAUTH: Wait for any session-wide authentication to complete
+      // This ensures all API requests are blocked until complete re-authentication finishes
+      const authService = config._authService;
+      if (authService && typeof authService.waitForSessionAuth === 'function') {
+        await authService.waitForSessionAuth(sessionKey);
+      }
 
       // Group students by credential so we can reuse the same untis session
       const groups = new Map();
