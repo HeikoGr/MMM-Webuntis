@@ -7,10 +7,13 @@
   "workspaceFolder": "/opt/magic_mirror/modules/MMM-Webuntis",
   "workspaceMount": "source=${localWorkspaceFolder},target=/opt/magic_mirror/modules/MMM-Webuntis,type=bind",
   "overrideCommand": false,
+  "runArgs": ["--shm-size=1g"],
   "shutdownAction": "stopContainer",
   "remoteUser": "root",
   "containerEnv": {
-    "IN_DEVCONTAINER": "1"
+    "IN_DEVCONTAINER": "1",
+    "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
+    "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-extensions --disable-dev-shm-usage --disable-gpu --no-first-run --no-default-browser-check"
   },
   "forwardPorts": [8080],
   "customizations": {

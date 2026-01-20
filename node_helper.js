@@ -723,7 +723,11 @@ module.exports = NodeHelper.create({
             });
           }
         } catch (err) {
-          this._mmLog('warn', null, `Could not fetch auto-discovered names for title fallback: ${this._formatErr(err)}`);
+          this._mmLog(
+            'warn',
+            null,
+            `Could not fetch auto-discovered names for title fallback (server=${server || 'unknown'}). Is the WebUntis server reachable? ${this._formatErr(err)}`
+          );
         }
         // Additionally validate configured studentIds against discovered students
         try {
@@ -1206,7 +1210,12 @@ module.exports = NodeHelper.create({
         // Use identifier-specific AuthService to prevent cache cross-contamination
         authSession = await this._createAuthSession(sample, config, identifier, credKey);
       } catch (err) {
-        const msg = `No valid credentials for group ${credKey}: ${this._formatErr(err)}`;
+        const errorMsg = this._formatErr(err);
+        // Differentiate between credential/config errors and network errors
+        const isNetworkError = errorMsg.includes('connect') || errorMsg.includes('timeout') || errorMsg.includes('network');
+        const msg = isNetworkError
+          ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
+          : `Authentication failed for ${credKey}: ${errorMsg}`;
         this._mmLog('error', null, msg);
         // Record and mark this warning for the current fetch cycle
         if (!this._currentFetchWarnings.has(msg)) {
@@ -1489,7 +1498,14 @@ module.exports = NodeHelper.create({
     const hasSessionConfig = this._configsBySession.has(sessionKey);
     const baseConfig = this._configsByIdentifier.get(identifier);
     if (!hasSessionConfig && !baseConfig) {
-      this._mmLog('warn', null, `[FETCH_DATA] Module ${identifier} not initialized for session ${sessionId} - ignoring fetch request`);
+      this._mmLog(
+        'warn',
+        null,
+        `[FETCH_DATA] Module ${identifier} not initialized for session ${sessionId} - attempting re-init from incoming payload`
+      );
+      // Attempt a self-heal by re-running initialization using the provided payload.
+      // This covers cases where the backend restarted but the frontend still thinks it is initialized.
+      await this._handleInitModule(payload);
       return;
     }
 
@@ -1669,8 +1685,25 @@ module.exports = NodeHelper.create({
    * @param {Object} config - Module configuration
    */
   async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config) {
-    const logger = (msg) => {
-      this._mmLog('debug', student, msg);
+    // Accept both logger(message) and logger(level, student, message) signatures
+    const logger = (...args) => {
+      // Standard signature: logger(level, student, message)
+      if (args.length >= 3 && typeof args[0] === 'string' && typeof args[2] === 'string') {
+        const [level, studentCtx, message] = args;
+        this._mmLog(level || 'debug', studentCtx || student, message);
+        return;
+      }
+
+      // logger(level, message)
+      if (args.length === 2 && typeof args[0] === 'string' && typeof args[1] === 'string') {
+        const [level, message] = args;
+        this._mmLog(level || 'debug', student, message);
+        return;
+      }
+
+      // Fallback: treat first argument as message
+      const [msg] = args;
+      this._mmLog('debug', student, typeof msg === 'string' ? msg : JSON.stringify(msg));
     };
 
     const restOptions = { cacheKey: credKey, authSession };

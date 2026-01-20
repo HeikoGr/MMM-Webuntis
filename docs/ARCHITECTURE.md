@@ -1,6 +1,6 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2026-01-14
+**Last Updated**: 2026-01-20
 **Project Status**: Production-ready with parallel data fetching (2.7x performance boost)
 
 ## Executive Summary
@@ -69,7 +69,7 @@ graph TB
     end
 
     MM <-->|Socket.IO| FE
-    FE <-->|FETCH_DATA / GOT_DATA| NH
+    FE <-->|INIT_MODULE / MODULE_INITIALIZED / FETCH_DATA / GOT_DATA| NH
     FE --> Widgets
     Widgets --> Util
 
@@ -351,10 +351,10 @@ sequenceDiagram
     B->>FE: Module loaded by MagicMirror
     FE->>FE: start() L528<br/>initialize data structures
     FE->>FE: _buildSendConfig() L182<br/>(merge defaults into students[])
-    FE->>NH: sendSocketNotification('FETCH_DATA')
+    FE->>NH: sendSocketNotification('INIT_MODULE')
 
     Note over NH: Config Validation & Normalization
-    NH->>NH: socketNotificationReceived() L1201<br/>Receive FETCH_DATA
+    NH->>NH: socketNotificationReceived() L1201<br/>Receive INIT_MODULE
     NH->>NH: configValidator.validateConfig() L195<br/>(schema validation)
     NH->>NH: configValidator.applyLegacyMappings() L85<br/>(25 legacy key mappings)
     NH->>NH: widgetConfigValidator.validateAllWidgets()<br/>(widget-specific validation)
@@ -374,6 +374,10 @@ sequenceDiagram
         Auth-->>NH: { students[], tenantId, schoolYearId }
         NH->>NH: _deriveStudentsFromAppData() L1344<br/>(extract studentId, title)
     end
+
+    NH-->>FE: sendSocketNotification('MODULE_INITIALIZED')<br/>(session-scoped)
+    FE->>FE: socketNotificationReceived()<br/>mark initialized + start timer
+    NH->>NH: _handleFetchData() L1403<br/>(auto-trigger first fetch)
 
     Note over NH: Authentication Flow (per student)
     loop for each student
@@ -455,7 +459,7 @@ graph LR
     A["Raw Config<br/>(user input)"]:::input
     --> B["_buildSendConfig() L182<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182'>Frontend</a>"]:::frontend
     --> C["Merged student[]<br/>(defaults + per-student)"]:::merged
-    --> D["sendSocketNotification<br/>FETCH_DATA"]:::socket
+    --> D["sendSocketNotification<br/>INIT_MODULE"]:::socket
     --> E["_normalizeLegacyConfig() L1470<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470'>Backend</a>"]:::backend
     --> F["applyLegacyMappings() L85<br/>(25 legacy keys)<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85'>configValidator</a>"]:::validator
     --> G["Normalized Config<br/>(canonical keys only)"]:::normalized
@@ -613,7 +617,7 @@ graph TB
         V3["resolved classId"]:::value
     end
 
-    Request["Incoming<br/>FETCH_DATA"]:::input
+    Request["Incoming fetch cycle<br/>(INIT_MODULE auto-fetch or FETCH_DATA)"]:::input
     --> Check1{"Auth cache<br/>valid?<br/>(< 14min)"}
     Check1 -->|Yes| Use1["Use cached token<br/>✅ Fast path"]:::success
     Check1 -->|No| Fetch1["Fetch new token<br/>🔄 Slow path<br/>(~500ms)"]:::slow
@@ -638,7 +642,7 @@ graph TB
 **Cache Performance**:
 - ✅ **Auth Token Cache**: High hit rate (~95%), saves ~500ms per request
 - ✅ **Class ID Cache**: High hit rate (~98%), saves API lookup
-- ⚠️ **No Response Cache**: Each FETCH_DATA triggers full API calls (potential optimization)
+- ⚠️ **No Response Cache**: Each fetch cycle (init-triggered or FETCH_DATA) triggers full API calls (potential optimization)
 
 **See**: [ISSUES.md MED-11](https://github.com/HeikoGr/MMM-Webuntis/blob/master/docs/ISSUES.md#-med-11-cache-invalidierung-nicht-konsistent) for cache invalidation consistency issues
 
@@ -729,7 +733,7 @@ graph TD
 | Function | Line | Purpose | Called by | Calls |
 |----------|------|---------|-----------|-------|
 | [`start()`](../node_helper.js#L66) | L66 | Initialize services & caches | MagicMirror | AuthService, CacheManager, logger |
-| [`socketNotificationReceived()`](../node_helper.js#L1201) | L1201 | Entry point for FETCH_DATA | Frontend | `_ensureStudentsFromAppData()`, `processGroup()` |
+| [`socketNotificationReceived()`](../node_helper.js#L1201) | L1201 | Entry point for INIT_MODULE + FETCH_DATA (auto-fetch after init) | Frontend | `_handleInitModule()`, `_handleFetchData()` |
 | [`_ensureStudentsFromAppData()`](../node_helper.js#L1234) | L1234 | Auto-discover students if empty | `socketNotificationReceived()` | `authService.getAuth()`, `_deriveStudentsFromAppData()` |
 | [`_normalizeLegacyConfig()`](../node_helper.js#L1470) | L1470 | Map old config keys → new | `_ensureStudentsFromAppData()` | `configValidator.applyLegacyMappings()` |
 | [`processGroup()`](../node_helper.js#L1262) | L1262 | Orchestrate fetches for student group | `socketNotificationReceived()` | `orchestrateFetch()`, `buildGotDataPayload()` |
@@ -742,7 +746,7 @@ graph TD
 
 | Function | Line | Purpose | Called by | Calls |
 |----------|------|---------|-----------|-------|
-| [`start()`](../MMM-Webuntis.js#L528) | L528 | Initialize module | MagicMirror | `_buildSendConfig()`, `sendSocketNotification()` |
+| [`start()`](../MMM-Webuntis.js#L528) | L528 | Initialize module & send INIT_MODULE | MagicMirror | `_buildSendConfig()`, `sendSocketNotification()` |
 | [`_buildSendConfig()`](../MMM-Webuntis.js#L182) | L182 | Merge defaults into students | `start()`, `_startFetchTimer()` | — |
 | [`socketNotificationReceived()`](../MMM-Webuntis.js#L606) | L606 | Receive GOT_DATA from backend | Backend | `_scheduleDomUpdate()` |
 | [`getDom()`](../MMM-Webuntis.js#L700) | L700 | Render all widgets | MagicMirror | `_getDisplayWidgets()`, `_renderWidgetTableRows()` |
@@ -1238,7 +1242,7 @@ graph TB
 | **Class IDs** | Session | ~98% | Avoid repeated lookups | Eliminates API call |
 | ~~API Responses~~ | — | — | ⚠️ Not implemented | Potential optimization |
 
-**Note**: API response caching not implemented. Each FETCH_DATA triggers full API calls. Could cache for 30-60s to prevent duplicate requests during rapid refreshes.
+**Note**: API response caching not implemented. Each fetch cycle (INIT_MODULE auto-fetch or FETCH_DATA) triggers full API calls. Could cache for 30-60s to prevent duplicate requests during rapid refreshes.
 
 ## Security Assessment
 

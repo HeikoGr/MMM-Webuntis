@@ -12,15 +12,29 @@ const execAsync = promisify(exec);
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(currentDir, '..');
 // Use /tmp for checker to avoid fs.cp self-copy restrictions
-const CHECKER_REPO = path.join('/tmp', `.mm-module-checker-${path.basename(PROJECT_ROOT)}`);
+const CHECKER_REPO = path.join('/tmp', `mm-module-checker-${path.basename(PROJECT_ROOT)}`);
 const UPSTREAM_REPO = 'https://github.com/MagicMirrorOrg/MagicMirror-3rd-Party-Modules.git';
 
 console.log('🔍 Setting up MagicMirror checker...');
 try {
   // Clone only the CHECKER repository (test tools), not the module to check
   if (!existsSync(CHECKER_REPO)) {
-    console.log('Cloning checker repository (first time only, may take a minute)...');
-    await execAsync(`git clone --depth 1 ${UPSTREAM_REPO} "${CHECKER_REPO}"`);
+    console.log('Fetching checker repository (git-free) via `degit` (first time only)...');
+    try {
+      // Use degit to copy repository without .git metadata
+      await execAsync(`npx degit MagicMirrorOrg/MagicMirror-3rd-Party-Modules#main "${CHECKER_REPO}"`);
+    } catch (err) {
+      const errMsg = err && err.message ? err.message : err;
+      console.log('`degit` failed or not available, falling back to git clone and stripping .git:', errMsg);
+      await execAsync(`git clone --depth 1 ${UPSTREAM_REPO} "${CHECKER_REPO}"`);
+      // Remove any .git metadata to ensure the checker copy is detached from git
+      try {
+        await fs.rm(path.join(CHECKER_REPO, '.git'), { recursive: true, force: true });
+      } catch (e) {
+        // Non-fatal: log and continue
+        console.log('Warning: failed to remove .git from checker clone:', e?.message || e);
+      }
+    }
   }
 
   if (!existsSync(path.join(CHECKER_REPO, 'node_modules'))) {

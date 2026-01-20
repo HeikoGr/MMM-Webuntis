@@ -654,7 +654,7 @@ graph TB
     end
 
     MM <-->|Socket Notifications| FE
-    FE <-->|FETCH_DATA<br/>GOT_DATA| NH
+    FE <-->|INIT_MODULE / MODULE_INITIALIZED / FETCH_DATA / GOT_DATA| NH
     FE --> Widgets
     NH --> Services
     Services --> REST

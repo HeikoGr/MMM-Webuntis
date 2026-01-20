@@ -4,16 +4,19 @@
 
 **Purpose**: Guide AI agents toward productive, high-quality contributions.
 **Status**: Production module (~5,200 LOC, 14 services, 6 widgets).
-**Last Updated**: 2026-01-14
+**Last Updated**: 2026-01-20
 
 ## Architecture Overview (Critical to Understand)
 
 **Frontend → Backend Socket Flow**:
 ```
-MMM-Webuntis.js (start) → socketNotification("FETCH_DATA")
-  → node_helper.js:socketNotificationReceived() [L1201]
-    → orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
-    → buildGotDataPayload() → socketNotification("GOT_DATA", payload)
+MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
+  → node_helper.js:socketNotificationReceived() [~L1201] → _handleInitModule()
+    → validate + applyLegacyMappings → auto-discover students (optional)
+    → socketNotification("MODULE_INITIALIZED") to FE
+    → _handleFetchData() auto-runs first fetch (no FE FETCH_DATA needed)
+      → orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
+      → buildGotDataPayload() → socketNotification("GOT_DATA", payload)
   → MMM-Webuntis.js:socketNotificationReceived() → widgets render
 ```
 
@@ -109,7 +112,7 @@ console.warn('[feature] Warning:', error);
 
 - Follow the repository’s existing ESLint/Prettier configuration.
 - Avoid broad refactors “for cleanliness”; do focused edits.
-- Run `node --run lint`/`npm test` (or at least a smoke test) before finishing larger changes so regressions surface early.
+- After any code change: run `node --run lint` and fix any new lint errors before saving/closing the change.
 - Align config/CLI changes with the matching templates and translations (`config.template.js`, `translations/*.json`, `custom.template.css` etc.) to avoid drift.
 - Fix errors and warnings where possible. Don't suppress them unless absolutely necessary.
 - Implement easy fixes even if they weren't your fault.
