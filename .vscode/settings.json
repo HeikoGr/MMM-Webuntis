@@ -24,7 +24,7 @@
   "terminal.integrated.scrollback": 5000,
   "git.autofetch": true,
   "[javascript]": {
-    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
     "editor.formatOnSave": true
   },
   "[json]": {
