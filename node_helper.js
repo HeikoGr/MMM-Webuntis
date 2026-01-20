@@ -990,7 +990,8 @@ module.exports = NodeHelper.create({
     let errorMsg = '\nCredentials missing! need either:';
     errorMsg += '\n  (1) studentId + username/password in module config, or';
     errorMsg += '\n  (2) username/password/school/server in student config, or';
-    errorMsg += '\n  (3) qrcode in student config for QR code login\n';
+    errorMsg += '\n  (3) qrcode in student config for QR code login, or';
+    errorMsg += '\n  (4) qrcode in module config for parent (LEGAL_GUARDIAN) authentication\n';
 
     this._mmLog('error', sample, errorMsg);
     throw new Error(errorMsg);
