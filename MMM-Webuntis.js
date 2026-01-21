@@ -83,6 +83,19 @@ Module.register('MMM-Webuntis', {
       showNowLine: true, // show current time line
       mergeGap: 15, // minutes gap to merge adjacent lessons
       maxLessons: 0, // max lessons per day (0 = no limit)
+      // Flexible field display configuration
+      fields: {
+        primary: 'subject', // Primary field to display (subject, teacher, room, class, studentGroup)
+        secondary: 'teacher', // Secondary field to display
+        additional: ['room'], // Array of additional fields to show as badges
+        format: {
+          subject: 'short', // 'short' or 'long' name format
+          teacher: 'short',
+          class: 'short',
+          room: 'short',
+          studentGroup: 'short',
+        },
+      },
     },
 
     exams: {

@@ -3,8 +3,8 @@
 # MMM-Webuntis: AI Agent Coding Guidelines
 
 **Purpose**: Guide AI agents toward productive, high-quality contributions.
-**Status**: Production module (~5,200 LOC, 14 services, 6 widgets).
-**Last Updated**: 2026-01-20
+**Status**: Production module (~5,500 LOC, 17 services, 6 widgets).
+**Last Updated**: 2025-01-21
 
 ## Architecture Overview (Critical to Understand)
 
@@ -21,10 +21,11 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 ```
 
 **Critical Services** (ordered by importance):
-1. **authService.js** - Auth + 14min token caching (QR code, credentials, parent accounts)
+1. **authService.js** - Auth + 14min token caching with 5min buffer (QR code, credentials, parent accounts)
 2. **webuntisApiService.js** - REST endpoint wrappers (getTimetable, getExams, getHomework, etc.)
-3. **dataFetchOrchestrator.js** - Parallel data fetching (ISSUES.md CRIT-1 tracks sequential→parallel migration)
-4. **dataTransformer.js** - Data normalization (timetable→lessons, dates→YYYYMMDD integers)
+3. **dataFetchOrchestrator.js** - Timetable-first + parallel fetching (prevents silent token failures)
+4. **node_helper.js** - API status tracking per session (skips permanent errors 403/404/410)
+5. **dataOrchestration.js** - Data normalization (timetable→lessons, dates→YYYYMMDD integers)
 
 **REST API Strategy**: Migrate away from deprecated JSON-RPC. Use REST for all data; JSON-RPC only for auth/OTP.
 
@@ -32,10 +33,11 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 ### Authentication Pattern
 - **Always** use `authService.getAuth()` - never call httpClient or fetch directly
-- `getAuth()` caches tokens for 14 minutes; never bypass cache
+- `getAuth()` caches tokens for 14 minutes with **5-minute buffer** (prevents silent API failures from expired tokens)
 - QR code auth: extract `person_id` from JWT token via `extractPersonIdFromToken()`
 - Parent account: fetches app/data to auto-discover student IDs
 - On token expiry: `onAuthError` callback invalidates cache automatically
+- Race condition protection: `_forceReauth` Set is cleared after use, `_pendingAuth` Map coordinates parallel requests
 
 ### REST API Calls
 - All data fetching via `webuntisApiService.callWebUntisAPI()` - no direct REST calls
@@ -43,6 +45,15 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 - Endpoint configs in `webuntisApiService.js#ENDPOINTS` - update if adding new data types
 - Required headers: `Authorization: Bearer {token}`, `X-Webuntis-Api-Tenant-Id: {tenantId}`
 - Error responses mapped to user-friendly warnings via `errorHandler.mapRestError()`
+- **Return value**: `{ data, status }` object (status code tracked per session)
+
+### API Status Tracking & Fetch Strategy
+- **Timetable-first strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
+- Fetch order: Timetable first (sequential, token validation), then 4 remaining APIs in parallel
+- **Status tracking**: `node_helper.js#_apiStatusBySession` Map tracks HTTP status per endpoint/session
+- **Permanent errors** (403, 404, 410): API calls skipped on next fetch (no retry)
+- **Temporary errors** (5xx, 429, 401): Retried on next fetch
+- Status tracking prevents wasted API calls to endpoints with permanent permission errors
 
 ### Data Transformation
 
@@ -79,15 +90,16 @@ console.warn('[feature] Warning:', error);
 ## File Organization (Updated: lib/ fully documented)
 
 **Essential files** (most editing happens here):
-- `node_helper.js` (1765 LOC) - Socket listener & data fetch orchestrator
-- `lib/authService.js` - Auth, QR code, token caching (14min TTL)
-- `lib/webuntisApiService.js` - Generic API caller for all 5 data types
-- `lib/restClient.js` - REST wrapper (headers, error handling, retry)
-- `lib/dataFetchOrchestrator.js` - Parallel fetch logic (CRITICAL: see ISSUES.md CRIT-1)
+- `node_helper.js` (1,803 LOC) - Socket listener, data fetch orchestrator, API status tracking
+- `lib/authService.js` - Auth, QR code, token caching (14min TTL, 5min buffer)
+- `lib/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
+- `lib/restClient.js` - REST wrapper (headers, error handling, retry, returns HTTP status)
+- `lib/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
 - `lib/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
 - `lib/configValidator.js` - Config schema + 25 legacy key mappings
 - `widgets/*.js` - 6 renderer modules (lessons, grid, exams, homework, absences, messagesofday)
-- `config/config.template.js` - Config schema with 90+ options
+- `widgets/util.js` - Flexible field utilities (getTeachers, getSubject, getRoom, getClass, getStudentGroup, buildFlexibleLessonDisplay)
+- `config/config.template.js` - Config schema with 90+ options (includes grid.fields for flexible display)
 - `tests/unit.test.js` - Jest tests (currently 0% coverage)
 
 **Supporting modules** (rarely modified):

@@ -9,8 +9,22 @@ function getNowLineState(ctx) {
 
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addHeader, getWidgetConfig, formatDate, formatTime, toMinutes, createWidgetContext } =
-    root.util?.initWidget?.(root) || {};
+  const {
+    log,
+    escapeHtml,
+    addHeader,
+    getWidgetConfig,
+    formatDate,
+    formatTime,
+    toMinutes,
+    createWidgetContext,
+    getTeachers,
+    getSubject,
+    getRoom,
+    getClass,
+    getStudentGroup,
+    getLessonDisplayMode,
+  } = root.util?.initWidget?.(root) || {};
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -304,24 +318,46 @@ function getNowLineState(ctx) {
   // ============================================================================
 
   function extractDayLessons(sourceForDay, ctx) {
-    return sourceForDay.map((el) => ({
-      dateStr: String(el.date),
-      startMin: ctx._toMinutes(el.startTime),
-      endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
-      startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
-      endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-      subjectShort: el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
-      subject: el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
-      teacherInitial: el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
-      teacher: el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
-      code: el.code || '',
-      substText: el.substText || '',
-      text: el.lstext || '',
-      type: el.type || null,
-      lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
-      su: el.su || [],
-      date: el.date,
-    }));
+    return sourceForDay.map((el) => {
+      // Use dynamic field extraction for flexible display
+      const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
+
+      return {
+        dateStr: String(el.date),
+        startMin: ctx._toMinutes(el.startTime),
+        endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
+        startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
+        endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
+        // Flexible field extraction
+        subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
+        subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
+        teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
+        teacher: getTeachers ? getTeachers(el, 'long')[0] : el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
+        room: getRoom ? getRoom(el, 'short') : el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
+        roomLong: getRoom ? getRoom(el, 'long') : el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
+        class: getClass ? getClass(el, 'short') : el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
+        classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
+        studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
+        studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
+        // Display mode information
+        isTeacherView: displayMode.isTeacherView,
+        isStudentView: displayMode.isStudentView,
+        // Legacy fields
+        code: el.code || '',
+        substText: el.substText || '',
+        text: el.lstext || '',
+        type: el.type || null,
+        activityType: el.activityType || 'NORMAL_TEACHING_PERIOD',
+        lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+        // Original array fields for flexible display
+        te: el.te || [],
+        su: el.su || [],
+        ro: el.ro || [],
+        cl: el.cl || [],
+        sg: el.sg || [],
+        date: el.date,
+      };
+    });
   }
 
   function validateAndNormalizeLessons(dayLessons, log) {
@@ -497,7 +533,9 @@ function getNowLineState(ctx) {
     const moreBadge = document.createElement('div');
     moreBadge.className = 'grid-more-badge';
     moreBadge.innerText = ctx.translate('more');
-    moreBadge.title = `${hiddenCount} weitere Stunde${hiddenCount > 1 ? 'n' : ''} ausgeblendet`;
+    const hiddenLessonsKey = hiddenCount > 1 ? 'hidden_lessons_plural' : 'hidden_lessons';
+    const hiddenLessonsLabel = ctx.translate ? ctx.translate(hiddenLessonsKey) : hiddenCount > 1 ? 'more lessons' : 'more lesson';
+    moreBadge.title = `${hiddenCount} ${hiddenLessonsLabel}`;
     inner.appendChild(moreBadge);
   }
 
@@ -515,14 +553,69 @@ function getNowLineState(ctx) {
     return cell;
   }
 
-  function makeLessonInnerHTML(lesson, escapeHtml) {
+  function makeLessonInnerHTML(lesson, escapeHtml, ctx) {
+    // Special handling for BREAK_SUPERVISION
+    if (lesson.activityType === 'BREAK_SUPERVISION') {
+      const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
+      const supervisedArea = lesson.room || lesson.roomLong || breakSupervisionLabel;
+      return `<div class='lesson-content break-supervision'><span class='lesson-primary'>🔔 ${escapeHtml(breakSupervisionLabel)}</span><br><span class='lesson-secondary'>${escapeHtml(supervisedArea)}</span></div>`;
+    }
+
+    // Use flexible field configuration from context if available
+    if (ctx && root.util.buildFlexibleLessonDisplay) {
+      try {
+        const displayParts = root.util.buildFlexibleLessonDisplay(lesson, ctx.config);
+
+        const primaryText = displayParts.primary ? escapeHtml(displayParts.primary) : '';
+        const secondaryText = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
+
+        // Format additional fields as inline badges
+        let additionalText = '';
+        if (displayParts.additional && displayParts.additional.length > 0) {
+          const additionalParts = displayParts.additional
+            .filter(Boolean)
+            .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
+            .join(' ');
+          if (additionalParts) {
+            additionalText = ` ${additionalParts}`;
+          }
+        }
+
+        // Build the display
+        const subst = lesson.substText
+          ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
+          : '';
+        const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+
+        const secondaryLine = secondaryText ? `<br><span class='lesson-secondary'>${secondaryText}${additionalText}</span>` : '';
+
+        return `<div class='lesson-content'><span class='lesson-primary'>${primaryText}</span>${secondaryLine}${subst}${txt}</div>`;
+      } catch {
+        // Silently fall through to legacy behavior on error
+      }
+    }
+
+    // Fallback to legacy behavior
     const subject = escapeHtml(lesson.subjectShort || lesson.subject);
-    const teacher = escapeHtml(lesson.teacherInitial || lesson.teacher);
+    let secondaryInfo = '';
+    if (lesson.isTeacherView && lesson.class) {
+      secondaryInfo = escapeHtml(lesson.class);
+    } else if (lesson.teacher && lesson.teacher !== 'N/A') {
+      secondaryInfo = escapeHtml(lesson.teacherInitial || lesson.teacher);
+    }
+
+    let roomInfo = '';
+    if (lesson.room && lesson.room !== '') {
+      roomInfo = ` <span class='lesson-room'>(${escapeHtml(lesson.room)})</span>`;
+    }
+
     const subst = lesson.substText
       ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
       : '';
     const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
-    return `<div class='lesson-content'><span class='lesson-subject'>${subject}</span><br><span class='lesson-teacher'>${teacher}</span>${subst}${txt}</div>`;
+    const secondaryLine = secondaryInfo ? `<br><span class='lesson-secondary'>${secondaryInfo}${roomInfo}</span>` : '';
+
+    return `<div class='lesson-content'><span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
   function checkHomeworkMatch(lesson, homeworks) {
@@ -697,19 +790,24 @@ function getNowLineState(ctx) {
           lessonDiv.style.right = '0';
 
           // Apply lesson type styling based on individual lesson
-          const lessonCode = lesson.code || '';
-          if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-            lessonDiv.classList.add('lesson-cancelled');
-          } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-            lessonDiv.classList.add('lesson-substitution');
+          // Check for activity type first (BREAK_SUPERVISION)
+          if (lesson.activityType === 'BREAK_SUPERVISION') {
+            lessonDiv.classList.add('lesson-break-supervision');
           } else {
-            lessonDiv.classList.add('lesson-regular');
+            const lessonCode = lesson.code || '';
+            if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
+              lessonDiv.classList.add('lesson-cancelled');
+            } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
+              lessonDiv.classList.add('lesson-substitution');
+            } else {
+              lessonDiv.classList.add('lesson-regular');
+            }
           }
 
           if (isPast) lessonDiv.classList.add('past');
           if (hasExam) lessonDiv.classList.add('has-exam');
 
-          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
           if (checkHomeworkMatch(lesson, homeworks)) {
             addHomeworkIcon(lessonDiv);
@@ -786,7 +884,7 @@ function getNowLineState(ctx) {
           leftCell.classList.add('lesson-substitution', 'split-left');
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
-          leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml);
+          leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml, ctx);
           if (checkHomeworkMatch(irregularLesson, homeworks)) {
             addHomeworkIcon(leftCell);
           }
@@ -796,7 +894,7 @@ function getNowLineState(ctx) {
           rightCell.classList.add('lesson-cancelled', 'split-right');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
-          rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml);
+          rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml, ctx);
           if (checkHomeworkMatch(cancelledLesson, homeworks)) {
             addHomeworkIcon(rightCell);
           }
@@ -815,18 +913,23 @@ function getNowLineState(ctx) {
         const lesson = lessons[0];
         const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
 
-        const lessonCode = lesson.code || '';
-        if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-          bothCell.classList.add('lesson-cancelled');
-        } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-          bothCell.classList.add('lesson-substitution');
+        // Check for activity type first (BREAK_SUPERVISION)
+        if (lesson.activityType === 'BREAK_SUPERVISION') {
+          bothCell.classList.add('lesson-break-supervision');
         } else {
-          bothCell.classList.add('lesson-regular');
+          const lessonCode = lesson.code || '';
+          if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
+            bothCell.classList.add('lesson-cancelled');
+          } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
+            bothCell.classList.add('lesson-substitution');
+          } else {
+            bothCell.classList.add('lesson-regular');
+          }
         }
 
         if (hasExam) bothCell.classList.add('has-exam');
         if (isPast) bothCell.classList.add('past');
-        bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml);
+        bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
         if (checkHomeworkMatch(lesson, homeworks)) {
           addHomeworkIcon(bothCell);
