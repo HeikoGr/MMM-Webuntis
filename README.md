@@ -566,7 +566,7 @@ node --run debug -- --config /path/to/config.js
 
 ## Dependencies
 
-- installed via `npm install` in the module directory.
+- installed via `npm ci --omit=dev` in the module directory.
 
 ### How it works
 
