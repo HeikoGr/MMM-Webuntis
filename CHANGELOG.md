@@ -4,6 +4,29 @@
 
 - Nothing yet. 🚧
 
+## 0.6.1
+
+### ✨ New Features
+
+- **Flexible Lesson Display**: New configuration options for grid widget to customize which fields are displayed (teachers, rooms, classes, student groups)
+  - Configure via `grid.fields` in config - choose any combination of available data fields
+  - Dynamic field extraction for improved lesson display flexibility
+  - Support for new activity types in lesson rendering
+
+### 🛠️ Improvements
+
+- **Smarter API Error Handling**: Module now tracks API status codes and automatically skips endpoints with permanent errors (403, 404, 410) to reduce unnecessary API calls
+- **Enhanced Authentication**: Session-wide authentication management with aggressive reauthentication on auth errors for more reliable token handling
+- **Better Performance**: Optimized data fetching by tracking last received data timestamp to prevent unnecessary API calls
+- **Role Discovery**: QR code login now extracts and handles user roles from authentication tokens
+- **Improved Styling**: Enhanced CSS with semantic classes for better customization and accessibility
+
+### 🐛 Bug Fixes
+
+- Fixed git hooks installation script to handle missing dev dependencies gracefully in production installs
+- Improved error handling for authentication refresh during data fetching
+- Better validation for student configuration and auto-discovery logic
+
 ## 0.6.0
 
 ### ✅ Reliability & Auth
