@@ -91,10 +91,17 @@ function setLogLevel() {
 // Load real node_helper with mocked dependencies
 // ============================================================================
 
+// Store payloads sent via sendSocketNotification for CLI consumption
+const capturedPayloads = new Map();
+
 const NodeHelper = {
   create: (moduleImpl) => ({
     ...moduleImpl,
     sendSocketNotification: (name, payload) => {
+      // Capture GOT_DATA payloads for CLI reporting
+      if (name === 'GOT_DATA' && payload?.id) {
+        capturedPayloads.set(payload.id, payload);
+      }
       // Stub: in CLI we don't have a frontend; just log
       Log.debug(`[sendSocketNotification] ${name} for ${payload?.id || 'unknown'}`);
     },
@@ -169,7 +176,6 @@ function getAllWebuntisModules(config) {
 async function cmdFetch(flags) {
   const configPath = flags.config || flags.c;
   const studentIndexFlag = flags.student || flags.s;
-  const action = flags.action || flags.a || 'all';
   const verbose = flags.verbose || flags.v;
   // CLI summarizes from debug dumps; no separate dump flag used
   const debugApi = flags['debug-api'] || flags.x;
@@ -262,107 +268,60 @@ async function cmdFetch(flags) {
         Log.wrapper_info(`  📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
         Log.wrapper_info(`  Testing student(s): [${studentIndices.join(', ')}]`);
 
-        // Clean up old dumps to avoid clutter (keep only latest 3 per student)
-        const dumpsDir = path.join(__dirname, '..', 'debug_dumps');
-        if (fs.existsSync(dumpsDir)) {
-          const allFiles = fs.readdirSync(dumpsDir).filter((f) => f.endsWith('_api.json'));
-          const filesByStudent = new Map();
+        // Trigger data fetch for all students (simulates browser behavior)
+        const fetchPayload = {
+          ...moduleConfig,
+          id: cliIdentifier,
+          sessionId: cliSessionId,
+        };
+        await nodeHelper._handleFetchData(fetchPayload);
 
-          // Group files by student name
-          allFiles.forEach((f) => {
-            const match = f.match(/^\d+_(.+)_api\.json$/);
-            if (match) {
-              const studentName = match[1];
-              if (!filesByStudent.has(studentName)) filesByStudent.set(studentName, []);
-              filesByStudent.get(studentName).push(f);
-            }
-          });
-
-          // Delete old dumps (keep only latest 3 per student)
-          filesByStudent.forEach((files) => {
-            const sorted = files.sort().reverse();
-            const toDelete = sorted.slice(3);
-            toDelete.forEach((f) => {
-              try {
-                fs.unlinkSync(path.join(dumpsDir, f));
-                Log.wrapper_info(`  🗑️  Deleted old dump: ${f}`);
-              } catch {
-                // ignore deletion errors
-              }
-            });
-          });
-        }
-
-        // Summarize results for each selected student based on latest debug dump
+        // Summarize results for each selected student from captured payloads
         for (const idx of studentIndices) {
           try {
             const stu = moduleConfig.students[idx] || {};
             const title = stu.title || `Student ${idx}`;
-            // Sanitize title same way as payloadBuilder.js does for dump filenames
-            const safeTitle = title.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-            // Locate latest dump file for this student
-            const files = fs.existsSync(dumpsDir) ? fs.readdirSync(dumpsDir).sort().reverse() : [];
-            const dumpFile = files.find((f) => f.includes(safeTitle) && f.endsWith('_api.json'));
-
-            if (!dumpFile) {
-              Log.warn(`  ⚠️ No debug dump found for ${title}.`);
+            // Get payload from captured GOT_DATA notification
+            const payload = capturedPayloads.get(cliIdentifier);
+            if (!payload) {
+              Log.warn(`  ⚠️ No payload captured for ${title}.`);
               failureCount++;
               continue;
             }
 
-            const dumpPath = path.join(dumpsDir, dumpFile);
-            const dumpJson = JSON.parse(fs.readFileSync(dumpPath, 'utf-8'));
+            // The payload can be a single object or have a students array
+            // For multi-student configs, need to find the right student's data
+            let studentData = payload;
 
-            const results = {
-              timetable: Array.isArray(dumpJson?.timetableRange) ? dumpJson.timetableRange.length : 0,
-              exams: Array.isArray(dumpJson?.exams) ? dumpJson.exams.length : 0,
-              homework: Array.isArray(dumpJson?.homeworks) ? dumpJson.homeworks.length : 0,
-              absences: Array.isArray(dumpJson?.absences) ? dumpJson.absences.length : 0,
-              messagesofday: Array.isArray(dumpJson?.messagesOfDay) ? dumpJson.messagesOfDay.length : 0,
-            };
-
-            if (action === 'auth') {
-              Log.wrapper_info('  ✓ Auth: login ok');
-            } else if (action === 'all') {
-              Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
-              Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
-              Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
-              Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
-              Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
-            } else {
-              const widgetToResult = {
-                lessons: 'timetable',
-                grid: 'timetable',
-                exams: 'exams',
-                homework: 'homework',
-                absences: 'absences',
-                messagesofday: 'messagesofday',
-              };
-              // Support comma-separated actions like "lessons,grid"
-              const actions = String(action || '')
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-              const actionsToReport = actions.length ? actions : ['all'];
-
-              for (const act of actionsToReport) {
-                if (act === 'all') {
-                  Log.wrapper_info(`  ✓ Lessons (Timetable): ${results.timetable}`);
-                  Log.wrapper_info(`  ✓ Exams: ${results.exams}`);
-                  Log.wrapper_info(`  ✓ Homework: ${results.homework}`);
-                  Log.wrapper_info(`  ✓ Absences: ${results.absences}`);
-                  Log.wrapper_info(`  ✓ Messages of Day: ${results.messagesofday}`);
-                } else {
-                  const key = widgetToResult[act] || act;
-                  const count = results[key] || 0;
-                  Log.wrapper_info(`  ✓ ${act.charAt(0).toUpperCase() + act.slice(1)}: ${count}`);
-                }
-              }
+            // If payload has students array, find this student's data
+            if (Array.isArray(payload.students)) {
+              studentData = payload.students.find((s) => s.title === title || s.studentId === stu.studentId);
+            } else if (payload.title !== title && moduleConfig.students.length > 1) {
+              // Skip if this is not the right student's payload
+              continue;
             }
 
-            // Show dump file
-            Log.wrapper_info(`  📄 Dump: debug_dumps/${dumpFile}`);
+            if (!studentData) {
+              Log.warn(`  ⚠️ No data for student ${title}.`);
+              failureCount++;
+              continue;
+            }
+
+            const results = {
+              timetable: Array.isArray(studentData.timetableRange) ? studentData.timetableRange.length : 0,
+              exams: Array.isArray(studentData.exams) ? studentData.exams.length : 0,
+              homework: Array.isArray(studentData.homeworks) ? studentData.homeworks.length : 0,
+              absences: Array.isArray(studentData.absences) ? studentData.absences.length : 0,
+              messagesofday: Array.isArray(studentData.messagesOfDay) ? studentData.messagesOfDay.length : 0,
+            };
+
+            Log.wrapper_info(`\n  📊 Final Payload for "${title}":`);
+            Log.wrapper_info(`     Lessons (Timetable): ${results.timetable}`);
+            Log.wrapper_info(`     Exams: ${results.exams}`);
+            Log.wrapper_info(`     Homework: ${results.homework}`);
+            Log.wrapper_info(`     Absences: ${results.absences}`);
+            Log.wrapper_info(`     Messages of Day: ${results.messagesofday}`);
             successCount++;
           } catch (err) {
             Log.error(`  ✗ Student ${idx} summary failed: ${err.message}`);

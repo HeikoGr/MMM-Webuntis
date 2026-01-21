@@ -85,6 +85,22 @@ let config = {
           showNowLine: true, // show current time line
           mergeGap: 15, // minutes gap to merge adjacent lessons
           maxLessons: 0, // max lessons per day (0 = no limit)
+
+          // === FLEXIBLE FIELD DISPLAY ===
+          // Optional: customize which fields to show in grid cells
+          // (defaults are defined in MMM-Webuntis.js)
+          // fields: {
+          //   primary: 'subject',    // Main field (first line)
+          //   secondary: 'teacher',  // Secondary field (second line)
+          //   additional: ['room'],  // Additional fields shown as badges/parentheses
+          //   format: {              // Display format: 'short' (abbreviation) or 'long' (full name)
+          //     subject: 'short',
+          //     teacher: 'short',
+          //     class: 'short',
+          //     room: 'short',
+          //     studentGroup: 'short',
+          //   },
+          // },
         },
 
         exams: {

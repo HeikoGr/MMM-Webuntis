@@ -18,5 +18,8 @@
   "absence_label": "Absence",
   "no_reason": "No reason",
   "absences_unavailable_parent_account": "Absences are not available with parent accounts (WebUntis API limitation)",
-  "widget_render_error": "Widget could not be loaded"
+  "widget_render_error": "Widget could not be loaded",
+  "break_supervision": "Break Supervision",
+  "hidden_lessons": "more lesson",
+  "hidden_lessons_plural": "more lessons"
 }

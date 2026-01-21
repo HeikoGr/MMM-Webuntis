@@ -83,6 +83,9 @@ module.exports = NodeHelper.create({
     this._libLogger = libLogger;
     // AuthService instances per module identifier to prevent cache cross-contamination
     this._authServicesByIdentifier = new Map();
+
+    // API Status tracking - maps endpoint to last HTTP status code
+    this._apiStatusBySession = new Map(); // sessionKey -> { timetable: 200, exams: 403, ... }
     // Initialize CacheManager for class ID and other caching
     this.cacheManager = new CacheManager(this._mmLog.bind(this));
     // expose payload compactor so linters don't flag unused imports until full refactor
@@ -97,6 +100,31 @@ module.exports = NodeHelper.create({
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     // Track which identifiers have completed student auto-discovery
     this._studentsDiscovered = {};
+  },
+
+  /**
+   * Check if an API endpoint should be skipped based on previous HTTP status
+   * Skips only on permanent errors (403, 404, 410), not on temporary errors (5xx)
+   * @param {string} sessionKey - Session key
+   * @param {string} endpoint - API endpoint name (timetable, exams, homework, absences, messagesOfDay)
+   * @returns {boolean} True if API should be skipped
+   */
+  _shouldSkipApi(sessionKey, endpoint) {
+    if (!this._apiStatusBySession.has(sessionKey)) return false;
+    const status = this._apiStatusBySession.get(sessionKey)[endpoint];
+    if (!status) return false;
+
+    // Permanent errors - skip API calls for these
+    // 403 Forbidden - user has no permission for this endpoint
+    // 404 Not Found - endpoint doesn't exist
+    // 410 Gone - resource permanently removed
+    const permanentErrors = [403, 404, 410];
+
+    // Do NOT skip on temporary errors:
+    // - 5xx errors (500, 502, 503, 504) are temporary server errors
+    // - 401 is handled by auth refresh mechanism
+    // - 429 rate limiting is temporary
+    return permanentErrors.includes(status);
   },
 
   /**
@@ -461,6 +489,13 @@ module.exports = NodeHelper.create({
     className = null,
     resourceType = null
   ) {
+    // Check if API should be skipped based on previous status
+    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'timetable')) {
+      const prevStatus = this._apiStatusBySession.get(options.sessionKey).timetable;
+      this._mmLog('debug', null, `[timetable] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+      return [];
+    }
+
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
     let classId = options.classId;
     const authRefreshTracker = options.authRefreshTracker || null;
@@ -489,7 +524,7 @@ module.exports = NodeHelper.create({
       throw new Error('AuthService not available in restOptions');
     }
 
-    return webuntisApiService.getTimetable({
+    const response = await webuntisApiService.getTimetable({
       getAuth: () =>
         authService.getAuth({
           school,
@@ -514,9 +549,26 @@ module.exports = NodeHelper.create({
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
+
+    // Track API status if sessionKey provided
+    if (options.sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(options.sessionKey)) {
+        this._apiStatusBySession.set(options.sessionKey, {});
+      }
+      this._apiStatusBySession.get(options.sessionKey).timetable = response.status;
+    }
+
+    return response.data;
   },
 
   async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+    // Check if API should be skipped based on previous status
+    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'exams')) {
+      const prevStatus = this._apiStatusBySession.get(options.sessionKey).exams;
+      this._mmLog('debug', null, `[exams] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+      return [];
+    }
+
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -528,7 +580,7 @@ module.exports = NodeHelper.create({
       throw new Error('AuthService not available in restOptions');
     }
 
-    return webuntisApiService.getExams({
+    const response = await webuntisApiService.getExams({
       getAuth: () =>
         authService.getAuth({
           school,
@@ -552,9 +604,26 @@ module.exports = NodeHelper.create({
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
+
+    // Track API status
+    if (options.sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(options.sessionKey)) {
+        this._apiStatusBySession.set(options.sessionKey, {});
+      }
+      this._apiStatusBySession.get(options.sessionKey).exams = response.status;
+    }
+
+    return response.data;
   },
 
   async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+    // Check if API should be skipped based on previous status
+    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'homework')) {
+      const prevStatus = this._apiStatusBySession.get(options.sessionKey).homework;
+      this._mmLog('debug', null, `[homework] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+      return [];
+    }
+
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -566,7 +635,7 @@ module.exports = NodeHelper.create({
       throw new Error('AuthService not available in restOptions');
     }
 
-    return webuntisApiService.getHomework({
+    const response = await webuntisApiService.getHomework({
       getAuth: () =>
         authService.getAuth({
           school,
@@ -587,9 +656,26 @@ module.exports = NodeHelper.create({
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
+
+    // Track API status
+    if (options.sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(options.sessionKey)) {
+        this._apiStatusBySession.set(options.sessionKey, {});
+      }
+      this._apiStatusBySession.get(options.sessionKey).homework = response.status;
+    }
+
+    return response.data;
   },
 
   async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+    // Check if API should be skipped based on previous status
+    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'absences')) {
+      const prevStatus = this._apiStatusBySession.get(options.sessionKey).absences;
+      this._mmLog('debug', null, `[absences] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+      return [];
+    }
+
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -601,7 +687,7 @@ module.exports = NodeHelper.create({
       throw new Error('AuthService not available in restOptions');
     }
 
-    return webuntisApiService.getAbsences({
+    const response = await webuntisApiService.getAbsences({
       getAuth: () =>
         authService.getAuth({
           school,
@@ -622,9 +708,26 @@ module.exports = NodeHelper.create({
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
+
+    // Track API status
+    if (options.sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(options.sessionKey)) {
+        this._apiStatusBySession.set(options.sessionKey, {});
+      }
+      this._apiStatusBySession.get(options.sessionKey).absences = response.status;
+    }
+
+    return response.data;
   },
 
   async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
+    // Check if API should be skipped based on previous status
+    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'messagesOfDay')) {
+      const prevStatus = this._apiStatusBySession.get(options.sessionKey).messagesOfDay;
+      this._mmLog('debug', null, `[messagesOfDay] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+      return [];
+    }
+
     const authOptions = this._getStandardAuthOptions(options);
     const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
     authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
@@ -636,7 +739,7 @@ module.exports = NodeHelper.create({
       throw new Error('AuthService not available in restOptions');
     }
 
-    return webuntisApiService.getMessagesOfDay({
+    const response = await webuntisApiService.getMessagesOfDay({
       getAuth: () =>
         authService.getAuth({
           school,
@@ -655,6 +758,16 @@ module.exports = NodeHelper.create({
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
     });
+
+    // Track API status
+    if (options.sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(options.sessionKey)) {
+        this._apiStatusBySession.set(options.sessionKey, {});
+      }
+      this._apiStatusBySession.get(options.sessionKey).messagesOfDay = response.status;
+    }
+
+    return response.data;
   },
 
   async _ensureStudentsFromAppData(moduleConfig) {
@@ -1112,12 +1225,12 @@ module.exports = NodeHelper.create({
         // Check if holidays are directly in appData or nested
         if (Array.isArray(authSession.appData.holidays)) {
           rawHolidays = authSession.appData.holidays;
-          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.holidays`);
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData (no API call needed)`);
         } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
           rawHolidays = authSession.appData.data.holidays;
-          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods extracted from appData.data.holidays`);
+          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData.data (no API call needed)`);
         } else {
-          this._mmLog('debug', null, 'Holidays: no holidays array found in appData');
+          this._mmLog('debug', null, 'Holidays: not found in appData (no API call - holidays unavailable)');
         }
       } else {
         this._mmLog('debug', null, 'Holidays: no appData available');
@@ -1315,7 +1428,7 @@ module.exports = NodeHelper.create({
           }
 
           // Fetch fresh data for this student
-          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config);
+          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config, sessionKey);
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           } else {
@@ -1709,8 +1822,9 @@ module.exports = NodeHelper.create({
    * @param {string} credKey - Credential grouping key
    * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
    * @param {Object} config - Module configuration
+   * @param {string} sessionKey - Session key for API status tracking
    */
-  async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config) {
+  async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey) {
     // Accept both logger(message) and logger(level, student, message) signatures
     const logger = (...args) => {
       // Standard signature: logger(level, student, message)
@@ -1733,7 +1847,7 @@ module.exports = NodeHelper.create({
     };
 
     const authRefreshTracker = { refreshed: false };
-    const restOptions = { cacheKey: credKey, authSession, authRefreshTracker };
+    const restOptions = { cacheKey: credKey, authSession, authRefreshTracker, sessionKey };
     if (authSession.qrCodeUrl) {
       restOptions.qrCodeUrl = authSession.qrCodeUrl;
     }
@@ -1865,6 +1979,9 @@ module.exports = NodeHelper.create({
 
     // ===== STEP 3: Build payload using payloadBuilder module =====
     try {
+      // Get API status for this session
+      const apiStatus = this._apiStatusBySession.get(sessionKey) || {};
+
       const payload = buildGotDataPayload({
         student,
         grid,
@@ -1887,6 +2004,7 @@ module.exports = NodeHelper.create({
         checkEmptyDataWarning: this._checkEmptyDataWarning.bind(this),
         mmLog: this._mmLog.bind(this),
         cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
+        apiStatus, // Include API status codes
       });
       return payload;
     } catch (err) {

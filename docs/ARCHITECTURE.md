@@ -1,11 +1,11 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2026-01-20
-**Project Status**: Production-ready with parallel data fetching (2.7x performance boost)
+**Last Updated**: 2025-01-21
+**Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures)
 
 ## Executive Summary
 
-MMM-Webuntis is a sophisticated MagicMirror² module featuring a **service-oriented architecture** with 17 specialized backend services and 6 configurable widget renderers. The module successfully migrated from legacy JSON-RPC API to modern REST API while maintaining backward compatibility through 25 legacy config mappings. Recent improvements include parallel data fetching orchestration, unified error handling utilities, and modular payload building. Key strengths include robust authentication (QR code, credentials, parent accounts), comprehensive error handling, and extensive documentation.
+MMM-Webuntis is a sophisticated MagicMirror² module featuring a **service-oriented architecture** with 17 specialized backend services and 6 configurable widget renderers. The module successfully migrated from legacy JSON-RPC API to modern REST API while maintaining backward compatibility through 25 legacy config mappings. Recent improvements include **timetable-first fetch strategy** (token validation before parallel fetches), **5-minute token buffer** (prevents silent API failures), **API status tracking** (skips permanent errors), flexible field configuration for grid widget, and break supervision support. Key strengths include robust authentication (QR code, credentials, parent accounts), comprehensive error handling, and extensive documentation.
 
 **Code Metrics**:
 - Total LOC: ~5,500
@@ -14,7 +14,7 @@ MMM-Webuntis is a sophisticated MagicMirror² module featuring a **service-orien
 - Test Coverage: 0% (planned improvement)
 - ESLint Errors: 0
 - Documentation: 27 markdown files
-- Performance: 2.7x faster data fetching (parallel vs sequential)
+- Performance: Timetable-first + parallel (fast + reliable)
 
 ## System Overview
 
@@ -195,12 +195,20 @@ graph TB
 
 ### Core Services
 
+**[node_helper.js](../node_helper.js)** - Main backend coordinator (1,803 LOC)
+- [`_shouldSkipApi()`](../node_helper.js#L106) - API status tracking: Skip permanent errors (403, 404, 410), retry temporary errors (5xx)
+- `_apiStatusBySession` Map - Tracks HTTP status codes per session/endpoint
+- Prevents repeated API calls to endpoints with permanent permission errors
+- Does NOT skip temporary errors (503, 500, 429) - retries on next fetch
+- **Dependencies**: All lib/ services
+
 **[authService.js](../lib/authService.js)** - Authentication and token caching
 - [`class AuthService`](../lib/authService.js#L29) - Main service class
 - [`getAuth()`](../lib/authService.js#L121) - Main auth entry point (with caching)
-- Token caching: 14-minute TTL, 1-minute safety buffer
+- Token caching: 14-minute TTL, **5-minute safety buffer** (prevents silent API failures from expired tokens)
 - QR code auth flow, parent account support
 - School/server resolution from QR codes
+- Race condition protection: `_forceReauth` flag cleanup after use, `_pendingAuth` Map for parallel request coordination
 - **Dependencies**: httpClient.js, fetchClient.js, cacheManager.js
 
 **[httpClient.js](../lib/httpClient.js)** - JSON-RPC client for WebUntis authentication
@@ -229,11 +237,12 @@ graph TB
 
 ### Orchestration & Building
 
-**[dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)** - Parallel data fetching (NEW)
-- [`orchestrateFetch()`](../lib/dataFetchOrchestrator.js#L25) - Orchestrate parallel API calls via Promise.all
-- **Performance**: 2.7x faster than sequential fetching (~2s vs ~5s)
+**[dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
+- [`orchestrateFetch()`](../lib/dataFetchOrchestrator.js#L25) - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
+- **Strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
+- **Performance**: Fast (~100ms overhead for sequential timetable, prevents wasted parallel calls)
+- Auth refresh detection: Retries all data types with fresh token if timetable fetch triggers auth renewal
 - Per-data-type error handling with fallback to empty arrays
-- Integrates with errorUtils.wrapAsync for consistent error collection
 - **Dependencies**: errorUtils.js
 
 **[payloadBuilder.js](../lib/payloadBuilder.js)** - GOT_DATA payload construction (NEW)
@@ -394,21 +403,28 @@ sequenceDiagram
         end
         HTTP->>HTTP: getBearerToken() L244
         HTTP->>REST: GET /api/token/new
-        REST-->>HTTP: bearer token (15min expiry)
+        REST-->>HTTP: bearer token (JWT, 15min expiry)
         HTTP-->>Auth: { cookies, token }
-        Auth->>Auth: Cache token (14min TTL)
+        Auth->>Auth: Cache token (14min TTL, 5min buffer)
     end
 
-    Note over NH,REST: ✨ Parallel Data Fetching (NEW - 2.7x faster)
+    Note over NH,REST: ✨ Timetable-First + Parallel Fetching (prevents silent token failures)
     loop for each student
         NH->>Orch: orchestrateFetch() L25
 
+        Note over Orch: Step 1: Fetch timetable FIRST (token validation canary)
+        Orch->>API: getTimetable() L164
+        API->>REST: GET /timetable/entries
+        REST-->>API: timetable[] or 401 Unauthorized
+        API-->>Orch: normalized timetable
+
+        alt timetable returned 401 (token expired)
+            Note over Orch: Auth refresh triggered, retry all data types
+            Orch->>Orch: orchestrateFetch() again with fresh token
+        end
+
+        Note over Orch: Step 2: Token validated, fetch remaining 4 APIs in parallel
         par Parallel Fetch via Promise.all
-            Orch->>API: getTimetable() L164
-            API->>REST: GET /timetable/entries
-            REST-->>API: timetable[]
-            API-->>Orch: normalized timetable
-        and
             Orch->>API: getExams() L199
             API->>REST: GET /exams
             REST-->>API: exams[]

@@ -61,8 +61,9 @@ All text elements have dedicated CSS classes for precise styling:
 
 | Class | Element | Example Use |
 |-------|---------|-------------|
-| `.lesson-subject` | Subject name (Grid) | Increase font size |
-| `.lesson-teacher` | Teacher name (Grid) | Change color |
+| `.lesson-primary` | Primary field (Grid) - typically subject, but configurable via `grid.fields.primary` | Increase font size |
+| `.lesson-secondary` | Secondary field (Grid) - typically teacher, but configurable via `grid.fields.secondary` | Change color |
+| `.lesson-break-supervision` | Break supervision periods | Customize background/color |
 | `.teacher-name` | Teacher name (Lessons/Exams) | Make bold |
 | `.lesson-substitution-text` | Substitution info | Orange color |
 | `.lesson-info-text` | General lesson text | Italic style |
@@ -85,8 +86,8 @@ All text elements have dedicated CSS classes for precise styling:
 
 ```css
 /* config/custom.css */
-.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-subject,
-.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-teacher {
+.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-primary,
+.MMM-Webuntis .grid-combined .lesson-cancelled .lesson-secondary {
   text-decoration: line-through;
 }
 ```
@@ -94,11 +95,11 @@ All text elements have dedicated CSS classes for precise styling:
 ### 2. Larger text for visually impaired users
 
 ```css
-.MMM-Webuntis .lesson-subject {
+.MMM-Webuntis .lesson-primary {
   font-size: 1rem;          /* Default: 0.75rem */
 }
 
-.MMM-Webuntis .lesson-teacher {
+.MMM-Webuntis .lesson-secondary {
   font-size: 0.85rem;       /* Default: 0.65rem */
 }
 
@@ -107,16 +108,27 @@ All text elements have dedicated CSS classes for precise styling:
 }
 ```
 
-### 3. Bold teacher names
+### 3. Bold teacher names (when teacher is secondary field)
 
 ```css
 .MMM-Webuntis .teacher-name,
-.MMM-Webuntis .lesson-teacher {
+.MMM-Webuntis .lesson-secondary {
   font-weight: 700;
 }
 ```
 
-### 4. Highlight exam descriptions
+### 4. Customize break supervision appearance
+
+```css
+.MMM-Webuntis .lesson-break-supervision {
+  background-color: #ffd700;  /* Gold background */
+  color: #000000;
+  font-weight: 600;
+  border-left: 4px solid #ff6600;  /* Orange accent */
+}
+```
+
+### 5. Highlight exam descriptions
 
 ```css
 .MMM-Webuntis .exam-description {
@@ -128,7 +140,7 @@ All text elements have dedicated CSS classes for precise styling:
 }
 ```
 
-### 5. Hide homework icons
+### 6. Hide homework icons
 
 ```css
 .MMM-Webuntis .homework-icon {
@@ -136,7 +148,7 @@ All text elements have dedicated CSS classes for precise styling:
 }
 ```
 
-### 6. Custom day label styling
+### 7. Custom day label styling
 
 ```css
 .MMM-Webuntis .grid-daylabel {
@@ -150,7 +162,7 @@ All text elements have dedicated CSS classes for precise styling:
 }
 ```
 
-### 7. Increase spacing for better readability
+### 8. Increase spacing for better readability
 
 ```css
 .MMM-Webuntis .wu-widget-container {
@@ -189,10 +201,12 @@ All text elements have dedicated CSS classes for precise styling:
 ## Accessibility Best Practices
 
 1. **Test contrast ratios:** Ensure text/background combinations meet WCAG AA standards (4.5:1 for normal text)
-2. **Use semantic classes:** Target `.lesson-subject` instead of generic `.small`
+2. **Use semantic classes:** Target `.lesson-primary`/`.lesson-secondary` instead of generic `.small`
 3. **Avoid pure color coding:** Use icons, text styles, or patterns in addition to colors
 4. **Test with screen readers:** Ensure custom styles don't break screen reader navigation
 5. **Increase font sizes gradually:** Start with 1.2× and adjust based on viewing distance
+6. **Consider flexible field configuration:** Grid widget supports configurable primary/secondary fields via `grid.fields` config
+6. **Consider flexible field configuration:** Grid widget supports configurable primary/secondary fields via `grid.fields` config
 
 ## Full CSS Class Reference
 
@@ -225,14 +239,19 @@ All text elements have dedicated CSS classes for precise styling:
 - `.has-exam` - Lessons with exams (yellow left border)
 
 ### Text Element Classes
-- `.lesson-subject` - Subject/course name
-- `.lesson-teacher` - Teacher name/initials
+- `.lesson-primary` - Primary field (configurable via `grid.fields.primary`, typically subject)
+- `.lesson-secondary` - Secondary field (configurable via `grid.fields.secondary`, typically teacher)
+- `.lesson-break-supervision` - Break supervision periods
 - `.teacher-name` - Teacher name (inline)
 - `.lesson-substitution-text` - Substitution details
 - `.lesson-info-text` - General lesson information
 - `.exam-description` - Exam description text
 - `.message-subject` - Message headline
 - `.message-text` - Message body text
+
+### Legacy Classes (Deprecated, use lesson-primary/lesson-secondary instead)
+- `.lesson-subject` - **Deprecated:** Use `.lesson-primary`
+- `.lesson-teacher` - **Deprecated:** Use `.lesson-secondary`
 
 ### Row Type Classes
 - `.examRow` - Exam data row

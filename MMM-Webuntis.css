@@ -310,6 +310,13 @@
   color: var(--wu-regular-text);
 }
 
+.MMM-Webuntis .grid-combined .lesson-break-supervision,
+.MMM-Webuntis .ticker-item .lesson-content.lesson-break-supervision {
+  background-color: #d47aeb;
+  color: #4a0052;
+  font-weight: 500;
+}
+
 .MMM-Webuntis .grid-combined .lesson-regular {
   border-color: var(--wu-lesson-border);
   padding: var(--wu-lesson-padding);
@@ -635,14 +642,14 @@
 
 /* Semantic CSS Classes for Accessibility */
 
-/* Lesson Subject (Grid & Lessons) */
-.MMM-Webuntis .lesson-subject {
+/* Lesson Primary Field (Grid & Lessons) */
+.MMM-Webuntis .lesson-primary {
   font-weight: 600;
   font-size: 0.75rem;
 }
 
-/* Lesson Teacher (Grid & Lessons) */
-.MMM-Webuntis .lesson-teacher {
+/* Lesson Secondary Field (Grid & Lessons) */
+.MMM-Webuntis .lesson-secondary {
   font-size: 0.65rem;
   color: #888;
   font-weight: 400;

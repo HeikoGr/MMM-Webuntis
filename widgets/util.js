@@ -238,6 +238,14 @@
         typeof util.createWidgetContext === 'function'
           ? util.createWidgetContext
           : () => ({ isVerbose: false, getConfig: () => undefined }),
+      // Flexible field configuration functions
+      getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => '',
+      getSubject: typeof util.getSubject === 'function' ? util.getSubject : () => '',
+      getRoom: typeof util.getRoom === 'function' ? util.getRoom : () => '',
+      getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
+      getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
+      getLessonDisplayMode: typeof util.getLessonDisplayMode === 'function' ? util.getLessonDisplayMode : () => 'auto',
+      buildFlexibleLessonDisplay: typeof util.buildFlexibleLessonDisplay === 'function' ? util.buildFlexibleLessonDisplay : null,
     };
   }
 
@@ -275,7 +283,224 @@
     getWidgetConfig,
     initWidget,
     createWidgetContext,
+    // New dynamic field utilities
+    getFieldValue,
+    getTeachers,
+    getSubject,
+    getRoom,
+    getClass,
+    getStudentGroup,
+    getLessonDisplayMode,
+    buildLessonDisplayText,
+    // Flexible field configuration
+    resolveFieldConfig,
+    getConfiguredFieldValue,
+    buildFlexibleLessonDisplay,
   };
+
+  /**
+   * Extract information from lesson fields flexibly based on available data
+   * Supports both traditional (te/su/ro) and dynamic (cl/sg) fields
+   */
+  function getFieldValue(lesson, fieldType, format = 'short') {
+    if (!lesson) return '';
+
+    const field = lesson[fieldType];
+    if (!field || !Array.isArray(field) || field.length === 0) return '';
+
+    const item = field[0];
+    if (!item) return '';
+
+    // Return short name or long name based on format preference
+    return format === 'long' ? item.longname || item.name : item.name || item.longname;
+  }
+
+  /**
+   * Get all available teachers from lesson (handles multiple teachers)
+   */
+  function getTeachers(lesson, format = 'short') {
+    if (!lesson?.te || !Array.isArray(lesson.te)) return [];
+    return lesson.te
+      .map((teacher) => (format === 'long' ? teacher.longname || teacher.name : teacher.name || teacher.longname))
+      .filter(Boolean);
+  }
+
+  /**
+   * Get subject information with fallback
+   */
+  function getSubject(lesson, format = 'short') {
+    return getFieldValue(lesson, 'su', format);
+  }
+
+  /**
+   * Get room information with fallback
+   */
+  function getRoom(lesson, format = 'short') {
+    return getFieldValue(lesson, 'ro', format);
+  }
+
+  /**
+   * Get class information (for teacher view)
+   */
+  function getClass(lesson, format = 'short') {
+    return getFieldValue(lesson, 'cl', format);
+  }
+
+  /**
+   * Get student group information
+   */
+  function getStudentGroup(lesson, format = 'short') {
+    return getFieldValue(lesson, 'sg', format);
+  }
+
+  /**
+   * Determine lesson display mode based on available fields
+   * Returns an object with display preferences for the current context
+   */
+  function getLessonDisplayMode(lesson) {
+    const hasTeacher = lesson?.te && lesson.te.length > 0;
+    const hasSubject = lesson?.su && lesson.su.length > 0;
+    const hasRoom = lesson?.ro && lesson.ro.length > 0;
+    const hasClass = lesson?.cl && lesson.cl.length > 0;
+    const hasStudentGroup = lesson?.sg && lesson.sg.length > 0;
+
+    // Determine if this appears to be a teacher account (has class info, no student group emphasis)
+    const isTeacherView = hasClass && !hasStudentGroup;
+
+    // Determine if this is a student account (has student group, limited class info)
+    const isStudentView = hasStudentGroup && !hasClass;
+
+    return {
+      isTeacherView,
+      isStudentView,
+      hasTeacher,
+      hasSubject,
+      hasRoom,
+      hasClass,
+      hasStudentGroup,
+      // Suggested primary info for different contexts
+      primaryInfo: isTeacherView ? 'class' : 'subject',
+      secondaryInfo: isTeacherView ? 'room' : 'teacher',
+      showStudentGroup: hasStudentGroup && !isTeacherView,
+    };
+  }
+
+  /**
+   * Build flexible lesson display text based on available fields and context
+   */
+  function buildLessonDisplayText(lesson, options = {}) {
+    const {
+      showSubject = true,
+      showTeacher = true,
+      showRoom = false,
+      showClass = false,
+      showStudentGroup = false,
+      format = 'short',
+      separator = ' | ',
+    } = options;
+
+    const parts = [];
+
+    if (showSubject) {
+      const subject = getSubject(lesson, format);
+      if (subject) parts.push(subject);
+    }
+
+    if (showTeacher) {
+      const teachers = getTeachers(lesson, format);
+      if (teachers.length > 0) {
+        parts.push(teachers.join(', '));
+      }
+    }
+
+    if (showRoom) {
+      const room = getRoom(lesson, format);
+      if (room) parts.push(room);
+    }
+
+    if (showClass) {
+      const className = getClass(lesson, format);
+      if (className) parts.push(className);
+    }
+
+    if (showStudentGroup) {
+      const group = getStudentGroup(lesson, format);
+      if (group) parts.push(group);
+    }
+
+    return parts.join(separator);
+  }
+
+  /**
+   * Resolve field configuration from config (uses defaults from MMM-Webuntis.js)
+   */
+  function resolveFieldConfig(config) {
+    const gridConfig = config?.grid?.fields || {};
+
+    // Return config as-is (defaults are already merged by MagicMirror from MMM-Webuntis.js)
+    return {
+      primary: gridConfig.primary || 'subject',
+      secondary: gridConfig.secondary || 'teacher',
+      additional: gridConfig.additional || ['room'],
+      format: gridConfig.format || {
+        subject: 'short',
+        teacher: 'short',
+        class: 'short',
+        room: 'short',
+        studentGroup: 'short',
+      },
+    };
+  }
+
+  /**
+   * Get field value based on flexible configuration
+   */
+  function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
+    if (!lesson || !fieldType || fieldType === 'none') return '';
+
+    const format = fieldConfig?.format?.[fieldType] || 'short';
+
+    switch (fieldType) {
+      case 'subject':
+        return getSubject(lesson, format);
+      case 'teacher': {
+        const teachers = getTeachers(lesson, format);
+        return teachers.length > 0 ? teachers[0] : '';
+      }
+      case 'room':
+        return getRoom(lesson, format);
+      case 'class':
+        return getClass(lesson, format);
+      case 'studentGroup':
+        return getStudentGroup(lesson, format);
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Build lesson display text using flexible field configuration
+   */
+  function buildFlexibleLessonDisplay(lesson, config, options = {}) {
+    const fieldConfig = resolveFieldConfig(config);
+    const { includeAdditional = true } = options;
+
+    const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
+    const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
+
+    const parts = { primary, secondary, additional: [] };
+
+    if (includeAdditional && Array.isArray(fieldConfig.additional)) {
+      for (const additionalField of fieldConfig.additional) {
+        const value = getConfiguredFieldValue(lesson, additionalField, fieldConfig);
+        if (value && value !== primary && value !== secondary) {
+          parts.additional.push(value);
+        }
+      }
+    }
+
+    return parts;
+  }
 
   root.dom = {
     createElement,
