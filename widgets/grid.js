@@ -659,8 +659,21 @@ function getNowLineState(ctx) {
     let groupId = 0;
 
     for (const [dateStr, lessons] of byDate.entries()) {
-      // Sort lessons by start time for efficient overlap detection
-      const sorted = lessons.slice().sort((a, b) => a.startMin - b.startMin);
+      // Separate break supervisions from regular lessons
+      // Break supervisions should be positioned freely, not grouped with overlapping lessons
+      const regularLessons = [];
+      const breakSupervisions = [];
+
+      for (const lesson of lessons) {
+        if (lesson.activityType === 'BREAK_SUPERVISION') {
+          breakSupervisions.push(lesson);
+        } else {
+          regularLessons.push(lesson);
+        }
+      }
+
+      // Sort regular lessons by start time for efficient overlap detection
+      const sorted = regularLessons.slice().sort((a, b) => a.startMin - b.startMin);
 
       // Track which lessons have been assigned to a group
       const assigned = new Set();
@@ -696,6 +709,13 @@ function getNowLineState(ctx) {
         // Create unique key for this group
         const key = `${dateStr}_group_${groupId++}`;
         groups.set(key, overlappingGroup);
+      }
+
+      // Add break supervisions as individual groups (no overlap checking)
+      // This allows them to be positioned freely, even if they overlap with regular lessons
+      for (const supervision of breakSupervisions) {
+        const key = `${dateStr}_supervision_${groupId++}`;
+        groups.set(key, [supervision]);
       }
     }
 
