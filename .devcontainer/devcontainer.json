@@ -2,7 +2,7 @@
   "name": "MMM-Webuntis (MagicMirror Dev)",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "."
+    "context": ".."
   },
   "workspaceFolder": "/opt/magic_mirror/modules/MMM-Webuntis",
   "workspaceMount": "source=${localWorkspaceFolder},target=/opt/magic_mirror/modules/MMM-Webuntis,type=bind",
@@ -26,5 +26,5 @@
     }
   },
   "postCreateCommand": "/bin/sh .devcontainer/postCreate.sh",
-  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo 'Playwright MCP started (logs: /tmp/playwright-mcp.log)'; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
+  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && nohup npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo \"Playwright MCP started (logs: /tmp/playwright-mcp.log, port: 8931)\"; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
 }

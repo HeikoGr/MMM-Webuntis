@@ -1,0 +1,27 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+
+# Node modules (will be installed in container)
+node_modules/
+
+# Logs and debug dumps
+*.log
+debug_dumps/
+
+# Test files
+tests/
+*.test.js
+
+# Config templates (copied separately)
+config/config.template.js
+config/custom.template.css
+
+# Development files
+.vscode/
+*.bak

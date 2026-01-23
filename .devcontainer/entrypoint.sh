@@ -34,6 +34,8 @@ copy_from_template() {
 
   if [ ! -f "$target" ] && [ -f "$template" ]; then
     cp "$template" "$target"
+    # Convert CRLF to LF (Windows -> Unix line endings)
+    sed -i 's/\r$//' "$target" 2>/dev/null || true
     echo "✓ Created: $name (from template)"
   fi
 }
@@ -59,6 +61,8 @@ create_symlink "${MODULE_DIR}/config/.env" "${MAGICMIRROR_PATH}/.env" ".env"
 ENV_FILE="${MAGICMIRROR_PATH}/.env"
 if [ -f "$ENV_FILE" ]; then
   echo "Loading environment variables from $ENV_FILE"
+  # Fix line endings (CRLF -> LF) before sourcing
+  sed -i 's/\r$//' "$ENV_FILE" 2>/dev/null || true
   set -a
   . "$ENV_FILE"
   set +a

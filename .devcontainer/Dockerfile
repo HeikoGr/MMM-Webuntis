@@ -26,15 +26,22 @@ RUN npm install -g pm2
 RUN npm install -g \
     prettier \
     cspell
-
+# Install Playwright browsers for testing
+RUN npx playwright install chrome --with-deps
 WORKDIR /opt/magic_mirror
 
-COPY ./entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh || true
+# Copy shell scripts and ensure correct line endings (LF) for cross-platform compatibility (Windows/Linux)
+COPY .devcontainer/entrypoint.sh /entrypoint.sh
+COPY .devcontainer/postCreate.sh /tmp/postCreate.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /tmp/postCreate.sh && \
+    chmod +x /entrypoint.sh /tmp/postCreate.sh
+
+# Ensure compatibility with generated Dockerfiles that expect /entrypoint
+RUN ln -sf /entrypoint.sh /entrypoint
 
 # Provide a default PM2 ecosystem file so `pm2-runtime` can start MagicMirror.
 # This is a minimal file intended for development in the devcontainer.
-COPY ./ecosystem.config.js /opt/magic_mirror/ecosystem.config.js
+COPY .devcontainer/ecosystem.config.js /opt/magic_mirror/ecosystem.config.js
 
 EXPOSE 8080
 
