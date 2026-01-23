@@ -4,7 +4,7 @@
     "type": "git",
     "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
-  "version": "0.6.2pre",
+  "version": "0.6.2",
   "description": "MagicMirror module to access Webuntis school timetables.",
   "main": "MMM-Webuntis.js",
   "keywords": [
@@ -25,7 +25,8 @@
     "lint:fix": "eslint --fix && prettier --write .",
     "test:spelling": "cspell .",
     "debug": "node cli/node_helper_wrapper.js",
-    "check:mm": "node scripts/magicmirror-check.mjs"
+    "check:current": "node scripts/magicmirror-check.mjs --current",
+    "check": "node scripts/magicmirror-check.mjs"
   },
   "lint-staged": {
     "*": [
@@ -41,7 +42,7 @@
     "cspell": "^9.6.0",
     "eslint": "^9.39.2",
     "eslint-plugin-n": "^17.23.2",
-    "globals": "^17.0.0",
+    "globals": "^17.1.0",
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
     "simple-git-hooks": "^2.13.1"

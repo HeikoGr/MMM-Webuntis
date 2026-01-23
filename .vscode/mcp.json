@@ -3,7 +3,7 @@
     "microsoft/playwright-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@playwright/mcp@latest", "--viewport-size=1920x1080", "--isolated", "--no-sandbox"]
+      "args": ["@playwright/mcp@latest", "--viewport-size=1920x1080", "--isolated", "--no-sandbox", "--headless"]
     }
   }
 }

@@ -1,0 +1,16 @@
+# Enforce LF line endings for shell scripts to ensure cross-platform compatibility
+# Critical for Docker containers that run on Linux
+*.sh text eol=lf
+
+# Ensure consistent line endings for other text files
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.mjs text eol=lf
+*.css text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Keep Windows batch files with CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf

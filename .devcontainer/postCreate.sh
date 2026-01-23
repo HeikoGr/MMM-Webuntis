@@ -6,6 +6,14 @@ MAGICMIRROR_PATH="/opt/magic_mirror"
 MODULE_DIR="$(pwd)"
 MODULE_NAME="$(basename \"$MODULE_DIR\")"
 
-# Note: Symlinks are now created in entrypoint.sh before the .env is loaded,
-# ensuring they exist during container startup. This postCreate.sh only copies
-# template files if they don't exist yet.
+echo "Running postCreate setup for $MODULE_NAME..."
+
+# Install module dependencies
+if [ -f "$MODULE_DIR/package.json" ]; then
+  echo "Installing $MODULE_NAME dependencies..."
+  npm install || {
+    echo "WARNING: npm install failed for $MODULE_NAME"
+  }
+fi
+
+echo "postCreate setup complete!"
