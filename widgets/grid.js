@@ -554,11 +554,13 @@ function getNowLineState(ctx) {
   }
 
   function makeLessonInnerHTML(lesson, escapeHtml, ctx) {
-    // Special handling for BREAK_SUPERVISION
+    // Special handling for BREAK_SUPERVISION (must run first, before flexible display)
     if (lesson.activityType === 'BREAK_SUPERVISION') {
       const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
-      const supervisedArea = lesson.room || lesson.roomLong || breakSupervisionLabel;
-      return `<div class='lesson-content break-supervision'><span class='lesson-primary'>🔔 ${escapeHtml(breakSupervisionLabel)}</span><br><span class='lesson-secondary'>${escapeHtml(supervisedArea)}</span></div>`;
+      const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
+      const supervisedArea = lesson.room || lesson.roomLong || '';
+      const displayText = supervisedArea ? `🔔 ${shortLabel} (${supervisedArea})` : `🔔 ${shortLabel}`;
+      return `<div class='lesson-content break-supervision'><span class='lesson-primary'>${escapeHtml(displayText)}</span></div>`;
     }
 
     // Use flexible field configuration from context if available
@@ -566,6 +568,7 @@ function getNowLineState(ctx) {
       try {
         const displayParts = root.util.buildFlexibleLessonDisplay(lesson, ctx.config);
 
+        // Skip empty displays (e.g., lessons with no subject, teacher, room)
         const primaryText = displayParts.primary ? escapeHtml(displayParts.primary) : '';
         const secondaryText = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
 

@@ -311,10 +311,39 @@
 }
 
 .MMM-Webuntis .grid-combined .lesson-break-supervision,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-break-supervision {
+.MMM-Webuntis .grid-combined .lesson-content.break-supervision,
+.MMM-Webuntis .ticker-item .lesson-content.break-supervision {
   background-color: #d47aeb;
-  color: #4a0052;
+  color: #ffffff; /* white text for good contrast on purple */
   font-weight: 500;
+}
+
+/* Ensure inner content fills the parent cell for consistent visuals */
+.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  overflow: hidden;
+  font-size: 0.8em;
+  line-height: 1.1;
+}
+
+/* Override lesson-primary and lesson-secondary styles within break-supervision */
+.MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-primary,
+.MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-secondary {
+  position: static !important; /* override any absolute positioning */
+  margin: 0;
+  padding: 0;
+  color: #ffffff !important; /* white text */
+  font-size: 9px;
+  line-height: 1;
 }
 
 .MMM-Webuntis .grid-combined .lesson-regular {
