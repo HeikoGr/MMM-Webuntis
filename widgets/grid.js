@@ -753,6 +753,7 @@ function getNowLineState(ctx) {
     tickerWrapper.style.position = 'absolute';
     tickerWrapper.style.left = '0.15rem'; // Match grid-lesson left offset
     tickerWrapper.style.right = '0.15rem'; // Match grid-lesson right offset
+    tickerWrapper.style.zIndex = '10'; // Ensure ticker appears above cancelled lessons
     tickerWrapper.setAttribute('data-date', lessons[0].dateStr);
     tickerWrapper.setAttribute('data-end-min', String(Math.max(...lessons.map((l) => l.endMin))));
 
@@ -893,38 +894,72 @@ function getNowLineState(ctx) {
 
       const hasExam = lessons.some((l) => lessonHasExam(l));
 
-      // RULE 1a: Exactly 2 lessons - one cancelled, one irregular -> split view (regular substitution)
-      // This is the typical case: original lesson cancelled, replacement lesson irregular
-      if (lessons.length === 2) {
-        const cancelledLesson = lessons.find((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
-        const irregularLesson = lessons.find((l) => l.code === 'irregular' || l.status === 'SUBSTITUTION');
+      // RULE 0: Generic split view for cancelled + non-cancelled lessons
+      // Display replacement/event on left, cancelled lessons on right
+      const cancelledLessons = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
+      const nonCancelledLessons = lessons.filter((l) => l.code !== 'cancelled' && l.status !== 'CANCELLED');
 
-        if (cancelledLesson && irregularLesson) {
-          // Use split view: irregular left, cancelled right (using position absolute)
-          const { bothInner } = containers;
+      if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1) {
+        const { bothInner } = containers;
 
-          const leftCell = createLessonCell(topPx, heightPx, irregularLesson.dateStr, eMin);
-          leftCell.classList.add('lesson-substitution', 'split-left');
+        // Left side: Non-cancelled lessons (replacement/event/regular)
+        // If only one lesson, use full height; if multiple, stack them individually
+        if (nonCancelledLessons.length === 1) {
+          const replacement = nonCancelledLessons[0];
+          const leftCell = createLessonCell(topPx, heightPx, replacement.dateStr, eMin);
+
+          // Determine styling based on lesson type
+          if (replacement.code === 'irregular' || replacement.status === 'SUBSTITUTION') {
+            leftCell.classList.add('lesson-substitution', 'split-left');
+          } else {
+            leftCell.classList.add('lesson-regular', 'split-left');
+          }
+
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
-          leftCell.innerHTML = makeLessonInnerHTML(irregularLesson, escapeHtml, ctx);
-          if (checkHomeworkMatch(irregularLesson, homeworks)) {
+          leftCell.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
+          if (checkHomeworkMatch(replacement, homeworks)) {
             addHomeworkIcon(leftCell);
           }
           bothInner.appendChild(leftCell);
+        } else {
+          // Multiple non-cancelled lessons: stack them individually
+          for (const lesson of nonCancelledLessons) {
+            const lTopPx = Math.round(((lesson.startMin - allStart) / totalMinutes) * totalHeight);
+            const lHeightPx = Math.max(12, Math.round(((lesson.endMin - lesson.startMin) / totalMinutes) * totalHeight));
 
-          const rightCell = createLessonCell(topPx, heightPx, cancelledLesson.dateStr, eMin);
+            const leftCell = createLessonCell(lTopPx, lHeightPx, lesson.dateStr, lesson.endMin);
+
+            if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
+              leftCell.classList.add('lesson-substitution', 'split-left');
+            } else {
+              leftCell.classList.add('lesson-regular', 'split-left');
+            }
+
+            if (hasExam) leftCell.classList.add('has-exam');
+            if (isPast) leftCell.classList.add('past');
+            leftCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
+            if (checkHomeworkMatch(lesson, homeworks)) {
+              addHomeworkIcon(leftCell);
+            }
+            bothInner.appendChild(leftCell);
+          }
+        }
+
+        // Right side: Cancelled lessons stacked by their individual time slots
+        for (const cancelled of cancelledLessons) {
+          const cTopPx = Math.round(((cancelled.startMin - allStart) / totalMinutes) * totalHeight);
+          const cHeightPx = Math.max(12, Math.round(((cancelled.endMin - cancelled.startMin) / totalMinutes) * totalHeight));
+
+          const rightCell = createLessonCell(cTopPx, cHeightPx, cancelled.dateStr, cancelled.endMin);
           rightCell.classList.add('lesson-cancelled', 'split-right');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
-          rightCell.innerHTML = makeLessonInnerHTML(cancelledLesson, escapeHtml, ctx);
-          if (checkHomeworkMatch(cancelledLesson, homeworks)) {
+          rightCell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
+          if (checkHomeworkMatch(cancelled, homeworks)) {
             addHomeworkIcon(rightCell);
           }
           bothInner.appendChild(rightCell);
-        } else {
-          // Two lessons but not the cancelled+irregular pattern -> use ticker
-          createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
         }
       }
       // RULE 1b: More than 2 overlapping lessons -> ticker
