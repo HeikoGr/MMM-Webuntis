@@ -340,20 +340,12 @@ Module.register('MMM-Webuntis', {
   _filterTimetableRange(entries, studentConfig) {
     if (!Array.isArray(entries) || entries.length === 0) return [];
     const cfg = studentConfig || {};
-    const fallback = this.config || {};
     const defaults = this.defaults || {};
 
-    // Prefer new keys `nextDays` / `pastDays`, fall back to legacy `daysToShow` / `pastDaysToShow`.
-    const daysVal =
-      cfg.nextDays ?? cfg.daysToShow ?? fallback.nextDays ?? fallback.daysToShow ?? defaults.nextDays ?? defaults.daysToShow ?? 0;
-    const pastVal =
-      cfg.pastDays ??
-      cfg.pastDaysToShow ??
-      fallback.pastDays ??
-      fallback.pastDaysToShow ??
-      defaults.pastDays ??
-      defaults.pastDaysToShow ??
-      0;
+    // Legacy keys are already normalized in backend (configValidator.js)
+    // Priority: grid-specific > student-level > defaults
+    const daysVal = cfg.grid?.nextDays ?? cfg.nextDays ?? defaults.nextDays ?? 0;
+    const pastVal = cfg.grid?.pastDays ?? cfg.pastDays ?? defaults.pastDays ?? 0;
     const daysToShow = Number(daysVal);
     const pastDaysToShow = Number(pastVal);
     const limitFuture = Number.isFinite(daysToShow) && daysToShow > 0;
@@ -367,7 +359,7 @@ Module.register('MMM-Webuntis', {
     if (!this._currentTodayYmd) this._currentTodayYmd = todayYmd;
 
     const minYmd = limitPast ? this._shiftYmd(todayYmd, -pastDaysToShow) : null;
-    const maxYmd = limitFuture ? this._shiftYmd(todayYmd, daysToShow - 1) : null;
+    const maxYmd = limitFuture ? this._shiftYmd(todayYmd, daysToShow) : null;
 
     return entries.filter((lesson) => {
       const ymd = Number(lesson?.date);
