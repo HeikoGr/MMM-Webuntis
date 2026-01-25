@@ -1,35 +1,39 @@
-# Documentation
+# MMM-Webuntis Documentation
 
-This folder contains the detailed REST API documentation and implementation notes for MMM-Webuntis.
+This directory contains comprehensive documentation for the MMM-Webuntis module.
 
-## Start Here (Canonical Docs)
+## Documentation Structure
 
-- Quickest end-to-end reference: [01-getting-started/IMPLEMENTATION_REFERENCE.md](01-getting-started/IMPLEMENTATION_REFERENCE.md)
-- Navigation map (what lives where): [01-getting-started/DOCUMENTATION_INDEX.md](01-getting-started/DOCUMENTATION_INDEX.md)
-- Authentication (cookies + bearer token): [02-api-reference/BEARER_TOKEN_GUIDE.md](02-api-reference/BEARER_TOKEN_GUIDE.md)
-- Endpoint overview: [02-api-reference/REST_ENDPOINTS_OVERVIEW.md](02-api-reference/REST_ENDPOINTS_OVERVIEW.md)
-- App data structure and parsing notes: [02-api-reference/APP_DATA_ANALYSIS.md](02-api-reference/APP_DATA_ANALYSIS.md)
-- Implementation patterns and architecture: [03-implementation/REST_IMPLEMENTATION_GUIDE.md](03-implementation/REST_IMPLEMENTATION_GUIDE.md)
-- JSON-RPC → REST migration plan: [03-implementation/REST_MIGRATION_PLAN.md](03-implementation/REST_MIGRATION_PLAN.md)
-- Parent account specifics: [03-implementation/REST_PARENT_ACCOUNT_SOLUTION.md](03-implementation/REST_PARENT_ACCOUNT_SOLUTION.md)
+### Core Documentation
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, data flow diagrams, and module structure
+- **[API_REFERENCE.md](API_REFERENCE.md)** - REST and JSON-RPC endpoints, authentication, data normalization
+- **[CONFIG.md](CONFIG.md)** - Complete configuration reference
+- **[CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)** - Styling guide, CSS variables, and accessibility options
 
-## Deep Dives
+### Issue Tracking
+- **[ISSUES.md](ISSUES.md)** - Known issues, technical debt, and refactoring tasks
 
-For exhaustive research notes and discovery logs, start at: [04-research/README.md](04-research/README.md)
+---
 
-## Useful Commands
+## Quick Reference
+
+### Testing & Debugging
 
 ```bash
 # Test configuration and fetch data
 node --run debug
 
-# Lint
+# Lint code
 node --run lint
 
 # Spell check
 node --run test:spelling
+
+# Check dependencies
+node --run deps:check
 ```
 
-## CLI
+### CLI
 
-CLI tooling lives outside this folder: [../cli/README.md](../cli/README.md)
+CLI tooling documentation: [../cli/README.md](../cli/README.md)
+
