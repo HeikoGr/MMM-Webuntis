@@ -29,9 +29,89 @@ git pull
 npm ci --omit=dev
 ```
 
-## Quick Start
+## Authentication Methods
 
-Add to your `config/config.js`:
+MMM-Webuntis supports two authentication methods for both student and parent accounts:
+
+### 1. QR Code Login (Recommended)
+
+**Available for:** Students and Parents
+
+**How to get QR code:**
+1. Open WebUntis app or website
+2. Go to Account → Data Access
+3. Generate QR code for this app
+4. Copy the `untis://...` URL
+
+**Student account:**
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    students: [
+      {
+        title: "Alice",
+        qrcode: "untis://setschool?url=myschool.webuntis.com&school=myschool&user=alice&key=ABC123..."
+      }
+    ]
+  }
+}
+```
+
+**Parent account (auto-discovery):**
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    qrcode: "untis://setschool?url=myschool.webuntis.com&school=myschool&user=parent&key=XYZ789...",
+    students: []  // Empty = auto-discover all children
+  }
+}
+```
+
+### 2. Direct Login (Username/Password)
+
+**Available for:** Students and Parents
+
+**Student account:**
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    students: [
+      {
+        title: "Alice",
+        username: "alice.smith",
+        password: "student-password",
+        school: "myschool",
+        server: "myschool.webuntis.com"
+      }
+    ]
+  }
+}
+```
+
+**Parent account (auto-discovery):**
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_right",
+  config: {
+    username: "parent@example.com",
+    password: "parent-password",
+    school: "myschool",
+    server: "myschool.webuntis.com",
+    students: []  // Empty = auto-discover all children
+  }
+}
+```
+
+### Mixed Authentication
+
+You can combine different authentication methods in one config:
 
 ```javascript
 {
@@ -41,20 +121,21 @@ Add to your `config/config.js`:
     students: [
       {
         title: "Alice",
-        qrcode: "untis://setschool?..."  // Get from WebUntis app
+        qrcode: "untis://..."  // Student with QR code
+      },
+      {
+        title: "Bob",
+        username: "bob.jones",  // Student with direct login
+        password: "password123",
+        school: "myschool",
+        server: "myschool.webuntis.com"
       }
     ]
   }
 }
 ```
 
-**Getting the QR code:**
-1. Open WebUntis app
-2. Go to Account → Data Access
-3. Generate QR code for this app
-4. Copy the `untis://...` URL
-
-## Common Configurations
+## Common Use Cases
 
 ### Week View (Monday-Friday)
 
@@ -75,8 +156,21 @@ Add to your `config/config.js`:
 }
 ```
 
-### Multiple Students
+### Multiple Students (Same Family)
 
+**Option 1: Parent account with auto-discovery**
+```javascript
+{
+  module: "MMM-Webuntis",
+  position: "top_left",
+  config: {
+    qrcode: "untis://...",  // Parent QR code
+    students: []  // Auto-discovers all children
+  }
+}
+```
+
+**Option 2: Individual student accounts**
 ```javascript
 {
   module: "MMM-Webuntis",
@@ -90,18 +184,30 @@ Add to your `config/config.js`:
 }
 ```
 
-### Parent Account (Auto-Discovery)
+### Multiple Families (Separate Instances)
 
 ```javascript
+// Family 1 - top left
+{
+  module: "MMM-Webuntis",
+  position: "top_left",
+  config: {
+    header: "Family Schmidt",
+    qrcode: "untis://...",  // Parent Schmidt QR code
+    students: []
+  }
+},
+// Family 2 - top right
 {
   module: "MMM-Webuntis",
   position: "top_right",
   config: {
-    username: "parent@example.com",
-    password: "your-password",
-    school: "myschool",
-    server: "myschool.webuntis.com",
-    students: []  // Empty = auto-discover all children
+    header: "Family Müller",
+    username: "mueller@example.com",  // Parent Müller login
+    password: "password",
+    school: "school",
+    server: "school.webuntis.com",
+    students: []
   }
 }
 ```
@@ -139,23 +245,32 @@ For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
 ## Troubleshooting
 
 **No data showing?**
-1. Check credentials (QR code or username/password)
+1. Verify authentication credentials:
+   - **QR code:** Check complete `untis://...` URL (must include `key=` parameter)
+   - **Direct login:** Verify username, password, school, server
 2. Enable debug logging: `logLevel: 'debug'`
-3. Check browser console and PM2 logs
+3. Check browser console and PM2 logs: `pm2 logs --lines 100`
 
 **Empty grid/widgets?**
 - Past lessons are hidden by default
 - Adjust `nextDays` to show more future days
 - Try `grid.weekView: true` for automatic week display
 
-**SSO/Corporate login?**
-- Use QR code instead of username/password
-- Generate from WebUntis app → Account → Data Access
+**SSO/Corporate login not working?**
+- SSO accounts cannot use direct username/password login
+- Use QR code instead (works with all account types)
+- Generate from WebUntis app/website → Account → Data Access
 
-**Need student IDs?**
-- Use parent account with empty `students: []`
-- Check logs for auto-discovered IDs
-- See [docs/CONFIG.md - Auto-Discovery](docs/CONFIG.md#auto-discovery-feature)
+**Parent account shows no children?**
+- Set `students: []` (empty array) to enable auto-discovery
+- Check logs for "Auto-discovered X student(s)" message
+- Verify parent credentials have access to student data
+
+**Auto-discovery not working?**
+- Enable debug logging: `logLevel: 'debug'`
+- Check PM2 logs for authentication errors
+- Verify parent account credentials
+- See [docs/CONFIG.md - Auto-Discovery](docs/CONFIG.md#auto-discovery-feature) for details
 
 ## CLI Testing Tool
 
