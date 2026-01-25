@@ -1,7 +1,7 @@
 /**
  * Test Grid Rendering with Debug Dump Data
  *
- * Usage: node scripts/test_with_dump.js debug_dumps/debug_api.json
+ * Usage: node scripts/test_with_dump.js debug_dumps/forged/api.json
  *
  * This script loads a debug dump and injects it into the frontend for visual testing.
  * Opens a local HTTP server that serves the MagicMirror module with the dump data.
@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-const dumpPath = process.argv[2] || 'debug_dumps/debug_api.json';
+const dumpPath = process.argv[2] || 'debug_dumps/forged/api.json';
 const port = 8888;
 
 if (!fs.existsSync(dumpPath)) {

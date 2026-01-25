@@ -79,6 +79,7 @@ Module.register('MMM-Webuntis', {
     grid: {
       nextDays: 4, // widget-specific days ahead (shows school week Mon-Fri if today is Monday)
       pastDays: 0, // widget-specific days past
+      weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
       dateFormat: 'EEE dd.MM.', // format for grid dates
       showNowLine: true, // show current time line
       mergeGap: 15, // minutes gap to merge adjacent lessons
