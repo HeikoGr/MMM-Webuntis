@@ -198,8 +198,9 @@ Configure grid widget behavior using the `grid` configuration namespace:
 | `grid.mergeGap` | int | `15` | Maximum gap (in minutes) between consecutive lessons to consider them mergeable. |
 | `grid.maxLessons` | int | `0` | Limit lessons per day in grid view. `0` = show all; `>=1` limits to first N timeUnits. |
 | `grid.showNowLine` | bool | `true` | Show the current time line in grid view. |
-| `grid.nextDays` | int | - | (optional) Days ahead to display. **Range = `pastDays + 1 + nextDays`**. Example: `pastDays: 1, nextDays: 3` = 5 days. |
-| `grid.pastDays` | int | - | (optional) Days past to display. If not set, uses global values. |
+| `grid.weekView` | bool | `false` | **Calendar week view (Monday-Friday only)**. When enabled, automatically displays the current school week (Mon-Fri). Overrides `nextDays` and `pastDays`. On Friday after 16:00, Saturday, and Sunday, automatically switches to the next week. |
+| `grid.nextDays` | int | - | (optional) Days ahead to display. **Range = `pastDays + 1 + nextDays`**. Example: `pastDays: 1, nextDays: 3` = 5 days. Ignored when `weekView: true`. |
+| `grid.pastDays` | int | - | (optional) Days past to display. If not set, uses global values. Ignored when `weekView: true`. |
 
 **Example (5-day view: yesterday + today + 3 days ahead):**
 ```javascript
@@ -211,6 +212,18 @@ grid: {
   nextDays: 3,  // 3 days ahead
   pastDays: 1,  // 1 day past
   // Total: 1 + 1 + 3 = 5 days
+}
+```
+
+**Example (calendar week view - Monday to Friday):**
+```javascript
+grid: {
+  weekView: true,  // Shows Mon-Fri of current/next week
+  dateFormat: 'EEE dd.MM.',
+  mergeGap: 15,
+  maxLessons: 8,
+  showNowLine: true,
+  // nextDays/pastDays are ignored when weekView is enabled
 }
 ```
 

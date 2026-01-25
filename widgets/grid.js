@@ -104,14 +104,59 @@ function getNowLineState(ctx) {
 
   function validateAndExtractGridConfig(ctx, studentConfig) {
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
+    const weekView = getWidgetConfig(studentConfig, 'grid', 'weekView') ?? false;
     const configuredNext = getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
     const configuredPast = getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
-    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
-    const pastDays = Math.max(0, parseInt(configuredPast, 10));
-    const startOffset = -pastDays;
-    const totalDisplayDays = pastDays + 1 + daysToShow;
     const gridDateFormat = getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
     const maxGridLessons = Math.max(0, Math.floor(Number(getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
+
+    let daysToShow, pastDays, startOffset, totalDisplayDays;
+
+    if (weekView) {
+      // Calendar week view (Monday-Friday)
+      // Use debugDate if configured, otherwise current date
+      let baseDate;
+      if (ctx._currentTodayYmd && typeof ctx._currentTodayYmd === 'number') {
+        const s = String(ctx._currentTodayYmd);
+        const by = parseInt(s.substring(0, 4), 10);
+        const bm = parseInt(s.substring(4, 6), 10) - 1;
+        const bd = parseInt(s.substring(6, 8), 10);
+        baseDate = new Date(by, bm, bd);
+      } else {
+        baseDate = new Date();
+      }
+
+      const dayOfWeek = baseDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      const currentHour = new Date().getHours();
+      const currentMinute = new Date().getMinutes();
+
+      // Determine if we should show current week or next week
+      let weekOffset = 0;
+      if (dayOfWeek === 5) {
+        // Friday - only advance to next week if in real-time mode (no debugDate) and after 16:00
+        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
+        if (!isDebugMode && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
+          weekOffset = 1; // Show next week
+        }
+        // In debug mode on Friday, show current week (Mon-Fri including Friday)
+      } else if (dayOfWeek === 6 || dayOfWeek === 0) {
+        // Saturday or Sunday - show next week
+        weekOffset = 1;
+      }
+
+      // Calculate offset to Monday of target week
+      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Sunday needs special handling
+      startOffset = daysToMonday + weekOffset * 7;
+      totalDisplayDays = 5; // Monday to Friday
+      daysToShow = totalDisplayDays - 1; // Used for some calculations
+      pastDays = 0;
+    } else {
+      // Standard view with configurable nextDays/pastDays
+      daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
+      pastDays = Math.max(0, parseInt(configuredPast, 10));
+      startOffset = -pastDays;
+      totalDisplayDays = pastDays + 1 + daysToShow;
+    }
 
     return {
       daysToShow,
@@ -120,6 +165,7 @@ function getNowLineState(ctx) {
       totalDisplayDays,
       gridDateFormat,
       maxGridLessons,
+      weekView,
     };
   }
 
@@ -1078,13 +1124,11 @@ function getNowLineState(ctx) {
     // 2. Calculate time range
     const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
-    const fullDayEnd = allEnd; // Store original end time for holiday overlays
     allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
     const pxPerMinute = 0.75;
     const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
-    const fullDayHeight = Math.max(120, Math.round((fullDayEnd - allStart) * pxPerMinute));
 
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
@@ -1165,10 +1209,10 @@ function getNowLineState(ctx) {
       if (isToday) bothInner.classList.add('is-today');
       bothWrap.appendChild(bothInner);
 
-      // Add holiday notice if applicable - use full day height
+      // Add holiday notice if applicable - use totalHeight to respect maxLessons
       const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
       if (holiday) {
-        addDayNotice(bothInner, fullDayHeight, '🏖️', escapeHtml(holiday.longName || holiday.name), '2em');
+        addDayNotice(bothInner, totalHeight, '🏖️', escapeHtml(holiday.longName || holiday.name), '2em');
       }
 
       // Add to grid
