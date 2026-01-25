@@ -33,7 +33,7 @@ npm ci --omit=dev
 
 MMM-Webuntis supports two authentication methods for both student and parent accounts:
 
-### 1. QR Code Login (Recommended)
+### 1. QR Code Login
 
 **Available for:** Students and Parents
 
