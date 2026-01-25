@@ -7,9 +7,9 @@
  * Opens a local HTTP server that serves the MagicMirror module with the dump data.
  */
 
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
 
 const dumpPath = process.argv[2] || 'debug_dumps/forged/api.json';
 const port = 8888;
