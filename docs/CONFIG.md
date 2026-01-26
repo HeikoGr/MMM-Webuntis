@@ -359,6 +359,6 @@ students: [
 ---
 
 For troubleshooting and advanced configuration, see:
-- [README.md](README.md) - Quick start and installation
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture
-- [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md) - Styling options
+- [README.md](../README.md) - Quick start and installation
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
+- [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md) - Styling options

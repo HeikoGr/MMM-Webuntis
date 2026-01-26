@@ -10,9 +10,6 @@ This directory contains comprehensive documentation for the MMM-Webuntis module.
 - **[CONFIG.md](CONFIG.md)** - Complete configuration reference
 - **[CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)** - Styling guide, CSS variables, and accessibility options
 
-### Issue Tracking
-- **[ISSUES.md](ISSUES.md)** - Known issues, technical debt, and refactoring tasks
-
 ---
 
 ## Quick Reference
