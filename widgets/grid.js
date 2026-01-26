@@ -23,8 +23,115 @@ function getNowLineState(ctx) {
     getRoom,
     getClass,
     getStudentGroup,
-    getLessonDisplayMode,
+    getInfo,
   } = root.util?.initWidget?.(root) || {};
+
+  // ============================================================================
+  // Grid-specific helper functions (moved from util.js)
+  // ============================================================================
+
+  /**
+   * Determine lesson display mode based on available fields
+   */
+  function getLessonDisplayMode(lesson) {
+    const hasTeacher = lesson?.te && lesson.te.length > 0;
+    const hasSubject = lesson?.su && lesson.su.length > 0;
+    const hasRoom = lesson?.ro && lesson.ro.length > 0;
+    const hasClass = lesson?.cl && lesson.cl.length > 0;
+    const hasStudentGroup = lesson?.sg && lesson.sg.length > 0;
+
+    const isTeacherView = hasClass && !hasStudentGroup;
+    const isStudentView = hasStudentGroup && !hasClass;
+
+    return {
+      isTeacherView,
+      isStudentView,
+      hasTeacher,
+      hasSubject,
+      hasRoom,
+      hasClass,
+      hasStudentGroup,
+      primaryInfo: isTeacherView ? 'class' : 'subject',
+      secondaryInfo: isTeacherView ? 'room' : 'teacher',
+      showStudentGroup: hasStudentGroup && !isTeacherView,
+    };
+  }
+
+  /**
+   * Resolve field configuration from config
+   */
+  function resolveFieldConfig(config) {
+    const gridConfig = config?.grid?.fields || {};
+    return {
+      primary: gridConfig.primary || 'subject',
+      secondary: gridConfig.secondary || 'teacher',
+      additional: gridConfig.additional || ['room'],
+      format: gridConfig.format || {
+        subject: 'short',
+        teacher: 'short',
+        class: 'short',
+        room: 'short',
+        studentGroup: 'short',
+        info: 'short',
+      },
+    };
+  }
+
+  /**
+   * Get field value based on flexible configuration
+   */
+  function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
+    if (!lesson || !fieldType || fieldType === 'none') return '';
+
+    const format = fieldConfig?.format?.[fieldType] || 'short';
+
+    switch (fieldType) {
+      case 'subject':
+        return getSubject(lesson, format);
+      case 'teacher': {
+        const teachers = getTeachers(lesson, format);
+        return teachers.length > 0 ? teachers[0] : '';
+      }
+      case 'room':
+        return getRoom(lesson, format);
+      case 'class':
+        return getClass(lesson, format);
+      case 'studentGroup':
+        return getStudentGroup(lesson, format);
+      case 'info':
+        return getInfo(lesson, format);
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Build lesson display using flexible field configuration
+   */
+  function buildFlexibleLessonDisplay(lesson, config, options = {}) {
+    const fieldConfig = resolveFieldConfig(config);
+    const { includeAdditional = true } = options;
+
+    const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
+    const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
+
+    const parts = { primary, secondary, additional: [] };
+
+    if (includeAdditional && Array.isArray(fieldConfig.additional)) {
+      for (const additionalField of fieldConfig.additional) {
+        const value = getConfiguredFieldValue(lesson, additionalField, fieldConfig);
+        if (value && value !== primary && value !== secondary) {
+          parts.additional.push(value);
+        }
+      }
+    }
+
+    return parts;
+  }
+
+  // ============================================================================
+  // Now line updater
+  // ============================================================================
 
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
@@ -385,6 +492,8 @@ function getNowLineState(ctx) {
         classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
         studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
         studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
+        infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
+        infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
         // Display mode information
         isTeacherView: displayMode.isTeacherView,
         isStudentView: displayMode.isStudentView,
@@ -401,6 +510,7 @@ function getNowLineState(ctx) {
         ro: el.ro || [],
         cl: el.cl || [],
         sg: el.sg || [],
+        info: el.info || [],
         date: el.date,
       };
     });
@@ -609,10 +719,10 @@ function getNowLineState(ctx) {
       return `<div class='lesson-content break-supervision'><span class='lesson-primary'>${escapeHtml(displayText)}</span></div>`;
     }
 
-    // Use flexible field configuration from context if available
-    if (ctx && root.util.buildFlexibleLessonDisplay) {
+    // Use flexible field configuration
+    if (ctx) {
       try {
-        const displayParts = root.util.buildFlexibleLessonDisplay(lesson, ctx.config);
+        const displayParts = buildFlexibleLessonDisplay(lesson, ctx.config);
 
         // Skip empty displays (e.g., lessons with no subject, teacher, room)
         const primaryText = displayParts.primary ? escapeHtml(displayParts.primary) : '';
@@ -1008,8 +1118,8 @@ function getNowLineState(ctx) {
           bothInner.appendChild(rightCell);
         }
       }
-      // RULE 1b: More than 2 overlapping lessons -> ticker
-      else if (lessons.length > 2) {
+      // RULE 1: Two or more overlapping lessons -> ticker
+      else if (lessons.length >= 2) {
         createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
       }
       // RULE 2: Single lesson -> full width cell

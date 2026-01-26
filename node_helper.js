@@ -1697,7 +1697,7 @@ module.exports = NodeHelper.create({
       for (const student of studentsList) {
         // Apply legacy config mapping to student-level config
         const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-        const credKey = this._getCredentialKey(normalizedStudent, config, sessionIdentifier);
+        const credKey = this._getCredentialKey(normalizedStudent, config, sessionKey);
         if (!groups.has(credKey)) groups.set(credKey, []);
         groups.get(credKey).push(normalizedStudent);
       }
@@ -1732,14 +1732,19 @@ module.exports = NodeHelper.create({
 
   /**
    * Build a stable key that represents a login/session so results can be cached.
+   * Uses sessionKey (identifier:sessionId) for full session isolation.
    * For parent accounts (studentId + module-level username), group by parent credentials.
    * For direct logins, group by student credentials.
    *
    * @param {Object} student - Student credential object
+   * @param {Object} moduleConfig - Module configuration
+   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
    * @returns {string} credential key
    */
-  _getCredentialKey(student, moduleConfig, identifier = 'default') {
-    const scope = moduleConfig?.carouselId || identifier || 'default';
+  _getCredentialKey(student, moduleConfig, sessionKey = 'default') {
+    // Use full sessionKey (identifier:sessionId) for complete browser-session isolation
+    // This prevents cross-contamination between different browser windows with same identifier
+    const scope = moduleConfig?.carouselId || sessionKey || 'default';
     const scopePrefix = scope ? `${scope}::` : '';
     const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
     const hasOwnCredentials = student.qrcode || (student.username && student.password && student.school && student.server);

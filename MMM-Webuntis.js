@@ -462,7 +462,7 @@ Module.register('MMM-Webuntis', {
     }
 
     // Check if no students configured AND no parent credentials for auto-discovery
-    const hasParentCreds = config.username && config.password && config.school;
+    const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
     if (!Array.isArray(config.students) || config.students.length === 0) {
       if (!hasParentCreds) {
         warnings.push(
@@ -599,19 +599,11 @@ Module.register('MMM-Webuntis', {
 
     this._paused = false;
     this._startNowLineUpdater();
-    // Generate or retrieve unique session ID for this browser window instance
-    // Use localStorage to persist the sessionId across page reloads
-    const storageKey = `MMM-Webuntis_sessionId_${this.identifier}`;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem(storageKey)) {
-      this._sessionId = localStorage.getItem(storageKey);
-      this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (from localStorage)`);
-    } else {
-      this._sessionId = Math.random().toString(36).substring(2, 11);
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(storageKey, this._sessionId);
-      }
-      this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (newly generated)`);
-    }
+
+    // Generate unique session ID for this browser window/tab instance
+    // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
+    this._sessionId = Math.random().toString(36).substring(2, 11);
+    this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
 
     // Track when data was last received to optimize resume() behavior
     // (prevents unnecessary API calls during rapid carousel page switches)
