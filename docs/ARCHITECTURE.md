@@ -1328,8 +1328,9 @@ graph TB
     - Improves maintainability
 
 11. **Migrate to TypeScript**
-    - See [TYPESCRIPT_MIGRATION_PLAN.md](./TYPESCRIPT_MIGRATION_PLAN.md)
     - Phase 1: Type definitions for lib/ modules
+    - Phase 2: Migrate core services (lib/)
+    - Phase 3: Migrate widgets and frontend
 
 ### Performance Opportunities
 
@@ -1339,8 +1340,6 @@ graph TB
 
 ## References
 
-- **Refactoring Roadmap**: [REFACTORING_ROADMAP.md](./REFACTORING_ROADMAP.md)
-- **TypeScript Migration**: [TYPESCRIPT_MIGRATION_PLAN.md](./TYPESCRIPT_MIGRATION_PLAN.md)
-- **API Documentation**: [02-api-reference/](./02-api-reference/)
-- **Research Notes**: [01-research/](./01-research/)
-- **Issues & Auffälligkeiten**: [ISSUES.md](./ISSUES.md)
+- **API Documentation**: [API_REFERENCE.md](API_REFERENCE.md)
+- **Configuration**: [CONFIG.md](CONFIG.md)
+- **CSS Customization**: [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)
