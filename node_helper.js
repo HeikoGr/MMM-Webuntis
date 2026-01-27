@@ -25,7 +25,7 @@ const widgetConfigValidator = require('./lib/widgetConfigValidator');
 
 // Refactored modules for fetchData simplification (CRIT-1 from ISSUES.md)
 const { orchestrateFetch } = require('./lib/dataFetchOrchestrator');
-const { buildGotDataPayload } = require('./lib/payloadBuilder');
+const { buildGotDataPayload, dumpPayload } = require('./lib/payloadBuilder');
 
 /**
  * ERROR HANDLING STRATEGY:
@@ -1356,42 +1356,86 @@ module.exports = NodeHelper.create({
       } catch (err) {
         const errorMsg = this._formatErr(err);
         // Differentiate between credential/config errors and network errors
-        const isNetworkError = errorMsg.includes('connect') || errorMsg.includes('timeout') || errorMsg.includes('network');
-        const msg = isNetworkError
-          ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
-          : `Authentication failed for ${credKey}: ${errorMsg}`;
-        this._mmLog('error', null, msg);
+        const isNetworkError =
+          errorMsg.includes('connect') || errorMsg.includes('timeout') || errorMsg.includes('network') || errorMsg.includes('fetch failed');
+        const warningObj = {
+          message: isNetworkError
+            ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
+            : `Authentication failed for ${credKey}: ${errorMsg}`,
+          category: isNetworkError ? 'temporary' : 'permanent',
+        };
+        this._mmLog('error', null, warningObj.message);
 
-        // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
-        // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
-        const authService = this._getAuthServiceForIdentifier(identifier);
-        if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
-          authService.invalidateAllCachesForSession(sessionKey);
-          this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
+        // RETRY LOGIC: If network error (fetch failed), retry once immediately
+        // WebUntis servers sometimes reject the first request but accept the second
+        let retrySucceeded = false;
+        if (isNetworkError) {
+          this._mmLog('warn', null, `[RETRY] Network error detected, retrying auth immediately for ${credKey}...`);
+          try {
+            // Force cache invalidation for immediate retry
+            const authService = this._getAuthServiceForIdentifier(identifier);
+            if (authService) {
+              authService.invalidateAllCachesForSession(sessionKey);
+            }
+            // Wait 1 second before retry to let network recover
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            authSession = await this._createAuthSession(sample, config, identifier, credKey);
+            this._mmLog('info', null, `[RETRY] Auth retry successful for ${credKey}`);
+            retrySucceeded = true;
+            // Don't return or throw - just set flag and continue after this catch block
+          } catch (retryErr) {
+            this._mmLog('error', null, `[RETRY] Auth retry failed for ${credKey}: ${this._formatErr(retryErr)}`);
+            // Fall through to original error handling below
+          }
         }
 
-        // Record and mark this warning for the current fetch cycle
-        if (!this._currentFetchWarnings.has(msg)) {
-          groupWarnings.push(msg);
-          this._currentFetchWarnings.add(msg);
+        // Only execute error handling if retry didn't succeed
+        if (!retrySucceeded) {
+          // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
+          // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
+          const authService = this._getAuthServiceForIdentifier(identifier);
+          if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
+            authService.invalidateAllCachesForSession(sessionKey);
+            this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
+          }
+
+          // Additional cleanup: Clear pending auth promises to prevent stuck auth state
+          if (authService) {
+            // Clear session-wide auth promise if it exists (prevents future requests from waiting on failed auth)
+            if (authService._pendingAuthBySession && authService._pendingAuthBySession.has(sessionKey)) {
+              authService._pendingAuthBySession.delete(sessionKey);
+              this._mmLog('warn', null, `[REAUTH] Cleared pending auth promise for session ${sessionKey}`);
+            }
+          }
+
+          // Record and mark this warning for the current fetch cycle
+          const warningKey = JSON.stringify(warningObj);
+          if (!this._currentFetchWarnings.has(warningKey)) {
+            groupWarnings.push(warningObj);
+            this._currentFetchWarnings.add(warningKey);
+          }
+          // Send error payload to frontend with warnings
+          for (const student of students) {
+            const errorPayload = {
+              title: student.title,
+              id: identifier,
+              sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
+              config: student,
+              warnings: groupWarnings, // Already structured { message, category }
+              timeUnits: [],
+              timetableRange: [],
+              exams: [],
+              homeworks: [],
+              absences: [],
+            };
+            // Dump error payload if dumpBackendPayloads is enabled
+            dumpPayload(errorPayload, config, student, this._mmLog.bind(this), this._cleanupOldDebugDumps.bind(this));
+            // Sending error to frontend silently
+            this.sendSocketNotification('GOT_DATA', errorPayload);
+          }
+          return;
         }
-        // Send error payload to frontend with warnings
-        for (const student of students) {
-          // Sending error to frontend silently
-          this.sendSocketNotification('GOT_DATA', {
-            title: student.title,
-            id: identifier,
-            sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
-            config: student,
-            warnings: groupWarnings,
-            timeUnits: [],
-            timetableRange: [],
-            exams: [],
-            homeworks: [],
-            absences: [],
-          });
-        }
-        return;
+        // If retry succeeded, continue with normal flow below (authSession is set)
       }
 
       // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
@@ -1419,10 +1463,12 @@ module.exports = NodeHelper.create({
           const studentValidationWarnings = this._validateStudentConfig(student);
           if (studentValidationWarnings.length > 0) {
             studentValidationWarnings.forEach((w) => {
-              this._mmLog('warn', student, w);
-              if (!this._currentFetchWarnings.has(w)) {
-                groupWarnings.push(w);
-                this._currentFetchWarnings.add(w);
+              const warningObj = typeof w === 'string' ? { message: w, category: 'permanent' } : w;
+              this._mmLog('warn', student, warningObj.message);
+              const warningKey = JSON.stringify(warningObj);
+              if (!this._currentFetchWarnings.has(warningKey)) {
+                groupWarnings.push(warningObj);
+                this._currentFetchWarnings.add(warningKey);
               }
             });
           }
@@ -1441,18 +1487,19 @@ module.exports = NodeHelper.create({
           this._mmLog('error', student, errorMsg);
 
           // ===== CONVERT REST ERRORS TO USER-FRIENDLY WARNINGS =====
-          const warningMsg = this._convertRestErrorToWarning(err, {
+          const warningObj = this._convertRestErrorToWarning(err, {
             studentTitle: student.title,
             school: student.school || config?.school,
             server: student.server || config?.server || 'webuntis.com',
           });
-          if (warningMsg) {
+          if (warningObj) {
             // Only record each distinct warning once per fetch cycle
-            if (!this._currentFetchWarnings.has(warningMsg)) {
-              groupWarnings.push(warningMsg);
-              this._currentFetchWarnings.add(warningMsg);
+            const warningKey = JSON.stringify(warningObj);
+            if (!this._currentFetchWarnings.has(warningKey)) {
+              groupWarnings.push(warningObj);
+              this._currentFetchWarnings.add(warningKey);
             }
-            this._mmLog('warn', student, warningMsg);
+            this._mmLog('warn', student, warningObj.message);
           }
         }
       }
@@ -1468,10 +1515,14 @@ module.exports = NodeHelper.create({
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
-      const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
-      if (!this._currentFetchWarnings.has(authMsg)) {
-        groupWarnings.push(authMsg);
-        this._currentFetchWarnings.add(authMsg);
+      const warningObj = {
+        message: `Authentication failed for group: ${this._formatErr(error)}`,
+        category: 'permanent',
+      };
+      const warningKey = JSON.stringify(warningObj);
+      if (!this._currentFetchWarnings.has(warningKey)) {
+        groupWarnings.push(warningObj);
+        this._currentFetchWarnings.add(warningKey);
       }
     } finally {
       // Cleanup not needed - session managed by authService cache

@@ -512,6 +512,7 @@ function getNowLineState(ctx) {
         sg: el.sg || [],
         info: el.info || [],
         date: el.date,
+        icons: el.icons || [],
       };
     });
   }
@@ -777,30 +778,16 @@ function getNowLineState(ctx) {
     return `<div class='lesson-content'><span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
-  function checkHomeworkMatch(lesson, homeworks) {
-    if (!homeworks || !Array.isArray(homeworks) || homeworks.length === 0) {
-      return false;
-    }
-
-    const lessonDate = Number(lesson.date);
-    const lessonNames = Array.isArray(lesson.su) ? lesson.su.flatMap((su) => [su.name, su.longname].filter(Boolean)) : [];
-
-    return homeworks.some((hw) => {
-      const hwDueDate = Number(hw.dueDate);
-      const hwSuArr = Array.isArray(hw.su) ? hw.su : hw.su ? [hw.su] : [];
-      const hwNames = hwSuArr.flatMap((su) => [su.name, su.longname].filter(Boolean));
-      const subjectMatch = lessonNames.some((ln) => hwNames.includes(ln));
-      return hwDueDate === lessonDate && subjectMatch;
-    });
+  function hasHomeworkIcon(lesson) {
+    if (!lesson || !Array.isArray(lesson.icons)) return false;
+    return lesson.icons.includes('HOMEWORK');
   }
 
   function addHomeworkIcon(cell) {
     const icon = document.createElement('span');
     icon.className = 'homework-icon';
-    icon.innerHTML = '📘';
-    if (cell && cell.innerHTML) {
-      cell.appendChild(icon.cloneNode(true));
-    }
+    icon.innerHTML = '✍'; // Pencil icon (U+270F)
+    cell.appendChild(icon);
   }
 
   function groupLessonsByTimeSlot(lessonsToRender) {
@@ -881,7 +868,7 @@ function getNowLineState(ctx) {
     return groups;
   }
 
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks) {
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast) {
     // Group lessons by subject (same subject = one ticker unit, displayed stacked)
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
@@ -989,7 +976,7 @@ function getNowLineState(ctx) {
 
           lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
-          if (checkHomeworkMatch(lesson, homeworks)) {
+          if (hasHomeworkIcon(lesson)) {
             addHomeworkIcon(lessonDiv);
           }
 
@@ -1009,7 +996,7 @@ function getNowLineState(ctx) {
     container.appendChild(tickerWrapper);
   }
 
-  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
+  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml) {
     const { bothInner } = containers;
 
     // Group lessons by time slot
@@ -1050,12 +1037,38 @@ function getNowLineState(ctx) {
 
       const hasExam = lessons.some((l) => lessonHasExam(l));
 
-      // RULE 0: Generic split view for cancelled + non-cancelled lessons
-      // Display replacement/event on left, cancelled lessons on right
       const cancelledLessons = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
       const nonCancelledLessons = lessons.filter((l) => l.code !== 'cancelled' && l.status !== 'CANCELLED');
 
-      if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1) {
+      // Determine lesson type based on API activityType:
+      // - NORMAL_TEACHING_PERIOD: Regular lesson (could be REGULAR or CANCELLED status)
+      // - ADDITIONAL_PERIOD: Additional/moved lesson (substitution)
+      // - SUBSTITUTION: Explicit substitution
+      // - EVENT: Special event (e.g., "findet regulär statt")
+      // - OFFICE_HOUR: Office hour
+      // - EXAM: Exam (handled separately)
+      // - BREAK_SUPERVISION: Break supervision (handled separately)
+      //
+      // Parallel lessons: All lessons are NORMAL_TEACHING_PERIOD (regular schedule, different groups)
+      // Substitution: At least one lesson is ADDITIONAL_PERIOD, SUBSTITUTION, EVENT, or OFFICE_HOUR (schedule change)
+      const hasSubstitutionType = lessons.some(
+        (l) =>
+          l.activityType === 'ADDITIONAL_PERIOD' ||
+          l.activityType === 'SUBSTITUTION' ||
+          l.activityType === 'EVENT' ||
+          l.activityType === 'OFFICE_HOUR'
+      );
+      const allNormalLessons = lessons.every((l) => l.activityType === 'NORMAL_TEACHING_PERIOD' || !l.activityType);
+
+      // Parallel lessons: Multiple normal lessons at same time → Ticker
+      // Substitution: Cancelled lesson + additional/moved/event lesson (e.g., Ma replaces Bk, Event replaces HA_B) → Split-View
+      const isParallelLessons = lessons.length >= 2 && allNormalLessons && !hasSubstitutionType;
+
+      // RULE 0: Split view for substitutions
+      // Display replacement/additional/event lesson on left, cancelled lesson on right
+      // This applies when we have both cancelled and non-cancelled lessons, AND at least one is a substitution/additional/event
+      const isSubstitution = cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1 && hasSubstitutionType;
+      if (isSubstitution) {
         const { bothInner } = containers;
 
         // Left side: Non-cancelled lessons (replacement/event/regular)
@@ -1074,7 +1087,7 @@ function getNowLineState(ctx) {
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
-          if (checkHomeworkMatch(replacement, homeworks)) {
+          if (hasHomeworkIcon(replacement)) {
             addHomeworkIcon(leftCell);
           }
           bothInner.appendChild(leftCell);
@@ -1095,7 +1108,7 @@ function getNowLineState(ctx) {
             if (hasExam) leftCell.classList.add('has-exam');
             if (isPast) leftCell.classList.add('past');
             leftCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
-            if (checkHomeworkMatch(lesson, homeworks)) {
+            if (hasHomeworkIcon(lesson)) {
               addHomeworkIcon(leftCell);
             }
             bothInner.appendChild(leftCell);
@@ -1112,17 +1125,23 @@ function getNowLineState(ctx) {
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
           rightCell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
-          if (checkHomeworkMatch(cancelled, homeworks)) {
+          if (hasHomeworkIcon(cancelled)) {
             addHomeworkIcon(rightCell);
           }
           bothInner.appendChild(rightCell);
         }
       }
-      // RULE 1: Two or more overlapping lessons -> ticker
-      else if (lessons.length >= 2) {
-        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
+      // RULE 1: Parallel lessons (all normal teaching periods) -> ticker
+      // Multiple lessons at same time, all are regular schedule (not substitutions)
+      else if (isParallelLessons) {
+        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast);
       }
-      // RULE 2: Single lesson -> full width cell
+      // RULE 2: Multiple lessons, but not parallel and not substitution -> ticker (fallback)
+      // This catches edge cases like multiple cancelled lessons
+      else if (lessons.length >= 2) {
+        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast);
+      }
+      // RULE 3: Single lesson -> full width cell
       else if (lessons.length === 1) {
         const lesson = lessons[0];
         const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
@@ -1145,7 +1164,7 @@ function getNowLineState(ctx) {
         if (isPast) bothCell.classList.add('past');
         bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
-        if (checkHomeworkMatch(lesson, homeworks)) {
+        if (hasHomeworkIcon(lesson)) {
           addHomeworkIcon(bothCell);
         }
 
@@ -1348,7 +1367,7 @@ function getNowLineState(ctx) {
         }
       } else {
         // Render lesson cells
-        renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml);
+        renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml);
       }
 
       // Add absence overlays if any

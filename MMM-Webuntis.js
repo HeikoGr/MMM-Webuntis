@@ -420,6 +420,26 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Add a warning to the module warnings Map with timestamp and category
+   * @param {string} msg - Warning message
+   * @param {string} category - 'permanent' (config/dependency) or 'temporary' (network/API)
+   */
+  _addWarning(msg, category = 'permanent') {
+    if (!msg || typeof msg !== 'string') return;
+    const trimmed = msg.trim();
+    if (!trimmed) return;
+
+    // Avoid duplicate warnings - only update timestamp if already exists
+    if (!this.moduleWarnings.has(trimmed)) {
+      this.moduleWarnings.set(trimmed, {
+        message: trimmed,
+        timestamp: Date.now(),
+        category: category || 'permanent',
+      });
+    }
+  },
+
+  /**
    * Validate module configuration and collect warnings before sending to backend
    */
   _validateAndWarnConfig(config) {
@@ -476,10 +496,7 @@ Module.register('MMM-Webuntis', {
 
     // Warn for each unique warning
     warnings.forEach((warning) => {
-      if (!this.moduleWarningsSet.has(warning)) {
-        this.moduleWarningsSet.add(warning);
-        this._log('warn', warning);
-      }
+      this._addWarning(warning, 'permanent'); // Config warnings are permanent
     });
   },
 
@@ -593,7 +610,7 @@ Module.register('MMM-Webuntis', {
     this.holidaysByStudent = {};
     this.holidayMapByStudent = {};
     this.preprocessedByStudent = {};
-    this.moduleWarningsSet = new Set();
+    this.moduleWarnings = new Map(); // warning -> { message, timestamp, category }
     this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
 
@@ -669,7 +686,9 @@ Module.register('MMM-Webuntis', {
   },
 
   _sendInit() {
+    this._validateAndWarnConfig(this.config);
     this._log('debug', '[INIT] Sending INIT_MODULE to backend');
+
     this.sendSocketNotification('INIT_MODULE', this._buildSendConfig());
   },
 
@@ -795,15 +814,15 @@ Module.register('MMM-Webuntis', {
     const sortedStudentTitles = this._getSortedStudentTitles();
 
     // Render any module-level warnings once, above all widgets
-    if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
+    if (this.moduleWarnings && this.moduleWarnings.size > 0) {
       const warnContainer = document.createDocumentFragment();
-      for (const w of Array.from(this.moduleWarningsSet)) {
+      for (const [msg] of this.moduleWarnings) {
         const warnDiv = document.createElement('div');
         // Add critical class for dependency-related warnings
-        const isCritical = w.includes('Dependency issues') || w.includes('npm install') || w.includes('node_modules');
+        const isCritical = msg.includes('Dependency issues') || msg.includes('npm install') || msg.includes('node_modules');
         warnDiv.className = isCritical ? 'mmm-webuntis-warning critical small bright' : 'mmm-webuntis-warning small bright';
         try {
-          warnDiv.textContent = `⚠️ ${w}`;
+          warnDiv.textContent = `⚠️ ${msg}`;
         } catch {
           warnDiv.textContent = '⚠️ Configuration warning';
         }
@@ -1011,11 +1030,10 @@ Module.register('MMM-Webuntis', {
 
       // Process initialization warnings if present
       if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-        this.moduleWarningsSet = this.moduleWarningsSet || new Set();
         payload.warnings.forEach((w) => {
-          if (!this.moduleWarningsSet.has(w)) {
-            this.moduleWarningsSet.add(w);
-            this._log('warn', `Init warning: ${w}`);
+          // Backend sends: { message: 'text', category: 'temporary'|'permanent' }
+          if (w && typeof w === 'object' && w.message) {
+            this._addWarning(w.message, w.category || 'permanent');
           }
         });
       }
@@ -1032,10 +1050,20 @@ Module.register('MMM-Webuntis', {
     if (notification === 'INIT_ERROR') {
       this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
       if (Array.isArray(payload.errors)) {
-        payload.errors.forEach((err) => this._log('error', `  - ${err}`));
+        payload.errors.forEach((err) => {
+          this._log('error', `  - ${err}`);
+          // Errors are strings, treat as permanent
+          this._addWarning(err, 'permanent');
+        });
       }
       if (Array.isArray(payload.warnings)) {
-        payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
+        payload.warnings.forEach((w) => {
+          // Backend sends: { message: 'text', category: 'temporary'|'permanent' }
+          if (w && typeof w === 'object' && w.message) {
+            this._log('warn', `  - ${w.message}`);
+            this._addWarning(w.message, w.category || 'permanent');
+          }
+        });
       }
       this._initialized = false;
       this.updateDom();
@@ -1044,15 +1072,14 @@ Module.register('MMM-Webuntis', {
 
     if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
       const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
-      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
       warnList.forEach((w) => {
-        if (!this.moduleWarningsSet.has(w)) {
-          this.moduleWarningsSet.add(w);
-          this._log('warn', `Config warning: ${w}`);
+        // Backend sends: { message: 'text', category: 'temporary'|'permanent' }
+        if (w && typeof w === 'object' && w.message) {
+          this._addWarning(w.message, w.category || 'permanent');
 
           // Show critical dependency warnings as browser notification
-          if (w.includes('Dependency issues') || w.includes('npm install')) {
-            this._log('error', `CRITICAL: ${w}`);
+          if (w.message.includes('Dependency issues') || w.message.includes('npm install')) {
+            this._log('error', `CRITICAL: ${w.message}`);
           }
         }
       });
@@ -1097,15 +1124,29 @@ Module.register('MMM-Webuntis', {
       this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
 
-    // Collect module-level warnings (deduped) and log newly seen ones to console
+    // Collect module-level warnings (backend sends structured warnings with category)
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
       payload.warnings.forEach((w) => {
-        if (!this.moduleWarningsSet.has(w)) {
-          this.moduleWarningsSet.add(w);
-          this._log('warn', `Module warning: ${w}`);
+        // Backend sends: { message: 'text', category: 'temporary'|'permanent' }
+        if (w && typeof w === 'object' && w.message) {
+          this._addWarning(w.message, w.category || 'permanent');
         }
       });
+    }
+
+    // Clear temporary warnings if data was successfully fetched
+    const hasData =
+      (Array.isArray(payload.timetableRange) && payload.timetableRange.length > 0) ||
+      (Array.isArray(payload.exams) && payload.exams.length > 0) ||
+      (Array.isArray(payload.homeworks) && payload.homeworks.length > 0);
+
+    if (hasData) {
+      // Clear all temporary warnings on successful fetch (no string matching needed)
+      for (const [key, value] of this.moduleWarnings.entries()) {
+        if (value.category === 'temporary') {
+          this.moduleWarnings.delete(key);
+        }
+      }
     }
 
     const timeUnitsList = payload.timeUnits || [];
@@ -1131,7 +1172,47 @@ Module.register('MMM-Webuntis', {
     });
     this.periodNamesByStudent[title] = periodMap;
 
-    const timetableRange = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
+    // Validate incoming data - only update if new data is present
+    // This prevents overwriting good cached data with empty API responses
+    const incomingTimetable = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
+    const incomingExams = Array.isArray(payload.exams) ? payload.exams : [];
+    const incomingHomework = Array.isArray(payload.homeworks) ? payload.homeworks : []; // Backend always sends flat array
+    const incomingAbsences = Array.isArray(payload.absences) ? payload.absences : [];
+    const incomingMessages = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
+    const incomingHolidays = Array.isArray(payload.holidays) ? payload.holidays : [];
+
+    // Check if ANY new data exists (not all empty)
+    const hasAnyNewData =
+      incomingTimetable.length > 0 ||
+      incomingExams.length > 0 ||
+      incomingHomework.length > 0 ||
+      incomingAbsences.length > 0 ||
+      incomingMessages.length > 0 ||
+      incomingHolidays.length > 0;
+
+    // Check if we have existing data for this student
+    const hasExistingData =
+      this.timetableByStudent[title]?.length > 0 ||
+      this.examsByStudent[title]?.length > 0 ||
+      this.homeworksByStudent[title]?.length > 0 ||
+      this.absencesByStudent[title]?.length > 0 ||
+      this.messagesOfDayByStudent[title]?.length > 0 ||
+      this.holidaysByStudent[title]?.length > 0;
+
+    // Decision: Update data if we have new data OR if no existing data exists (first fetch)
+    const shouldUpdate = hasAnyNewData || !hasExistingData;
+
+    if (!shouldUpdate) {
+      this._log('warn', `[GOT_DATA] Skipping data update for ${title} - received empty data and have valid cached data`);
+      // Still update DOM to show warnings if present, but keep old data
+      this.updateDom();
+      return;
+    }
+
+    this._log('debug', `[GOT_DATA] Updating data for ${title} (hasNew=${hasAnyNewData}, hasExisting=${hasExistingData})`);
+
+    // Update timetable data
+    const timetableRange = incomingTimetable;
     this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
     this._log(
       'debug',
@@ -1153,19 +1234,13 @@ Module.register('MMM-Webuntis', {
       rawGroupedByDate: groupedRaw,
     };
 
-    this.examsByStudent[title] = Array.isArray(payload.exams) ? payload.exams : [];
-
-    const hw = payload.homeworks;
-    const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
-    this.homeworksByStudent[title] = hwNorm;
-
-    this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
-
+    // Update other data types
+    this.examsByStudent[title] = incomingExams;
+    this.homeworksByStudent[title] = incomingHomework;
+    this.absencesByStudent[title] = incomingAbsences;
     this.absencesUnavailableByStudent[title] = Boolean(payload.absencesUnavailable);
-
-    this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
-
-    this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
+    this.messagesOfDayByStudent[title] = incomingMessages;
+    this.holidaysByStudent[title] = incomingHolidays;
     this.holidayMapByStudent[title] = payload.holidayByDate || {};
 
     // Update DOM immediately; debounce removed to reflect data as soon as it arrives

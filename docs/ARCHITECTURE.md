@@ -1,7 +1,7 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2025-01-21
-**Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures)
+**Last Updated**: 2026-01-27
+**Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures) and auto-warning cleanup
 
 ## Executive Summary
 
@@ -936,6 +936,41 @@ graph TD
 ```
 
 ## Error Handling & Warnings
+
+### Warning Management System (v2.1+)
+
+**Purpose**: Automatically clean up temporary warnings while keeping permanent warnings visible.
+
+**Key Features**:
+- ✅ **Auto-categorization**: Warnings are categorized as 'temporary' or 'permanent'
+- ✅ **Time-based cleanup**: Temporary warnings auto-expire after 10 minutes
+- ✅ **Success-based cleanup**: Connection warnings cleared on successful fetch
+- ✅ **User-friendly**: No manual action required for temporary issues
+
+**Implementation**:
+```javascript
+// Frontend (MMM-Webuntis.js)
+this.moduleWarnings = new Map(); // warning -> { message, timestamp, category }
+
+// Timer-based cleanup (every 60 seconds)
+this._warningCleanupTimer = setInterval(() => {
+  this._cleanupOldWarnings(); // Remove warnings older than 10 minutes
+}, 60000);
+
+// Success-based cleanup (on GOT_DATA)
+if (hasData) {
+  this._clearWarningsMatching(/cannot connect|timeout|econnrefused/i);
+}
+```
+
+**Warning Categories**:
+
+| Category | Examples | Auto-Remove | User Action |
+|----------|----------|-------------|-------------|
+| **Temporary** | Network errors, timeouts, HTTP 503 | ✅ Yes (10min or on success) | None required |
+| **Permanent** | Config errors, HTTP 403/404, invalid credentials | ❌ No | Fix config |
+
+**See**: [WARNING_MANAGEMENT.md](WARNING_MANAGEMENT.md) for detailed documentation.
 
 ### Error Handling Flow (NEW)
 
