@@ -24,6 +24,7 @@ function getNowLineState(ctx) {
     getClass,
     getStudentGroup,
     getInfo,
+    isExamLesson,
   } = root.util?.initWidget?.(root) || {};
 
   // ============================================================================
@@ -342,26 +343,6 @@ function getNowLineState(ctx) {
     return allEnd;
   }
 
-  function getTimeUnitBounds(timeUnits, ui) {
-    if (!Array.isArray(timeUnits) || ui < 0 || ui >= timeUnits.length) {
-      return { startMin: null, lineMin: null };
-    }
-
-    const u = timeUnits[ui];
-    const startMin = u?.startMin ?? null;
-    let lineMin = null;
-
-    if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
-      lineMin = timeUnits[ui + 1].startMin;
-    } else if (u?.endMin !== undefined) {
-      lineMin = u.endMin;
-    } else if (startMin !== null) {
-      lineMin = startMin + 60;
-    }
-
-    return { startMin, lineMin };
-  }
-
   // ============================================================================
   // DOM CREATION - HEADER & TIME AXIS
   // ============================================================================
@@ -410,8 +391,18 @@ function getNowLineState(ctx) {
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
       for (let ui = 0; ui < timeUnits.length; ui++) {
         const u = timeUnits[ui];
-        const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
+        const startMin = u?.startMin ?? null;
         if (startMin === null) continue;
+
+        // Calculate lineMin for this time unit
+        let lineMin = null;
+        if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
+          lineMin = timeUnits[ui + 1].startMin;
+        } else if (u?.endMin !== undefined) {
+          lineMin = u.endMin;
+        } else if (startMin !== null) {
+          lineMin = startMin + 60;
+        }
 
         const top = Math.round(((startMin - allStart) / totalMinutes) * totalHeight);
         const lab = document.createElement('div');
@@ -469,74 +460,6 @@ function getNowLineState(ctx) {
   // ============================================================================
   // LESSON PROCESSING & FILTERING
   // ============================================================================
-
-  function extractDayLessons(sourceForDay, ctx) {
-    return sourceForDay.map((el) => {
-      // Use dynamic field extraction for flexible display
-      const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
-
-      return {
-        dateStr: String(el.date),
-        startMin: ctx._toMinutes(el.startTime),
-        endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
-        startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
-        endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        // Flexible field extraction
-        subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
-        subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
-        teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
-        teacher: getTeachers ? getTeachers(el, 'long')[0] : el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
-        room: getRoom ? getRoom(el, 'short') : el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
-        roomLong: getRoom ? getRoom(el, 'long') : el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
-        class: getClass ? getClass(el, 'short') : el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
-        classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
-        studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
-        studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
-        infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
-        infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
-        // Display mode information
-        isTeacherView: displayMode.isTeacherView,
-        isStudentView: displayMode.isStudentView,
-        // Legacy fields
-        code: el.code || '',
-        substText: el.substText || '',
-        text: el.lstext || '',
-        type: el.type || null,
-        activityType: el.activityType || 'NORMAL_TEACHING_PERIOD',
-        lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
-        // Original array fields for flexible display
-        te: el.te || [],
-        su: el.su || [],
-        ro: el.ro || [],
-        cl: el.cl || [],
-        sg: el.sg || [],
-        info: el.info || [],
-        date: el.date,
-        icons: el.icons || [],
-      };
-    });
-  }
-
-  function validateAndNormalizeLessons(dayLessons, log) {
-    for (const curr of dayLessons) {
-      curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
-
-      if (curr.startMin === undefined || curr.startMin === null) {
-        log(
-          'debug',
-          'Lesson missing startMin; backend should provide numeric startMin/endMin',
-          curr.lessonId ? { lessonId: curr.lessonId } : curr
-        );
-      }
-
-      if (curr.endMin === undefined || curr.endMin === null) {
-        if (curr.startMin !== undefined && curr.startMin !== null) {
-          curr.endMin = curr.startMin + 45;
-        }
-      }
-    }
-    return dayLessons;
-  }
 
   function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
@@ -617,19 +540,6 @@ function getNowLineState(ctx) {
     return filtered;
   }
 
-  function lessonHasExam(lesson) {
-    // Primary check: REST API provides `type: 'EXAM'` (uppercase) directly on lessons that are exams
-    if (lesson?.type && String(lesson.type).toUpperCase() === 'EXAM') return true;
-
-    // Fallback: Check if lesson text contains exam keywords
-    const lText = String(lesson?.text || lesson?.lstext || '').toLowerCase();
-    if (lText.includes('klassenarbeit') || lText.includes('klausur') || lText.includes('arbeit')) {
-      return true;
-    }
-
-    return false;
-  }
-
   // ============================================================================
   // DOM CREATION - DAY COLUMNS
   // ============================================================================
@@ -638,7 +548,15 @@ function getNowLineState(ctx) {
     try {
       if (Array.isArray(timeUnits) && timeUnits.length > 0) {
         for (let ui = 0; ui < timeUnits.length; ui++) {
-          const { lineMin } = getTimeUnitBounds(timeUnits, ui);
+          const u = timeUnits[ui];
+          let lineMin = null;
+          if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
+            lineMin = timeUnits[ui + 1].startMin;
+          } else if (u?.endMin !== undefined) {
+            lineMin = u.endMin;
+          } else if (u?.startMin !== null && u?.startMin !== undefined) {
+            lineMin = u.startMin + 60;
+          }
           if (lineMin === undefined || lineMin === null) continue;
           if (lineMin < allStart || lineMin > allEnd) continue;
 
@@ -694,20 +612,6 @@ function getNowLineState(ctx) {
     const hiddenLessonsLabel = ctx.translate ? ctx.translate(hiddenLessonsKey) : hiddenCount > 1 ? 'more lessons' : 'more lesson';
     moreBadge.title = `${hiddenCount} ${hiddenLessonsLabel}`;
     inner.appendChild(moreBadge);
-  }
-
-  // ============================================================================
-  // LESSON CELL RENDERING
-  // ============================================================================
-
-  function createLessonCell(topPx, heightPx, dateStr, eMin) {
-    const cell = document.createElement('div');
-    cell.className = 'grid-lesson lesson';
-    cell.style.top = `${topPx}px`;
-    cell.style.height = `${heightPx}px`;
-    cell.setAttribute('data-date', dateStr);
-    cell.setAttribute('data-end-min', String(eMin));
-    return cell;
   }
 
   function makeLessonInnerHTML(lesson, escapeHtml, ctx) {
@@ -778,15 +682,10 @@ function getNowLineState(ctx) {
     return `<div class='lesson-content'><span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
-  function hasHomeworkIcon(lesson) {
-    if (!lesson || !Array.isArray(lesson.icons)) return false;
-    return lesson.icons.includes('HOMEWORK');
-  }
-
   function addHomeworkIcon(cell) {
     const icon = document.createElement('span');
     icon.className = 'homework-icon';
-    icon.innerHTML = '✍'; // Pencil icon (U+270F)
+    icon.innerHTML = '📘'; // Book icon (U+1F4D8)
     cell.appendChild(icon);
   }
 
@@ -976,7 +875,7 @@ function getNowLineState(ctx) {
 
           lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
-          if (hasHomeworkIcon(lesson)) {
+          if (lesson?.icons?.includes('HOMEWORK')) {
             addHomeworkIcon(lessonDiv);
           }
 
@@ -1035,7 +934,7 @@ function getNowLineState(ctx) {
         if (typeof eMin === 'number' && !Number.isNaN(eMin) && eMin <= nowMin) isPast = true;
       }
 
-      const hasExam = lessons.some((l) => lessonHasExam(l));
+      const hasExam = lessons.some((l) => isExamLesson?.(l));
 
       const cancelledLessons = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
       const nonCancelledLessons = lessons.filter((l) => l.code !== 'cancelled' && l.status !== 'CANCELLED');
@@ -1075,7 +974,12 @@ function getNowLineState(ctx) {
         // If only one lesson, use full height; if multiple, stack them individually
         if (nonCancelledLessons.length === 1) {
           const replacement = nonCancelledLessons[0];
-          const leftCell = createLessonCell(topPx, heightPx, replacement.dateStr, eMin);
+          const leftCell = document.createElement('div');
+          leftCell.className = 'grid-lesson lesson';
+          leftCell.style.top = `${topPx}px`;
+          leftCell.style.height = `${heightPx}px`;
+          leftCell.setAttribute('data-date', replacement.dateStr);
+          leftCell.setAttribute('data-end-min', String(eMin));
 
           // Determine styling based on lesson type
           if (replacement.code === 'irregular' || replacement.status === 'SUBSTITUTION') {
@@ -1087,7 +991,7 @@ function getNowLineState(ctx) {
           if (hasExam) leftCell.classList.add('has-exam');
           if (isPast) leftCell.classList.add('past');
           leftCell.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
-          if (hasHomeworkIcon(replacement)) {
+          if (replacement?.icons?.includes('HOMEWORK')) {
             addHomeworkIcon(leftCell);
           }
           bothInner.appendChild(leftCell);
@@ -1097,7 +1001,12 @@ function getNowLineState(ctx) {
             const lTopPx = Math.round(((lesson.startMin - allStart) / totalMinutes) * totalHeight);
             const lHeightPx = Math.max(12, Math.round(((lesson.endMin - lesson.startMin) / totalMinutes) * totalHeight));
 
-            const leftCell = createLessonCell(lTopPx, lHeightPx, lesson.dateStr, lesson.endMin);
+            const leftCell = document.createElement('div');
+            leftCell.className = 'grid-lesson lesson';
+            leftCell.style.top = `${lTopPx}px`;
+            leftCell.style.height = `${lHeightPx}px`;
+            leftCell.setAttribute('data-date', lesson.dateStr);
+            leftCell.setAttribute('data-end-min', String(lesson.endMin));
 
             if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
               leftCell.classList.add('lesson-substitution', 'split-left');
@@ -1108,7 +1017,7 @@ function getNowLineState(ctx) {
             if (hasExam) leftCell.classList.add('has-exam');
             if (isPast) leftCell.classList.add('past');
             leftCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
-            if (hasHomeworkIcon(lesson)) {
+            if (lesson?.icons?.includes('HOMEWORK')) {
               addHomeworkIcon(leftCell);
             }
             bothInner.appendChild(leftCell);
@@ -1120,12 +1029,17 @@ function getNowLineState(ctx) {
           const cTopPx = Math.round(((cancelled.startMin - allStart) / totalMinutes) * totalHeight);
           const cHeightPx = Math.max(12, Math.round(((cancelled.endMin - cancelled.startMin) / totalMinutes) * totalHeight));
 
-          const rightCell = createLessonCell(cTopPx, cHeightPx, cancelled.dateStr, cancelled.endMin);
+          const rightCell = document.createElement('div');
+          rightCell.className = 'grid-lesson lesson';
+          rightCell.style.top = `${cTopPx}px`;
+          rightCell.style.height = `${cHeightPx}px`;
+          rightCell.setAttribute('data-date', cancelled.dateStr);
+          rightCell.setAttribute('data-end-min', String(cancelled.endMin));
           rightCell.classList.add('lesson-cancelled', 'split-right');
           if (hasExam) rightCell.classList.add('has-exam');
           if (isPast) rightCell.classList.add('past');
           rightCell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
-          if (hasHomeworkIcon(cancelled)) {
+          if (cancelled?.icons?.includes('HOMEWORK')) {
             addHomeworkIcon(rightCell);
           }
           bothInner.appendChild(rightCell);
@@ -1144,7 +1058,12 @@ function getNowLineState(ctx) {
       // RULE 3: Single lesson -> full width cell
       else if (lessons.length === 1) {
         const lesson = lessons[0];
-        const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
+        const bothCell = document.createElement('div');
+        bothCell.className = 'grid-lesson lesson';
+        bothCell.style.top = `${topPx}px`;
+        bothCell.style.height = `${heightPx}px`;
+        bothCell.setAttribute('data-date', lesson.dateStr);
+        bothCell.setAttribute('data-end-min', String(eMin));
 
         // Check for activity type first (BREAK_SUPERVISION)
         if (lesson.activityType === 'BREAK_SUPERVISION') {
@@ -1164,7 +1083,7 @@ function getNowLineState(ctx) {
         if (isPast) bothCell.classList.add('past');
         bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
-        if (hasHomeworkIcon(lesson)) {
+        if (lesson?.icons?.includes('HOMEWORK')) {
           addHomeworkIcon(bothCell);
         }
 
@@ -1317,9 +1236,53 @@ function getNowLineState(ctx) {
           .filter((el) => String(el.date) === dateStr)
           .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
 
-      // Extract and normalize lessons
-      let dayLessons = extractDayLessons(sourceForDay, ctx);
-      dayLessons = validateAndNormalizeLessons(dayLessons, log);
+      // Extract, normalize and validate lessons inline
+      const dayLessons = sourceForDay.map((el) => {
+        const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
+        const startMin = ctx._toMinutes(el.startTime);
+        const endMin = el.endTime ? ctx._toMinutes(el.endTime) : startMin !== undefined && startMin !== null ? startMin + 45 : null;
+
+        if (startMin === undefined || startMin === null) {
+          log('debug', 'Lesson missing startMin; backend should provide numeric startMin/endMin', el.id ?? el.lid ?? el);
+        }
+
+        return {
+          dateStr: String(el.date),
+          startMin,
+          endMin,
+          startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
+          endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
+          subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
+          subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
+          teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
+          teacher: getTeachers ? getTeachers(el, 'long')[0] : el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
+          room: getRoom ? getRoom(el, 'short') : el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
+          roomLong: getRoom ? getRoom(el, 'long') : el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
+          class: getClass ? getClass(el, 'short') : el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
+          classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
+          studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
+          studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
+          infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
+          infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
+          isTeacherView: displayMode.isTeacherView,
+          isStudentView: displayMode.isStudentView,
+          code: el.code || '',
+          substText: el.substText || '',
+          text: el.lstext || '',
+          type: el.type || null,
+          activityType: el.activityType || 'NORMAL_TEACHING_PERIOD',
+          lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+          lessonIds: (el.id ?? el.lid ?? el.lessonId) ? [String(el.id ?? el.lid ?? el.lessonId)] : [],
+          te: el.te || [],
+          su: el.su || [],
+          ro: el.ro || [],
+          cl: el.cl || [],
+          sg: el.sg || [],
+          info: el.info || [],
+          date: el.date,
+          icons: el.icons || [],
+        };
+      });
 
       // Filter by max periods and time cutoff
       const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);

@@ -4,7 +4,7 @@
 
 **Purpose**: Guide AI agents toward productive, high-quality contributions.
 **Status**: Production module (~5,500 LOC, 17 services, 6 widgets).
-**Last Updated**: 2025-01-21
+**Last Updated**: 2026-01-27
 
 ## Architecture Overview (Critical to Understand)
 
@@ -59,7 +59,7 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Core Principle**: Deterministic transformations based on data source. No compatibility layers needed since frontend and backend always update synchronously.
 
-- All API responses normalized in `dataTransformer.js` - use pure functions only
+- All API responses normalized in `webuntisApiService.js` transformation functions
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
 - HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
 - Never send raw API objects to frontend - run through `compactArray()` with schema
@@ -68,6 +68,12 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 - REST API sends HHMM integers (e.g., 1350 = 13:50) → pass through directly
 - Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseTimegridTimeString(v)`
 - Frontend receives HHMM integers; widgets format via `formatTime(hhmm)` → "13:50"
+
+**Type Field Handling** (exam detection):
+- Timetable API provides `type` field: "EXAM", "NORMAL_TEACHING_PERIOD", "EVENT", "ADDITIONAL_PERIOD"
+- `type` field preserved separately from `activityType` in transformation (webuntisApiService.js line 255)
+- Frontend uses `isExamLesson(lesson)` (widgets/util.js) to check if lesson is exam
+- Exam lessons receive CSS class `has-exam` for visual styling (yellow left border)
 
 **Important**: Data format is always deterministic - always know and specify the source format. No guessing.
 
@@ -98,7 +104,7 @@ console.warn('[feature] Warning:', error);
 - `lib/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
 - `lib/configValidator.js` - Config schema + 25 legacy key mappings
 - `widgets/*.js` - 6 renderer modules (lessons, grid, exams, homework, absences, messagesofday)
-- `widgets/util.js` - Flexible field utilities (getTeachers, getSubject, getRoom, getClass, getStudentGroup, buildFlexibleLessonDisplay)
+- `widgets/util.js` - Shared utilities for all widgets (getTeachers, getSubject, getRoom, getClass, getStudentGroup, isExamLesson, etc.)
 - `config/config.template.js` - Config schema with 90+ options (includes grid.fields for flexible display)
 - `tests/unit.test.js` - Jest tests (currently 0% coverage)
 
@@ -115,10 +121,9 @@ console.warn('[feature] Warning:', error);
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
-- `docs/DATA_TRANSFORMATIONS.md` - **Complete analysis of all data transformations (time, date, HTML sanitization)**
-- `docs/01-research/API_ARCHITECTURE.md` - REST endpoints, auth methods, coverage
-- `docs/ISSUES.md` - Known issues, CRITICAL refactoring tasks
-- `docs/lib-README.md` - Service documentation
+- `docs/API_REFERENCE.md` - REST endpoints, auth methods, coverage
+- `docs/CONFIG.md` - Configuration reference
+- `docs/CSS_CUSTOMIZATION.md` - CSS customization guide
 
 ## Quality bar
 
@@ -189,7 +194,7 @@ console.warn('[feature] Warning:', error);
 
 **Frontend:**
 - Frontend logs are visible in MagicMirror's browser console - you **cannot directly access** these from the backend
-- Use the built-in Simple Browser (`open_simple_browser` tool) for limited visual inspection of the module
+- Use the Playwright MCP for visual inspection of the module
 - Test frontend rendering changes via `node --run debug` (backend) + manual browser testing
 
 **Testing Workflow:**
@@ -365,6 +370,34 @@ Security note:
 - Socket message handling (MMM-Webuntis.js)
 - Browser console errors
 
-For frontend testing: run `node --run debug` to validate backend, then use `open_simple_browser` to test visual aspects (limited GUI in dev container).
+For frontend testing: run `node --run debug` to validate backend, then use Playwright MCP to test visual aspects.
+
+## Recent Changes (Jan 2026)
+
+### Exam Detection Refactoring
+- **Changed**: Moved exam detection from text-matching (fragile) to API `type` field (reliable)
+- **Files modified**:
+  - `lib/webuntisApiService.js` - Added `type` field preservation (line 255)
+  - `widgets/util.js` - Created shared `isExamLesson()` function
+  - `widgets/grid.js`, `widgets/lessons.js` - Removed duplicated exam detection logic
+- **Frontend fix**: Added `isExamLesson` export to `initWidget()` in util.js (was missing from return object)
+- **Result**: Exam lessons now correctly marked with `has-exam` CSS class (yellow left border)
+
+### Code Cleanup
+- **Removed over-engineered functions** in grid.js: `extractDayLessons()`, `validateAndNormalizeLessons()`, `lessonHasExam()`, `hasHomeworkIcon()`, `createLessonCell()`, `getTimeUnitBounds()`
+- **DRY principle applied**: Consolidated duplicated utilities into `widgets/util.js`
+- **Total reduction**: ~105 lines of code removed, improved maintainability
+
+### Available Timetable API Fields
+Additional fields available in REST timetable API (currently stored but partially unused):
+- `color` - Lesson color (green for cancelled, gray for regular) - useful for styling
+- `link` - External links for online lessons (Zoom, Teams, etc.) - **HIGH PRIORITY**
+- `notesAll` - Global notes/annotations
+- `position[X].removed` - Detailed substitution info (who was replaced)
+- `moved` - Info about moved/rescheduled lessons
+- `texts[]` - Structured text info (not just string concatenation)
+- Browser console errors
+
+For frontend testing: run `node --run debug` to validate backend, then use Playwright MCP to test visual aspects.
 
 </instructions>

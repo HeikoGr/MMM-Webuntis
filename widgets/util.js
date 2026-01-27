@@ -245,6 +245,7 @@
       getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
       getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
       getInfo: typeof util.getInfo === 'function' ? util.getInfo : () => '',
+      isExamLesson: typeof util.isExamLesson === 'function' ? util.isExamLesson : () => false,
     };
   }
 
@@ -329,6 +330,15 @@
     return getFieldValue(lesson, 'info', format);
   }
 
+  /**
+   * Check if lesson is an exam
+   * Uses REST API type field ("EXAM") - no text matching needed
+   */
+  function isExamLesson(lesson) {
+    // REST API provides `type: 'EXAM'` directly for exam periods
+    return lesson?.type && String(lesson.type).toUpperCase() === 'EXAM';
+  }
+
   // Export all utilities
   root.util = {
     formatYmd,
@@ -353,6 +363,7 @@
     getClass,
     getStudentGroup,
     getInfo,
+    isExamLesson,
   };
 
   root.dom = {

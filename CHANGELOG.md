@@ -2,7 +2,25 @@
 
 ## Unreleased
 
-- Nothing yet. 🚧
+### ✨ New Features
+
+- **API-Based Exam Detection**: Switched from text-matching to reliable `type` field from Webuntis API
+  - Exams detected via `type: "EXAM"` field instead of text heuristics
+  - Visual marking: Exams now display with yellow left border (`has-exam` CSS class)
+  - Future-proof: No longer vulnerable to i18n changes or text variations
+
+### 🛠️ Improvements
+
+- **Code Cleanup**: Removed over-engineered helper functions in grid.js
+  - Eliminated duplicated exam detection logic (`lessonHasExam()`, text matching in lessons.js)
+  - Consolidated utilities into `widgets/util.js` for DRY principle
+  - Inline transformations for `extractDayLessons()` and `validateAndNormalizeLessons()`
+  - Removed trivial wrapper functions: `createLessonCell()`, `hasHomeworkIcon()`, `getTimeUnitBounds()`
+  - **Result**: ~105 lines of code removed, improved maintainability
+
+- **Widget Utilities Export**: Fixed missing `isExamLesson` export in `initWidget()` function
+  - All widgets now have consistent access to shared utilities
+  - Reduced duplication between grid.js and lessons.js
 
 ## 0.6.1
 

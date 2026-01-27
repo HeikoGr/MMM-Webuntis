@@ -1,6 +1,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext, isExamLesson } =
+    root.util?.initWidget?.(root) || {};
 
   function renderLessonsForStudent(ctx, container, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
@@ -179,14 +180,11 @@
         }
 
         let addClass = '';
-        // Check for exam type: REST API type field ("EXAM" uppercase) or text-based fallback (lstext keywords)
-        if (entry.type && String(entry.type).toUpperCase() === 'EXAM') {
+        // Check for exam using shared utility
+        if (isExamLesson?.(entry)) {
           addClass = 'exam';
         } else {
-          const entryText = String(entry.lstext || '').toLowerCase();
-          if (entryText.includes('klassenarbeit') || entryText.includes('klausur') || entryText.includes('arbeit')) {
-            addClass = 'exam';
-          } else if (entry.code === 'cancelled') {
+          if (entry.code === 'cancelled') {
             addClass = 'cancelled';
           } else if (entry.code === 'irregular') {
             addClass = 'substitution';
