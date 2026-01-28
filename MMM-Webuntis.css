@@ -373,7 +373,7 @@
   opacity: 0.72;
 }
 
-.MMM-Webuntis .grid-combined .lesson {
+.MMM-Webuntis .grid-combined .lesson .lesson-ticker-wrapper {
   border: 1px solid #ccc;
   border-radius: var(--wu-lesson-radius);
   text-align: left;
@@ -628,7 +628,7 @@
 .MMM-Webuntis .ticker-item .lesson-content {
   border-radius: var(--wu-lesson-radius);
   width: 100%;
-  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
+  padding: var(--wu-lesson-padding);
   box-sizing: border-box;
   overflow: hidden;
   position: relative;

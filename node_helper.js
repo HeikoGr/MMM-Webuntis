@@ -548,6 +548,8 @@ module.exports = NodeHelper.create({
       mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
+      authService,
+      sessionKey: options.sessionKey ?? null,
     });
 
     // Track API status if sessionKey provided
@@ -598,6 +600,8 @@ module.exports = NodeHelper.create({
       rangeEnd,
       personId,
       logger: this._mmLog.bind(this),
+      authService,
+      sessionKey: options.sessionKey ?? null,
       normalizeDate: this._normalizeDateToInteger.bind(this),
       normalizeTime: this._normalizeTimeToMinutes.bind(this),
       sanitizeHtml: this._sanitizeHtmlText.bind(this),
@@ -655,6 +659,8 @@ module.exports = NodeHelper.create({
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
+      authService,
+      sessionKey: options.sessionKey ?? null,
     });
 
     // Track API status
@@ -707,6 +713,8 @@ module.exports = NodeHelper.create({
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
+      authService,
+      sessionKey: options.sessionKey ?? null,
     });
 
     // Track API status
@@ -757,6 +765,8 @@ module.exports = NodeHelper.create({
       logger: this._mmLog.bind(this),
       debugApi: options.debugApi || false,
       dumpRaw: options.dumpRawApiResponses || false,
+      authService,
+      sessionKey: options.sessionKey ?? null,
     });
 
     // Track API status
@@ -1476,11 +1486,35 @@ module.exports = NodeHelper.create({
           // Fetch fresh data for this student
           const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config, sessionKey);
           if (!payload) {
-            this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
+            this._mmLog(
+              'warn',
+              student,
+              `fetchData returned empty payload for ${student.title} - skipping update to preserve existing data`
+            );
           } else {
-            // Add warnings to payload
-            const uniqWarnings = Array.from(new Set(groupWarnings));
-            studentPayloads.push({ ...payload, id: identifier, warnings: uniqWarnings });
+            // CRITICAL FIX: Only send payload if it contains actual data OR if this is the first fetch
+            // This prevents overwriting valid cached data with empty results from failed API calls
+            const hasTimetableData = payload.timetableRange && payload.timetableRange.length > 0;
+            const hasAnyData =
+              hasTimetableData ||
+              (payload.exams && payload.exams.length > 0) ||
+              (payload.homeworks && payload.homeworks.length > 0) ||
+              (payload.absences && payload.absences.length > 0);
+
+            // Only skip if we have NO data at all (likely due to timeout/error)
+            // Still send if we have at least some data (partial success is better than nothing)
+            if (!hasAnyData) {
+              this._mmLog(
+                'warn',
+                student,
+                `Fetch completed but returned no data for ${student.title} - skipping update to preserve existing frontend data`
+              );
+              // Don't add to studentPayloads - this prevents frontend from clearing its cache
+            } else {
+              // Add warnings to payload
+              const uniqWarnings = Array.from(new Set(groupWarnings));
+              studentPayloads.push({ ...payload, id: identifier, warnings: uniqWarnings });
+            }
           }
         } catch (err) {
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
