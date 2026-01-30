@@ -502,6 +502,30 @@ Module.register('MMM-Webuntis', {
     return hh * 60 + mm;
   },
 
+  _hasErrorWarnings(warnings = []) {
+    if (!Array.isArray(warnings) || warnings.length === 0) return false;
+    const pattern = /(authentication failed|cannot connect|timeout|temporarily unavailable|rate limit|http\s*\d{3})/i;
+    return warnings.some((w) => pattern.test(String(w)));
+  },
+
+  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings) {
+    const nextIsArray = Array.isArray(nextData);
+    const prevIsArray = Array.isArray(prevData);
+    const nextEmpty = nextIsArray && nextData.length === 0;
+    const prevHasData = prevIsArray && prevData.length > 0;
+
+    if (!prevHasData) return false;
+    if (!nextEmpty) return false;
+
+    // If this data type wasn't fetched, keep previous data
+    if (fetchFlag === false) return true;
+
+    const numericStatus = Number(status);
+    const isBadStatus = Number.isFinite(numericStatus) && (numericStatus === 0 || numericStatus >= 400);
+    const hasErrorWarning = this._hasErrorWarnings(warnings);
+
+    return isBadStatus || hasErrorWarning;
+  },
   _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
@@ -1097,16 +1121,21 @@ Module.register('MMM-Webuntis', {
       this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
 
+    const warningsList = Array.isArray(payload.warnings) ? payload.warnings : [];
+
     // Collect module-level warnings (deduped) and log newly seen ones to console
-    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+    if (warningsList.length > 0) {
       this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-      payload.warnings.forEach((w) => {
+      warningsList.forEach((w) => {
         if (!this.moduleWarningsSet.has(w)) {
           this.moduleWarningsSet.add(w);
           this._log('warn', `Module warning: ${w}`);
         }
       });
     }
+
+    const apiStatus = payload.apiStatus || {};
+    const fetchFlags = payload.fetchFlags || {};
 
     const timeUnitsList = payload.timeUnits || [];
     let timeUnits = [];
@@ -1123,23 +1152,45 @@ Module.register('MMM-Webuntis', {
     } catch (e) {
       this._log('warn', 'failed to build timeUnits from grid', e);
     }
-    this.timeUnitsByStudent[title] = timeUnits;
+    const prevTimeUnits = this.timeUnitsByStudent[title] || [];
+    const keepTimeUnits = this._shouldPreserveData(
+      timeUnits,
+      prevTimeUnits,
+      fetchFlags.fetchTimegrid ?? fetchFlags.fetchTimetable ?? true,
+      apiStatus.timetable,
+      warningsList
+    );
+    if (!keepTimeUnits) {
+      this.timeUnitsByStudent[title] = timeUnits;
+    }
+    const effectiveTimeUnits = keepTimeUnits ? prevTimeUnits : timeUnits;
 
     const periodMap = {};
-    timeUnits.forEach((u) => {
+    effectiveTimeUnits.forEach((u) => {
       periodMap[u.startTime] = u.name;
     });
     this.periodNamesByStudent[title] = periodMap;
 
     const timetableRange = Array.isArray(payload.timetableRange) ? payload.timetableRange : [];
-    this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
+    const prevTimetable = this.timetableByStudent[title] || [];
+    const keepTimetable = this._shouldPreserveData(
+      timetableRange,
+      prevTimetable,
+      fetchFlags.fetchTimetable ?? true,
+      apiStatus.timetable,
+      warningsList
+    );
+    if (!keepTimetable) {
+      this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
+    }
+    const effectiveTimetable = keepTimetable ? prevTimetable : this.timetableByStudent[title] || [];
     this._log(
       'debug',
-      `[GOT_DATA] Timetable filtered: ${payload.timetableRange?.length || 0} total -> ${this.timetableByStudent[title]?.length || 0} after filter`
+      `[GOT_DATA] Timetable filtered: ${payload.timetableRange?.length || 0} total -> ${effectiveTimetable?.length || 0} after filter`
     );
 
     const groupedRaw = {};
-    (this.timetableByStudent[title] || []).forEach((el) => {
+    (effectiveTimetable || []).forEach((el) => {
       const key = el && el.date != null ? String(el.date) : null;
       if (!key) return;
       if (!groupedRaw[key]) groupedRaw[key] = [];
@@ -1153,17 +1204,53 @@ Module.register('MMM-Webuntis', {
       rawGroupedByDate: groupedRaw,
     };
 
-    this.examsByStudent[title] = Array.isArray(payload.exams) ? payload.exams : [];
+    const nextExams = Array.isArray(payload.exams) ? payload.exams : [];
+    const prevExams = this.examsByStudent[title] || [];
+    const keepExams = this._shouldPreserveData(nextExams, prevExams, fetchFlags.fetchExams ?? true, apiStatus.exams, warningsList);
+    if (!keepExams) {
+      this.examsByStudent[title] = nextExams;
+    }
 
     const hw = payload.homeworks;
     const hwNorm = Array.isArray(hw) ? hw : Array.isArray(hw?.homeworks) ? hw.homeworks : Array.isArray(hw?.homework) ? hw.homework : [];
-    this.homeworksByStudent[title] = hwNorm;
+    const prevHomeworks = this.homeworksByStudent[title] || [];
+    const keepHomeworks = this._shouldPreserveData(
+      hwNorm,
+      prevHomeworks,
+      fetchFlags.fetchHomeworks ?? true,
+      apiStatus.homework,
+      warningsList
+    );
+    if (!keepHomeworks) {
+      this.homeworksByStudent[title] = hwNorm;
+    }
 
-    this.absencesByStudent[title] = Array.isArray(payload.absences) ? payload.absences : [];
+    const nextAbsences = Array.isArray(payload.absences) ? payload.absences : [];
+    const prevAbsences = this.absencesByStudent[title] || [];
+    const keepAbsences = this._shouldPreserveData(
+      nextAbsences,
+      prevAbsences,
+      fetchFlags.fetchAbsences ?? true,
+      apiStatus.absences,
+      warningsList
+    );
+    if (!keepAbsences) {
+      this.absencesByStudent[title] = nextAbsences;
+      this.absencesUnavailableByStudent[title] = Boolean(payload.absencesUnavailable);
+    }
 
-    this.absencesUnavailableByStudent[title] = Boolean(payload.absencesUnavailable);
-
-    this.messagesOfDayByStudent[title] = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
+    const nextMessages = Array.isArray(payload.messagesOfDay) ? payload.messagesOfDay : [];
+    const prevMessages = this.messagesOfDayByStudent[title] || [];
+    const keepMessages = this._shouldPreserveData(
+      nextMessages,
+      prevMessages,
+      fetchFlags.fetchMessagesOfDay ?? true,
+      apiStatus.messagesOfDay,
+      warningsList
+    );
+    if (!keepMessages) {
+      this.messagesOfDayByStudent[title] = nextMessages;
+    }
 
     this.holidaysByStudent[title] = Array.isArray(payload.holidays) ? payload.holidays : [];
     this.holidayMapByStudent[title] = payload.holidayByDate || {};

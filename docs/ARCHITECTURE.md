@@ -1,11 +1,11 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2025-01-21
+**Last Updated**: 2026-01-30
 **Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures)
 
 ## Executive Summary
 
-MMM-Webuntis is a sophisticated MagicMirror² module featuring a **service-oriented architecture** with 17 specialized backend services and 6 configurable widget renderers. The module successfully migrated from legacy JSON-RPC API to modern REST API while maintaining backward compatibility through 25 legacy config mappings. Recent improvements include **timetable-first fetch strategy** (token validation before parallel fetches), **5-minute token buffer** (prevents silent API failures), **API status tracking** (skips permanent errors), flexible field configuration for grid widget, and break supervision support. Key strengths include robust authentication (QR code, credentials, parent accounts), comprehensive error handling, and extensive documentation.
+MMM-Webuntis is a sophisticated MagicMirror² module featuring a **service-oriented architecture** with 17 specialized backend services and 6 configurable widget renderers. The module successfully migrated from legacy JSON-RPC API to modern REST API while maintaining backward compatibility through 25 legacy config mappings. Recent improvements include **timetable-first fetch strategy** (token validation before parallel fetches), **auth canary when timetable is disabled**, **5-minute token buffer** (prevents silent API failures), **API status tracking** (skips permanent errors), **frontend preservation of last non-empty data on error**, flexible field configuration for grid widget, and break supervision support. Key strengths include robust authentication (QR code, credentials, parent accounts), comprehensive error handling, and extensive documentation.
 
 **Code Metrics**:
 - Total LOC: ~5,500
@@ -28,7 +28,7 @@ graph TB
     end
 
     subgraph Backend["⚙️ Backend (Node.js)"]
-        NH["node_helper.js<br/>(Coordinator, 1803 LOC)"]
+        NH["node_helper.js<br/>(Coordinator, ~2058 LOC)"]
 
         subgraph Core["🔑 Core Services"]
             Auth["authService.js<br/>(Auth & Token Cache)"]
@@ -229,7 +229,7 @@ graph TB
 - **Dependencies**: restClient.js, authService.js, dataTransformer.js (legacy)
 
 **[restClient.js](../lib/restClient.js)** - REST API wrapper
-- [`callRestEndpoint()`](../lib/restClient.js#L27) - Generic REST caller
+- [`callRestAPI()`](../lib/restClient.js#L27) - Generic REST caller
 - Bearer token authentication
 - Tenant ID header management (`X-Webuntis-Api-Tenant-Id`)
 - Response parsing and error handling
@@ -240,6 +240,7 @@ graph TB
 **[dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
 - [`orchestrateFetch()`](../lib/dataFetchOrchestrator.js#L25) - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
 - **Strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
+- **Auth canary**: If timetable is not requested, a minimal timetable call is used as a token canary before other APIs
 - **Performance**: Fast (~100ms overhead for sequential timetable, prevents wasted parallel calls)
 - Auth refresh detection: Retries all data types with fresh token if timetable fetch triggers auth renewal
 - Per-data-type error handling with fallback to empty arrays
@@ -411,6 +412,8 @@ sequenceDiagram
     Note over NH,REST: ✨ Timetable-First + Parallel Fetching (prevents silent token failures)
     loop for each student
         NH->>Orch: orchestrateFetch() L25
+
+        Note over Orch: Step 0: If timetable disabled, run a minimal timetable call as auth canary
 
         Note over Orch: Step 1: Fetch timetable FIRST (token validation canary)
         Orch->>API: getTimetable() L164
