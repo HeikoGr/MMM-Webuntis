@@ -26,8 +26,8 @@ node --run lint
 # Spell check
 node --run test:spelling
 
-# Check dependencies
-node --run deps:check
+# Check configuration
+node --run check
 ```
 
 ### CLI

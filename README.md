@@ -287,7 +287,7 @@ node --run debug
 node --run lint           # Check code style
 node --run lint:fix       # Auto-fix formatting
 node --run test:spelling  # Check spelling
-node --run deps:check     # Verify dependencies
+node --run check          # Verify configuration
 ```
 
 ## Documentation

@@ -128,6 +128,26 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Record API status from an error response so frontend can detect failures.
+   * @param {string} sessionKey - Session key
+   * @param {string} endpoint - API endpoint name
+   * @param {Error} err - Error object
+   */
+  _recordApiStatusFromError(sessionKey, endpoint, err) {
+    if (!sessionKey) return;
+    const rawStatus = err?.status || err?.response?.status;
+    const msg = typeof err?.message === 'string' ? err.message : '';
+    const match = msg.match(/\b(4\d\d|5\d\d)\b/);
+    const parsed = rawStatus || (match ? Number(match[1]) : null);
+    const status = Number.isFinite(Number(parsed)) ? Number(parsed) : 0;
+
+    if (!this._apiStatusBySession.has(sessionKey)) {
+      this._apiStatusBySession.set(sessionKey, {});
+    }
+    this._apiStatusBySession.get(sessionKey)[endpoint] = status;
+  },
+
+  /**
    * Get or create AuthService instance for a specific module identifier
    * Each module instance gets its own AuthService to prevent cache cross-contamination
    * @param {string} identifier - Module instance identifier
@@ -196,8 +216,8 @@ module.exports = NodeHelper.create({
    * Invoke a REST helper with a target descriptor (school/server + credentials).
    * Keeps call sites concise and consistent.
    */
-  async _callRest(fn, target, ...args) {
-    return fn.call(this, target.school, target.username, target.password, target.server, ...args);
+  async _callRest(fn, authCtx, sessionCtx, logCtx, flagsCtx, ...args) {
+    return fn.call(this, authCtx, sessionCtx, logCtx, flagsCtx, ...args);
   },
 
   // ---------------------------------------------------------------------------
@@ -329,14 +349,15 @@ module.exports = NodeHelper.create({
     return Array.from(candidates.values());
   },
 
-  async _resolveClassIdViaRest(school, username, password, server, rangeStart, rangeEnd, className, options = {}) {
+  async _resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className, options = {}) {
+    const { school, username, password, server, qrCodeUrl, cacheKey, authService } = authCtx || {};
     const desiredName = className && String(className).trim();
-    const cacheKeyBase = options.cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
+    const cacheKeyBase = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
     // Include studentId in cache key so each student has their own class cache entry
     const studentIdPart = options.studentId ? `::student::${options.studentId}` : '';
-    const cacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
-    if (this.cacheManager.has('classId', cacheKey)) {
-      return this.cacheManager.get('classId', cacheKey);
+    const classCacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
+    if (this.cacheManager.has('classId', classCacheKey)) {
+      return this.cacheManager.get('classId', classCacheKey);
     }
 
     const formatDateISO = (date) => {
@@ -352,23 +373,22 @@ module.exports = NodeHelper.create({
       return `${year}${month}${day}`;
     };
 
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
     if (!authService) {
-      throw new Error('AuthService not available in restOptions');
+      throw new Error('AuthService not available in authCtx');
     }
-
-    const { token, cookieString, tenantId, schoolYearId } = await authService.getAuth({
-      school,
-      username,
-      password,
-      server,
-      options: {
-        ...options,
-        mmLog: this._mmLog.bind(this),
-        formatErr: this._formatErr.bind(this),
-      },
-    });
+    const authOptions = this._getStandardAuthOptions({ cacheKey: cacheKeyBase });
+    const authResult = qrCodeUrl
+      ? await authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: cacheKeyBase })
+      : await authService.getAuth(
+          {
+            school,
+            username,
+            password,
+            server,
+          },
+          authOptions
+        );
+    const { token, cookieString, tenantId, schoolYearId } = authResult || {};
 
     if (!cookieString) {
       throw new Error('Missing REST auth cookies for class resolution');
@@ -469,7 +489,7 @@ module.exports = NodeHelper.create({
       throw new Error(hint);
     }
 
-    this.cacheManager.set('classId', cacheKey, chosen.id, 24 * 60 * 60 * 1000); // TTL: 24 hours
+    this.cacheManager.set('classId', classCacheKey, chosen.id, 24 * 60 * 60 * 1000); // TTL: 24 hours
     return chosen.id;
   },
 
@@ -477,10 +497,10 @@ module.exports = NodeHelper.create({
    * Get timetable via REST API using unified restClient
    */
   async _getTimetableViaRest(
-    school,
-    username,
-    password,
-    server,
+    authCtx,
+    sessionCtx,
+    logCtx,
+    flagsCtx,
     rangeStart,
     rangeEnd,
     personId,
@@ -489,282 +509,331 @@ module.exports = NodeHelper.create({
     className = null,
     resourceType = null
   ) {
+    const { sessionKey, authRefreshTracker } = sessionCtx || {};
+    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
+    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
+    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
+    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
+
     // Check if API should be skipped based on previous status
-    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'timetable')) {
-      const prevStatus = this._apiStatusBySession.get(options.sessionKey).timetable;
-      this._mmLog('debug', null, `[timetable] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+    if (sessionKey && this._shouldSkipApi(sessionKey, 'timetable')) {
+      const prevStatus = this._apiStatusBySession.get(sessionKey).timetable;
+      mmLog('debug', null, `[timetable] Skipping API call due to previous status ${prevStatus} (permanent error)`);
       return [];
     }
 
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
     let classId = options.classId;
-    const authRefreshTracker = options.authRefreshTracker || null;
-
     // Resolve class ID if needed
     if (wantsClass && !classId) {
-      classId = await this._resolveClassIdViaRest(
-        school,
-        username,
-        password,
+      classId = await this._resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className || options.className || null, {
+        ...options,
+        personId,
+        studentId: options.studentId || personId,
+      });
+    }
+
+    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
+
+    if (!authService) {
+      throw new Error('AuthService not available in authCtx');
+    }
+
+    let response;
+    try {
+      response = await webuntisApiService.getTimetable({
+        getAuth: () =>
+          qrCodeUrl
+            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
+            : authService.getAuth(
+                {
+                  school,
+                  username,
+                  password,
+                  server,
+                },
+                authOptions
+              ),
+        onAuthError: () => {
+          if (authRefreshTracker) authRefreshTracker.refreshed = true;
+          return authService.invalidateCache(effectiveCacheKey);
+        },
         server,
         rangeStart,
         rangeEnd,
-        className || options.className || null,
-        { ...options, personId }
-      );
+        personId,
+        useClassTimetable: wantsClass,
+        classId,
+        resourceType: resourceType || null,
+        logger: this._mmLog.bind(this),
+        mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
+        debugApi: Boolean(debugApi),
+        dumpRaw: Boolean(dumpRawApiResponses),
+      });
+    } catch (err) {
+      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'timetable', err);
+      throw err;
     }
-
-    const authOptions = this._getStandardAuthOptions(options);
-    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
-    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
-
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
-    if (!authService) {
-      throw new Error('AuthService not available in restOptions');
-    }
-
-    const response = await webuntisApiService.getTimetable({
-      getAuth: () =>
-        authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        }),
-      onAuthError: () => {
-        if (authRefreshTracker) authRefreshTracker.refreshed = true;
-        return authService.invalidateCache(cacheKey);
-      },
-      server,
-      rangeStart,
-      rangeEnd,
-      personId,
-      useClassTimetable: wantsClass,
-      classId,
-      resourceType: resourceType || null,
-      logger: this._mmLog.bind(this),
-      mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
-      debugApi: options.debugApi || false,
-      dumpRaw: options.dumpRawApiResponses || false,
-    });
 
     // Track API status if sessionKey provided
-    if (options.sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(options.sessionKey)) {
-        this._apiStatusBySession.set(options.sessionKey, {});
+    if (sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(sessionKey)) {
+        this._apiStatusBySession.set(sessionKey, {});
       }
-      this._apiStatusBySession.get(options.sessionKey).timetable = response.status;
+      this._apiStatusBySession.get(sessionKey).timetable = response.status;
     }
 
     return response.data;
   },
 
-  async _getExamsViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+  async _getExamsViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
+    const { sessionKey, authRefreshTracker } = sessionCtx || {};
+    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
+    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
+    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
+    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
+
     // Check if API should be skipped based on previous status
-    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'exams')) {
-      const prevStatus = this._apiStatusBySession.get(options.sessionKey).exams;
-      this._mmLog('debug', null, `[exams] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+    if (sessionKey && this._shouldSkipApi(sessionKey, 'exams')) {
+      const prevStatus = this._apiStatusBySession.get(sessionKey).exams;
+      mmLog('debug', null, `[exams] Skipping API call due to previous status ${prevStatus} (permanent error)`);
       return [];
     }
 
-    const authOptions = this._getStandardAuthOptions(options);
-    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
-    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
-    const authRefreshTracker = options.authRefreshTracker || null;
+    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
 
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
     if (!authService) {
-      throw new Error('AuthService not available in restOptions');
+      throw new Error('AuthService not available in authCtx');
     }
 
-    const response = await webuntisApiService.getExams({
-      getAuth: () =>
-        authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        }),
-      onAuthError: () => {
-        if (authRefreshTracker) authRefreshTracker.refreshed = true;
-        return authService.invalidateCache(cacheKey);
-      },
-      server,
-      rangeStart,
-      rangeEnd,
-      personId,
-      logger: this._mmLog.bind(this),
-      normalizeDate: this._normalizeDateToInteger.bind(this),
-      normalizeTime: this._normalizeTimeToMinutes.bind(this),
-      sanitizeHtml: this._sanitizeHtmlText.bind(this),
-      debugApi: options.debugApi || false,
-      dumpRaw: options.dumpRawApiResponses || false,
-    });
+    let response;
+    try {
+      response = await webuntisApiService.getExams({
+        getAuth: () =>
+          qrCodeUrl
+            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
+            : authService.getAuth(
+                {
+                  school,
+                  username,
+                  password,
+                  server,
+                },
+                authOptions
+              ),
+        onAuthError: () => {
+          if (authRefreshTracker) authRefreshTracker.refreshed = true;
+          return authService.invalidateCache(effectiveCacheKey);
+        },
+        server,
+        rangeStart,
+        rangeEnd,
+        personId,
+        logger: this._mmLog.bind(this),
+        normalizeDate: this._normalizeDateToInteger.bind(this),
+        normalizeTime: this._normalizeTimeToMinutes.bind(this),
+        sanitizeHtml: this._sanitizeHtmlText.bind(this),
+        debugApi: Boolean(debugApi),
+        dumpRaw: Boolean(dumpRawApiResponses),
+      });
+    } catch (err) {
+      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'exams', err);
+      throw err;
+    }
 
     // Track API status
-    if (options.sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(options.sessionKey)) {
-        this._apiStatusBySession.set(options.sessionKey, {});
+    if (sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(sessionKey)) {
+        this._apiStatusBySession.set(sessionKey, {});
       }
-      this._apiStatusBySession.get(options.sessionKey).exams = response.status;
+      this._apiStatusBySession.get(sessionKey).exams = response.status;
     }
 
     return response.data;
   },
 
-  async _getHomeworkViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+  async _getHomeworkViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
+    const { sessionKey, authRefreshTracker } = sessionCtx || {};
+    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
+    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
+    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
+    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
+
     // Check if API should be skipped based on previous status
-    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'homework')) {
-      const prevStatus = this._apiStatusBySession.get(options.sessionKey).homework;
-      this._mmLog('debug', null, `[homework] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+    if (sessionKey && this._shouldSkipApi(sessionKey, 'homework')) {
+      const prevStatus = this._apiStatusBySession.get(sessionKey).homework;
+      mmLog('debug', null, `[homework] Skipping API call due to previous status ${prevStatus} (permanent error)`);
       return [];
     }
 
-    const authOptions = this._getStandardAuthOptions(options);
-    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
-    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
-    const authRefreshTracker = options.authRefreshTracker || null;
+    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
 
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
     if (!authService) {
-      throw new Error('AuthService not available in restOptions');
+      throw new Error('AuthService not available in authCtx');
     }
 
-    const response = await webuntisApiService.getHomework({
-      getAuth: () =>
-        authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        }),
-      onAuthError: () => {
-        if (authRefreshTracker) authRefreshTracker.refreshed = true;
-        return authService.invalidateCache(cacheKey);
-      },
-      server,
-      rangeStart,
-      rangeEnd,
-      personId,
-      logger: this._mmLog.bind(this),
-      debugApi: options.debugApi || false,
-      dumpRaw: options.dumpRawApiResponses || false,
-    });
+    let response;
+    try {
+      response = await webuntisApiService.getHomework({
+        getAuth: () =>
+          qrCodeUrl
+            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
+            : authService.getAuth(
+                {
+                  school,
+                  username,
+                  password,
+                  server,
+                },
+                authOptions
+              ),
+        onAuthError: () => {
+          if (authRefreshTracker) authRefreshTracker.refreshed = true;
+          return authService.invalidateCache(effectiveCacheKey);
+        },
+        server,
+        rangeStart,
+        rangeEnd,
+        personId,
+        logger: this._mmLog.bind(this),
+        debugApi: Boolean(debugApi),
+        dumpRaw: Boolean(dumpRawApiResponses),
+      });
+    } catch (err) {
+      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'homework', err);
+      throw err;
+    }
 
     // Track API status
-    if (options.sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(options.sessionKey)) {
-        this._apiStatusBySession.set(options.sessionKey, {});
+    if (sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(sessionKey)) {
+        this._apiStatusBySession.set(sessionKey, {});
       }
-      this._apiStatusBySession.get(options.sessionKey).homework = response.status;
+      this._apiStatusBySession.get(sessionKey).homework = response.status;
     }
 
     return response.data;
   },
 
-  async _getAbsencesViaRest(school, username, password, server, rangeStart, rangeEnd, personId, options = {}) {
+  async _getAbsencesViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
+    const { sessionKey, authRefreshTracker } = sessionCtx || {};
+    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
+    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
+    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
+    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
+
     // Check if API should be skipped based on previous status
-    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'absences')) {
-      const prevStatus = this._apiStatusBySession.get(options.sessionKey).absences;
-      this._mmLog('debug', null, `[absences] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+    if (sessionKey && this._shouldSkipApi(sessionKey, 'absences')) {
+      const prevStatus = this._apiStatusBySession.get(sessionKey).absences;
+      mmLog('debug', null, `[absences] Skipping API call due to previous status ${prevStatus} (permanent error)`);
       return [];
     }
 
-    const authOptions = this._getStandardAuthOptions(options);
-    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
-    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
-    const authRefreshTracker = options.authRefreshTracker || null;
+    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
 
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
     if (!authService) {
-      throw new Error('AuthService not available in restOptions');
+      throw new Error('AuthService not available in authCtx');
     }
 
-    const response = await webuntisApiService.getAbsences({
-      getAuth: () =>
-        authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        }),
-      onAuthError: () => {
-        if (authRefreshTracker) authRefreshTracker.refreshed = true;
-        return authService.invalidateCache(cacheKey);
-      },
-      server,
-      rangeStart,
-      rangeEnd,
-      personId,
-      logger: this._mmLog.bind(this),
-      debugApi: options.debugApi || false,
-      dumpRaw: options.dumpRawApiResponses || false,
-    });
+    let response;
+    try {
+      response = await webuntisApiService.getAbsences({
+        getAuth: () =>
+          qrCodeUrl
+            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
+            : authService.getAuth(
+                {
+                  school,
+                  username,
+                  password,
+                  server,
+                },
+                authOptions
+              ),
+        onAuthError: () => {
+          if (authRefreshTracker) authRefreshTracker.refreshed = true;
+          return authService.invalidateCache(effectiveCacheKey);
+        },
+        server,
+        rangeStart,
+        rangeEnd,
+        personId,
+        logger: this._mmLog.bind(this),
+        debugApi: Boolean(debugApi),
+        dumpRaw: Boolean(dumpRawApiResponses),
+      });
+    } catch (err) {
+      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'absences', err);
+      throw err;
+    }
 
     // Track API status
-    if (options.sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(options.sessionKey)) {
-        this._apiStatusBySession.set(options.sessionKey, {});
+    if (sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(sessionKey)) {
+        this._apiStatusBySession.set(sessionKey, {});
       }
-      this._apiStatusBySession.get(options.sessionKey).absences = response.status;
+      this._apiStatusBySession.get(sessionKey).absences = response.status;
     }
 
     return response.data;
   },
 
-  async _getMessagesOfDayViaRest(school, username, password, server, date, options = {}) {
+  async _getMessagesOfDayViaRest(authCtx, sessionCtx, logCtx, flagsCtx, date) {
+    const { sessionKey, authRefreshTracker } = sessionCtx || {};
+    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
+    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
+    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
+    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
+
     // Check if API should be skipped based on previous status
-    if (options.sessionKey && this._shouldSkipApi(options.sessionKey, 'messagesOfDay')) {
-      const prevStatus = this._apiStatusBySession.get(options.sessionKey).messagesOfDay;
-      this._mmLog('debug', null, `[messagesOfDay] Skipping API call due to previous status ${prevStatus} (permanent error)`);
+    if (sessionKey && this._shouldSkipApi(sessionKey, 'messagesOfDay')) {
+      const prevStatus = this._apiStatusBySession.get(sessionKey).messagesOfDay;
+      mmLog('debug', null, `[messagesOfDay] Skipping API call due to previous status ${prevStatus} (permanent error)`);
       return [];
     }
 
-    const authOptions = this._getStandardAuthOptions(options);
-    const cacheKey = authOptions.cacheKey || `user:${username}@${server}/${school}`;
-    authOptions.cacheKey = cacheKey; // Ensure cacheKey is explicitly set
-    const authRefreshTracker = options.authRefreshTracker || null;
+    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
 
-    // Get AuthService from options (set in fetchData)
-    const authService = options.authService;
     if (!authService) {
-      throw new Error('AuthService not available in restOptions');
+      throw new Error('AuthService not available in authCtx');
     }
 
-    const response = await webuntisApiService.getMessagesOfDay({
-      getAuth: () =>
-        authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        }),
-      onAuthError: () => {
-        if (authRefreshTracker) authRefreshTracker.refreshed = true;
-        return authService.invalidateCache(cacheKey);
-      },
-      server,
-      date,
-      logger: this._mmLog.bind(this),
-      debugApi: options.debugApi || false,
-      dumpRaw: options.dumpRawApiResponses || false,
-    });
+    let response;
+    try {
+      response = await webuntisApiService.getMessagesOfDay({
+        getAuth: () =>
+          qrCodeUrl
+            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
+            : authService.getAuth(
+                {
+                  school,
+                  username,
+                  password,
+                  server,
+                },
+                authOptions
+              ),
+        onAuthError: () => {
+          if (authRefreshTracker) authRefreshTracker.refreshed = true;
+          return authService.invalidateCache(effectiveCacheKey);
+        },
+        server,
+        date,
+        logger: this._mmLog.bind(this),
+        debugApi: Boolean(debugApi),
+        dumpRaw: Boolean(dumpRawApiResponses),
+      });
+    } catch (err) {
+      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'messagesOfDay', err);
+      throw err;
+    }
 
     // Track API status
-    if (options.sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(options.sessionKey)) {
-        this._apiStatusBySession.set(options.sessionKey, {});
+    if (sessionKey && response.status) {
+      if (!this._apiStatusBySession.has(sessionKey)) {
+        this._apiStatusBySession.set(sessionKey, {});
       }
-      this._apiStatusBySession.get(options.sessionKey).messagesOfDay = response.status;
+      this._apiStatusBySession.get(sessionKey).messagesOfDay = response.status;
     }
 
     return response.data;
@@ -1377,6 +1446,21 @@ module.exports = NodeHelper.create({
         }
         // Send error payload to frontend with warnings
         for (const student of students) {
+          const effectiveDisplayMode = student.displayMode || config.displayMode;
+          const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
+          const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
+          const wantsExamsWidget = this._wantsWidget('exams', effectiveDisplayMode);
+          const wantsHomeworkWidget = this._wantsWidget('homework', effectiveDisplayMode);
+          const wantsAbsencesWidget = this._wantsWidget('absences', effectiveDisplayMode);
+          const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', effectiveDisplayMode);
+          const fetchFlags = {
+            fetchTimegrid: Boolean(wantsGridWidget || wantsLessonsWidget),
+            fetchTimetable: Boolean(wantsGridWidget || wantsLessonsWidget),
+            fetchExams: Boolean(wantsGridWidget || wantsExamsWidget),
+            fetchHomeworks: Boolean(wantsGridWidget || wantsHomeworkWidget),
+            fetchAbsences: Boolean(wantsGridWidget || wantsAbsencesWidget),
+            fetchMessagesOfDay: Boolean(wantsMessagesOfDayWidget),
+          };
           // Sending error to frontend silently
           this.sendSocketNotification('GOT_DATA', {
             title: student.title,
@@ -1389,6 +1473,9 @@ module.exports = NodeHelper.create({
             exams: [],
             homeworks: [],
             absences: [],
+            messagesOfDay: [],
+            apiStatus: {},
+            fetchFlags,
           });
         }
         return;
@@ -1851,15 +1938,31 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', student, typeof msg === 'string' ? msg : JSON.stringify(msg));
     };
 
+    const logCtx = {
+      logger,
+      mmLog: this._mmLog.bind(this),
+      formatErr: this._formatErr.bind(this),
+    };
+
     const authRefreshTracker = { refreshed: false };
-    const restOptions = { cacheKey: credKey, authSession, authRefreshTracker, sessionKey };
-    if (authSession.qrCodeUrl) {
-      restOptions.qrCodeUrl = authSession.qrCodeUrl;
-    }
-    restOptions.authService = config._authService;
-    // Allow optional raw API dumps when enabled in module config
-    restOptions.dumpRawApiResponses = Boolean(config.dumpRawApiResponses);
-    // restOptions configured silently
+    const authCtx = {
+      authService: config._authService,
+      cacheKey: credKey,
+      qrCodeUrl: authSession.qrCodeUrl || null,
+      school: authSession.school,
+      server: authSession.server,
+      username: authSession.username || null,
+      password: authSession.password || null,
+    };
+    const sessionCtx = {
+      sessionKey,
+      authRefreshTracker,
+      authSession,
+    };
+    const flagsCtx = {
+      debugApi: Boolean(config.debugApi),
+      dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
+    };
 
     const { school, server } = authSession;
     const ownPersonId = authSession.personId;
@@ -1898,6 +2001,14 @@ module.exports = NodeHelper.create({
     const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
     const fetchAbsences = Boolean(wantsGridWidget || wantsAbsencesWidget);
     const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
+    const fetchFlags = {
+      fetchTimegrid,
+      fetchTimetable,
+      fetchExams,
+      fetchHomeworks,
+      fetchAbsences,
+      fetchMessagesOfDay,
+    };
 
     // Calculate base date (with optional debugDate support)
     const baseNow = function () {
@@ -1942,8 +2053,10 @@ module.exports = NodeHelper.create({
       dateRanges,
       baseNow,
       restTargets,
-      restOptions,
-      authRefreshTracker,
+      authCtx,
+      sessionCtx,
+      logCtx,
+      flagsCtx,
       fetchFlags: {
         fetchTimetable,
         fetchExams,
@@ -1957,7 +2070,7 @@ module.exports = NodeHelper.create({
       getHomeworkViaRest: this._getHomeworkViaRest.bind(this),
       getAbsencesViaRest: this._getAbsencesViaRest.bind(this),
       getMessagesOfDayViaRest: this._getMessagesOfDayViaRest.bind(this),
-      logger,
+      logger: logCtx.logger,
       describeTarget,
       className,
       currentFetchWarnings: this._currentFetchWarnings,
@@ -2002,6 +2115,7 @@ module.exports = NodeHelper.create({
         dateRanges,
         todayYmd,
         fetchTimetable,
+        fetchFlags,
         activeHoliday,
         moduleConfig: config,
         currentFetchWarnings: this._currentFetchWarnings,
