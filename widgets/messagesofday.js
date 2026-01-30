@@ -1,7 +1,28 @@
+/**
+ * Messages of Day Widget
+ * Renders daily messages/announcements from school
+ * Supports:
+ * - Subject and text display
+ * - HTML-formatted text (safe tags only: b, i, u, br, p)
+ * - Expanded message display mode
+ * - Localized "Messages of the Day" header
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { log, escapeHtml, addFullRow, addHeader } = root.util?.initWidget?.(root) || {};
 
+  /**
+   * Render messages of day widget for a single student
+   * Displays messages in full-width rows with subject + text
+   * Text supports safe HTML formatting tags (backend sanitizes)
+   *
+   * @param {Object} ctx - Main module context (provides translate, config)
+   * @param {HTMLElement} container - DOM element to append message rows
+   * @param {string} studentCellTitle - Student name (not used, messages span full width)
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} messagesOfDay - Array of message objects (subject, text, isExpanded)
+   * @returns {number} Number of rows added to container
+   */
   function renderMessagesOfDayForStudent(ctx, container, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;
 

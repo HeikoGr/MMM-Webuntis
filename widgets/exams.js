@@ -1,7 +1,27 @@
+/**
+ * Exams Widget
+ * Renders upcoming exams with configurable display options:
+ * - Date format customization
+ * - Subject/teacher display toggle
+ * - Past exam filtering (debug mode exception)
+ * - Sorted by date and time
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
+  /**
+   * Render exams widget for a single student
+   * Displays exams sorted by date and time
+   * Filters past exams unless debug mode is active
+   *
+   * @param {Object} ctx - Main module context (provides translate, config, debug support)
+   * @param {HTMLElement} container - DOM element to append exam rows
+   * @param {string} studentCellTitle - Student name for compact mode student column
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} exams - Array of exam objects from backend (examDate, startTime, name, subject, teachers, text)
+   * @returns {number} Number of rows added to container
+   */
   function renderExamsForStudent(ctx, container, studentCellTitle, studentConfig, exams) {
     try {
       let addedRows = 0;

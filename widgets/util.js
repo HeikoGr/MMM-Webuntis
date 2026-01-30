@@ -1,10 +1,21 @@
+/**
+ * Widget Utilities Module
+ * Provides common utility functions for all MMM-Webuntis widgets
+ * Functions include: date/time formatting, DOM manipulation, logging, field extraction
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
-  // Global log function - respects window.MMMWebuntisLogLevel set by main module
-  // Supports two signatures:
-  //   - log(level, ...args)
-  //   - log(ctx, level, ...args)  [legacy, ctx is ignored]
+  /**
+   * Global log function for widgets
+   * Respects window.MMMWebuntisLogLevel set by main module
+   *
+   * Supports two signatures for backward compatibility:
+   *   - log(level, ...args)              [recommended]
+   *   - log(ctx, level, ...args)         [legacy, ctx is ignored]
+   *
+   * @param {...any} fullArgs - Variable arguments (level, message) or (ctx, level, message)
+   */
   function log(...fullArgs) {
     // Handle both log(level, ...args) and log(ctx, level, ...args) signatures
     let level, args;
@@ -40,10 +51,38 @@
     }
   }
 
+  /**
+   * Format YYYYMMDD integer to dd.MM.yyyy string
+   * Convenience wrapper around formatDate with default format
+   *
+   * @param {number|string} ymd - Date as YYYYMMDD integer (e.g., 20260130)
+   * @returns {string} Formatted date string (e.g., "30.01.2026")
+   */
   function formatYmd(ymd) {
     return formatDate(ymd, 'dd.MM.yyyy');
   }
 
+  /**
+   * Format date with custom pattern using locale-aware formatting
+   * Supports multiple input formats:
+   *   - YYYYMMDD integer (20260130)
+   *   - ISO date string ("2026-01-30" or "2026-01-30T00:00:00Z")
+   *   - Date object
+   *
+   * Supported format tokens:
+   *   - yyyy: 4-digit year (2026)
+   *   - yy: 2-digit year (26)
+   *   - dd: 2-digit day (01-31)
+   *   - d: 1-digit day (1-31)
+   *   - mm: 2-digit month (01-12)
+   *   - m: 1-digit month (1-12)
+   *   - EEE: Short weekday name (locale-aware, e.g., "Thu")
+   *   - EEEE: Long weekday name (locale-aware, e.g., "Thursday")
+   *
+   * @param {number|string|Date} ymd - Date value to format
+   * @param {string} format - Format pattern (default: 'dd.MM.yyyy')
+   * @returns {string} Formatted date string or empty string if invalid
+   */
   function formatDate(ymd, format = 'dd.MM.yyyy') {
     if (ymd === null || ymd === undefined || ymd === '') return '';
 
@@ -110,6 +149,17 @@
     });
   }
 
+  /**
+   * Format time value to HH:MM string
+   * Supports multiple input formats:
+   *   - "13:50" → "13:50" (pass-through)
+   *   - 1350 → "13:50"
+   *   - "08:15" → "08:15"
+   *   - 815 → "08:15"
+   *
+   * @param {string|number} v - Time value (HHMM integer or "HH:MM" string)
+   * @returns {string} Formatted time string "HH:MM" or empty string if invalid
+   */
   function formatTime(v) {
     if (v === null || v === undefined) return '';
     const s = String(v).trim();
@@ -118,6 +168,16 @@
     return `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
   }
 
+  /**
+   * Convert time value to minutes since midnight
+   * Supports multiple input formats:
+   *   - "13:50" → 830 minutes
+   *   - 1350 → 830 minutes
+   *   - "08:15" → 495 minutes
+   *
+   * @param {string|number} t - Time value to convert
+   * @returns {number} Minutes since midnight (0-1439) or NaN if invalid
+   */
   function toMinutes(t) {
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();
@@ -133,11 +193,27 @@
     return hh * 60 + mm;
   }
 
+  /**
+   * Escape HTML special characters to prevent XSS
+   * Converts: &, <, >, ", '
+   *
+   * @param {string} s - String to escape
+   * @returns {string} HTML-safe string
+   */
   function escapeHtml(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /**
+   * Create a DOM element with optional class and content
+   * Convenience wrapper around document.createElement
+   *
+   * @param {string} tag - HTML tag name (e.g., 'div', 'span')
+   * @param {string} className - CSS class name(s) to apply
+   * @param {string} innerHTML - HTML content to insert
+   * @returns {HTMLElement} Created DOM element
+   */
   function createElement(tag, className = '', innerHTML = '') {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -145,11 +221,34 @@
     return el;
   }
 
+  /**
+   * Add a student header row to a widget container
+   * Used in verbose mode to separate students visually
+   *
+   * @param {HTMLElement} container - Widget container element
+   * @param {string} studentTitle - Student name to display in header
+   */
   function addHeader(container, studentTitle = '') {
     const header = createElement('div', 'wu-row wu-row-header', studentTitle);
     container.appendChild(header);
   }
 
+  /**
+   * Add a data row to a widget container
+   * Creates a 3-column row: student | meta | data
+   *
+   * Column behavior:
+   *   - Student column: Always created (empty div if no title) to maintain grid alignment
+   *   - If text2 is provided: meta and data columns are separate
+   *   - If only text1 is provided: meta column spans full width
+   *
+   * @param {HTMLElement} container - Widget container element
+   * @param {string} type - Row type CSS class (e.g., 'wu-row-lesson', 'wu-row-exam')
+   * @param {string} studentTitle - Student name (empty in compact mode)
+   * @param {string} text1 - Content for meta column (date, time, etc.)
+   * @param {string} text2 - Content for data column (subject, description, etc.)
+   * @param {string} addClass - Additional CSS classes for data column (e.g., 'cancelled', 'exam')
+   */
   function addRow(container, type, studentTitle = '', text1 = '', text2 = '', addClass = '') {
     const row = createElement('div');
     row.className = `wu-row ${type}`;
@@ -176,6 +275,15 @@
     container.appendChild(row);
   }
 
+  /**
+   * Add a full-width row to a widget container
+   * Used for messages, warnings, or special content that spans the entire width
+   *
+   * @param {HTMLElement} container - Widget container element
+   * @param {string} type - Row type CSS class (e.g., 'wu-row-message')
+   * @param {string} content - HTML content to display
+   * @param {string} addClass - Additional CSS classes for the row
+   */
   function addFullRow(container, type, content = '', addClass = '') {
     const row = createElement('div');
     row.className = `wu-row ${type}`;
@@ -190,6 +298,12 @@
     container.appendChild(row);
   }
 
+  /**
+   * Create a widget container element with standard classes
+   * Container is styled for MagicMirror's display (bright, small, light)
+   *
+   * @returns {HTMLElement} Container div with wu-widget-container class
+   */
   function createContainer() {
     const container = createElement('div');
     container.className = 'wu-widget-container bright small light';
@@ -214,10 +328,12 @@
   }
 
   /**
-   * Initialize widget utilities and DOM helpers.
-   * Returns an object with all common widget utilities to reduce boilerplate.
-   * @param {Object} root - The MMMWebuntisWidgets root object
-   * @returns {Object} Object containing util and dom helpers
+   * Initialize widget utilities and DOM helpers
+   * Returns an object with all common widget utilities to reduce boilerplate
+   * Provides safe fallbacks if any utility is missing
+   *
+   * @param {Object} widgetRoot - The MMMWebuntisWidgets root object
+   * @returns {Object} Object containing util and dom helper functions
    */
   function initWidget(widgetRoot) {
     const util = widgetRoot.util || {};
@@ -249,13 +365,18 @@
   }
 
   /**
-   * Create a widget instance configuration wrapper.
-   * Provides convenient config access for all widgets.
+   * Create a widget instance configuration wrapper
+   * Provides convenient config access and mode detection for all widgets
    *
-   * @param {string} widgetName - Widget name (e.g., 'lessons', 'exams')
-   * @param {Object} studentConfig - Student configuration
-   * @param {Object} util - Utility functions
-   * @returns {Object} Widget config wrapper with helper methods
+   * @param {string} widgetName - Widget name (e.g., 'lessons', 'grid', 'exams')
+   * @param {Object} studentConfig - Student configuration from backend
+   * @param {Object} util - Utility functions object
+   * @returns {Object} Widget config wrapper with:
+   *   - name: Widget name
+   *   - config: Student configuration
+   *   - isVerbose: True if mode is 'verbose'
+   *   - getConfig(key, defaultValue): Get widget-specific config value
+   *   - log(level, msg): Logging function
    */
   function createWidgetContext(widgetName, studentConfig, util) {
     return {
@@ -268,8 +389,14 @@
   }
 
   /**
-   * Extract information from lesson fields flexibly based on available data
+   * Extract field value from lesson data structure
+   * Generic function to extract any field type (teacher, subject, room, class, etc.)
    * Supports both traditional (te/su/ro) and dynamic (cl/sg) fields
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} fieldType - Field type to extract (e.g., 'te', 'su', 'ro', 'cl', 'sg')
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Field value or empty string if not found
    */
   function getFieldValue(lesson, fieldType, format = 'short') {
     if (!lesson) return '';
@@ -285,7 +412,12 @@
   }
 
   /**
-   * Get all available teachers from lesson (handles multiple teachers)
+   * Get all teachers from lesson (handles multiple teachers)
+   * Returns array of teacher names for flexible display
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string[]} Array of teacher names (may be empty)
    */
   function getTeachers(lesson, format = 'short') {
     if (!lesson?.te || !Array.isArray(lesson.te)) return [];
@@ -295,35 +427,55 @@
   }
 
   /**
-   * Get subject information with fallback
+   * Get subject name from lesson
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Subject name or empty string
    */
   function getSubject(lesson, format = 'short') {
     return getFieldValue(lesson, 'su', format);
   }
 
   /**
-   * Get room information with fallback
+   * Get room name from lesson
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Room name or empty string
    */
   function getRoom(lesson, format = 'short') {
     return getFieldValue(lesson, 'ro', format);
   }
 
   /**
-   * Get class information (for teacher view)
+   * Get class name from lesson (useful for teacher view)
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Class name or empty string
    */
   function getClass(lesson, format = 'short') {
     return getFieldValue(lesson, 'cl', format);
   }
 
   /**
-   * Get student group information
+   * Get student group name from lesson
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Student group name or empty string
    */
   function getStudentGroup(lesson, format = 'short') {
     return getFieldValue(lesson, 'sg', format);
   }
 
   /**
-   * Get info field (additional information)
+   * Get additional info from lesson
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} format - Name format: 'short' (default) or 'long'
+   * @returns {string} Info text or empty string
    */
   function getInfo(lesson, format = 'short') {
     return getFieldValue(lesson, 'info', format);

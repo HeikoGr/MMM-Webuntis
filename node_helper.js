@@ -161,6 +161,14 @@ module.exports = NodeHelper.create({
     return this._authServicesByIdentifier.get(identifier);
   },
 
+  /**
+   * Normalize legacy configuration keys to modern format
+   * Applies 25+ legacy config key mappings from configValidator module
+   * Also generates deprecation warnings for outdated keys
+   *
+   * @param {Object} cfg - Raw configuration object (may contain legacy keys)
+   * @returns {Object} Normalized config with modern keys
+   */
   _normalizeLegacyConfig(cfg) {
     if (!cfg || typeof cfg !== 'object') return cfg;
 
@@ -214,7 +222,15 @@ module.exports = NodeHelper.create({
 
   /**
    * Invoke a REST helper with a target descriptor (school/server + credentials).
-   * Keeps call sites concise and consistent.
+   * Keeps call sites concise and consistent by wrapping context objects.
+   *
+   * @param {Function} fn - REST API function to call (e.g., _getTimetableViaRest)
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {...any} args - Additional arguments to pass to the function
+   * @returns {Promise<any>} Result from the REST API function
    */
   async _callRest(fn, authCtx, sessionCtx, logCtx, flagsCtx, ...args) {
     return fn.call(this, authCtx, sessionCtx, logCtx, flagsCtx, ...args);
@@ -224,6 +240,14 @@ module.exports = NodeHelper.create({
   // Logging and error helpers
   // ---------------------------------------------------------------------------
 
+  /**
+   * Internal logging function that forwards messages to MagicMirror's Log system
+   * Automatically adds student name tag if provided
+   *
+   * @param {string} level - Log level: 'debug', 'info', 'warn', 'error'
+   * @param {Object|null} student - Student context object (adds [studentName] tag if present)
+   * @param {string} message - Log message to output
+   */
   _mmLog(level, student, message) {
     // Don't add [MMM-Webuntis] tag here - MagicMirror's Log methods add it automatically
     const studentTag = student && student.title ? `[${String(student.title).trim()}] ` : '';
@@ -252,12 +276,24 @@ module.exports = NodeHelper.create({
     Log.info(formatted);
   },
 
+  /**
+   * Format error objects into human-readable strings
+   * Delegates to errorHandler module for consistent error formatting
+   *
+   * @param {Error|any} err - Error object or value to format
+   * @returns {string} Formatted error message
+   */
   _formatErr(err) {
     return errorHandler.formatError(err);
   },
 
   /**
-   * Map REST API status to legacy JSON-RPC code format
+   * Map REST API HTTP status codes to legacy JSON-RPC code format
+   * This maintains compatibility with legacy error handling code
+   *
+   * @param {number} status - HTTP status code (e.g., 200, 401, 403, 404, 500)
+   * @param {string} substitutionText - Optional text to include in error message
+   * @returns {number} Legacy code format for frontend consumption
    */
   _mapRestStatusToLegacyCode(status, substitutionText) {
     return mapRestStatusToLegacyCode(status, substitutionText);
@@ -296,7 +332,12 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Create standard options object for authService calls (with logging and error handlers)
+   * Create standard options object for authService calls
+   * Provides bound logging and error formatting functions to authService
+   * This ensures consistent logging behavior across all auth operations
+   *
+   * @param {Object} additionalOptions - Additional options to merge (e.g., cacheKey)
+   * @returns {Object} Options object with mmLog and formatErr bound to this instance
    */
   _getStandardAuthOptions(additionalOptions = {}) {
     return {
@@ -306,9 +347,18 @@ module.exports = NodeHelper.create({
     };
   },
 
+  /**
+   * Collect class candidates from WebUntis API response data
+   * Recursively walks through the data structure to find class entries
+   * Filters by resourceType='CLASS' to avoid teachers/rooms
+   *
+   * @param {any} data - API response data (object or array)
+   * @returns {Array} Array of class candidates with {id, name, shortName, longName}
+   */
   _collectClassCandidates(data) {
     const candidates = new Map(); // id -> candidate
 
+    // Internal function to add a single candidate if it's a valid class entry
     const addCandidate = (item) => {
       if (!item || typeof item !== 'object') return;
       const type = (item.resourceType || item.elementType || item.type || item.category || '').toString().toUpperCase();
@@ -349,6 +399,21 @@ module.exports = NodeHelper.create({
     return Array.from(candidates.values());
   },
 
+  /**
+   * Resolve class ID from class name using REST API endpoints
+   * Tries two strategies:
+   *   1. classservices endpoint (when studentId available) - most accurate
+   *   2. timetable/filter endpoint - broader search
+   * Caches results for 24 hours to avoid repeated API calls
+   *
+   * @param {Object} authCtx - Authentication context (server, credentials, authService)
+   * @param {Object} sessionCtx - Session context (for tracking)
+   * @param {Date} rangeStart - Start date for the query range
+   * @param {Date} rangeEnd - End date for the query range
+   * @param {string} className - Name of the class to search for (e.g., "5a", "10B")
+   * @param {Object} options - Additional options (studentId for improved accuracy)
+   * @returns {Promise<number>} Resolved class ID
+   */
   async _resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className, options = {}) {
     const { school, username, password, server, qrCodeUrl, cacheKey, authService } = authCtx || {};
     const desiredName = className && String(className).trim();
@@ -360,12 +425,15 @@ module.exports = NodeHelper.create({
       return this.cacheManager.get('classId', classCacheKey);
     }
 
+    // Date formatting helpers for API requests
+    // ISO format (YYYY-MM-DD) for timetable/filter endpoint
     const formatDateISO = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
+    // YYYYMMDD format for classservices endpoint
     const formatDateYYYYMMDD = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -373,6 +441,7 @@ module.exports = NodeHelper.create({
       return `${year}${month}${day}`;
     };
 
+    // Authenticate using authService (handles caching internally)
     if (!authService) {
       throw new Error('AuthService not available in authCtx');
     }
@@ -394,6 +463,7 @@ module.exports = NodeHelper.create({
       throw new Error('Missing REST auth cookies for class resolution');
     }
 
+    // Build REST API headers with authentication tokens
     const headers = {
       Cookie: cookieString,
       Accept: 'application/json',
@@ -406,7 +476,8 @@ module.exports = NodeHelper.create({
 
     let mappedClassId = null;
 
-    // Aggressive path: if we have a studentId, try classservices first (closest to "what this student sees")
+    // STRATEGY 1: Try classservices endpoint first (most accurate when studentId is known)
+    // This endpoint returns the actual class assignments for the specific student
     if (options.studentId) {
       try {
         const url = new URL(`https://${server}/WebUntis/api/classreg/classservices`);
@@ -422,6 +493,7 @@ module.exports = NodeHelper.create({
         if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
           // Prefer explicit mapping from personKlasseMap when present
+          // This is the authoritative source for student -> class assignment
           const map = resp.data?.data?.personKlasseMap;
           if (map && Object.prototype.hasOwnProperty.call(map, options.studentId)) {
             const mapped = map[options.studentId];
@@ -434,7 +506,8 @@ module.exports = NodeHelper.create({
       }
     }
 
-    // Secondary path: timetable/filter (broader) if nothing found yet
+    // STRATEGY 2: Try timetable/filter endpoint if classservices didn't work
+    // This is a broader search that returns all classes visible to the authenticated user
     if (!candidates || candidates.length === 0) {
       try {
         const url = new URL(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`);
@@ -462,12 +535,13 @@ module.exports = NodeHelper.create({
     }
 
     let chosen = null;
-    // If classservices told us the class id for this student, pick it first
+    // PRIORITY 1: If classservices provided a personKlasseMap, use that mapping first
     if (mappedClassId && candidates.some((c) => Number(c.id) === Number(mappedClassId))) {
       chosen = candidates.find((c) => Number(c.id) === Number(mappedClassId));
       this._mmLog('debug', null, `[REST] personKlasseMap selected classId=${mappedClassId}`);
     }
 
+    // PRIORITY 2: Match by configured class name (case-insensitive)
     if (desiredName) {
       const desiredLower = desiredName.toLowerCase();
       chosen = candidates.find((c) =>
@@ -475,11 +549,13 @@ module.exports = NodeHelper.create({
       );
     }
 
+    // PRIORITY 3: If no class name configured and only one class exists, auto-select it
     if (!chosen && !desiredName && candidates.length === 1) {
       chosen = candidates[0];
       this._mmLog('debug', null, `[REST] No class name configured; using sole available class ${chosen.name} (${chosen.id})`);
     }
 
+    // No match found - provide helpful error message with available classes
     if (!chosen) {
       const available = candidates
         .map((c) => `${c.name || c.shortName || c.longName || c.id}`)
@@ -489,12 +565,32 @@ module.exports = NodeHelper.create({
       throw new Error(hint);
     }
 
+    // Cache the resolved class ID for 24 hours to avoid repeated API calls
     this.cacheManager.set('classId', classCacheKey, chosen.id, 24 * 60 * 60 * 1000); // TTL: 24 hours
     return chosen.id;
   },
 
   /**
-   * Get timetable via REST API using unified restClient
+   * Get timetable data via REST API using unified restClient
+   *
+   * Supports both:
+   *   - Person timetable (student's personal schedule)
+   *   - Class timetable (entire class schedule, requires class ID resolution)
+   *
+   * Uses API status tracking to skip permanent errors (403, 404, 410).
+   *
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {Date} rangeStart - Start date for timetable query
+   * @param {Date} rangeEnd - End date for timetable query
+   * @param {number} personId - Person ID (student or parent)
+   * @param {Object} options - Additional options (classId, className, studentId)
+   * @param {boolean} useClassTimetable - Whether to fetch class timetable instead of personal
+   * @param {string} className - Class name for resolution (e.g., "5a")
+   * @param {string} resourceType - Resource type filter (CLASS, TEACHER, SUBJECT, ROOM)
+   * @returns {Promise<Array>} Timetable array with lesson entries
    */
   async _getTimetableViaRest(
     authCtx,
@@ -586,6 +682,21 @@ module.exports = NodeHelper.create({
     return response.data;
   },
 
+  /**
+   * Get exams data via REST API
+   * Fetches upcoming exams/tests for the specified person and date range
+   *
+   * Uses API status tracking to skip permanent errors (403, 404, 410).
+   *
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {Date} rangeStart - Start date for exams query
+   * @param {Date} rangeEnd - End date for exams query
+   * @param {number} personId - Person ID (student)
+   * @returns {Promise<Array>} Exams array with exam entries
+   */
   async _getExamsViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
     const { sessionKey, authRefreshTracker } = sessionCtx || {};
     const { debugApi, dumpRawApiResponses } = flagsCtx || {};
@@ -652,6 +763,21 @@ module.exports = NodeHelper.create({
     return response.data;
   },
 
+  /**
+   * Get homework data via REST API
+   * Fetches homework assignments for the specified person and date range
+   *
+   * Uses API status tracking to skip permanent errors (403, 404, 410).
+   *
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {Date} rangeStart - Start date for homework query
+   * @param {Date} rangeEnd - End date for homework query
+   * @param {number} personId - Person ID (student)
+   * @returns {Promise<Array>} Homework array with homework entries
+   */
   async _getHomeworkViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
     const { sessionKey, authRefreshTracker } = sessionCtx || {};
     const { debugApi, dumpRawApiResponses } = flagsCtx || {};
@@ -715,6 +841,21 @@ module.exports = NodeHelper.create({
     return response.data;
   },
 
+  /**
+   * Get absences data via REST API
+   * Fetches absence records for the specified person and date range
+   *
+   * Uses API status tracking to skip permanent errors (403, 404, 410).
+   *
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {Date} rangeStart - Start date for absences query
+   * @param {Date} rangeEnd - End date for absences query
+   * @param {number} personId - Person ID (student)
+   * @returns {Promise<Array>} Absences array with absence entries
+   */
   async _getAbsencesViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
     const { sessionKey, authRefreshTracker } = sessionCtx || {};
     const { debugApi, dumpRawApiResponses } = flagsCtx || {};
@@ -778,6 +919,19 @@ module.exports = NodeHelper.create({
     return response.data;
   },
 
+  /**
+   * Get messages of day via REST API
+   * Fetches school announcements/messages for a specific date
+   *
+   * Uses API status tracking to skip permanent errors (403, 404, 410).
+   *
+   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
+   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
+   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
+   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
+   * @param {Date} date - Date for messages query (typically today)
+   * @returns {Promise<Array>} Messages array with message entries
+   */
   async _getMessagesOfDayViaRest(authCtx, sessionCtx, logCtx, flagsCtx, date) {
     const { sessionKey, authRefreshTracker } = sessionCtx || {};
     const { debugApi, dumpRawApiResponses } = flagsCtx || {};
@@ -839,6 +993,18 @@ module.exports = NodeHelper.create({
     return response.data;
   },
 
+  /**
+   * Auto-discover students from parent account (app/data endpoint)
+   * This function handles three scenarios:
+   *   1. No students configured -> auto-discover all students from parent account
+   *   2. Students with IDs but no titles -> fill in missing titles from auto-discovery
+   *   3. Students with titles but no IDs -> suggest/assign student IDs
+   *
+   * Also merges module-level defaults into each student config for consistent behavior
+   *
+   * @param {Object} moduleConfig - Module configuration object
+   * @returns {Promise<void>} No return value, modifies moduleConfig.students in place
+   */
   async _ensureStudentsFromAppData(moduleConfig) {
     try {
       if (!moduleConfig || typeof moduleConfig !== 'object') return;
@@ -859,12 +1025,13 @@ module.exports = NodeHelper.create({
       });
       let autoStudents = null;
 
-      // Parent credentials can be either username/password/school OR qrcode (LEGAL_GUARDIAN)
+      // Check if parent credentials are configured (username/password/school OR qrcode)
+      // Parent credentials enable auto-discovery and parent-mode authentication
       const hasParentCreds = Boolean((moduleConfig.username && moduleConfig.password && moduleConfig.school) || moduleConfig.qrcode);
       if (!hasParentCreds) return;
 
-      // Only auto-discover if NO students with real credentials are configured at all
-      // If user explicitly configured ANY real students, respect that choice
+      // SCENARIO 1: Students are already configured (have credentials or IDs)
+      // Try to improve configured data by filling missing titles or suggesting IDs
       if (configuredStudents.length > 0) {
         // However, if any student is missing a title but has a studentId,
         // try to fetch auto-discovered data to fill in the missing titles
@@ -872,7 +1039,7 @@ module.exports = NodeHelper.create({
         try {
           let authResult;
 
-          // Use QR code auth if available (LEGAL_GUARDIAN), otherwise username/password
+          // Authenticate using parent credentials (QR code or username/password)
           if (moduleConfig.qrcode) {
             authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
               cacheKey: `parent-qr:${moduleConfig.qrcode}`,
@@ -896,7 +1063,7 @@ module.exports = NodeHelper.create({
             configuredStudents.forEach((configStudent) => {
               if (!configStudent || typeof configStudent !== 'object') return;
 
-              // Fill missing title when we have an id
+              // IMPROVEMENT 1: Fill missing title when we have a student ID
               if (configStudent.studentId && !configStudent.title) {
                 const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
                 if (autoStudent) {
@@ -910,7 +1077,7 @@ module.exports = NodeHelper.create({
                 }
               }
 
-              // If title is present but no studentId, suggest candidate ids based on title match
+              // IMPROVEMENT 2: If title is present but no studentId, suggest candidate IDs based on title match
               // If there's exactly one match, auto-assign it for convenience
               if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
                 const titleLower = String(configStudent.title).toLowerCase();
@@ -947,7 +1114,8 @@ module.exports = NodeHelper.create({
             `Could not fetch auto-discovered names for title fallback (server=${server || 'unknown'}). Is the WebUntis server reachable? ${this._formatErr(err)}`
           );
         }
-        // Additionally validate configured studentIds against discovered students
+        // VALIDATION: Check if configured studentIds actually exist in discovered students
+        // Warn user if they configured an invalid studentId
         try {
           if (autoStudents && autoStudents.length > 0) {
             configuredStudents.forEach((configStudent) => {
@@ -1022,7 +1190,8 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      // Auto-discover students from app/data (when no students manually configured)
+      // SCENARIO 2: No students configured -> auto-discover from parent account
+      // This is the default behavior when students[] is empty or not provided
       const server = moduleConfig.server || 'webuntis.com';
       let authResult;
 
@@ -1199,6 +1368,14 @@ module.exports = NodeHelper.create({
     throw new Error(errorMsg);
   },
 
+  /**
+   * Compact timegrid data from WebUntis API to reduce payload size
+   * Handles both old format (array of rows with timeUnits) and new format (direct array of time slots)
+   * Keeps only essential fields: startTime, endTime, name
+   *
+   * @param {Array} rawGrid - Raw timegrid data from API
+   * @returns {Array} Compacted timeUnits array with minimal fields
+   */
   // Reduce memory by keeping only the fields the frontend uses
   // Returns timeUnits array directly instead of wrapping in an object,
   // since timeUnits (lesson slots) are the same for all days.
@@ -1250,6 +1427,14 @@ module.exports = NodeHelper.create({
     return normalizeTimeToMinutes(time);
   },
 
+  /**
+   * Compact holidays data from WebUntis API
+   * Handles both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
+   * Normalizes all dates to YYYYMMDD integer format
+   *
+   * @param {Array} rawHolidays - Raw holidays data from API
+   * @returns {Array} Compacted holidays array with {id, name, longName, startDate, endDate}
+   */
   _compactHolidays(rawHolidays) {
     if (!Array.isArray(rawHolidays)) return [];
     return rawHolidays.map((h) => {
@@ -1311,6 +1496,15 @@ module.exports = NodeHelper.create({
     return this._compactHolidays(rawHolidays);
   },
 
+  /**
+   * Check if a specific widget should be displayed based on displayMode configuration
+   * Supports both exact matches and comma-separated lists
+   * Handles backwards-compatible values (e.g., "list" = "lessons,exams")
+   *
+   * @param {string} widgetName - Widget name to check (e.g., 'grid', 'lessons', 'exams')
+   * @param {string} displayMode - Display mode from config (e.g., 'grid', 'lessons,exams,homework')
+   * @returns {boolean} True if widget should be displayed
+   */
   _wantsWidget(widgetName, displayMode) {
     const w = String(widgetName || '').toLowerCase();
     const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase();
@@ -1403,9 +1597,21 @@ module.exports = NodeHelper.create({
 
 
   /**
-   * Process a credential group: login, fetch data for students and logout.
+   * Process a credential group: authenticate, fetch data for all students, send to frontend
+   * This is the main orchestration function that:
+   *   1. Creates authentication session (cached by authService)
+   *   2. Fetches data for each student in the group (using shared credentials)
+   *   3. Sends all payloads to frontend at once (minimizes DOM redraws)
+   *
    * Authentication is cached by authService, so multiple sessions with same credentials
-   * will only authenticate once.
+   * will only authenticate once. Token caching prevents unnecessary re-authentication.
+   *
+   * @param {string} credKey - Credential grouping key (identifies shared auth session)
+   * @param {Array} students - Array of student configs sharing these credentials
+   * @param {string} identifier - Module instance identifier
+   * @param {string} sessionKey - Session key for API status tracking
+   * @param {Object} config - Module configuration
+   * @returns {Promise<void>}
    */
   async processGroup(credKey, students, identifier, sessionKey, config) {
     // Single-run processing: authenticate (authService handles caching), fetch data for each student, and logout.
@@ -1433,6 +1639,7 @@ module.exports = NodeHelper.create({
 
         // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
         // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
+        // Prevents cascading failures from expired/corrupted auth state
         const authService = this._getAuthServiceForIdentifier(identifier);
         if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
           authService.invalidateAllCachesForSession(sessionKey);
@@ -1484,6 +1691,7 @@ module.exports = NodeHelper.create({
       // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
       // Holidays are shared across all students in the same school/group.
       // Extract and compact them once before processing students to avoid redundant work.
+      // Holidays come from appData (no separate API call needed)
       const wantsGridWidget = this._wantsWidget('grid', config?.displayMode);
       const wantsLessonsWidget = this._wantsWidget('lessons', config?.displayMode);
       const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
@@ -1496,7 +1704,7 @@ module.exports = NodeHelper.create({
         );
       }
 
-      // Authentication complete via authService (no login() needed)
+      // Authentication complete via authService (no explicit login() needed)
       // Collect all student payloads before sending to avoid multiple DOM updates
       const studentPayloads = [];
 
@@ -1548,6 +1756,7 @@ module.exports = NodeHelper.create({
       for (const payload of studentPayloads) {
         // Send to ALL module instances, but include both id and sessionId for filtering
         // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
+        // This allows multiple browser windows with same module identifier to get separate data
         payload.id = identifier;
         payload.sessionId = sessionKey.split(':')[1]; // Extract sessionId from "identifier:sessionId"
         // Sending data to frontend silently
@@ -1572,11 +1781,16 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Handle socket notifications sent by the frontend module.
-   * Listens for `INIT_MODULE` (initialization) and `FETCH_DATA` (data refresh).
+   * Handle socket notifications sent by the frontend module
+   * Main entry point for all frontend-to-backend communication
    *
-   * @param {string} notification - Notification name
-   * @param {any} payload - Notification payload
+   * Listens for:
+   *   - INIT_MODULE: First-time module initialization (config validation, student discovery)
+   *   - FETCH_DATA: Data refresh request (periodic updates, manual refresh)
+   *
+   * @param {string} notification - Notification name (INIT_MODULE, FETCH_DATA)
+   * @param {any} payload - Notification payload (config object, refresh request)
+   * @returns {Promise<void>}
    */
   async socketNotificationReceived(notification, payload) {
     // Processing socket notifications silently (no logging for cleaner output)
@@ -1594,9 +1808,17 @@ module.exports = NodeHelper.create({
 
   /**
    * Handle INIT_MODULE notification - performs one-time module initialization
-   * Validates config, sets up authentication, discovers students, and notifies frontend when ready
    *
-   * @param {Object} payload - Module configuration from frontend
+   * Flow:
+   *   1. Apply legacy config mappings (25+ deprecated keys)
+   *   2. Validate configuration (validateConfig from configValidator)
+   *   3. Set up AuthService for this identifier (prevents cache cross-contamination)
+   *   4. Auto-discover students if parent credentials provided
+   *   5. Send MODULE_INITIALIZED to frontend
+   *   6. Automatically trigger initial data fetch (no separate FETCH_DATA needed)
+   *
+   * @param {Object} payload - Module configuration from frontend (includes id, sessionId, config)
+   * @returns {Promise<void>}
    */
   async _handleInitModule(payload) {
     let normalizedConfig;
@@ -1608,6 +1830,7 @@ module.exports = NodeHelper.create({
       const payloadCopy = JSON.parse(JSON.stringify(payload));
 
       // Apply legacy mappings to convert old keys to new structure
+      // This ensures backwards compatibility with 25+ deprecated config keys
       const result = applyLegacyMappings(payloadCopy, {
         warnCallback: (msg) => this._mmLog('warn', null, msg),
       });
@@ -1616,13 +1839,14 @@ module.exports = NodeHelper.create({
 
       identifier = normalizedConfig.id || 'default';
       const sessionId = payload.sessionId || 'unknown';
+      // Session key format: "identifier:sessionId" for complete browser-window isolation
       sessionKey = `${identifier}:${sessionId}`;
 
       // Store config per session for isolation
       this._configsBySession.set(sessionKey, normalizedConfig);
       // Config stored silently
 
-      // Log debugDate if present (stored in normalizedConfig, not global)
+      // Log debugDate if present (for debugging time-sensitive scenarios)
       if (normalizedConfig.debugDate) {
         this._mmLog('debug', null, `[INIT_MODULE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
       }
@@ -1661,6 +1885,7 @@ module.exports = NodeHelper.create({
       normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
 
       // Auto-discover students if needed (one-time during init)
+      // This fetches student list from parent account if students[] is empty/incomplete
       await this._ensureStudentsFromAppData(normalizedConfig);
 
       // Mark students as discovered for this identifier
@@ -1680,6 +1905,7 @@ module.exports = NodeHelper.create({
 
       // Automatically trigger initial data fetch after successful initialization
       // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
+      // Simplifies the initialization flow: INIT_MODULE -> MODULE_INITIALIZED + GOT_DATA
       await this._handleFetchData({
         id: identifier,
         sessionId: payload.sessionId,
@@ -1700,9 +1926,17 @@ module.exports = NodeHelper.create({
 
   /**
    * Handle FETCH_DATA notification - performs data refresh for already initialized module
-   * Uses cached config and authentication, only fetches fresh data from WebUntis
    *
-   * @param {Object} payload - Fetch request from frontend
+   * Flow:
+   *   1. Verify module is initialized (per session or per identifier)
+   *   2. Update session-specific config if provided (e.g., debugDate changes)
+   *   3. Delegate to _executeFetchForSession for actual data fetching
+   *
+   * Uses cached config and authentication, only fetches fresh data from WebUntis.
+   * Supports self-healing: if module not initialized but FETCH_DATA received, re-runs INIT_MODULE.
+   *
+   * @param {Object} payload - Fetch request from frontend (includes id, sessionId, optional debugDate)
+   * @returns {Promise<void>}
    */
   async _handleFetchData(payload) {
     const identifier = payload.id || 'default';
@@ -1714,9 +1948,12 @@ module.exports = NodeHelper.create({
     this._lastFetchTimestamp = fetchTimestamp;
 
     // Verify module is initialized (per session preferred, fall back to identifier)
+    // Session-specific config takes precedence over identifier-level config
     const hasSessionConfig = this._configsBySession.has(sessionKey);
     const baseConfig = this._configsByIdentifier.get(identifier);
     if (!hasSessionConfig && !baseConfig) {
+      // Self-healing: if module not initialized but FETCH_DATA received, re-run initialization
+      // This handles cases where backend restarted but frontend still thinks it's initialized
       this._mmLog(
         'warn',
         null,
@@ -1734,7 +1971,7 @@ module.exports = NodeHelper.create({
       this._configsBySession.set(sessionKey, normalizedConfig);
     }
 
-    // Update session-specific config if provided (e.g., debugDate changes)
+    // Update session-specific config if provided (e.g., debugDate changes for testing)
     if (payload.debugDate !== undefined) {
       normalizedConfig = { ...normalizedConfig, debugDate: payload.debugDate };
       this._configsBySession.set(sessionKey, normalizedConfig);
@@ -1749,7 +1986,17 @@ module.exports = NodeHelper.create({
 
   /**
    * Execute fetch for a specific session
-   * This processes only the config for the given session
+   *
+   * Flow:
+   *   1. Verify session exists in _configsBySession
+   *   2. Wait for any pending session-wide re-authentication (AGGRESSIVE REAUTH)
+   *   3. Group students by credential key (share auth sessions)
+   *   4. Process each credential group (authenticate, fetch, send to frontend)
+   *
+   * This processes only the config for the given session (no cross-session contamination).
+   *
+   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
+   * @returns {Promise<void>}
    */
   async _executeFetchForSession(sessionKey) {
     if (!this._configsBySession.has(sessionKey)) {
@@ -1771,12 +2018,14 @@ module.exports = NodeHelper.create({
 
       // AGGRESSIVE REAUTH: Wait for any session-wide authentication to complete
       // This ensures all API requests are blocked until complete re-authentication finishes
+      // Prevents cascading failures from expired/corrupted tokens
       const authService = config._authService;
       if (authService && typeof authService.waitForSessionAuth === 'function') {
         await authService.waitForSessionAuth(sessionKey);
       }
 
       // Group students by credential so we can reuse the same untis session
+      // Students with the same credentials share a single auth session (reduces API calls)
       const groups = new Map();
 
       // Group students by credential. Normalize each student config for legacy key compatibility.
@@ -1793,6 +2042,7 @@ module.exports = NodeHelper.create({
       // authService handles caching of authentication, so we don't need to cache authSession here
       for (const [credKey, students] of groups.entries()) {
         // Check if another session is already fetching this credKey
+        // This prevents duplicate API calls when multiple sessions use the same credentials
         if (this._pendingFetchByCredKey.has(credKey)) {
           this._mmLog('debug', null, `Session ${sessionKey}: Another session is fetching credKey=${credKey}, waiting...`);
           // Wait for the other session to complete (its cache will be available to us too)
@@ -1818,15 +2068,17 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Build a stable key that represents a login/session so results can be cached.
-   * Uses sessionKey (identifier:sessionId) for full session isolation.
+   * Build a stable credential key for session caching and grouping
+   * Students with the same credentials share a single WebUntis session to minimize API calls
+   *
+   * Uses sessionKey (identifier:sessionId) for full browser-session isolation.
    * For parent accounts (studentId + module-level username), group by parent credentials.
-   * For direct logins, group by student credentials.
+   * For direct student logins, group by student credentials.
    *
    * @param {Object} student - Student credential object
    * @param {Object} moduleConfig - Module configuration
    * @param {string} sessionKey - Session key (format: "identifier:sessionId")
-   * @returns {string} credential key
+   * @returns {string} credential key for caching/grouping (e.g., "scope::parent:user@server/school")
    */
   _getCredentialKey(student, moduleConfig, sessionKey = 'default') {
     // Use full sessionKey (identifier:sessionId) for complete browser-session isolation
@@ -1849,11 +2101,12 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Extract timegrid from timetable data (REST API returns time slots with lessons)
-   * The REST API doesn't have a separate timegrid endpoint, but the timetable includes time information
+   * Extract timegrid (time slots) from timetable data
+   * The REST API doesn't have a separate timegrid endpoint, but timetable includes time information
+   * This function derives the school's time schedule from lesson start/end times
    *
    * @param {Array} timetable - Timetable array from REST API
-   * @returns {Array} timegrid array with timeUnits
+   * @returns {Array} timegrid array with timeUnits {startTime, endTime, name}
    */
   _extractTimegridFromTimetable(timetable) {
     if (!Array.isArray(timetable) || timetable.length === 0) return [];
@@ -1868,7 +2121,7 @@ module.exports = NodeHelper.create({
 
     if (startTimes.size === 0) return [];
 
-    // Sort unique start times
+    // Sort unique start times chronologically (convert HH:MM to integer for comparison)
     const sortedStarts = Array.from(startTimes).sort((a, b) => {
       const timeA = parseInt(a.replace(':', ''));
       const timeB = parseInt(b.replace(':', ''));
@@ -1876,6 +2129,7 @@ module.exports = NodeHelper.create({
     });
 
     // Create timeUnits (periods) from sorted start times
+    // Each period runs from one start time to the next, or to its lesson's end time for the last period
     const timeUnits = [];
     for (let i = 0; i < sortedStarts.length; i++) {
       const startTime = sortedStarts[i];
@@ -1902,11 +2156,16 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Main fetch function that orchestrates data fetching for a student.
-   * This is the simplified version that delegates to specialized modules:
-   * - lib/dateRangeCalculator.js: calculates date ranges for all data types
-   * - lib/dataFetchOrchestrator.js: fetches all data in parallel using Promise.all (2.7x speedup)
-   * - lib/payloadBuilder.js: builds the GOT_DATA payload with compacting and warnings
+   * Main data fetch orchestrator for a single student
+   * This simplified version delegates to specialized modules:
+   *   - lib/dateRangeCalculator.js: calculates date ranges for all data types
+   *   - lib/dataFetchOrchestrator.js: fetches all data in parallel (2.7x speedup vs sequential)
+   *   - lib/payloadBuilder.js: builds GOT_DATA payload with compacting and warnings
+   *
+   * Flow:
+   *   1. Calculate date ranges (nextDays, previousDays, examsDays, etc.)
+   *   2. Fetch all data types in parallel (timetable-first strategy prevents silent token failures)
+   *   3. Build and return compacted payload for frontend
    *
    * @param {Object} authSession - Authenticated session with server, school, cookies, token
    * @param {Object} student - Student config object
@@ -1915,9 +2174,11 @@ module.exports = NodeHelper.create({
    * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
    * @param {Object} config - Module configuration
    * @param {string} sessionKey - Session key for API status tracking
+   * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
    */
   async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey) {
     // Accept both logger(message) and logger(level, student, message) signatures
+    // This provides flexibility for calling code while maintaining consistent logging
     const logger = (...args) => {
       // Standard signature: logger(level, student, message)
       if (args.length >= 3 && typeof args[0] === 'string' && typeof args[2] === 'string') {
@@ -1938,6 +2199,8 @@ module.exports = NodeHelper.create({
       this._mmLog('debug', student, typeof msg === 'string' ? msg : JSON.stringify(msg));
     };
 
+    // Build context objects for passing to API functions
+    // These group related parameters to keep function signatures clean
     const logCtx = {
       logger,
       mmLog: this._mmLog.bind(this),
@@ -1972,7 +2235,8 @@ module.exports = NodeHelper.create({
     const authService = config._authService;
     const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData, role);
 
-    // REST targets built silently (removed debug log for cleaner output)
+    // Verify REST targets were successfully built
+    // If empty, authentication likely failed or credentials are invalid
     if (!restTargets || restTargets.length === 0) {
       this._mmLog('warn', student, `No REST targets built - cannot fetch data! Check authentication and credentials.`);
     }
@@ -1988,6 +2252,8 @@ module.exports = NodeHelper.create({
     const className = student.class || student.className || null;
     const effectiveDisplayMode = student.displayMode || config.displayMode;
 
+    // Determine which widgets are requested based on displayMode configuration
+    // This controls which API endpoints we need to call
     const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
     const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
     const wantsExamsWidget = this._wantsWidget('exams', effectiveDisplayMode);
@@ -2010,7 +2276,8 @@ module.exports = NodeHelper.create({
       fetchMessagesOfDay,
     };
 
-    // Calculate base date (with optional debugDate support)
+    // Calculate base date (with optional debugDate support for testing)
+    // debugDate allows simulating "today" for testing future/past scenarios
     const baseNow = function () {
       try {
         const dbg = (typeof config?.debugDate === 'string' && config.debugDate) || null;
@@ -2032,9 +2299,11 @@ module.exports = NodeHelper.create({
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
     // ===== STEP 1: Calculate date ranges using dateRangeCalculator module =====
+    // This determines start/end dates for timetable, exams, homework, absences based on config
     const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences);
 
-    // Get Timegrid from appData if available
+    // Get Timegrid from appData if available (avoids extra API call)
+    // appData is fetched during authentication and includes the school's time schedule
     let grid = [];
     if (authSession?.appData?.currentSchoolYear?.timeGrid?.units) {
       const units = authSession.appData.currentSchoolYear.timeGrid.units;
@@ -2083,11 +2352,12 @@ module.exports = NodeHelper.create({
     const rawMessagesOfDay = fetchResults.messagesOfDay;
 
     // Extract timegrid from timetable data if not available from appData
+    // This is a fallback for schools that don't include timegrid in appData
     if (fetchTimegrid && grid.length === 0 && timetable.length > 0) {
       grid = this._extractTimegridFromTimetable(timetable);
     }
 
-    // Find active holiday for today
+    // Find active holiday for today (to show in widget if currently on holiday)
     const findHolidayForDate = (ymd, holidays) => {
       if (!Array.isArray(holidays) || holidays.length === 0) return null;
       const dateNum = Number(ymd);
@@ -2096,8 +2366,9 @@ module.exports = NodeHelper.create({
     const activeHoliday = findHolidayForDate(todayYmd, compactHolidays);
 
     // ===== STEP 3: Build payload using payloadBuilder module =====
+    // This compacts all data, applies transformations, and adds warnings
     try {
-      // Get API status for this session
+      // Get API status for this session (includes HTTP status codes for each endpoint)
       const apiStatus = this._apiStatusBySession.get(sessionKey) || {};
 
       const payload = buildGotDataPayload({

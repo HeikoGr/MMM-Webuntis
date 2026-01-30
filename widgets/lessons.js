@@ -1,7 +1,34 @@
+/**
+ * Lessons Widget
+ * Renders upcoming lessons for students with support for:
+ * - Time-based lesson display (past/future days configurable)
+ * - Holiday detection and display
+ * - Cancelled/substitution/irregular lesson highlighting
+ * - Configurable date formats and student group filtering
+ * - Exam detection within lesson entries
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
+  /**
+   * Render lessons widget for a single student
+   * Displays lessons grouped by date, sorted by time, with visual indicators for:
+   * - Cancelled lessons (code='cancelled' or status='CANCELLED')
+   * - Substitutions (code='irregular' or status='SUBSTITUTION')
+   * - Exam lessons (type='EXAM' or lstext contains exam keywords)
+   * - Holiday notices when no lessons
+   *
+   * @param {Object} ctx - Main module context (provides translate, config, debug support)
+   * @param {HTMLElement} container - DOM element to append lesson rows
+   * @param {string} studentCellTitle - Student name for compact mode student column
+   * @param {string} studentTitle - Student name used for logging/debug
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} timetable - Array of lesson objects from backend
+   * @param {Object} startTimesMap - Map of startTime → lesson number (e.g., 830 → "1")
+   * @param {Array} holidays - Array of holiday objects (name, longName, date)
+   * @returns {number} Number of rows added to container (0 = widget disabled)
+   */
   function renderLessonsForStudent(ctx, container, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
     let addedRows = 0;

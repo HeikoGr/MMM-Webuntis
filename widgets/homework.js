@@ -1,7 +1,27 @@
+/**
+ * Homework Widget
+ * Renders homework assignments with configurable display options:
+ * - Date format customization
+ * - Subject display toggle
+ * - Text/remark display toggle
+ * - Sorted by due date and subject
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
+  /**
+   * Render homework widget for a single student
+   * Displays homework sorted by due date, then by subject
+   * Supports multi-line text with HTML formatting
+   *
+   * @param {Object} ctx - Main module context (provides translate, config)
+   * @param {HTMLElement} container - DOM element to append homework rows
+   * @param {string} studentCellTitle - Student name for compact mode student column
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} homeworks - Array of homework objects (dueDate, su{name, longname}, text, remark)
+   * @returns {number} Number of rows added to container
+   */
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 

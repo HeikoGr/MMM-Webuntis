@@ -1,30 +1,38 @@
 Module.register('MMM-Webuntis', {
-  // Version marker to force browser cache refresh (increment when making changes)
+  // Increment this value to ensure browser reloads updated scripts/styles
   _cacheVersion: '2.0.1',
 
-  // Simple frontend logger factory (lightweight, avoids bundler require() issues)
+  /**
+   * Simple frontend logger factory for widget logging
+   * Creates a lightweight logger that respects the configured log level
+   * Avoids bundler require() issues by using pure JavaScript
+   *
+   * @param {string} moduleName - Module name for log prefixes (default: 'MMM-Webuntis')
+   * @returns {Object} Logger object with log(level, msg) method
+   */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
-    // Use only console methods allowed by linting rules (warn, error)
+    // Create a logger object for frontend widgets, respecting configured log level
     const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
     const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     return {
       log(level, msg) {
         try {
-          // Respect logLevel setting from global window variable
+          // Use global logLevel if set, otherwise default to 'info'
           const configured = window.MMMWebuntisLogLevel || 'info';
           const configuredLevel = levels[configured] !== undefined ? configured : 'info';
           const msgLevel = levels[level] !== undefined ? level : 'info';
 
-          // Skip logging if message level exceeds configured level
+          // Only log if message level is within configured threshold
           if (levels[msgLevel] > levels[configuredLevel]) {
             return;
           }
 
           const method = METHODS[level] || 'warn';
+          // Output to browser console
           // eslint-disable-next-line no-console
           console[method](`${moduleName}: ${msg}`);
         } catch {
-          // ignore
+          // Ignore logging errors
         }
       },
     };
@@ -45,7 +53,6 @@ Module.register('MMM-Webuntis', {
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
-    // Backwards compatible: 'list' => lessons, exams | 'grid' => grid
     displayMode: 'lessons, exams',
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
 
@@ -56,13 +63,13 @@ Module.register('MMM-Webuntis', {
     // server: 'schoolserver.webuntis.com',  // WebUntis server URL (usually subdomain.webuntis.com)
 
     // === STUDENTS ===
-    //students: [
-    //  {
-    //    title: 'kids name', // Display name for the student
-    //    studentId: 1234, // replace with student ID for individual title
-    //    qrcode: null, // optional: untis:// URL from WebUntis QR code
-    //  },
-    //],
+    // students: [
+    //   {
+    //     title: 'kids name', // Display name for the student
+    //     studentId: 1234, // replace with student ID for individual title
+    //     qrcode: null, // optional: untis:// URL from WebUntis QR code
+    //   },
+    // ],
 
     // === WIDGET NAMESPACED DEFAULTS ===
     // Per-widget configuration namespaces
@@ -127,15 +134,34 @@ Module.register('MMM-Webuntis', {
     messagesofday: {}, // no specific defaults yet
   },
 
+  /**
+   * Return array of CSS files to load for this module
+   * Called by MagicMirror during module initialization
+   *
+   * @returns {string[]} Array of CSS file paths
+   */
   getStyles() {
+    // Return array of CSS files to load for this module
     return [this.file('MMM-Webuntis.css')];
   },
 
+  /**
+   * Return array of JavaScript files to load for this module
+   * Dynamically loads only the widget scripts that are enabled in displayMode
+   * This reduces bundle size by skipping unused widgets
+   *
+   * Called by MagicMirror during module initialization
+   *
+   * @returns {string[]} Array of JavaScript file paths
+   */
   getScripts() {
     // Store logLevel globally so widgets can access it during initialization
     window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
 
+    // Always load util.js for widget helpers
     const scripts = [this.file('widgets/util.js')];
+
+    // Map widget keys to their script files
     const widgetScriptMap = {
       lessons: 'widgets/lessons.js',
       exams: 'widgets/exams.js',
@@ -145,6 +171,7 @@ Module.register('MMM-Webuntis', {
       messagesofday: 'widgets/messagesofday.js',
     };
 
+    // Load only scripts for widgets that are enabled in config
     const widgets = Array.from(new Set(this._getDisplayWidgets()));
     for (const widget of widgets) {
       const scriptPath = widgetScriptMap[widget];
@@ -155,14 +182,29 @@ Module.register('MMM-Webuntis', {
     return scripts;
   },
 
+  /**
+   * Return translation files for supported languages
+   * Called by MagicMirror's i18n system
+   *
+   * @returns {Object} Map of language codes to translation file paths
+   */
   getTranslations() {
+    // Provide translation files for supported languages
     return {
       en: 'translations/en.json',
       de: 'translations/de.json',
     };
   },
 
+  /**
+   * Get global widget API object
+   * The widget API is populated by widget scripts (widgets/*.js) at load time
+   * Provides access to widget rendering functions and utilities
+   *
+   * @returns {Object|null} Widget API object or null if not available
+   */
   _getWidgetApi() {
+    // Return global widget API object if available
     try {
       return window.MMMWebuntisWidgets || null;
     } catch {
@@ -170,23 +212,47 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  /**
+   * Check if a specific widget is enabled in the current displayMode
+   *
+   * @param {string} name - Widget name to check (e.g., 'grid', 'lessons')
+   * @returns {boolean} True if widget is enabled
+   */
   _hasWidget(name) {
+    // Check if a widget is enabled in the current displayMode
     return this._getDisplayWidgets().includes(String(name).toLowerCase());
   },
 
+  /**
+   * Parse displayMode config and return array of enabled widgets
+   * Handles special cases:
+   *   - 'grid' → ['grid']
+   *   - 'list' → ['lessons', 'exams']
+   *   - 'lessons,exams,homework' → ['lessons', 'exams', 'homework']
+   *
+   * Also normalizes aliases (e.g., 'homework' = 'homeworks', 'absence' = 'absences')
+   *
+   * @returns {string[]} Array of enabled widget names (lowercase, canonical form)
+   */
   _getDisplayWidgets() {
+    // Extract displayMode from config (e.g. "lessons, exams, grid")
     const raw = this?.config?.displayMode;
+    // Normalize to string and lowercase for consistent matching
     const s = raw === undefined || raw === null ? '' : String(raw);
     const lower = s.toLowerCase().trim();
 
+    // Special case: if displayMode is exactly "grid", only show grid widget
     if (lower === 'grid') return ['grid'];
+    // Special case: if displayMode is exactly "list", show lessons and exams widgets
     if (lower === 'list') return ['lessons', 'exams'];
 
+    // Split comma-separated list into individual widget names
     const parts = lower
       .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
+      .map((p) => p.trim()) // Remove extra whitespace
+      .filter(Boolean); // Remove empty strings
 
+    // Map various aliases and singular/plural forms to canonical widget keys
     const map = {
       grid: 'grid',
       list: 'list',
@@ -202,23 +268,35 @@ Module.register('MMM-Webuntis', {
       messages: 'messagesofday',
     };
 
+    // Build output list of widgets to display, avoiding duplicates
     const out = [];
     for (const p of parts) {
-      const w = map[p];
-      if (!w) continue;
+      const w = map[p]; // Translate alias to canonical widget name
+      if (!w) continue; // Skip unknown entries
+      // If "list" is present, add both lessons and exams widgets
       if (w === 'list') {
         if (!out.includes('lessons')) out.push('lessons');
         if (!out.includes('exams')) out.push('exams');
         continue;
       }
+      // Add widget if not already included
       if (!out.includes(w)) out.push(w);
     }
 
+    // Fallback: if no valid widgets found, default to lessons and exams
     return out.length > 0 ? out : ['lessons', 'exams'];
   },
 
-  // Simple log helper to control verbosity from the module config
+  /**
+   * Simple log helper to control verbosity from the module config
+   * Respects the configured logLevel (none, error, warn, info, debug)
+   * Delegates to frontend logger if available, otherwise uses console
+   *
+   * @param {string} level - Log level ('error', 'warn', 'info', 'debug')
+   * @param {...any} args - Arguments to log (strings, objects, etc.)
+   */
   _log(level, ...args) {
+    // Log messages to frontend logger or browser console, respecting log level
     // If a frontend logger is available, delegate to it. Otherwise fallback to console.
     try {
       const frontendFactory = this._createFrontendLogger;
@@ -250,7 +328,15 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  /**
+   * Get DOM helper from widget API
+   * The DOM helper provides utility functions for creating widget containers
+   * and headers (defined in widgets/util.js)
+   *
+   * @returns {Object|null} DOM helper object or null if unavailable
+   */
   _getDomHelper() {
+    // Get DOM helper from widget API, log warning if unavailable
     const helper = this._getWidgetApi()?.dom || null;
     if (!helper) {
       this._log('warn', 'MMM-Webuntis dom helper not available, widget container helpers will be skipped.');
@@ -258,7 +344,14 @@ Module.register('MMM-Webuntis', {
     return helper;
   },
 
+  /**
+   * Create a container element for a widget
+   * Uses DOM helper if available, otherwise creates a basic div
+   *
+   * @returns {HTMLElement} Container element with wu-widget-container class
+   */
   _createWidgetContainer() {
+    // Create a container element for a widget, using helper if available
     const helper = this._getDomHelper();
     if (helper && typeof helper.createContainer === 'function') {
       return helper.createContainer();
@@ -268,12 +361,31 @@ Module.register('MMM-Webuntis', {
     return container;
   },
 
+  /**
+   * Determine if a student header should be rendered
+   * Headers are shown in verbose mode when multiple students are configured
+   *
+   * @param {Object} studentConfig - Student configuration object
+   * @returns {boolean} True if header should be rendered
+   */
   _shouldRenderStudentHeader(studentConfig) {
+    // Determine if a student header should be rendered (for verbose mode and multiple students)
     const mode = studentConfig?.mode ?? this.config.mode;
     return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
   },
 
+  /**
+   * Prepare student label for widget rendering
+   * In verbose mode with multiple students, adds header to container and returns empty string
+   * Otherwise returns student title as label string
+   *
+   * @param {HTMLElement} container - Container element to add header to
+   * @param {string} studentTitle - Student name/title
+   * @param {Object} studentConfig - Student configuration object
+   * @returns {string} Label string (empty if header was added to container)
+   */
   _prepareStudentLabel(container, studentTitle, studentConfig) {
+    // Add student header to container if needed, otherwise return label string
     if (this._shouldRenderStudentHeader(studentConfig)) {
       const helper = this._getDomHelper();
       if (helper && typeof helper.addHeader === 'function') {
@@ -284,12 +396,29 @@ Module.register('MMM-Webuntis', {
     return studentTitle;
   },
 
+  /**
+   * Get sorted list of student titles for widget rendering
+   * Sorts alphabetically for consistent display order
+   *
+   * @returns {string[]} Sorted array of student titles
+   */
   _getSortedStudentTitles() {
+    // Return sorted list of student titles for rendering widgets
     if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
     return Object.keys(this.timetableByStudent).sort();
   },
 
+  /**
+   * Invoke a widget renderer function from the widget API
+   * Safely calls widget methods with error handling
+   *
+   * @param {string} widgetKey - Widget name (e.g., 'lessons', 'exams')
+   * @param {string} methodName - Method name to call (e.g., 'renderLessonsForStudent')
+   * @param {...any} args - Arguments to pass to the widget renderer
+   * @returns {any} Result from widget renderer (typically row count)
+   */
   _invokeWidgetRenderer(widgetKey, methodName, ...args) {
+    // Call a widget renderer function from the widget API, log warning if missing
     const api = this._getWidgetApi();
     const fn = api?.[widgetKey]?.[methodName];
     if (typeof fn !== 'function') {
@@ -299,7 +428,17 @@ Module.register('MMM-Webuntis', {
     return fn(this, ...args);
   },
 
+  /**
+   * Render widget rows for multiple students
+   * Creates a document fragment containing one container per student
+   * Only includes containers that actually have content (count > 0)
+   *
+   * @param {string[]} studentTitles - Array of student titles to render
+   * @param {Function} renderRow - Renderer function: (studentTitle, studentLabel, studentConfig, container) => count
+   * @returns {DocumentFragment|null} Fragment with widget containers or null if no content
+   */
   _renderWidgetTableRows(studentTitles, renderRow) {
+    // Render a table of widgets for each student, using the provided row renderer
     // Create a fragment that will contain one container per student (if they have rows).
     const frag = document.createDocumentFragment();
 
@@ -320,14 +459,31 @@ Module.register('MMM-Webuntis', {
     return frag.hasChildNodes() ? frag : null;
   },
 
+  /**
+   * Compute today's date as YYYYMMDD integer
+   * Uses cached value if available (set during start() or resume())
+   * Supports debugDate for testing (frozen date simulation)
+   *
+   * @returns {number} Date as YYYYMMDD integer (e.g., 20260130)
+   */
   _computeTodayYmdValue() {
+    // Compute today's date as YYYYMMDD integer, using debugDate if set
     // If debugDate is set, always use it instead of current date
     if (this._currentTodayYmd) return this._currentTodayYmd;
     const now = new Date();
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
   },
 
+  /**
+   * Shift a YYYYMMDD date integer by deltaDays
+   * Handles month/year boundaries correctly
+   *
+   * @param {number} baseYmd - Base date as YYYYMMDD integer (e.g., 20260130)
+   * @param {number} deltaDays - Number of days to shift (positive or negative)
+   * @returns {number|null} Shifted date as YYYYMMDD integer or null if invalid
+   */
   _shiftYmd(baseYmd, deltaDays = 0) {
+    // Shift a YYYYMMDD date integer by deltaDays, return new YYYYMMDD integer
     const num = Number(baseYmd);
     if (!Number.isFinite(num)) return null;
     const year = Math.floor(num / 10000);
@@ -338,7 +494,16 @@ Module.register('MMM-Webuntis', {
     return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
   },
 
+  /**
+   * Filter timetable entries by date range based on config
+   * Uses grid-specific config (grid.nextDays, grid.pastDays) with fallbacks to student/module level
+   *
+   * @param {Array} entries - Timetable entries to filter
+   * @param {Object} studentConfig - Student configuration object
+   * @returns {Array} Filtered timetable entries within date range
+   */
   _filterTimetableRange(entries, studentConfig) {
+    // Filter timetable entries by date range based on config (nextDays/pastDays)
     if (!Array.isArray(entries) || entries.length === 0) return [];
     const cfg = studentConfig || {};
     const defaults = this.defaults || {};
@@ -371,7 +536,15 @@ Module.register('MMM-Webuntis', {
     });
   },
 
+  /**
+   * Build configuration object to send to backend
+   * Deep merges widget-specific defaults into module and student configs
+   * MagicMirror only does shallow merge, so nested widget configs need manual merging
+   *
+   * @returns {Object} Complete config object with merged defaults and student configs
+   */
   _buildSendConfig() {
+    // Build config object to send to backend, merging widget defaults and student configs
     const defNoStudents = { ...(this.config || {}) };
     delete defNoStudents.students;
 
@@ -386,7 +559,6 @@ Module.register('MMM-Webuntis', {
     });
 
     // NOTE: debugDate is never persisted - always use config.debugDate as-is (or null)
-
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
 
     const mergedStudents = rawStudents.map((s) => {
@@ -420,9 +592,19 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Validate module configuration and collect warnings before sending to backend
+   * Validate module configuration and collect warnings
+   * Checks:
+   *   - displayMode contains valid widget names
+   *   - logLevel is valid
+   *   - Numeric ranges (nextDays, pastDays) are not negative
+   *   - Student credentials or parent credentials are configured
+   *
+   * Warnings are logged and stored in moduleWarningsSet to avoid duplicates
+   *
+   * @param {Object} config - Configuration object to validate
    */
   _validateAndWarnConfig(config) {
+    // Validate config and collect warnings for displayMode, logLevel, numeric ranges, and student setup
     const warnings = [];
 
     // Validate displayMode
@@ -456,7 +638,6 @@ Module.register('MMM-Webuntis', {
     if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
       warnings.push(`daysToShow cannot be negative (deprecated key). Value: ${config.daysToShow}`);
     }
-
     if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
     }
@@ -483,7 +664,18 @@ Module.register('MMM-Webuntis', {
     });
   },
 
+  /**
+   * Convert time string or integer to minutes since midnight
+   * Supports multiple formats:
+   *   - "13:50" → 830 minutes
+   *   - 1350 → 830 minutes
+   *   - "08:15" → 495 minutes
+   *
+   * @param {string|number} t - Time value to convert
+   * @returns {number} Minutes since midnight (NaN if invalid)
+   */
   _toMinutes(t) {
+    // Convert time string or integer (e.g. "13:50" or 1350) to minutes since midnight
     const util = this._getWidgetApi()?.util;
     if (util && typeof util.toMinutes === 'function') {
       return util.toMinutes(t);
@@ -502,13 +694,43 @@ Module.register('MMM-Webuntis', {
     return hh * 60 + mm;
   },
 
+  /**
+   * Check if warnings array contains critical errors
+   * Critical errors include:
+   *   - Authentication failures
+   *   - Connection errors (timeout, cannot connect)
+   *   - HTTP error status codes (4xx, 5xx)
+   *   - Rate limiting
+   *
+   * @param {string[]} warnings - Array of warning messages
+   * @returns {boolean} True if any warning indicates a critical error
+   */
   _hasErrorWarnings(warnings = []) {
+    // Check if any warnings indicate a critical error (auth, connection, HTTP status)
     if (!Array.isArray(warnings) || warnings.length === 0) return false;
     const pattern = /(authentication failed|cannot connect|timeout|temporarily unavailable|rate limit|http\s*\d{3})/i;
     return warnings.some((w) => pattern.test(String(w)));
   },
 
+  /**
+   * Decide whether to preserve previous data when new data is empty or fetch failed
+   * Preserves data if:
+   *   - Previous data exists AND new data is empty
+   *   - Data type wasn't fetched (fetchFlag=false)
+   *   - API returned error status (>= 400 or 0)
+   *   - Warnings contain critical errors (auth, connection)
+   *
+   * This prevents blank widgets during temporary API outages
+   *
+   * @param {Array} nextData - New data from backend
+   * @param {Array} prevData - Previous cached data
+   * @param {boolean} fetchFlag - Whether this data type was actually fetched
+   * @param {number} status - HTTP status code from API
+   * @param {string[]} warnings - Warning messages from fetch
+   * @returns {boolean} True if previous data should be preserved
+   */
   _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings) {
+    // Decide whether to keep previous data if new data is empty or fetch failed
     const nextIsArray = Array.isArray(nextData);
     const prevIsArray = Array.isArray(prevData);
     const nextEmpty = nextIsArray && nextData.length === 0;
@@ -526,7 +748,22 @@ Module.register('MMM-Webuntis', {
 
     return isBadStatus || hasErrorWarning;
   },
+
+  /**
+   * Render grid widget for a student
+   * Delegates to grid widget script (widgets/grid.js)
+   *
+   * @param {string} studentTitle - Student name/title
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} timetable - Filtered timetable entries
+   * @param {Array} homeworks - Homework entries
+   * @param {Array} timeUnits - Time slots (periods)
+   * @param {Array} exams - Exam entries
+   * @param {Array} absences - Absence entries
+   * @returns {HTMLElement|null} Grid DOM element or null if widget not loaded
+   */
   _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
+    // Render grid widget for a student using widget API
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
@@ -536,7 +773,21 @@ Module.register('MMM-Webuntis', {
     return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
   },
 
+  /**
+   * Render lessons list widget for a student
+   * Delegates to lessons widget script (widgets/lessons.js)
+   *
+   * @param {HTMLElement} container - Container element to render into
+   * @param {string} studentLabel - Student label string (or empty if header added)
+   * @param {string} studentTitle - Student name/title
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} timetable - Filtered timetable entries
+   * @param {Map} startTimesMap - Map of time units for formatting
+   * @param {Array} holidays - Holiday entries
+   * @returns {number} Number of rendered rows
+   */
   _renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
+    // Render lessons list widget for a student using widget API
     return this._invokeWidgetRenderer(
       'lessons',
       'renderLessonsForStudent',
@@ -550,19 +801,63 @@ Module.register('MMM-Webuntis', {
     );
   },
 
+  /**
+   * Render exams widget for a student
+   * Delegates to exams widget script (widgets/exams.js)
+   *
+   * @param {HTMLElement} container - Container element to render into
+   * @param {string} studentLabel - Student label string
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} exams - Exam entries
+   * @returns {number} Number of rendered rows
+   */
   _renderExamsForStudent(container, studentLabel, studentConfig, exams) {
+    // Render exams widget for a student using widget API
     return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', container, studentLabel, studentConfig, exams);
   },
 
+  /**
+   * Render homework widget for a student
+   * Delegates to homework widget script (widgets/homework.js)
+   *
+   * @param {HTMLElement} container - Container element to render into
+   * @param {string} studentLabel - Student label string
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} homeworks - Homework entries
+   * @returns {number} Number of rendered rows
+   */
   _renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks) {
+    // Render homework widget for a student using widget API
     return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', container, studentLabel, studentConfig, homeworks);
   },
 
+  /**
+   * Render absences widget for a student
+   * Delegates to absences widget script (widgets/absences.js)
+   *
+   * @param {HTMLElement} container - Container element to render into
+   * @param {string} studentLabel - Student label string
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} absences - Absence entries
+   * @returns {number} Number of rendered rows
+   */
   _renderAbsencesForStudent(container, studentLabel, studentConfig, absences) {
+    // Render absences widget for a student using widget API
     return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', container, studentLabel, studentConfig, absences);
   },
 
+  /**
+   * Render messages of day widget for a student
+   * Delegates to messagesofday widget script (widgets/messagesofday.js)
+   *
+   * @param {HTMLElement} container - Container element to render into
+   * @param {string} studentLabel - Student label string
+   * @param {Object} studentConfig - Student configuration
+   * @param {Array} messagesOfDay - Message entries
+   * @returns {number} Number of rendered rows
+   */
   _renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay) {
+    // Render messages of day widget for a student using widget API
     return this._invokeWidgetRenderer(
       'messagesofday',
       'renderMessagesOfDayForStudent',
@@ -573,7 +868,20 @@ Module.register('MMM-Webuntis', {
     );
   },
 
+  /**
+   * Module initialization - called by MagicMirror at startup
+   *
+   * Performs:
+   *   1. Store log level in global config for widget access
+   *   2. Initialize data storage structures (timetableByStudent, examsByStudent, etc.)
+   *   3. Generate unique session ID for browser window isolation
+   *   4. Parse and set debugDate if configured (frozen date for testing)
+   *   5. Send INIT_MODULE to backend to start data fetching
+   *
+   * Multi-instance support: Each instance should have a unique identifier in config.js
+   */
   start() {
+    // Module initialization logic
     // Normalization moved to backend (node_helper); keep frontend config untouched
 
     // Store logLevel in global config so widgets can access it independently
@@ -663,19 +971,37 @@ Module.register('MMM-Webuntis', {
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
 
+  /**
+   * Start the now line updater for grid view
+   * The now line shows current time position in the grid widget
+   * Only starts if showNowLine config is not explicitly disabled
+   */
   _startNowLineUpdater() {
-    // Only start the now line updater if showNowLine is enabled (applies to grid view)
+    // Start the now line updater for grid view if enabled
     if (this.config.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
 
+  /**
+   * Stop the now line updater for grid view
+   * Called during suspend() to stop unnecessary timer updates
+   */
   _stopNowLineUpdater() {
+    // Stop the now line updater for grid view
     const fn = this._getWidgetApi()?.grid?.stopNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
 
+  /**
+   * Start periodic data fetch timer
+   * Sends FETCH_DATA to backend at configured updateInterval
+   * Respects legacy fetchIntervalMs key for backwards compatibility
+   *
+   * Timer is skipped if module is paused or interval is invalid
+   */
   _startFetchTimer() {
+    // Start periodic data fetch timer based on updateInterval
     if (this._paused) return;
     if (this._fetchTimer) return;
     // Prefer the new `updateInterval` config key, fall back to legacy `fetchIntervalMs`.
@@ -692,12 +1018,26 @@ Module.register('MMM-Webuntis', {
     }, interval);
   },
 
+  /**
+   * Send INIT_MODULE notification to backend
+   * Triggers one-time module initialization (config validation, student discovery)
+   * Backend responds with MODULE_INITIALIZED when ready
+   */
   _sendInit() {
+    // Send INIT_MODULE notification to backend with config
     this._log('debug', '[INIT] Sending INIT_MODULE to backend');
     this.sendSocketNotification('INIT_MODULE', this._buildSendConfig());
   },
 
+  /**
+   * Send FETCH_DATA notification to backend for data refresh
+   * Only sends if module is initialized (prevents fetch before init)
+   * Stores pending resume request if called during initialization
+   *
+   * @param {string} reason - Reason for fetch ('manual', 'periodic', 'resume')
+   */
   _sendFetchData(reason = 'manual') {
+    // Send FETCH_DATA notification to backend, unless not initialized
     // Prevent fetch before initialization is complete
     if (!this._initialized) {
       // Store pending resume request to execute after initialization
@@ -710,14 +1050,28 @@ Module.register('MMM-Webuntis', {
     this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
   },
 
+  /**
+   * Stop periodic data fetch timer
+   * Called during suspend() to stop unnecessary fetch attempts
+   */
   _stopFetchTimer() {
+    // Stop periodic data fetch timer
     if (this._fetchTimer) {
       clearInterval(this._fetchTimer);
       this._fetchTimer = null;
     }
   },
 
+  /**
+   * Suspend module - called by MagicMirror when module becomes hidden
+   * Stops all timers to reduce unnecessary processing:
+   *   - Now line updater (grid widget)
+   *   - Periodic fetch timer
+   *   - DOM update batching timer
+   *   - Resume fallback timer
+   */
   suspend() {
+    // Suspend module: stop timers and clear update state
     this._log('debug', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
@@ -734,7 +1088,21 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  /**
+   * Resume module - called by MagicMirror when module becomes visible
+   *
+   * Performs:
+   *   1. Reset _currentTodayYmd if date changed during suspend (only if not using debugDate)
+   *   2. Skip initial resume() call (MagicMirror calls resume on all modules at startup)
+   *   3. Skip resume fetch if recently initialized (prevents duplicate with auto-fetch)
+   *   4. Skip fetch if data is fresh (within updateInterval)
+   *   5. Send FETCH_DATA to backend for stale data
+   *   6. Set fallback timer to retry if no data arrives within 3 seconds
+   *
+   * Optimization: Only fetches when needed to reduce API load during carousel page switches
+   */
   resume() {
+    // Resume module: refresh date, fetch data if needed, restart timers
     this._log('debug', `[resume] Module resumed, _currentTodayYmd=${this._currentTodayYmd}, config.debugDate=${this.config?.debugDate}`);
     this._paused = false;
 
@@ -813,6 +1181,7 @@ Module.register('MMM-Webuntis', {
   },
 
   getDom() {
+    // Build and return DOM for module, rendering widgets and warnings
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
 
@@ -993,6 +1362,7 @@ Module.register('MMM-Webuntis', {
   },
 
   notificationReceived(notification) {
+    // Handle MagicMirror notifications (e.g. DOM_OBJECTS_CREATED for legacy config warnings)
     if (notification === 'DOM_OBJECTS_CREATED') {
       // Display deprecation warnings if legacy config keys are detected
       if (this.config.__legacyUsed && this.config.__legacyUsed.length > 0) {
@@ -1005,6 +1375,7 @@ Module.register('MMM-Webuntis', {
   },
 
   socketNotificationReceived(notification, payload) {
+    // Handle backend socket notifications: initialization, config errors, data updates
     // Filter by sessionId (preferred) or id (fallback) to ensure data goes to correct instance
     // This allows multi-instance support without requiring explicit identifiers in config
     if (payload && payload.sessionId && this._sessionId !== payload.sessionId) {

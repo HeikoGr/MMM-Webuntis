@@ -1,8 +1,31 @@
+/**
+ * Absences Widget
+ * Renders absence records with configurable display and filtering:
+ * - Date range filtering (past/future days)
+ * - Date format customization
+ * - Excused/unexcused status display
+ * - Reason text display
+ * - Time range display (startTime-endTime)
+ * - Subject information
+ * - Maximum item limit
+ */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime, createWidgetContext } =
     root.util?.initWidget?.(root) || {};
 
+  /**
+   * Render absences widget for a single student
+   * Displays absences sorted by date and time
+   * Filters by date range (pastDays/futureDays) and respects maxItems limit
+   *
+   * @param {Object} ctx - Main module context (provides translate, config)
+   * @param {HTMLElement} container - DOM element to append absence rows
+   * @param {string} studentCellTitle - Student name for compact mode student column
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} absences - Array of absence objects (date, startTime, endTime, su, reason, excused)
+   * @returns {number} Number of rows added to container
+   */
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 

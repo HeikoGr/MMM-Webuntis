@@ -1,5 +1,28 @@
+/**
+ * Grid/Calendar Widget
+ * Renders a visual timetable grid with:
+ * - Time-based vertical layout (time axis on left, days as columns)
+ * - Overlapping lesson detection and ticker animations
+ * - Split-view for cancelled + replacement lessons
+ * - Holiday and absence overlays
+ * - Now-line indicator for current time
+ * - Configurable week view (Mon-Fri) or custom date ranges
+ * - Break supervision support
+ * - Flexible field display configuration (subject/teacher/room/class/etc.)
+ */
+
+/**
+ * WeakMap to store now-line updater state per module instance
+ * Prevents memory leaks by using WeakMap (automatic cleanup when ctx is GC'd)
+ */
 const nowLineStates = new WeakMap();
 
+/**
+ * Get or initialize now-line updater state for a module instance
+ *
+ * @param {Object} ctx - Main module context
+ * @returns {Object} State object with timer and initialTimeout properties
+ */
 function getNowLineState(ctx) {
   if (!nowLineStates.has(ctx)) {
     nowLineStates.set(ctx, { timer: null, initialTimeout: null });
@@ -32,6 +55,15 @@ function getNowLineState(ctx) {
 
   /**
    * Determine lesson display mode based on available fields
+   * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @returns {Object} Display mode object with flags:
+   *   - isTeacherView: boolean - Lesson has class info (teacher perspective)
+   *   - isStudentView: boolean - Lesson has studentGroup info (student perspective)
+   *   - hasTeacher/hasSubject/hasRoom/hasClass/hasStudentGroup: field availability flags
+   *   - primaryInfo/secondaryInfo: suggested field types for display
+   *   - showStudentGroup: boolean - Whether to show student group
    */
   function getLessonDisplayMode(lesson) {
     const hasTeacher = lesson?.te && lesson.te.length > 0;
@@ -59,6 +91,14 @@ function getNowLineState(ctx) {
 
   /**
    * Resolve field configuration from config
+   * Extracts grid.fields.{primary, secondary, additional, format} from student config
+   *
+   * @param {Object} config - Student configuration object
+   * @returns {Object} Resolved field configuration with defaults:
+   *   - primary: string - Primary field type (default: 'subject')
+   *   - secondary: string - Secondary field type (default: 'teacher')
+   *   - additional: string[] - Additional field types (default: ['room'])
+   *   - format: Object - Name format per field type (default: 'short')
    */
   function resolveFieldConfig(config) {
     const gridConfig = config?.grid?.fields || {};
@@ -79,6 +119,12 @@ function getNowLineState(ctx) {
 
   /**
    * Get field value based on flexible configuration
+   * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {string} fieldType - Field type to extract ('subject', 'teacher', 'room', 'class', 'studentGroup', 'info')
+   * @param {Object} fieldConfig - Field configuration with format specifications
+   * @returns {string} Extracted field value or empty string if not found/invalid type
    */
   function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
     if (!lesson || !fieldType || fieldType === 'none') return '';
@@ -107,6 +153,16 @@ function getNowLineState(ctx) {
 
   /**
    * Build lesson display using flexible field configuration
+   * Extracts primary, secondary, and additional fields based on grid.fields config
+   * Automatically deduplicates additional fields if they match primary/secondary
+   *
+   * @param {Object} lesson - Lesson object from backend
+   * @param {Object} config - Student configuration object
+   * @param {Object} options - Display options (includeAdditional: boolean)
+   * @returns {Object} Display parts object:
+   *   - primary: string - Primary field value
+   *   - secondary: string - Secondary field value
+   *   - additional: string[] - Additional field values (deduplicated)
    */
   function buildFlexibleLessonDisplay(lesson, config, options = {}) {
     const fieldConfig = resolveFieldConfig(config);
@@ -133,6 +189,13 @@ function getNowLineState(ctx) {
   // Now line updater
   // ============================================================================
 
+  /**
+   * Start the now-line updater (runs every minute)
+   * Updates now-line position and refreshes past lesson masks
+   * Automatically triggers data fetch on date change (if not in debug mode)
+   *
+   * @param {Object} ctx - Main module context
+   */
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
     if (!ctx._hasWidget('grid')) return;
@@ -192,6 +255,12 @@ function getNowLineState(ctx) {
     tick();
   }
 
+  /**
+   * Stop the now-line updater
+   * Clears both minute timer and initial timeout
+   *
+   * @param {Object} ctx - Main module context
+   */
   function stopNowLineUpdater(ctx) {
     if (!ctx) return;
     const state = getNowLineState(ctx);
@@ -209,6 +278,23 @@ function getNowLineState(ctx) {
   // CONFIGURATION & VALIDATION
   // ============================================================================
 
+  /**
+   * Validate and extract grid configuration
+   * Supports two modes:
+   *   - weekView: true → Always show Mon-Fri of current/next week (auto-advance on Fri 16:00+ / Sat/Sun)
+   *   - weekView: false → Show configurable past/future days (pastDays + today + nextDays)
+   *
+   * @param {Object} ctx - Main module context (provides debugDate support)
+   * @param {Object} studentConfig - Student-specific configuration
+   * @returns {Object} Grid configuration with calculated offsets:
+   *   - daysToShow: number - Number of future days to show (not including today)
+   *   - pastDays: number - Number of past days to show
+   *   - startOffset: number - Day offset from base date (negative = past)
+   *   - totalDisplayDays: number - Total days to display
+   *   - gridDateFormat: string - Date format for day labels
+   *   - maxGridLessons: number - Maximum lessons per day (0 = no limit)
+   *   - weekView: boolean - Whether week view mode is active
+   */
   function validateAndExtractGridConfig(ctx, studentConfig) {
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
     const weekView = getWidgetConfig(studentConfig, 'grid', 'weekView') ?? false;
@@ -280,6 +366,18 @@ function getNowLineState(ctx) {
   // TIME AXIS CALCULATION
   // ============================================================================
 
+  /**
+   * Calculate time range for grid (vertical axis)
+   * Uses time units if available, otherwise infers from lesson data
+   * Filters out lessons longer than 12 hours (likely data errors)
+   *
+   * @param {Array} timetable - Array of lesson objects
+   * @param {Array} timeUnits - Array of time unit objects (startMin, endMin, name, startTime)
+   * @param {Object} ctx - Main module context (provides _toMinutes helper)
+   * @returns {Object} Time range object:
+   *   - allStart: number - Earliest minute of day (default: 7*60 = 7:00 AM)
+   *   - allEnd: number - Latest minute of day (default: 17*60 = 5:00 PM)
+   */
   function calculateTimeRange(timetable, timeUnits, ctx) {
     let allStart = Infinity;
     let allEnd = -Infinity;
@@ -312,6 +410,16 @@ function getNowLineState(ctx) {
     return { allStart, allEnd };
   }
 
+  /**
+   * Apply max lessons limit to time range cutoff
+   * Limits visible time range to first N periods (respects time unit boundaries)
+   *
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes (before limit)
+   * @param {number} maxGridLessons - Maximum number of periods to show (0 = no limit)
+   * @param {Array} timeUnits - Array of time unit objects
+   * @returns {number} New end time in minutes (clamped to period boundary)
+   */
   function applyMaxLessonsLimit(allStart, allEnd, maxGridLessons, timeUnits) {
     if (maxGridLessons >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
       const targetIndex = Math.min(timeUnits.length - 1, maxGridLessons - 1);
@@ -332,6 +440,16 @@ function getNowLineState(ctx) {
         targetIndex + 1 < timeUnits.length &&
         timeUnits[targetIndex + 1]?.startMin !== undefined
       ) {
+        /**
+         * Get time unit start and line position
+         * Calculates where to draw horizontal grid lines between periods
+         *
+         * @param {Array} timeUnits - Array of time unit objects
+         * @param {number} ui - Time unit index
+         * @returns {Object} Boundary object:
+         *   - startMin: number|null - Start time in minutes
+         *   - lineMin: number|null - Line position in minutes (at period end or next period start)
+         */
         cutoff = timeUnits[targetIndex + 1].startMin;
       }
 
@@ -366,6 +484,18 @@ function getNowLineState(ctx) {
   // DOM CREATION - HEADER & TIME AXIS
   // ============================================================================
 
+  /**
+   * Create grid header with day labels
+   * Creates a grid row with empty corner cell + day column labels
+   *
+   * @param {number} totalDisplayDays - Number of days to display
+   * @param {Date} baseDate - Base date for calculations
+   * @param {number} startOffset - Day offset from base date
+   * @param {string} gridDateFormat - Date format for day labels
+   * @param {Object} ctx - Main module context
+   * @param {Object} util - Utility object with formatDate function
+   * @returns {Object} Object with header element and gridTemplateColumns string
+   */
   function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
@@ -399,6 +529,18 @@ function getNowLineState(ctx) {
     return { header, gridTemplateColumns: cols.join(' ') };
   }
 
+  /**
+   * Create time axis (left column with hour labels and grid lines)
+   * Renders either time units (periods) or hourly grid lines
+   *
+   * @param {Array} timeUnits - Array of time unit objects (name, startTime, startMin, endMin)
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalHeight - Total height in pixels
+   * @param {number} totalMinutes - Total minutes span (allEnd - allStart)
+   * @param {Object} ctx - Main module context (provides translate)
+   * @returns {HTMLElement} Time axis div element
+   */
   function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
     const timeAxis = document.createElement('div');
     timeAxis.className = 'grid-timecell';
@@ -470,6 +612,18 @@ function getNowLineState(ctx) {
   // LESSON PROCESSING & FILTERING
   // ============================================================================
 
+  /**
+   * Extract and normalize lessons for a single day
+   * Converts backend lesson objects to grid-specific format with:
+   * - Time values (startMin/endMin in minutes)
+   * - Flexible field extraction (subject/teacher/room/class/etc.)
+   * - Display mode detection (teacher view vs student view)
+   * - Legacy field support
+   *
+   * @param {Array} sourceForDay - Array of lesson objects for one day
+   * @param {Object} ctx - Main module context (provides _toMinutes helper)
+   * @returns {Array} Normalized lesson objects
+   */
   function extractDayLessons(sourceForDay, ctx) {
     return sourceForDay.map((el) => {
       // Use dynamic field extraction for flexible display
@@ -516,6 +670,15 @@ function getNowLineState(ctx) {
     });
   }
 
+  /**
+   * Validate and normalize lessons
+   * Ensures all lessons have startMin/endMin values
+   * Fills missing endMin with startMin + 45 minutes (default lesson duration)
+   *
+   * @param {Array} dayLessons - Array of extracted lesson objects
+   * @param {Function} log - Logging function
+   * @returns {Array} Validated lesson objects (mutated in-place)
+   */
   function validateAndNormalizeLessons(dayLessons, log) {
     for (const curr of dayLessons) {
       curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
@@ -537,6 +700,24 @@ function getNowLineState(ctx) {
     return dayLessons;
   }
 
+  /**
+   * Filter lessons by maximum periods limit
+   * When maxGridLessons is set:
+   * - Filters ALL lessons (including cancelled/irregular) by period index
+   * - Only shows lessons in the first N periods
+   * When maxGridLessons is not set:
+   * - Filters by allEnd cutoff time
+   * - Keeps cancelled/irregular lessons regardless of time
+   *
+   * @param {Array} dayLessons - Array of normalized lesson objects
+   * @param {number} maxGridLessons - Maximum number of periods (0 = no limit)
+   * @param {Array} timeUnits - Array of time unit objects
+   * @param {string} studentTitle - Student name (for logging)
+   * @param {string} dateStr - Date string (YYYYMMDD)
+   * @param {Object} ctx - Main module context
+   * @param {number|null} allEnd - End time cutoff in minutes
+   * @returns {Array} Filtered lesson objects
+   */
   function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
       // If no maxGridLessons limit, still filter by allEnd cutoff if provided
@@ -616,6 +797,15 @@ function getNowLineState(ctx) {
     return filtered;
   }
 
+  /**
+   * Check if lesson is an exam
+   * Uses two detection methods:
+   * 1. REST API type field (type === 'EXAM')
+   * 2. Fallback text-based keywords (Klassenarbeit, Klausur, Arbeit)
+   *
+   * @param {Object} lesson - Lesson object
+   * @returns {boolean} True if lesson is an exam
+   */
   function lessonHasExam(lesson) {
     // Primary check: REST API provides `type: 'EXAM'` (uppercase) directly on lessons that are exams
     if (lesson?.type && String(lesson.type).toUpperCase() === 'EXAM') return true;
@@ -633,6 +823,17 @@ function getNowLineState(ctx) {
   // DOM CREATION - DAY COLUMNS
   // ============================================================================
 
+  /**
+   * Add horizontal grid lines to day column
+   * Renders either time unit boundaries or hourly lines
+   *
+   * @param {HTMLElement} inner - Day column inner container
+   * @param {Array} timeUnits - Array of time unit objects
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalMinutes - Total minutes span
+   * @param {number} totalHeight - Total height in pixels
+   */
   function addHourLinesToColumn(inner, timeUnits, allStart, allEnd, totalMinutes, totalHeight) {
     try {
       if (Array.isArray(timeUnits) && timeUnits.length > 0) {
@@ -661,6 +862,16 @@ function getNowLineState(ctx) {
     }
   }
 
+  /**
+   * Add now-line placeholder to day column
+   * Creates hidden now-line element (visibility controlled by updateNowLinesAll)
+   * Stores time range and height for dynamic positioning
+   *
+   * @param {HTMLElement} inner - Day column inner container
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalHeight - Total height in pixels
+   */
   function addNowLineToColumn(inner, allStart, allEnd, totalHeight) {
     const nowLine = document.createElement('div');
     nowLine.className = 'grid-nowline';
@@ -673,6 +884,16 @@ function getNowLineState(ctx) {
     inner._totalHeight = totalHeight;
   }
 
+  /**
+   * Add a day-wide notice (holiday or "no lessons")
+   * Creates a full-height notice with icon and text
+   *
+   * @param {HTMLElement} inner - Day column inner container
+   * @param {number} totalHeight - Total height in pixels
+   * @param {string} icon - Icon emoji or text (e.g., '🏖️', '📅')
+   * @param {string} text - Notice text (HTML allowed)
+   * @param {string} iconSize - Icon font size (default: '1.5em')
+   */
   function addDayNotice(inner, totalHeight, icon, text, iconSize = '1.5em') {
     // Unified function for both holiday and no-lessons notices
     const notice = document.createElement('div');
@@ -685,6 +906,14 @@ function getNowLineState(ctx) {
     inner.appendChild(notice);
   }
 
+  /**
+   * Add "more" badge to indicate hidden lessons
+   * Displayed when maxGridLessons limit is active
+   *
+   * @param {HTMLElement} inner - Day column inner container
+   * @param {number} hiddenCount - Number of hidden lessons
+   * @param {Object} ctx - Main module context (provides translate)
+   */
   function addMoreBadge(inner, hiddenCount, ctx) {
     const moreBadge = document.createElement('div');
     moreBadge.className = 'grid-more-badge';
@@ -699,6 +928,16 @@ function getNowLineState(ctx) {
   // LESSON CELL RENDERING
   // ============================================================================
 
+  /**
+   * Create a lesson cell container
+   * Base element for all lesson types (regular, cancelled, substitution, exam)
+   *
+   * @param {number} topPx - Top position in pixels
+   * @param {number} heightPx - Height in pixels
+   * @param {string} dateStr - Date string (YYYYMMDD)
+   * @param {number} eMin - End time in minutes
+   * @returns {HTMLElement} Lesson cell div
+   */
   function createLessonCell(topPx, heightPx, dateStr, eMin) {
     const cell = document.createElement('div');
     cell.className = 'grid-lesson lesson';
@@ -709,6 +948,19 @@ function getNowLineState(ctx) {
     return cell;
   }
 
+  /**
+   * Generate HTML content for lesson cell
+   * Supports two display modes:
+   * 1. Flexible field configuration (grid.fields.{primary, secondary, additional})
+   * 2. Legacy fallback (subject + teacher/class + room)
+   *
+   * Special handling for BREAK_SUPERVISION activity type
+   *
+   * @param {Object} lesson - Lesson object with display fields
+   * @param {Function} escapeHtml - HTML escape function
+   * @param {Object} ctx - Main module context (provides config)
+   * @returns {string} HTML content for lesson cell
+   */
   function makeLessonInnerHTML(lesson, escapeHtml, ctx) {
     // Special handling for BREAK_SUPERVISION (must run first, before flexible display)
     if (lesson.activityType === 'BREAK_SUPERVISION') {
@@ -777,6 +1029,14 @@ function getNowLineState(ctx) {
     return `<div class='lesson-content'><span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
+  /**
+   * Check if lesson has matching homework
+   * Matches by date and subject name
+   *
+   * @param {Object} lesson - Lesson object
+   * @param {Array} homeworks - Array of homework objects
+   * @returns {boolean} True if homework matches lesson
+   */
   function checkHomeworkMatch(lesson, homeworks) {
     if (!homeworks || !Array.isArray(homeworks) || homeworks.length === 0) {
       return false;
@@ -794,6 +1054,12 @@ function getNowLineState(ctx) {
     });
   }
 
+  /**
+   * Add homework icon to lesson cell
+   * Displays 📘 icon when homework is due
+   *
+   * @param {HTMLElement} cell - Lesson cell element
+   */
   function addHomeworkIcon(cell) {
     const icon = document.createElement('span');
     icon.className = 'homework-icon';
@@ -803,6 +1069,16 @@ function getNowLineState(ctx) {
     }
   }
 
+  /**
+   * Group lessons by overlapping time slots
+   * Groups are used to determine rendering strategy:
+   * - 1 lesson → full-width cell
+   * - 2+ overlapping lessons → ticker animation
+   * - Break supervisions → always separate (no overlap checking)
+   *
+   * @param {Array} lessonsToRender - Array of normalized lesson objects
+   * @returns {Map} Map of group key → lesson array
+   */
   function groupLessonsByTimeSlot(lessonsToRender) {
     // Group lessons by date first
     const byDate = new Map();
@@ -881,6 +1157,21 @@ function getNowLineState(ctx) {
     return groups;
   }
 
+  /**
+   * Create ticker animation for overlapping lessons
+   * Groups lessons by subject and creates seamless scrolling ticker
+   * Each subject group is displayed stacked (lessons within group positioned relatively)
+   *
+   * @param {Array} lessons - Array of overlapping lesson objects
+   * @param {number} topPx - Top position in pixels
+   * @param {number} heightPx - Height in pixels
+   * @param {HTMLElement} container - Day column container
+   * @param {Object} ctx - Main module context
+   * @param {Function} escapeHtml - HTML escape function
+   * @param {boolean} hasExam - True if any lesson in group is an exam
+   * @param {boolean} isPast - True if lesson is in the past
+   * @param {Array} homeworks - Array of homework objects
+   */
   function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks) {
     // Group lessons by subject (same subject = one ticker unit, displayed stacked)
     const getSubjectName = (lesson) => {
@@ -1009,6 +1300,23 @@ function getNowLineState(ctx) {
     container.appendChild(tickerWrapper);
   }
 
+  /**
+   * Render all lesson cells for a day column
+   * Determines rendering strategy based on lesson grouping:
+   * - RULE 0: Split view for cancelled + non-cancelled lessons (left/right split)
+   * - RULE 1: Ticker animation for 2+ overlapping lessons
+   * - RULE 2: Full-width cell for single lessons
+   *
+   * @param {Array} lessonsToRender - Array of filtered/normalized lessons
+   * @param {Object} containers - Container objects ({ bothInner })
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalMinutes - Total minutes span
+   * @param {number} totalHeight - Total height in pixels
+   * @param {Array} homeworks - Array of homework objects
+   * @param {Object} ctx - Main module context
+   * @param {Function} escapeHtml - HTML escape function
+   */
   function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
     const { bothInner } = containers;
 
@@ -1158,6 +1466,17 @@ function getNowLineState(ctx) {
   // ABSENCE OVERLAY RENDERING
   // ============================================================================
 
+  /**
+   * Create absence overlay element
+   * Visual indicator for absence periods (excused/unexcused)
+   *
+   * @param {Object} ctx - Main module context (provides translate)
+   * @param {number} topPx - Top position in pixels
+   * @param {number} heightPx - Height in pixels
+   * @param {string} dateStr - Date string (YYYYMMDD)
+   * @param {Object} absence - Absence object (reason, excused)
+   * @returns {HTMLElement} Absence overlay div
+   */
   function createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence) {
     const overlay = document.createElement('div');
     overlay.className = 'grid-absence-overlay';
@@ -1187,6 +1506,19 @@ function getNowLineState(ctx) {
     return overlay;
   }
 
+  /**
+   * Add absence overlays to day column
+   * Renders semi-transparent overlays for each absence period
+   * Clamps overlays to visible time range
+   *
+   * @param {HTMLElement} bothInner - Day column inner container
+   * @param {Array} dayAbsences - Array of absence objects for this day
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalMinutes - Total minutes span
+   * @param {number} totalHeight - Total height in pixels
+   * @param {Object} ctx - Main module context
+   */
   function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
     if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
       return;
@@ -1227,6 +1559,33 @@ function getNowLineState(ctx) {
   // MAIN ORCHESTRATION FUNCTION
   // ============================================================================
 
+  /**
+   * Render grid/calendar widget for a single student
+   * Main entry point for grid rendering
+   *
+   * Workflow:
+   * 1. Validate and extract configuration (week view / custom range)
+   * 2. Calculate time range (vertical axis)
+   * 3. Create header with day labels
+   * 4. Create time axis with period/hour labels
+   * 5. For each day:
+   *    - Extract and normalize lessons
+   *    - Filter by max periods / time cutoff
+   *    - Render lesson cells (full-width / ticker / split view)
+   *    - Add absence overlays
+   *    - Add holiday / no-lessons notices
+   * 6. Initialize now-line updater
+   *
+   * @param {Object} ctx - Main module context
+   * @param {string} studentTitle - Student name
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Array} timetable - Array of lesson objects
+   * @param {Array} homeworks - Array of homework objects
+   * @param {Array} timeUnits - Array of time unit objects (periods)
+   * @param {Array} exams - Array of exam objects (not used in grid, but passed for context)
+   * @param {Array} absences - Array of absence objects
+   * @returns {HTMLElement} Grid widget wrapper element
+   */
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
     // 1. Validate and extract configuration
     const config = validateAndExtractGridConfig(ctx, studentConfig);
@@ -1378,6 +1737,14 @@ function getNowLineState(ctx) {
     return wrapper;
   }
 
+  /**
+   * Refresh past lesson masks
+   * Updates "past" CSS class on lesson cells based on current time
+   * Called by now-line updater every minute
+   *
+   * @param {Object} ctx - Main module context (provides _currentTodayYmd)
+   * @param {HTMLElement} rootEl - Root element to search (defaults to document)
+   */
   function refreshPastMasks(ctx, rootEl = null) {
     try {
       if (!ctx) return;
@@ -1409,6 +1776,16 @@ function getNowLineState(ctx) {
     }
   }
 
+  /**
+   * Update now-line position for all day columns
+   * Shows now-line only for today's column
+   * Hides now-line if showNowLine config is false
+   * Called by now-line updater every minute
+   *
+   * @param {Object} ctx - Main module context (provides studentConfig.showNowLine)
+   * @param {HTMLElement} rootEl - Root element to search (defaults to document)
+   * @returns {number} Number of now-lines updated
+   */
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
