@@ -10,7 +10,7 @@
 >
 > This project contains substantial AI-generated code. Review, test, and audit all files, web UI, and documentation before using it in production or safety-relevant contexts. Treat defaults and generated logic as untrusted until verified.
 
-A MagicMirror² module that displays WebUntis timetables, exams, homework, and absences.
+A MagicMirror² module that displays WebUntis timetables, exams, homework, absences and messagesofday.
 
 ## Installation
 
@@ -28,6 +28,35 @@ cd ~/MagicMirror/modules/MMM-Webuntis
 git pull
 npm ci --omit=dev
 ```
+
+### Troubleshooting: Git History Conflicts
+
+If `git pull` fails with errors like "divergent branches" or your commit history doesn't match the repository (e.g., after a history rewrite), you can reset your local installation:
+
+**⚠️ Warning:** This will **discard all local changes** (custom code etc.). Back them up first!
+
+**Option 1: Fresh Clone (Recommended for most users)**
+
+```bash
+cd ~/MagicMirror/modules
+mv MMM-Webuntis MMM-Webuntis.backup  # Backup your old installation
+git clone https://github.com/HeikoGr/MMM-Webuntis
+cd MMM-Webuntis
+npm ci --omit=dev
+```
+
+**Option 2: Force Reset (If you want to keep the same directory)**
+
+```bash
+cd ~/MagicMirror/modules/MMM-Webuntis
+
+# Reset to match the remote repository
+git fetch origin
+git reset --hard origin/master
+npm ci --omit=dev
+```
+
+After resetting, restart MagicMirror² to apply changes.
 
 ## Authentication Methods
 
