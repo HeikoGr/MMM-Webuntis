@@ -118,6 +118,50 @@ function getNowLineState(ctx) {
   }
 
   /**
+   * Interprets REST timetable status values directly (case-insensitive)
+   *
+   * @param {string} status - REST API status code (e.g. 'ADDITIONAL', 'CHANGED')
+   * @returns {boolean} True if status represents an irregular lesson
+   *
+   * Irregular REST statuses:
+   * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
+   */
+
+  function isIrregularStatus(status) {
+    const upperStatus = String(status || '').toUpperCase();
+    return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
+  }
+
+  /**
+   * Central utility function: Returns all status classes for a lesson
+   * @param {Object} lesson - Lesson object
+   * @param {Object} opts - Options: { nowYmd, nowMin, eMin, hasExam }
+   * @returns {string[]} Array of CSS classes
+   */
+  function getLessonStatusClasses(lesson, opts = {}) {
+    const classes = [];
+    if (lesson.activityType === 'BREAK_SUPERVISION') {
+      classes.push('lesson-break-supervision');
+    } else if (lesson.status === 'CANCELLED') {
+      classes.push('lesson-cancelled');
+    } else if (isIrregularStatus(lesson.status)) {
+      classes.push('lesson-substitution');
+    } else {
+      classes.push('lesson-regular');
+    }
+    if (opts.hasExam) classes.push('has-exam');
+    // Past lesson logic
+    const lessonYmd = Number(lesson.dateStr) || 0;
+    if (lessonYmd < opts.nowYmd) {
+      classes.push('past');
+    } else if (lessonYmd === opts.nowYmd) {
+      if (typeof opts.eMin === 'number' && !Number.isNaN(opts.eMin) && opts.eMin <= opts.nowMin) {
+        classes.push('past');
+      }
+    }
+    return classes;
+  }
+  /**
    * Get field value based on flexible configuration
    * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
    *
@@ -370,6 +414,7 @@ function getNowLineState(ctx) {
    * Calculate time range for grid (vertical axis)
    * Uses time units if available, otherwise infers from lesson data
    * Filters out lessons longer than 12 hours (likely data errors)
+   * Also checks for lessons outside timeUnits range (e.g., early supervision, late activities)
    *
    * @param {Array} timetable - Array of lesson objects
    * @param {Array} timeUnits - Array of time unit objects (startMin, endMin, name, startTime)
@@ -383,9 +428,27 @@ function getNowLineState(ctx) {
     let allEnd = -Infinity;
 
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+      // Calculate range from timeUnits first
       timeUnits.forEach((u) => {
         if (u.startMin !== undefined && u.startMin !== null) allStart = Math.min(allStart, u.startMin);
         if (u.endMin !== undefined && u.endMin !== null) allEnd = Math.max(allEnd, u.endMin);
+      });
+
+      // Also check timetable entries that fall outside timeUnits range
+      // (e.g., early morning supervision before first period, late activities after last period)
+      (Array.isArray(timetable) ? timetable : []).forEach((el) => {
+        const s = ctx._toMinutes(el.startTime);
+        const e = el.endTime ? ctx._toMinutes(el.endTime) : null;
+        if (s !== null && s !== undefined && e !== null && e !== undefined) {
+          // Only expand range for entries outside current bounds (prevents excessive expansion)
+          if (s < allStart || e > allEnd) {
+            // Sanity check: ignore unreasonably long entries (>12 hours)
+            if (e - s < 12 * 60) {
+              allStart = Math.min(allStart, s);
+              allEnd = Math.max(allEnd, e);
+            }
+          }
+        }
       });
     } else {
       (Array.isArray(timetable) ? timetable : []).forEach((el) => {
@@ -655,8 +718,8 @@ function getNowLineState(ctx) {
         code: el.code || '',
         substText: el.substText || '',
         text: el.lstext || '',
-        type: el.type || null,
         activityType: el.activityType || 'NORMAL_TEACHING_PERIOD',
+        status: el.status || 'REGULAR',
         lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
         // Original array fields for flexible display
         te: el.te || [],
@@ -724,12 +787,7 @@ function getNowLineState(ctx) {
       if (allEnd !== null && allEnd !== undefined) {
         return dayLessons.filter((lesson) => {
           // Always keep cancelled and irregular lessons
-          if (
-            lesson.code === 'cancelled' ||
-            lesson.status === 'CANCELLED' ||
-            lesson.code === 'irregular' ||
-            lesson.status === 'SUBSTITUTION'
-          ) {
+          if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
             return true;
           }
           const s = lesson.startMin;
@@ -742,6 +800,11 @@ function getNowLineState(ctx) {
     const filtered = dayLessons.filter((lesson) => {
       const s = lesson.startMin;
       if (s === undefined || s === null || Number.isNaN(s)) {
+        return true;
+      }
+
+      // Always show break supervisions (they can occur outside regular periods, e.g., early morning supervision)
+      if (lesson.activityType === 'BREAK_SUPERVISION') {
         return true;
       }
 
@@ -800,15 +863,19 @@ function getNowLineState(ctx) {
   /**
    * Check if lesson is an exam
    * Uses two detection methods:
-   * 1. REST API type field (type === 'EXAM')
+   * 1. REST API activityType field (activityType === 'EXAM')
    * 2. Fallback text-based keywords (Klassenarbeit, Klausur, Arbeit)
+   *
+   * Note: The raw REST API sends 'type: "EXAM"' which is mapped to 'activityType'
+   * during the REST timetable/lessons transformation in webuntisApiService.
+   * After transformation, the 'type' field in lesson objects is always null.
    *
    * @param {Object} lesson - Lesson object
    * @returns {boolean} True if lesson is an exam
    */
   function lessonHasExam(lesson) {
-    // Primary check: REST API provides `type: 'EXAM'` (uppercase) directly on lessons that are exams
-    if (lesson?.type && String(lesson.type).toUpperCase() === 'EXAM') return true;
+    // Primary check: REST API activityType field (mapped from raw API's 'type' field)
+    if (lesson?.activityType && String(lesson.activityType).toUpperCase() === 'EXAM') return true;
 
     // Fallback: Check if lesson text contains exam keywords
     const lText = String(lesson?.text || lesson?.lstext || '').toLowerCase();
@@ -1264,15 +1331,12 @@ function getNowLineState(ctx) {
           // Check for activity type first (BREAK_SUPERVISION)
           if (lesson.activityType === 'BREAK_SUPERVISION') {
             lessonDiv.classList.add('lesson-break-supervision');
+          } else if (lesson.status === 'CANCELLED') {
+            lessonDiv.classList.add('lesson-cancelled');
+          } else if (isIrregularStatus(lesson.status)) {
+            lessonDiv.classList.add('lesson-substitution');
           } else {
-            const lessonCode = lesson.code || '';
-            if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-              lessonDiv.classList.add('lesson-cancelled');
-            } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-              lessonDiv.classList.add('lesson-substitution');
-            } else {
-              lessonDiv.classList.add('lesson-regular');
-            }
+            lessonDiv.classList.add('lesson-regular');
           }
 
           if (isPast) lessonDiv.classList.add('past');
@@ -1360,48 +1424,30 @@ function getNowLineState(ctx) {
 
       // RULE 0: Generic split view for cancelled + non-cancelled lessons
       // Display replacement/event on left, cancelled lessons on right
-      const cancelledLessons = lessons.filter((l) => l.code === 'cancelled' || l.status === 'CANCELLED');
-      const nonCancelledLessons = lessons.filter((l) => l.code !== 'cancelled' && l.status !== 'CANCELLED');
+      const cancelledLessons = lessons.filter((l) => l.status === 'CANCELLED');
+      const nonCancelledLessons = lessons.filter((l) => l.status !== 'CANCELLED');
 
       if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1) {
         const { bothInner } = containers;
-
         // Left side: Non-cancelled lessons (replacement/event/regular)
-        // If only one lesson, use full height; if multiple, stack them individually
         if (nonCancelledLessons.length === 1) {
           const replacement = nonCancelledLessons[0];
           const leftCell = createLessonCell(topPx, heightPx, replacement.dateStr, eMin);
-
-          // Determine styling based on lesson type
-          if (replacement.code === 'irregular' || replacement.status === 'SUBSTITUTION') {
-            leftCell.classList.add('lesson-substitution', 'split-left');
-          } else {
-            leftCell.classList.add('lesson-regular', 'split-left');
-          }
-
-          if (hasExam) leftCell.classList.add('has-exam');
-          if (isPast) leftCell.classList.add('past');
+          getLessonStatusClasses(replacement, { nowYmd, nowMin, eMin, hasExam }).forEach((cls) => leftCell.classList.add(cls));
+          leftCell.classList.add('split-left');
           leftCell.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
           if (checkHomeworkMatch(replacement, homeworks)) {
             addHomeworkIcon(leftCell);
           }
           bothInner.appendChild(leftCell);
         } else {
-          // Multiple non-cancelled lessons: stack them individually
+          // Multiple non-cancelled lessons: stack sie individuell
           for (const lesson of nonCancelledLessons) {
             const lTopPx = Math.round(((lesson.startMin - allStart) / totalMinutes) * totalHeight);
             const lHeightPx = Math.max(12, Math.round(((lesson.endMin - lesson.startMin) / totalMinutes) * totalHeight));
-
             const leftCell = createLessonCell(lTopPx, lHeightPx, lesson.dateStr, lesson.endMin);
-
-            if (lesson.code === 'irregular' || lesson.status === 'SUBSTITUTION') {
-              leftCell.classList.add('lesson-substitution', 'split-left');
-            } else {
-              leftCell.classList.add('lesson-regular', 'split-left');
-            }
-
-            if (hasExam) leftCell.classList.add('has-exam');
-            if (isPast) leftCell.classList.add('past');
+            getLessonStatusClasses(lesson, { nowYmd, nowMin, eMin: lesson.endMin, hasExam }).forEach((cls) => leftCell.classList.add(cls));
+            leftCell.classList.add('split-left');
             leftCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
             if (checkHomeworkMatch(lesson, homeworks)) {
               addHomeworkIcon(leftCell);
@@ -1409,16 +1455,15 @@ function getNowLineState(ctx) {
             bothInner.appendChild(leftCell);
           }
         }
-
-        // Right side: Cancelled lessons stacked by their individual time slots
+        // Right side: Cancelled lessons
         for (const cancelled of cancelledLessons) {
           const cTopPx = Math.round(((cancelled.startMin - allStart) / totalMinutes) * totalHeight);
           const cHeightPx = Math.max(12, Math.round(((cancelled.endMin - cancelled.startMin) / totalMinutes) * totalHeight));
-
           const rightCell = createLessonCell(cTopPx, cHeightPx, cancelled.dateStr, cancelled.endMin);
-          rightCell.classList.add('lesson-cancelled', 'split-right');
-          if (hasExam) rightCell.classList.add('has-exam');
-          if (isPast) rightCell.classList.add('past');
+          getLessonStatusClasses(cancelled, { nowYmd, nowMin, eMin: cancelled.endMin, hasExam }).forEach((cls) =>
+            rightCell.classList.add(cls)
+          );
+          rightCell.classList.add('split-right');
           rightCell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
           if (checkHomeworkMatch(cancelled, homeworks)) {
             addHomeworkIcon(rightCell);
@@ -1434,29 +1479,11 @@ function getNowLineState(ctx) {
       else if (lessons.length === 1) {
         const lesson = lessons[0];
         const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
-
-        // Check for activity type first (BREAK_SUPERVISION)
-        if (lesson.activityType === 'BREAK_SUPERVISION') {
-          bothCell.classList.add('lesson-break-supervision');
-        } else {
-          const lessonCode = lesson.code || '';
-          if (lessonCode === 'cancelled' || lesson.status === 'CANCELLED') {
-            bothCell.classList.add('lesson-cancelled');
-          } else if (lessonCode === 'irregular' || lesson.status === 'SUBSTITUTION') {
-            bothCell.classList.add('lesson-substitution');
-          } else {
-            bothCell.classList.add('lesson-regular');
-          }
-        }
-
-        if (hasExam) bothCell.classList.add('has-exam');
-        if (isPast) bothCell.classList.add('past');
+        getLessonStatusClasses(lesson, { nowYmd, nowMin, eMin, hasExam }).forEach((cls) => bothCell.classList.add(cls));
         bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
-
         if (checkHomeworkMatch(lesson, homeworks)) {
           addHomeworkIcon(bothCell);
         }
-
         bothInner.appendChild(bothCell);
       }
     }
@@ -1762,14 +1789,12 @@ function getNowLineState(ctx) {
         if (!ds) return;
         const lessonYmd = Number(ds) || 0;
         const endMin = de !== null && de !== undefined ? Number(de) : NaN;
-        let isPast = false;
-        if (lessonYmd < todayYmd) {
-          isPast = true;
-        } else if (lessonYmd === todayYmd) {
-          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
+        // Konsistente Logik: Nur die 'past'-Klasse anpassen, andere bleiben erhalten
+        if (lessonYmd < todayYmd || (lessonYmd === todayYmd && !Number.isNaN(endMin) && endMin <= nowMin)) {
+          ln.classList.add('past');
+        } else {
+          ln.classList.remove('past');
         }
-        if (isPast) ln.classList.add('past');
-        else ln.classList.remove('past');
       });
     } catch (e) {
       log('warn', 'failed to refresh past masks', e);

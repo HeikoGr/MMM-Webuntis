@@ -12,6 +12,44 @@
   const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   /**
+   * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
+   *
+   * @param {Object|string} lessonOrStatus - Lesson object (with status/activityType) or REST API status code string.
+   * @returns {boolean} True if the lesson is considered irregular.
+   *
+   * Irregular indicators:
+   * - Status: 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'
+   * - Activity type: 'ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'
+   */
+
+  function isIrregularStatus(lessonOrStatus) {
+    // Accept either a lesson object or just the status string
+    if (typeof lessonOrStatus === 'string') {
+      const upperStatus = String(lessonOrStatus || '').toUpperCase();
+      return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
+    }
+
+    // Lesson object passed instead of status string
+    if (lessonOrStatus && typeof lessonOrStatus === 'object') {
+      const status = String(lessonOrStatus.status || '').toUpperCase();
+      const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
+
+      // Check status field
+      if (['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(status)) {
+        return true;
+      }
+
+      // Fallback: check if activityType indicates an irregular lesson
+      if (['ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'].includes(activityType)) {
+        return true;
+      }
+
+      return false;
+    }
+
+    return false;
+  }
+  /**
    * Render lessons widget for a single student
    * Displays lessons grouped by date, sorted by time, with visual indicators for:
    * - Cancelled lessons (code='cancelled' or status='CANCELLED')
@@ -119,8 +157,8 @@
         if (aTime !== bTime) return aTime - bTime;
 
         // Same time: cancelled lessons first, then substitutions/irregulars
-        const aCancelled = a.code === 'cancelled' || a.status === 'CANCELLED';
-        const bCancelled = b.code === 'cancelled' || b.status === 'CANCELLED';
+        const aCancelled = a.status === 'CANCELLED';
+        const bCancelled = b.status === 'CANCELLED';
         if (aCancelled && !bCancelled) return -1;
         if (!aCancelled && bCancelled) return 1;
 
@@ -155,11 +193,12 @@
         const timeForDay = new Date(year, month - 1, day);
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
+        const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
         if (
-          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
-          (isPast && (entry.code || '') !== 'error' && (ctx.config.logLevel ?? 'info') !== 'debug')
+          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && isRegularLesson) ||
+          (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')
         ) {
-          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
+          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
           continue;
         }
 
@@ -206,22 +245,16 @@
         }
 
         let addClass = '';
-        // Check for exam type: REST API type field ("EXAM" uppercase) or text-based fallback (lstext keywords)
-        if (entry.type && String(entry.type).toUpperCase() === 'EXAM') {
+        // Check for exam type: REST API activityType field ("EXAM" uppercase) or text-based fallback (lstext keywords)
+        if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
           addClass = 'exam';
         } else {
           const entryText = String(entry.lstext || '').toLowerCase();
           if (entryText.includes('klassenarbeit') || entryText.includes('klausur') || entryText.includes('arbeit')) {
             addClass = 'exam';
-          } else if (entry.code === 'cancelled') {
-            addClass = 'cancelled';
-          } else if (entry.code === 'irregular') {
-            addClass = 'substitution';
-          } else if (entry.code === 'error' || entry.code === 'info') {
-            addClass = entry.code;
           } else if (entry.status === 'CANCELLED') {
             addClass = 'cancelled';
-          } else if (entry.status === 'SUBSTITUTION' || (entry.substText && entry.substText.trim() !== '')) {
+          } else if (isIrregularStatus(entry) || (entry.substText && entry.substText.trim() !== '')) {
             addClass = 'substitution';
           }
         }
