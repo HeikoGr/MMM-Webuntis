@@ -370,6 +370,7 @@ function getNowLineState(ctx) {
    * Calculate time range for grid (vertical axis)
    * Uses time units if available, otherwise infers from lesson data
    * Filters out lessons longer than 12 hours (likely data errors)
+   * Also checks for lessons outside timeUnits range (e.g., early supervision, late activities)
    *
    * @param {Array} timetable - Array of lesson objects
    * @param {Array} timeUnits - Array of time unit objects (startMin, endMin, name, startTime)
@@ -383,9 +384,27 @@ function getNowLineState(ctx) {
     let allEnd = -Infinity;
 
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+      // Calculate range from timeUnits first
       timeUnits.forEach((u) => {
         if (u.startMin !== undefined && u.startMin !== null) allStart = Math.min(allStart, u.startMin);
         if (u.endMin !== undefined && u.endMin !== null) allEnd = Math.max(allEnd, u.endMin);
+      });
+
+      // Also check timetable entries that fall outside timeUnits range
+      // (e.g., early morning supervision before first period, late activities after last period)
+      (Array.isArray(timetable) ? timetable : []).forEach((el) => {
+        const s = ctx._toMinutes(el.startTime);
+        const e = el.endTime ? ctx._toMinutes(el.endTime) : null;
+        if (s !== null && s !== undefined && e !== null && e !== undefined) {
+          // Only expand range for entries outside current bounds (prevents excessive expansion)
+          if (s < allStart || e > allEnd) {
+            // Sanity check: ignore unreasonably long entries (>12 hours)
+            if (e - s < 12 * 60) {
+              allStart = Math.min(allStart, s);
+              allEnd = Math.max(allEnd, e);
+            }
+          }
+        }
       });
     } else {
       (Array.isArray(timetable) ? timetable : []).forEach((el) => {
@@ -742,6 +761,11 @@ function getNowLineState(ctx) {
     const filtered = dayLessons.filter((lesson) => {
       const s = lesson.startMin;
       if (s === undefined || s === null || Number.isNaN(s)) {
+        return true;
+      }
+
+      // Always show break supervisions (they can occur outside regular periods, e.g., early morning supervision)
+      if (lesson.activityType === 'BREAK_SUPERVISION') {
         return true;
       }
 
