@@ -118,13 +118,12 @@ function getNowLineState(ctx) {
   }
 
   /**
-   * Check if lesson status is "irregular" (substitution/replacement/additional)
-   * Based on REST API status values mapping to legacy codes
+   * Interprets REST timetable status values directly (case-insensitive)
    *
-   * @param {string} status - REST API status code
-   * @returns {boolean} True if status represents irregular lesson
+   * @param {string} status - REST API status code (e.g. 'ADDITIONAL', 'CHANGED')
+   * @returns {boolean} True if status represents an irregular lesson
    *
-   * Irregular statuses:
+   * Irregular REST statuses:
    * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
    */
 
@@ -134,10 +133,10 @@ function getNowLineState(ctx) {
   }
 
   /**
-   * Zentrale Utility-Funktion: Liefert alle Statusklassen für eine Lesson
-   * @param {Object} lesson - Lesson-Objekt
-   * @param {Object} opts - Optionen: { nowYmd, nowMin, eMin, hasExam }
-   * @returns {string[]} Array der CSS-Klassen
+   * Central utility function: Returns all status classes for a lesson
+   * @param {Object} lesson - Lesson object
+   * @param {Object} opts - Options: { nowYmd, nowMin, eMin, hasExam }
+   * @returns {string[]} Array of CSS classes
    */
   function getLessonStatusClasses(lesson, opts = {}) {
     const classes = [];
@@ -151,7 +150,7 @@ function getNowLineState(ctx) {
       classes.push('lesson-regular');
     }
     if (opts.hasExam) classes.push('has-exam');
-    // Vergangenheits-Logik
+    // Past lesson logic
     const lessonYmd = Number(lesson.dateStr) || 0;
     if (lessonYmd < opts.nowYmd) {
       classes.push('past');
@@ -868,8 +867,8 @@ function getNowLineState(ctx) {
    * 2. Fallback text-based keywords (Klassenarbeit, Klausur, Arbeit)
    *
    * Note: The raw REST API sends 'type: "EXAM"' which is mapped to 'activityType'
-   * during transformation (see lib/webuntisApiService.js#L260). The 'type' field
-   * in lesson objects is always null.
+   * during the REST timetable/lessons transformation in webuntisApiService.
+   * After transformation, the 'type' field in lesson objects is always null.
    *
    * @param {Object} lesson - Lesson object
    * @returns {boolean} True if lesson is an exam
