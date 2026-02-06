@@ -12,14 +12,14 @@
   const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   /**
-   * Check if lesson status is "irregular" (substitution/replacement/additional)
-   * Based on REST API status values mapping to legacy codes
+   * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
    *
-   * @param {string} status - REST API status code
-   * @returns {boolean} True if status represents irregular lesson
+   * @param {Object|string} lessonOrStatus - Lesson object (with status/activityType) or REST API status code string.
+   * @returns {boolean} True if the lesson is considered irregular.
    *
-   * Irregular statuses:
-   * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
+   * Irregular indicators:
+   * - Status: 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'
+   * - Activity type: 'ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'
    */
 
   function isIrregularStatus(lessonOrStatus) {
@@ -193,11 +193,12 @@
         const timeForDay = new Date(year, month - 1, day);
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
+        const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
         if (
-          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && (entry.code || '') === '') ||
-          (isPast && (entry.code || '') !== 'error' && (ctx.config.logLevel ?? 'info') !== 'debug')
+          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && isRegularLesson) ||
+          (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')
         ) {
-          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, code=${entry.code || 'none'})`);
+          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
           continue;
         }
 
@@ -244,8 +245,8 @@
         }
 
         let addClass = '';
-        // Check for exam type: REST API type field ("EXAM" uppercase) or text-based fallback (lstext keywords)
-        if (entry.type && String(entry.type).toUpperCase() === 'EXAM') {
+        // Check for exam type: REST API activityType field ("EXAM" uppercase) or text-based fallback (lstext keywords)
+        if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
           addClass = 'exam';
         } else {
           const entryText = String(entry.lstext || '').toLowerCase();
