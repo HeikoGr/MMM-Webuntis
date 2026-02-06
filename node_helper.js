@@ -12,13 +12,7 @@ const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = req
 const { createBackendLogger } = require('./lib/logger');
 const webuntisApiService = require('./lib/webuntisApiService');
 const AuthService = require('./lib/authService');
-const {
-  calculateFetchRanges,
-  mapRestStatusToLegacyCode,
-  sanitizeHtmlText,
-  normalizeDateToInteger,
-  normalizeTimeToMinutes,
-} = require('./lib/dataOrchestration');
+const { calculateFetchRanges, sanitizeHtmlText, normalizeDateToInteger, normalizeTimeToMinutes } = require('./lib/dataOrchestration');
 const CacheManager = require('./lib/cacheManager');
 const errorHandler = require('./lib/errorHandler');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
@@ -295,10 +289,6 @@ module.exports = NodeHelper.create({
    * @param {string} substitutionText - Optional text to include in error message
    * @returns {number} Legacy code format for frontend consumption
    */
-  _mapRestStatusToLegacyCode(status, substitutionText) {
-    return mapRestStatusToLegacyCode(status, substitutionText);
-  },
-
   /**
    * Cleanup old debug dumps, keeping only the N most recent files
    * @param {string} dumpDir - Directory containing debug dump files
@@ -662,7 +652,6 @@ module.exports = NodeHelper.create({
         classId,
         resourceType: resourceType || null,
         logger: this._mmLog.bind(this),
-        mapStatusToCode: this._mapRestStatusToLegacyCode.bind(this),
         debugApi: Boolean(debugApi),
         dumpRaw: Boolean(dumpRawApiResponses),
       });
