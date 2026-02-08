@@ -504,9 +504,18 @@ Module.register('MMM-Webuntis', {
    */
   _filterTimetableRange(entries, studentConfig) {
     // Filter timetable entries by date range based on config (nextDays/pastDays)
+    // IMPORTANT: If weekView is enabled, backend already calculated correct range (Mon-Fri),
+    // so we should NOT filter again with static nextDays/pastDays values
     if (!Array.isArray(entries) || entries.length === 0) return [];
     const cfg = studentConfig || {};
     const defaults = this.defaults || {};
+
+    // Check if weekView is enabled - if yes, skip filtering (backend handles it correctly)
+    const weekView = cfg.grid?.weekView ?? defaults.grid?.weekView ?? false;
+    if (weekView) {
+      this._log('debug', `[filterTimetable] weekView=true, skipping frontend date filter (backend handles range)`);
+      return entries.slice();
+    }
 
     // Legacy keys are already normalized in backend (configValidator.js)
     // Priority: grid-specific > student-level > defaults

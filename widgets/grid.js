@@ -118,48 +118,19 @@ function getNowLineState(ctx) {
   }
 
   /**
-   * Interprets REST timetable status values directly (case-insensitive)
+   * Check if lesson status is "irregular" (substitution/replacement/additional)
+   * Based on REST API status values mapping to legacy codes
    *
-   * @param {string} status - REST API status code (e.g. 'ADDITIONAL', 'CHANGED')
-   * @returns {boolean} True if status represents an irregular lesson
+   * @param {string} status - REST API status code
+   * @returns {boolean} True if status represents irregular lesson
    *
-   * Irregular REST statuses:
+   * Irregular statuses:
    * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
    */
 
   function isIrregularStatus(status) {
     const upperStatus = String(status || '').toUpperCase();
     return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
-  }
-
-  /**
-   * Central utility function: Returns all status classes for a lesson
-   * @param {Object} lesson - Lesson object
-   * @param {Object} opts - Options: { nowYmd, nowMin, eMin, hasExam }
-   * @returns {string[]} Array of CSS classes
-   */
-  function getLessonStatusClasses(lesson, opts = {}) {
-    const classes = [];
-    if (lesson.activityType === 'BREAK_SUPERVISION') {
-      classes.push('lesson-break-supervision');
-    } else if (lesson.status === 'CANCELLED') {
-      classes.push('lesson-cancelled');
-    } else if (isIrregularStatus(lesson.status)) {
-      classes.push('lesson-substitution');
-    } else {
-      classes.push('lesson-regular');
-    }
-    if (opts.hasExam) classes.push('has-exam');
-    // Past lesson logic
-    const lessonYmd = Number(lesson.dateStr) || 0;
-    if (lessonYmd < opts.nowYmd) {
-      classes.push('past');
-    } else if (lessonYmd === opts.nowYmd) {
-      if (typeof opts.eMin === 'number' && !Number.isNaN(opts.eMin) && opts.eMin <= opts.nowMin) {
-        classes.push('past');
-      }
-    }
-    return classes;
   }
   /**
    * Get field value based on flexible configuration
@@ -249,12 +220,13 @@ function getNowLineState(ctx) {
     const tick = () => {
       try {
         const nowLocal = new Date();
-        const nowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+        // Calculate real date (not affected by debugDate)
+        const realNowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
         // Only refresh data if debugDate is NOT set (i.e., using real time) and the day has changed
         const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
         if (!isDebugMode) {
-          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = nowYmd;
-          if (nowYmd !== ctx._currentTodayYmd) {
+          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = realNowYmd;
+          if (realNowYmd !== ctx._currentTodayYmd) {
             try {
               // Use the debounced _sendFetchData if available, otherwise direct socket call
               if (typeof ctx._sendFetchData === 'function') {
@@ -270,7 +242,7 @@ function getNowLineState(ctx) {
             } catch {
               // ignore
             }
-            ctx._currentTodayYmd = nowYmd;
+            ctx._currentTodayYmd = realNowYmd;
           }
         }
 
@@ -867,8 +839,8 @@ function getNowLineState(ctx) {
    * 2. Fallback text-based keywords (Klassenarbeit, Klausur, Arbeit)
    *
    * Note: The raw REST API sends 'type: "EXAM"' which is mapped to 'activityType'
-   * during the REST timetable/lessons transformation in webuntisApiService.
-   * After transformation, the 'type' field in lesson objects is always null.
+   * during transformation (see lib/webuntisApiService.js#L260). The 'type' field
+   * in lesson objects is always null.
    *
    * @param {Object} lesson - Lesson object
    * @returns {boolean} True if lesson is an exam
@@ -994,6 +966,56 @@ function getNowLineState(ctx) {
   // ============================================================================
   // LESSON CELL RENDERING
   // ============================================================================
+
+  /**
+   * Apply CSS classes to lesson element
+   * Centralized function for consistent class assignment across all lesson rendering modes
+   *
+   * @param {HTMLElement} element - Lesson cell element
+   * @param {Object} lesson - Lesson object
+   * @param {Object} options - Options for class assignment
+   * @param {boolean} options.hasExam - True if lesson has exam
+   * @param {boolean} options.isPast - True if lesson is in the past (used when nowYmd/nowMin not provided)
+   * @param {Array<string>} options.additionalClasses - Additional classes (e.g., 'split-left', 'split-right')
+   * @param {number|null} options.nowYmd - Current date as YYYYMMDD integer (for individual isPast calculation)
+   * @param {number|null} options.nowMin - Current time in minutes (for individual isPast calculation)
+   */
+  function applyLessonClasses(element, lesson, options = {}) {
+    const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
+
+    // Apply lesson type classes
+    if (lesson.activityType === 'BREAK_SUPERVISION') {
+      element.classList.add('lesson-break-supervision');
+    } else if (lesson.status === 'CANCELLED') {
+      element.classList.add('lesson-cancelled');
+    } else if (isIrregularStatus(lesson.status)) {
+      element.classList.add('lesson-substitution');
+    } else {
+      element.classList.add('lesson-regular');
+    }
+
+    // Apply additional classes (e.g., split-left, split-right)
+    if (additionalClasses.length > 0) {
+      element.classList.add(...additionalClasses);
+    }
+
+    // Calculate isPast (either from parameter or calculate individually)
+    let lessonIsPast = isPast;
+    if (nowYmd !== null && nowMin !== null) {
+      // Individual calculation for ticker items
+      const lessonYmd = Number(lesson.dateStr) || 0;
+      lessonIsPast = false;
+      if (lessonYmd < nowYmd) {
+        lessonIsPast = true;
+      } else if (lessonYmd === nowYmd) {
+        if (lesson.endMin <= nowMin) lessonIsPast = true;
+      }
+    }
+
+    // Apply state classes
+    if (lessonIsPast) element.classList.add('past');
+    if (hasExam) element.classList.add('has-exam');
+  }
 
   /**
    * Create a lesson cell container
@@ -1236,10 +1258,12 @@ function getNowLineState(ctx) {
    * @param {Object} ctx - Main module context
    * @param {Function} escapeHtml - HTML escape function
    * @param {boolean} hasExam - True if any lesson in group is an exam
-   * @param {boolean} isPast - True if lesson is in the past
+   * @param {boolean} isPast - True if lesson group is in the past (used for ticker wrapper)
    * @param {Array} homeworks - Array of homework objects
+   * @param {number} nowYmd - Current date as YYYYMMDD integer
+   * @param {number} nowMin - Current time in minutes since midnight
    */
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks) {
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks, nowYmd, nowMin) {
     // Group lessons by subject (same subject = one ticker unit, displayed stacked)
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
@@ -1327,20 +1351,12 @@ function getNowLineState(ctx) {
           lessonDiv.style.left = '0';
           lessonDiv.style.right = '0';
 
-          // Apply lesson type styling based on individual lesson
-          // Check for activity type first (BREAK_SUPERVISION)
-          if (lesson.activityType === 'BREAK_SUPERVISION') {
-            lessonDiv.classList.add('lesson-break-supervision');
-          } else if (lesson.status === 'CANCELLED') {
-            lessonDiv.classList.add('lesson-cancelled');
-          } else if (isIrregularStatus(lesson.status)) {
-            lessonDiv.classList.add('lesson-substitution');
-          } else {
-            lessonDiv.classList.add('lesson-regular');
-          }
-
-          if (isPast) lessonDiv.classList.add('past');
-          if (hasExam) lessonDiv.classList.add('has-exam');
+          // Apply lesson classes (type, past, exam)
+          applyLessonClasses(lessonDiv, lesson, {
+            hasExam,
+            nowYmd,
+            nowMin,
+          });
 
           lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
 
@@ -1412,6 +1428,8 @@ function getNowLineState(ctx) {
       const topPx = Math.round(((sMin - allStart) / totalMinutes) * totalHeight);
       const heightPx = Math.max(12, Math.round(((eMin - sMin) / totalMinutes) * totalHeight));
 
+      // Calculate isPast for the group (used for ticker wrapper and split views)
+      // Note: Individual lessons in ticker get their own isPast calculation via refreshPastMasks
       const lessonYmd = Number(firstLesson.dateStr) || 0;
       let isPast = false;
       if (lessonYmd < nowYmd) {
@@ -1429,25 +1447,40 @@ function getNowLineState(ctx) {
 
       if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1) {
         const { bothInner } = containers;
+
         // Left side: Non-cancelled lessons (replacement/event/regular)
+        // If only one lesson, use full height; if multiple, stack them individually
         if (nonCancelledLessons.length === 1) {
           const replacement = nonCancelledLessons[0];
           const leftCell = createLessonCell(topPx, heightPx, replacement.dateStr, eMin);
-          getLessonStatusClasses(replacement, { nowYmd, nowMin, eMin, hasExam }).forEach((cls) => leftCell.classList.add(cls));
-          leftCell.classList.add('split-left');
+
+          // Apply lesson classes with split-left flag
+          applyLessonClasses(leftCell, replacement, {
+            hasExam,
+            isPast,
+            additionalClasses: ['split-left'],
+          });
+
           leftCell.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
           if (checkHomeworkMatch(replacement, homeworks)) {
             addHomeworkIcon(leftCell);
           }
           bothInner.appendChild(leftCell);
         } else {
-          // Multiple non-cancelled lessons: stack sie individuell
+          // Multiple non-cancelled lessons: stack them individually
           for (const lesson of nonCancelledLessons) {
             const lTopPx = Math.round(((lesson.startMin - allStart) / totalMinutes) * totalHeight);
             const lHeightPx = Math.max(12, Math.round(((lesson.endMin - lesson.startMin) / totalMinutes) * totalHeight));
+
             const leftCell = createLessonCell(lTopPx, lHeightPx, lesson.dateStr, lesson.endMin);
-            getLessonStatusClasses(lesson, { nowYmd, nowMin, eMin: lesson.endMin, hasExam }).forEach((cls) => leftCell.classList.add(cls));
-            leftCell.classList.add('split-left');
+
+            // Apply lesson classes with split-left flag
+            applyLessonClasses(leftCell, lesson, {
+              hasExam,
+              isPast,
+              additionalClasses: ['split-left'],
+            });
+
             leftCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
             if (checkHomeworkMatch(lesson, homeworks)) {
               addHomeworkIcon(leftCell);
@@ -1455,15 +1488,21 @@ function getNowLineState(ctx) {
             bothInner.appendChild(leftCell);
           }
         }
-        // Right side: Cancelled lessons
+
+        // Right side: Cancelled lessons stacked by their individual time slots
         for (const cancelled of cancelledLessons) {
           const cTopPx = Math.round(((cancelled.startMin - allStart) / totalMinutes) * totalHeight);
           const cHeightPx = Math.max(12, Math.round(((cancelled.endMin - cancelled.startMin) / totalMinutes) * totalHeight));
+
           const rightCell = createLessonCell(cTopPx, cHeightPx, cancelled.dateStr, cancelled.endMin);
-          getLessonStatusClasses(cancelled, { nowYmd, nowMin, eMin: cancelled.endMin, hasExam }).forEach((cls) =>
-            rightCell.classList.add(cls)
-          );
-          rightCell.classList.add('split-right');
+
+          // Apply lesson classes with split-right flag
+          applyLessonClasses(rightCell, cancelled, {
+            hasExam,
+            isPast,
+            additionalClasses: ['split-right'],
+          });
+
           rightCell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
           if (checkHomeworkMatch(cancelled, homeworks)) {
             addHomeworkIcon(rightCell);
@@ -1473,17 +1512,25 @@ function getNowLineState(ctx) {
       }
       // RULE 1: Two or more overlapping lessons -> ticker
       else if (lessons.length >= 2) {
-        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks);
+        createTickerAnimation(lessons, topPx, heightPx, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks, nowYmd, nowMin);
       }
       // RULE 2: Single lesson -> full width cell
       else if (lessons.length === 1) {
         const lesson = lessons[0];
         const bothCell = createLessonCell(topPx, heightPx, lesson.dateStr, eMin);
-        getLessonStatusClasses(lesson, { nowYmd, nowMin, eMin, hasExam }).forEach((cls) => bothCell.classList.add(cls));
+
+        // Apply lesson classes (type, past, exam)
+        applyLessonClasses(bothCell, lesson, {
+          hasExam,
+          isPast,
+        });
+
         bothCell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
+
         if (checkHomeworkMatch(lesson, homeworks)) {
           addHomeworkIcon(bothCell);
         }
+
         bothInner.appendChild(bothCell);
       }
     }
@@ -1748,18 +1795,21 @@ function getNowLineState(ctx) {
 
     wrapper.appendChild(grid);
 
-    // Draw nowLine immediately on first render
-    try {
-      const gridWidget = ctx?._getWidgetApi?.()?.grid;
-      if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
-        gridWidget.updateNowLinesAll(ctx, wrapper);
+    // Draw nowLine and set past masks immediately on first render
+    // Use setTimeout to ensure DOM is fully updated before running
+    setTimeout(() => {
+      try {
+        const gridWidget = ctx?._getWidgetApi?.()?.grid;
+        if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
+          gridWidget.updateNowLinesAll(ctx, wrapper);
+        }
+        if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
+          gridWidget.refreshPastMasks(ctx, wrapper);
+        }
+      } catch (e) {
+        log('warn', 'initial now-line/past-mask update failed', e);
       }
-      if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
-        gridWidget.refreshPastMasks(ctx, wrapper);
-      }
-    } catch {
-      // ignore
-    }
+    }, 0);
 
     return wrapper;
   }
@@ -1767,7 +1817,8 @@ function getNowLineState(ctx) {
   /**
    * Refresh past lesson masks
    * Updates "past" CSS class on lesson cells based on current time
-   * Called by now-line updater every minute
+   * Handles both regular lesson cells and ticker animations
+   * Called by now-line updater every minute and initially after rendering
    *
    * @param {Object} ctx - Main module context (provides _currentTodayYmd)
    * @param {HTMLElement} rootEl - Root element to search (defaults to document)
@@ -1782,6 +1833,8 @@ function getNowLineState(ctx) {
           : nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+
+      // Update regular lesson cells (.grid-lesson)
       const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
       lessons.forEach((ln) => {
         const ds = ln.getAttribute('data-date');
@@ -1789,12 +1842,37 @@ function getNowLineState(ctx) {
         if (!ds) return;
         const lessonYmd = Number(ds) || 0;
         const endMin = de !== null && de !== undefined ? Number(de) : NaN;
-        // Konsistente Logik: Nur die 'past'-Klasse anpassen, andere bleiben erhalten
-        if (lessonYmd < todayYmd || (lessonYmd === todayYmd && !Number.isNaN(endMin) && endMin <= nowMin)) {
-          ln.classList.add('past');
-        } else {
-          ln.classList.remove('past');
+        let isPast = false;
+        if (lessonYmd < todayYmd) {
+          isPast = true;
+        } else if (lessonYmd === todayYmd) {
+          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
         }
+        if (isPast) ln.classList.add('past');
+        else ln.classList.remove('past');
+      });
+
+      // Update ticker wrappers (for overlapping lessons)
+      const tickers = scope.querySelectorAll('.grid-combined .lesson-ticker-wrapper');
+      tickers.forEach((ticker) => {
+        const ds = ticker.getAttribute('data-date');
+        const de = ticker.getAttribute('data-end-min');
+        if (!ds) return;
+        const lessonYmd = Number(ds) || 0;
+        const endMin = de !== null && de !== undefined ? Number(de) : NaN;
+        let isPast = false;
+        if (lessonYmd < todayYmd) {
+          isPast = true;
+        } else if (lessonYmd === todayYmd) {
+          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
+        }
+
+        // Update all lesson-content divs within ticker
+        const lessonDivs = ticker.querySelectorAll('.lesson-content');
+        lessonDivs.forEach((div) => {
+          if (isPast) div.classList.add('past');
+          else div.classList.remove('past');
+        });
       });
     } catch (e) {
       log('warn', 'failed to refresh past masks', e);
