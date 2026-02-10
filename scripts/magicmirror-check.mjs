@@ -161,7 +161,7 @@ function normalizePackage(pkg, moduleName) {
     if (typeof repo !== 'string') repo = '';
     repo = repo.replace(/^git\+/, '').replace(/\.git$/, '');
   } catch {
-    repo = '';
+    // repo already initialized to ''
   }
   out.repositoryUrl = repo;
   out.dependencies = pkg && typeof pkg.dependencies === 'object' && pkg.dependencies ? pkg.dependencies : {};

@@ -213,10 +213,31 @@
         const formattedStart = `${hh}:${mm}`;
         const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
         const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
+
+        // Find end period label for lessons spanning multiple periods (e.g., 750-935 = "1.-2.")
+        let endPeriodLabel = startLabel;
+        if (startLabel && entry.endTime) {
+          // Find all period start times between this lesson's start and end
+          const sortedStarts = Object.keys(startTimesMap)
+            .map(Number)
+            .filter((t) => t > entry.startTime && t < entry.endTime)
+            .sort((a, b) => b - a); // descending to get the latest period
+
+          if (sortedStarts.length > 0) {
+            const lastStart = sortedStarts[0];
+            endPeriodLabel = startTimesMap[lastStart];
+          }
+        }
+
         if (getWidgetConfig(studentConfig, 'lessons', 'showStartTime')) {
           timeStr += formattedStart;
         } else if (startLabel !== undefined) {
-          timeStr += `${startLabel}.`;
+          // Show period range if lesson spans multiple periods (e.g., "1.-2.")
+          if (endPeriodLabel !== undefined && endPeriodLabel !== startLabel) {
+            timeStr += `${startLabel}.-${endPeriodLabel}.`;
+          } else {
+            timeStr += `${startLabel}.`;
+          }
         } else {
           timeStr += formattedStart;
         }

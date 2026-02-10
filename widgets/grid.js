@@ -1264,10 +1264,25 @@ function getNowLineState(ctx) {
    * @param {number} nowMin - Current time in minutes since midnight
    */
   function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks, nowYmd, nowMin) {
-    // Group lessons by subject (same subject = one ticker unit, displayed stacked)
+    // Group lessons by subject + teacher/studentGroup for parallel classes
+    // Same subject at same time with different teachers/groups = separate ticker items
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
         return lesson.su[0].name || lesson.su[0].longname;
+      }
+      return null;
+    };
+
+    const getTeacherName = (lesson) => {
+      if (lesson.te && lesson.te.length > 0) {
+        return lesson.te[0].name || lesson.te[0].longname;
+      }
+      return null;
+    };
+
+    const getStudentGroupName = (lesson) => {
+      if (lesson.sg && lesson.sg.length > 0) {
+        return lesson.sg[0].name || lesson.sg[0].longname;
       }
       return null;
     };
@@ -1276,7 +1291,13 @@ function getNowLineState(ctx) {
     for (let index = 0; index < lessons.length; index++) {
       const lesson = lessons[index];
       const subject = getSubjectName(lesson);
-      const groupKey = subject || `unknown_${lesson.id ?? index}`;
+      const teacher = getTeacherName(lesson);
+      const studentGroup = getStudentGroupName(lesson);
+
+      // Group key includes teacher/studentGroup to separate parallel classes with same subject
+      // Lessons are only grouped together if they have same subject, teacher, studentGroup
+      const groupKey = `${subject || 'unknown'}_${teacher || 'noTeacher'}_${studentGroup || 'noGroup'}`;
+
       if (!subjectGroups.has(groupKey)) {
         subjectGroups.set(groupKey, []);
       }
@@ -1442,10 +1463,18 @@ function getNowLineState(ctx) {
 
       // RULE 0: Generic split view for cancelled + non-cancelled lessons
       // Display replacement/event on left, cancelled lessons on right
+      // BUT: Only use split view for true replacements (same student group)
+      // For parallel classes (different student groups), use ticker instead
       const cancelledLessons = lessons.filter((l) => l.status === 'CANCELLED');
       const nonCancelledLessons = lessons.filter((l) => l.status !== 'CANCELLED');
 
-      if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1) {
+      // Check if all lessons are for the same student group
+      // Different groups = parallel classes scenario → use ticker
+      const allStudentGroups = lessons.map((l) => l.sg?.[0]?.name || '').filter(Boolean);
+      const uniqueStudentGroups = new Set(allStudentGroups);
+      const hasDifferentGroups = uniqueStudentGroups.size > 1;
+
+      if (cancelledLessons.length >= 1 && nonCancelledLessons.length >= 1 && !hasDifferentGroups) {
         const { bothInner } = containers;
 
         // Left side: Non-cancelled lessons (replacement/event/regular)

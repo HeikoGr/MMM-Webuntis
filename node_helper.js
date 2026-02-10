@@ -1604,7 +1604,7 @@ module.exports = NodeHelper.create({
    */
   async processGroup(credKey, students, identifier, sessionKey, config) {
     // Single-run processing: authenticate (authService handles caching), fetch data for each student, and logout.
-    let authSession = null;
+    let authSession;
     const sample = students[0];
     const groupWarnings = [];
     // Per-fetch-cycle warning deduplication set. Ensures identical warnings
