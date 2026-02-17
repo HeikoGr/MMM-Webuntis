@@ -257,6 +257,27 @@ Set via `displayMode` (comma-separated):
 displayMode: "grid,exams,homework"
 ```
 
+## Class Timetable Mode
+
+By default, MMM-Webuntis shows the **student's personal timetable** with their specific schedule. Some schools only provide **class timetables** that show the entire class schedule.
+
+Enable class timetable mode per student:
+
+```javascript
+students: [
+  {
+    title: "Alice",
+    qrcode: "untis://...",
+    useClassTimetable: true  // Show class timetable instead of personal schedule
+  }
+]
+```
+
+**When to use:**
+- Your school uses class-based schedules instead of individual student schedules
+- You want to see the entire class schedule instead of just your child's lessons
+- Personal timetable shows no data but class timetable is available
+
 ## Configuration
 
 For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).

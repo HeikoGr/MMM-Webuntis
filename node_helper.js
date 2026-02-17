@@ -339,8 +339,9 @@ module.exports = NodeHelper.create({
 
   /**
    * Collect class candidates from WebUntis API response data
-   * Recursively walks through the data structure to find class entries
-   * Filters by resourceType='CLASS' to avoid teachers/rooms
+   * Reads structured class information from known API response fields:
+   *   - timetable/filter: data.classes[].class
+   *   - classservices: data (direct array or nested structure)
    *
    * @param {any} data - API response data (object or array)
    * @returns {Array} Array of class candidates with {id, name, shortName, longName}
@@ -348,74 +349,91 @@ module.exports = NodeHelper.create({
   _collectClassCandidates(data) {
     const candidates = new Map(); // id -> candidate
 
-    // Internal function to add a single candidate if it's a valid class entry
-    const addCandidate = (item) => {
-      if (!item || typeof item !== 'object') return;
-      const type = (item.resourceType || item.elementType || item.type || item.category || '').toString().toUpperCase();
-      // Accept only class-typed or untyped entries to avoid pulling in rooms/teachers
-      if (type && type !== 'CLASS') return;
+    // Helper to add a class candidate
+    const addCandidate = (classObj) => {
+      if (!classObj || typeof classObj !== 'object') return;
+      if (!classObj.id) return;
 
-      const name =
-        item.name ||
-        item.shortName ||
-        item.longName ||
-        item.displayName ||
-        (item.current && (item.current.shortName || item.current.name || item.current.longName));
-      if (!item.id || !name) return;
+      const name = classObj.shortName || classObj.displayName || classObj.name || classObj.longName;
+      if (!name) return;
 
-      if (!candidates.has(item.id)) {
-        candidates.set(item.id, {
-          id: item.id,
+      if (!candidates.has(classObj.id)) {
+        candidates.set(classObj.id, {
+          id: classObj.id,
           name: name,
-          shortName: item.shortName || (item.current && item.current.shortName) || name,
-          longName: item.longName || (item.current && item.current.longName) || name,
+          shortName: classObj.shortName || classObj.displayName || name,
+          longName: classObj.longName || name,
         });
       }
     };
 
-    const walk = (node) => {
-      if (!node) return;
-      if (Array.isArray(node)) {
-        node.forEach(walk);
-        return;
-      }
-      if (typeof node !== 'object') return;
+    // Strategy 1: timetable/filter response format - classes in structured array
+    // Example: { classes: [{ class: {...}, classTeacher1: {...}, classTeacher2: {...} }] }
+    if (data?.classes && Array.isArray(data.classes)) {
+      data.classes.forEach((item) => {
+        if (item.class) {
+          addCandidate(item.class); // Read from classes[].class
+        }
+      });
+    }
 
-      addCandidate(node);
-      Object.values(node).forEach((v) => walk(v));
-    };
+    // Strategy 2: classservices response format - array of class objects
+    // Could be direct array or nested in data.data
+    const classArray = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : null;
+    if (classArray) {
+      classArray.forEach((item) => {
+        // Only add items that have type='CLASS' or look like class objects
+        const type = (item.resourceType || item.elementType || item.type || '').toString().toUpperCase();
+        if (!type || type === 'CLASS') {
+          addCandidate(item);
+        }
+      });
+    }
 
-    walk(data);
+    // Strategy 3: Single class object (fallback)
+    if (data?.id && (data.shortName || data.longName || data.displayName)) {
+      addCandidate(data);
+    }
+
     return Array.from(candidates.values());
   },
 
   /**
-   * Resolve class ID from class name using REST API endpoints
-   * Tries two strategies:
-   *   1. classservices endpoint (when studentId available) - most accurate
-   *   2. timetable/filter endpoint - broader search
+   * Resolve class ID from class name using REST API
+   * Strategy depends on user role:
+   *   - LEGAL_GUARDIAN: Uses classservices API (provides studentId→classId mapping)
+   *   - STUDENT/TEACHER: Uses timetable/filter API (provides preSelected class)
    * Caches results for 24 hours to avoid repeated API calls
+   *
+   * Priority order:
+   *   1. personKlasseMap (LEGAL_GUARDIAN only) - maps studentId to classId
+   *   2. preSelected class from timetable/filter (STUDENT/TEACHER) - WebUntis assignment
+   *   3. Match by configured className (case-insensitive)
+   *   4. Auto-select if only one class available
    *
    * @param {Object} authCtx - Authentication context (server, credentials, authService)
    * @param {Object} sessionCtx - Session context (for tracking)
    * @param {Date} rangeStart - Start date for the query range
    * @param {Date} rangeEnd - End date for the query range
    * @param {string} className - Name of the class to search for (e.g., "5a", "10B")
-   * @param {Object} options - Additional options (studentId for improved accuracy)
+   * @param {string} role - User role (STUDENT, LEGAL_GUARDIAN, TEACHER)
+   * @param {Object} options - Additional options (studentId for parent accounts)
    * @returns {Promise<number>} Resolved class ID
    */
-  async _resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className, options = {}) {
+  async _resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className, role, options = {}) {
     const { school, username, password, server, qrCodeUrl, cacheKey, authService } = authCtx || {};
     const desiredName = className && String(className).trim();
+    const studentId = options?.studentId;
     const cacheKeyBase = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
-    // Include studentId in cache key so each student has their own class cache entry
-    const studentIdPart = options.studentId ? `::student::${options.studentId}` : '';
-    const classCacheKey = `${cacheKeyBase}${studentIdPart}::class::${(desiredName || '').toLowerCase()}`;
+    // Cache key includes role, studentId (for parents), and className to allow different resolutions per config
+    const roleKey = String(role || 'unknown').toLowerCase();
+    const studentKey = studentId ? `student${studentId}` : 'nostudent';
+    const classCacheKey = `${cacheKeyBase}::class::${roleKey}::${studentKey}::${(desiredName || 'auto').toLowerCase()}`;
     if (this.cacheManager.has('classId', classCacheKey)) {
       return this.cacheManager.get('classId', classCacheKey);
     }
 
-    // Date formatting helpers for API requests
+    // Date formatting helper for API request
     // ISO format (YYYY-MM-DD) for timetable/filter endpoint
     const formatDateISO = (date) => {
       const year = date.getFullYear();
@@ -423,8 +441,9 @@ module.exports = NodeHelper.create({
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
-    // YYYYMMDD format for classservices endpoint
-    const formatDateYYYYMMDD = (date) => {
+
+    // Integer format (YYYYMMDD) for classservices endpoint
+    const formatDateInt = (date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -463,17 +482,33 @@ module.exports = NodeHelper.create({
     if (token) headers.Authorization = `Bearer ${token}`;
 
     let candidates = [];
+    let preSelectedClassId = null;
 
-    let mappedClassId = null;
+    // Strategy depends on role:
+    // - Parent roles (LEGAL_GUARDIAN, PARENT, GUARDIAN, ELTERN): Use classservices (provides studentId→classId mapping)
+    // - STUDENT/TEACHER: Use timetable/filter (provides preSelected class)
+    // Check multiple variants of parent role names (different WebUntis instances may use different role names)
+    const normalizedRole = role ? String(role).toUpperCase() : '';
+    const isParentAccount =
+      normalizedRole.includes('LEGAL_GUARDIAN') ||
+      normalizedRole.includes('GUARDIAN') ||
+      normalizedRole.includes('PARENT') ||
+      normalizedRole.includes('ELTERN');
 
-    // STRATEGY 1: Try classservices endpoint first (most accurate when studentId is known)
-    // This endpoint returns the actual class assignments for the specific student
-    if (options.studentId) {
+    if (isParentAccount && studentId) {
+      // ===== STRATEGY 1: classservices for parent accounts (with studentId→classId mapping) =====
+      this._mmLog(
+        'debug',
+        null,
+        `[REST] Parent account detected (role=${role}): fetching class information via classservices (studentId=${studentId})`
+      );
       try {
         const url = new URL(`https://${server}/WebUntis/api/classreg/classservices`);
-        url.searchParams.append('startDate', formatDateYYYYMMDD(rangeStart));
-        url.searchParams.append('endDate', formatDateYYYYMMDD(rangeEnd));
-        url.searchParams.append('elementId', options.studentId);
+        url.searchParams.append('startDate', formatDateInt(rangeStart));
+        url.searchParams.append('endDate', formatDateInt(rangeEnd));
+        url.searchParams.append('elementId', studentId);
+
+        this._mmLog('debug', null, `[REST] classservices API: ${url.toString()}`);
 
         const resp = await fetchClient.get(url.toString(), {
           headers,
@@ -482,23 +517,37 @@ module.exports = NodeHelper.create({
 
         if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
-          // Prefer explicit mapping from personKlasseMap when present
-          // This is the authoritative source for student -> class assignment
-          const map = resp.data?.data?.personKlasseMap;
-          if (map && Object.prototype.hasOwnProperty.call(map, options.studentId)) {
-            const mapped = map[options.studentId];
-            if (Number.isFinite(Number(mapped))) mappedClassId = Number(mapped);
+
+          // Extract personKlasseMap (maps studentId to classId)
+          const map = resp.data?.personKlasseMap || resp.data?.data?.personKlasseMap;
+          if (map && typeof map === 'object') {
+            const mapSummary = Object.entries(map)
+              .map(([k, v]) => `${k}→${v}`)
+              .join(', ');
+            this._mmLog('debug', null, `[REST] personKlasseMap: ${mapSummary}`);
+
+            // Try to resolve classId from studentId mapping
+            const mappedClassId = map[String(studentId)];
+            if (mappedClassId) {
+              preSelectedClassId = Number(mappedClassId);
+              this._mmLog('info', null, `[REST] personKlasseMap: studentId ${studentId} → classId ${preSelectedClassId}`);
+            } else {
+              this._mmLog('warn', null, `[REST] personKlasseMap: studentId ${studentId} not found in map`);
+            }
           }
+
           this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
         }
       } catch (err) {
         this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
       }
-    }
-
-    // STRATEGY 2: Try timetable/filter endpoint if classservices didn't work
-    // This is a broader search that returns all classes visible to the authenticated user
-    if (!candidates || candidates.length === 0) {
+    } else {
+      // ===== STRATEGY 2: timetable/filter for student/teacher accounts (with preSelected class) =====
+      this._mmLog(
+        'debug',
+        null,
+        `[REST] Student/Teacher account (role=${role || 'unknown'}): fetching class information via timetable/filter`
+      );
       try {
         const url = new URL(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`);
         url.searchParams.append('resourceType', 'CLASS');
@@ -506,6 +555,8 @@ module.exports = NodeHelper.create({
         url.searchParams.append('start', formatDateISO(rangeStart));
         url.searchParams.append('end', formatDateISO(rangeEnd));
 
+        this._mmLog('debug', null, `[REST] timetable/filter API: ${url.toString()}`);
+
         const resp = await fetchClient.get(url.toString(), {
           headers,
           timeout: 15000,
@@ -513,6 +564,18 @@ module.exports = NodeHelper.create({
 
         if (resp.data) {
           candidates = this._collectClassCandidates(resp.data);
+
+          // Extract preSelected class (the student's/teacher's assigned class)
+          const preSelected = resp.data?.preSelected || resp.data?.data?.preSelected;
+          if (preSelected && preSelected.id) {
+            preSelectedClassId = Number(preSelected.id);
+            this._mmLog(
+              'info',
+              null,
+              `[REST] preSelected class detected: ${preSelected.displayName || preSelected.shortName || preSelected.longName} (id=${preSelectedClassId})`
+            );
+          }
+
           this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
         }
       } catch (err) {
@@ -525,24 +588,36 @@ module.exports = NodeHelper.create({
     }
 
     let chosen = null;
-    // PRIORITY 1: If classservices provided a personKlasseMap, use that mapping first
-    if (mappedClassId && candidates.some((c) => Number(c.id) === Number(mappedClassId))) {
-      chosen = candidates.find((c) => Number(c.id) === Number(mappedClassId));
-      this._mmLog('debug', null, `[REST] personKlasseMap selected classId=${mappedClassId}`);
+
+    // PRIORITY 1: Use preSelected/mapped class (personKlasseMap for parents, preSelected for students)
+    // This is the class WebUntis associates with the authenticated user
+    if (preSelectedClassId) {
+      if (candidates.some((c) => Number(c.id) === Number(preSelectedClassId))) {
+        chosen = candidates.find((c) => Number(c.id) === Number(preSelectedClassId));
+        const source = isParentAccount ? 'personKlasseMap' : 'preSelected';
+        this._mmLog('info', null, `[REST] ✓ ${source} class: ${chosen.name} (classId=${preSelectedClassId})`);
+      } else {
+        this._mmLog('warn', null, `[REST] preSelected/mapped classId=${preSelectedClassId} not found in candidates`);
+      }
     }
 
     // PRIORITY 2: Match by configured class name (case-insensitive)
-    if (desiredName) {
+    if (!chosen && desiredName) {
       const desiredLower = desiredName.toLowerCase();
       chosen = candidates.find((c) =>
         [c.name, c.shortName, c.longName].filter(Boolean).some((n) => String(n).toLowerCase() === desiredLower)
       );
+      if (chosen) {
+        this._mmLog('info', null, `[REST] ✓ Matched className="${desiredName}" to classId=${chosen.id} (${chosen.name})`);
+      } else {
+        this._mmLog('warn', null, `[REST] className="${desiredName}" not found in candidates`);
+      }
     }
 
     // PRIORITY 3: If no class name configured and only one class exists, auto-select it
     if (!chosen && !desiredName && candidates.length === 1) {
       chosen = candidates[0];
-      this._mmLog('debug', null, `[REST] No class name configured; using sole available class ${chosen.name} (${chosen.id})`);
+      this._mmLog('info', null, `[REST] ✓ Auto-selected sole available class ${chosen.name} (classId=${chosen.id})`);
     }
 
     // No match found - provide helpful error message with available classes
@@ -610,9 +685,10 @@ module.exports = NodeHelper.create({
 
     const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
     let classId = options.classId;
+    const role = options.role || sessionCtx?.authSession?.role || null;
     // Resolve class ID if needed
     if (wantsClass && !classId) {
-      classId = await this._resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className || options.className || null, {
+      classId = await this._resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className || options.className || null, role, {
         ...options,
         personId,
         studentId: options.studentId || personId,
@@ -2224,10 +2300,40 @@ module.exports = NodeHelper.create({
     const authService = config._authService;
     const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData, role);
 
+    // Log built REST targets for debugging
+    if (restTargets && restTargets.length > 0) {
+      const targetSummaries = restTargets.map((t) => {
+        const roleLabel = t.role || 'unknown';
+        const personIdLabel = t.personId ? `personId=${t.personId}` : 'personId=null';
+        const serverLabel = t.server || 'unknown-server';
+        return `${roleLabel} (${personIdLabel}, ${serverLabel})`;
+      });
+      this._mmLog('debug', student, `REST targets: ${targetSummaries.join(', ')}`);
+    }
+
     // Verify REST targets were successfully built
     // If empty, authentication likely failed or credentials are invalid
     if (!restTargets || restTargets.length === 0) {
-      this._mmLog('warn', student, `No REST targets built - cannot fetch data! Check authentication and credentials.`);
+      const hasQrCode = Boolean(student.qrcode);
+      const hasStudentCreds = Boolean(student.username && student.password && student.school && student.server);
+      const hasParentCreds = Boolean(config?.username && config?.password);
+      const hasStudentId = Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
+      const emptyStringCreds = student.username === '' || student.password === '';
+
+      let hint = 'Check authentication and credentials.';
+      if (emptyStringCreds) {
+        hint = 'Student credentials are empty strings - remove username/password fields or provide valid credentials.';
+      } else if (!hasQrCode && !hasStudentCreds && !hasParentCreds) {
+        hint =
+          'No credentials configured. Need either: (1) student.qrcode, (2) student username/password/school/server, or (3) config-level username/password with student.studentId.';
+      } else if (hasParentCreds && !hasStudentId) {
+        hint = 'Parent credentials configured but student.studentId is missing (required for parent mode).';
+      } else if (hasParentCreds && hasStudentId && (!appData || !appData.user || !appData.user.students)) {
+        hint =
+          'Parent credentials configured but appData.user.students is empty/missing (check if parent account has linked children in WebUntis).';
+      }
+
+      this._mmLog('warn', student, `No REST targets built - cannot fetch data! ${hint}`);
     }
 
     const describeTarget = (t) => {
