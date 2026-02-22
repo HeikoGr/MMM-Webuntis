@@ -468,7 +468,6 @@ REST API failed: 401 Unauthorized
 
 - Invalid credentials → Re-verify in config.js
 - School/server mismatch → Check `school` and `server` fields
-- Credentials with special characters → URL-encode them
 - Two-factor authentication enabled → Use QR code login instead
 
 **Debug steps:**
