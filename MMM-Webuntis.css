@@ -282,18 +282,22 @@
   color: var(--wu-replacement-text);
 }
 
-.MMM-Webuntis .grid-combined .lesson-substitution.split-left {
+/* Split view: generic layout — any status can appear in either half */
+.MMM-Webuntis .grid-combined .split-left {
   left: 0;
   right: auto;
   width: 50%;
   border-right: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
-
-.MMM-Webuntis .grid-combined .lesson-cancelled.split-right {
+.MMM-Webuntis .grid-combined .split-right {
   left: auto;
   right: 0;
   width: 50%;
+}
+
+/* Cancelled lesson in split-left always gets cancelled styling */
+.MMM-Webuntis .grid-combined .lesson-cancelled.split-left {
   background-color: var(--wu-cancelled-bg);
   color: var(--wu-cancelled-text);
 }
@@ -704,6 +708,41 @@
   font-size: 0.75rem;
   color: #999;
   font-style: italic;
+}
+
+/* Changed field indicators (CHANGED lessons) */
+.MMM-Webuntis .lesson-change-badge {
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.MMM-Webuntis .lesson-changed-old {
+  text-decoration: line-through;
+  opacity: 0.6;
+  color: var(--wu-cancelled-text, #aaa);
+  margin-right: 1px;
+}
+
+.MMM-Webuntis .lesson-changed-old::after {
+  content: ' →';
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.MMM-Webuntis .lesson-changed-new {
+  color: var(--wu-changed-highlight, #f0a030);
+  font-weight: 600;
+}
+
+/* MOVED lesson badge (lesson shifted to different time) */
+.MMM-Webuntis .lesson-moved-badge {
+  font-size: 0.7rem;
+  float: right;
+  opacity: 0.7;
+  margin-left: 2px;
 }
 
 /* Exam Description */

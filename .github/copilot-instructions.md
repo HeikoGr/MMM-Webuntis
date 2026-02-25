@@ -71,6 +71,23 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Important**: Data format is always deterministic - always know and specify the source format. No guessing.
 
+### ⚠️ Known Pitfall: extractDayLessons() — Whitelist Trap
+
+`widgets/grid.js#extractDayLessons()` maps raw payload lesson objects into the internal grid lesson shape. It uses `...el` (spread) as a base, then overrides specific keys. **If you add a new field to `schemas.lesson` in `payloadCompactor.js`, it is automatically forwarded** — no change to `extractDayLessons` needed.
+
+This was NOT always the case. Previously it whitelisted explicit field names, causing any new field (e.g. `changedFields`, `teOld`) to be silently dropped in the frontend. If a new field from the payload is missing in the widget despite appearing correctly in debug dumps, check whether `extractDayLessons` needs updating.
+
+**Full data flow for lesson fields:**
+```
+webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
+  → payloadCompactor.js#schemas.lesson        – declares field for compaction
+    → payloadBuilder.js#compactArray()        – compacts timetableRange
+      → socket GOT_DATA payload               – field present in timetableRange[]
+        → MMM-Webuntis.js#_filterTimetableRange()  – passes through unchanged
+          → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
+            → makeLessonInnerHTML()                – field available on `lesson`
+```
+
 ### Configuration
 - 25 legacy config key mappings in `configValidator.js#applyLegacyMappings()` - don't break them
 - Widget-specific validation in `widgetConfigValidator.js` - check before assuming config structure
