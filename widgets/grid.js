@@ -1288,19 +1288,26 @@ function getNowLineState(ctx) {
    * @param {number} nowYmd - Current date as YYYYMMDD integer
    * @param {number} nowMin - Current time in minutes since midnight
    */
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, hasExam, isPast, homeworks, nowYmd, nowMin) {
-    // Group lessons by subject + teacher/studentGroup for parallel classes
-    // Same subject at same time with different teachers/groups = separate ticker items
+  function createTickerAnimation(
+    lessons,
+    topPx,
+    heightPx,
+    container,
+    ctx,
+    escapeHtml,
+    hasExam,
+    isPast,
+    homeworks,
+    nowYmd,
+    nowMin,
+    tickerData
+  ) {
+    // Group lessons by subject + studentGroup/class for parallel classes.
+    // Teacher changes inside one subject/group should remain stacked in one item.
+    // Special handling: If a lesson is CANCELLED and has a replacement, they are shown as split-view within the same ticker item
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
         return lesson.su[0].name || lesson.su[0].longname;
-      }
-      return null;
-    };
-
-    const getTeacherName = (lesson) => {
-      if (lesson.te && lesson.te.length > 0) {
-        return lesson.te[0].name || lesson.te[0].longname;
       }
       return null;
     };
@@ -1312,21 +1319,79 @@ function getNowLineState(ctx) {
       return null;
     };
 
+    const getClassName = (lesson) => {
+      if (lesson.cl && lesson.cl.length > 0) {
+        return lesson.cl[0].name || lesson.cl[0].longname;
+      }
+      return null;
+    };
+
     const subjectGroups = new Map();
     for (let index = 0; index < lessons.length; index++) {
       const lesson = lessons[index];
       const subject = getSubjectName(lesson);
-      const teacher = getTeacherName(lesson);
       const studentGroup = getStudentGroupName(lesson);
+      const className = getClassName(lesson);
 
-      // Group key includes teacher/studentGroup to separate parallel classes with same subject
-      // Lessons are only grouped together if they have same subject, teacher, studentGroup
-      const groupKey = `${subject || 'unknown'}_${teacher || 'noTeacher'}_${studentGroup || 'noGroup'}`;
+      const groupKey = `${subject || 'unknown'}_${studentGroup || className || 'noGroup'}`;
 
       if (!subjectGroups.has(groupKey)) {
         subjectGroups.set(groupKey, []);
       }
       subjectGroups.get(groupKey).push(lesson);
+    }
+
+    for (const [, groupLessons] of subjectGroups.entries()) {
+      groupLessons.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+    }
+
+    // Identify cancelled+replacement pairs for split-view rendering within ticker.
+    // Multiple cancelled lessons that share the same replacement set are merged
+    // into ONE split ticker item (left side stacked), e.g. Deutsch/Bio/KT -> Excursion.
+    const splitViewPairs = [];
+    if (tickerData && tickerData.hasSplitView && tickerData.cancelledLessons.length > 0) {
+      const pairMap = new Map();
+      for (const cancelled of tickerData.cancelledLessons) {
+        // Find replacements that temporally overlap with this cancelled lesson
+        const matchingReplacements = tickerData.replacements.filter((r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin);
+
+        if (matchingReplacements.length > 0) {
+          const replacementKey = matchingReplacements
+            .map((r) => `${r.lessonId ?? 'noId'}_${r.startMin}_${r.endMin}_${r.status || ''}`)
+            .sort()
+            .join('|');
+
+          if (!pairMap.has(replacementKey)) {
+            pairMap.set(replacementKey, {
+              cancelledLessons: [],
+              replacements: matchingReplacements,
+            });
+          }
+
+          pairMap.get(replacementKey).cancelledLessons.push(cancelled);
+        }
+      }
+
+      for (const [, pair] of pairMap.entries()) {
+        pair.cancelledLessons.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+        splitViewPairs.push(pair);
+      }
+
+      // Remove split-pair lessons from subject groups (they're handled in split ticker items)
+      const pairedLessons = new Set();
+      for (const pair of splitViewPairs) {
+        for (const cancelled of pair.cancelledLessons) pairedLessons.add(cancelled);
+        for (const replacement of pair.replacements) pairedLessons.add(replacement);
+      }
+
+      for (const [key, groupLessons] of subjectGroups.entries()) {
+        const filtered = groupLessons.filter((l) => !pairedLessons.has(l));
+        if (filtered.length === 0) {
+          subjectGroups.delete(key);
+        } else {
+          subjectGroups.set(key, filtered);
+        }
+      }
     }
 
     // Create ticker wrapper - minimal container without lesson styling
@@ -1345,8 +1410,8 @@ function getNowLineState(ctx) {
     const tickerTrack = document.createElement('div');
     tickerTrack.className = 'ticker-track';
 
-    // Each subject group is one ticker unit
-    const itemCount = subjectGroups.size;
+    // Each subject group + split-view pairs are ticker units
+    const itemCount = subjectGroups.size + splitViewPairs.length;
     const itemWidthPercent = 100; // Each item should be 100% of wrapper width
 
     // Track width is: number of items * 2 (for 2 copies) * item width
@@ -1355,6 +1420,7 @@ function getNowLineState(ctx) {
 
     // Add subject groups twice for seamless loop
     for (let copy = 0; copy < 2; copy++) {
+      // Regular subject groups
       for (const [, subjectLessons] of subjectGroups.entries()) {
         const tickerItem = document.createElement('div');
         tickerItem.className = 'ticker-item';
@@ -1415,6 +1481,94 @@ function getNowLineState(ctx) {
 
         tickerTrack.appendChild(tickerItem);
       }
+
+      // Cancelled+replacement pairs as split-view ticker items
+      for (const pair of splitViewPairs) {
+        const tickerItem = document.createElement('div');
+        tickerItem.className = 'ticker-item ticker-item-split';
+
+        // Set item width as percentage of track
+        tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
+        tickerItem.style.position = 'relative';
+        tickerItem.style.height = '100%';
+
+        // Create split-view container within ticker item
+        const splitContainer = document.createElement('div');
+        splitContainer.className = 'lesson-both-inner';
+        splitContainer.style.position = 'absolute';
+        splitContainer.style.top = '0';
+        splitContainer.style.left = '0';
+        splitContainer.style.right = '0';
+        splitContainer.style.height = '100%';
+
+        const pairStartMin = Math.min(...pair.cancelledLessons.map((c) => c.startMin), ...pair.replacements.map((r) => r.startMin));
+        const pairEndMin = Math.max(...pair.cancelledLessons.map((c) => c.endMin), ...pair.replacements.map((r) => r.endMin));
+        const pairTotalMinutes = Math.max(1, pairEndMin - pairStartMin);
+
+        const toPairPercent = (lesson) => {
+          const lessonStartOffset = lesson.startMin - pairStartMin;
+          const lessonDuration = lesson.endMin - lesson.startMin;
+          return {
+            top: (lessonStartOffset / pairTotalMinutes) * 100,
+            height: (lessonDuration / pairTotalMinutes) * 100,
+          };
+        };
+
+        // Left side: cancelled lesson(s), stacked at natural positions
+        for (const cancelled of pair.cancelledLessons) {
+          const cancelledDiv = document.createElement('div');
+          cancelledDiv.className = 'lesson-content split-left';
+          const cancelledPos = toPairPercent(cancelled);
+          cancelledDiv.style.position = 'absolute';
+          cancelledDiv.style.top = `${cancelledPos.top}%`;
+          cancelledDiv.style.height = `${cancelledPos.height}%`;
+          cancelledDiv.style.left = '0';
+          cancelledDiv.style.width = '50%';
+
+          applyLessonClasses(cancelledDiv, cancelled, {
+            hasExam,
+            nowYmd,
+            nowMin,
+            additionalClasses: ['split-left'],
+          });
+
+          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
+          if (checkHomeworkMatch(cancelled, homeworks)) {
+            addHomeworkIcon(cancelledDiv);
+          }
+
+          splitContainer.appendChild(cancelledDiv);
+        }
+
+        // Right side: replacement lesson(s)
+        for (const replacement of pair.replacements) {
+          const replacementDiv = document.createElement('div');
+          replacementDiv.className = 'lesson-content split-right';
+          const replacementPos = toPairPercent(replacement);
+          replacementDiv.style.position = 'absolute';
+          replacementDiv.style.top = `${replacementPos.top}%`;
+          replacementDiv.style.height = `${replacementPos.height}%`;
+          replacementDiv.style.right = '0';
+          replacementDiv.style.width = '50%';
+
+          applyLessonClasses(replacementDiv, replacement, {
+            hasExam,
+            nowYmd,
+            nowMin,
+            additionalClasses: ['split-right'],
+          });
+
+          replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
+          if (checkHomeworkMatch(replacement, homeworks)) {
+            addHomeworkIcon(replacementDiv);
+          }
+
+          splitContainer.appendChild(replacementDiv);
+        }
+
+        tickerItem.appendChild(splitContainer);
+        tickerTrack.appendChild(tickerItem);
+      }
     }
 
     tickerWrapper.appendChild(tickerTrack);
@@ -1449,8 +1603,9 @@ function getNowLineState(ctx) {
    *   ≥ 1 ticker candidate does not.
    *
    * TICKER — truly parallel courses that all run in the same time range:
-   *   Triggered when ≥ 2 NORMAL_TEACHING_PERIOD lessons (REGULAR or CHANGED) are
-   *   in the group, no cancellations, and no spanning/sub-period split.
+   *   Triggered when ≥ 2 NORMAL_TEACHING_PERIOD lessons exist in the group,
+   *   regardless of status (REGULAR, CHANGED, or CANCELLED).
+   *   Cancelled lessons appear in the ticker with strikethrough styling.
    *   Uses sub-interval rendering with bridge-absorption to handle gaps between
    *   partially-overlapping lessons.
    *
@@ -1510,13 +1665,17 @@ function getNowLineState(ctx) {
       const cancelledLessons = lessons.filter((l) => l.status === 'CANCELLED');
       const addedLessons = lessons.filter((l) => l.status === 'ADDITIONAL'); // ADDITIONAL_PERIOD
       const substLessons = lessons.filter((l) => l.status === 'SUBSTITUTION');
-      // School events (Exkursion, class trips, …) that replace cancelled regular lessons.
+      // School events (excursion, field trips, class trips, …) that replace cancelled regular lessons.
       // activityType=EVENT with status=CHANGED means a scheduled event overrides this slot.
       const eventLessons = lessons.filter((l) => l.activityType === 'EVENT');
-      // Ticker candidates: scheduled parallel courses (teacher change counts as CHANGED ≠ CANCELLED)
-      const tickerCandidates = lessons.filter(
-        (l) => l.activityType === 'NORMAL_TEACHING_PERIOD' && (l.status === 'REGULAR' || l.status === 'CHANGED')
-      );
+      // Ticker candidates: ALL scheduled parallel courses (NORMAL_TEACHING_PERIOD).
+      // Include CANCELLED lessons - they were originally scheduled in parallel and should
+      // appear in the ticker (displayed as crossed-out via applyLessonClasses).
+      const tickerCandidates = lessons.filter((l) => l.activityType === 'NORMAL_TEACHING_PERIOD');
+      const plannedParallelCandidates = tickerCandidates.filter((l) => {
+        const status = String(l.status || '').toUpperCase();
+        return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
+      });
 
       // ── Strategy decision ─────────────────────────────────────────────────────
       //
@@ -1543,12 +1702,91 @@ function getNowLineState(ctx) {
         spanningLessons.length >= 1 &&
         subPeriodLessons.length >= 1;
 
-      // TICKER: truly parallel courses with no spanning/sub-period split.
-      const isTickerGroup =
-        !isSplitView && !isSpanSplitLayout && cancelledLessons.length === 0 && addedLessons.length === 0 && tickerCandidates.length >= 2;
+      // TICKER: activated from PLANNED parallel timetable structure.
+      // It must be true parallelism: at least two planned NORMAL_TEACHING_PERIOD
+      // entries overlap in time. Sequential lessons replaced by one excursion must
+      // NOT activate ticker.
+      const hasPlannedParallelOverlap = (() => {
+        if (plannedParallelCandidates.length < 2) return false;
+        for (let i = 0; i < plannedParallelCandidates.length; i++) {
+          for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
+            const first = plannedParallelCandidates[i];
+            const second = plannedParallelCandidates[j];
+            if (first.startMin < second.endMin && first.endMin > second.startMin) {
+              return true;
+            }
+          }
+        }
+        return false;
+      })();
+      const isTickerGroup = hasPlannedParallelOverlap;
+
+      // SPLIT VIEW: activated when there are cancelled+replacement lessons,
+      // but ONLY if Ticker is NOT active. If Ticker is active, cancelled+replacement
+      // are rendered within the ticker animation as split-view items.
+      const shouldUseSplitView = isSplitView && !isTickerGroup;
+
+      // ── TICKER rendering ──────────────────────────────────────────────────────
+      // HIGHEST PRIORITY: Checked first for parallel lessons.
+      // If cancelled+replacement exists alongside parallel lessons, they are
+      // rendered as split-view within ticker items, not as separate split view.
+      if (isTickerGroup) {
+        const tYmd = Number(tickerCandidates[0].dateStr) || 0;
+        const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
+        const isPast = calcIsPast(tYmd, tEMin);
+        const hasExam = tickerCandidates.some((l) => lessonHasExam(l));
+
+        // Pass cancelled lessons and replacements to ticker for split-view rendering
+        const tickerData = {
+          cancelledLessons,
+          replacements: [...addedLessons, ...substLessons, ...eventLessons],
+          hasSplitView: isSplitView,
+        };
+
+        const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
+        const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
+
+        if (tickerEnd > tickerStart) {
+          const tickerTop = Math.round(((tickerStart - allStart) / totalMinutes) * totalHeight);
+          const tickerHeight = Math.max(12, Math.round(((tickerEnd - tickerStart) / totalMinutes) * totalHeight));
+          createTickerAnimation(
+            tickerCandidates,
+            tickerTop,
+            tickerHeight,
+            bothInner,
+            ctx,
+            escapeHtml,
+            hasExam,
+            isPast,
+            homeworks,
+            nowYmd,
+            nowMin,
+            tickerData
+          );
+        }
+
+        // Render any non-ticker-candidate lessons (events, break supervisions) individually
+        for (const lesson of lessons) {
+          if (tickerCandidates.includes(lesson)) continue;
+          // Cancelled lessons are represented in the ticker.
+          if (cancelledLessons.includes(lesson)) continue;
+
+          // Replacements that overlap cancelled lessons are represented as
+          // split-view items inside the ticker and must not be duplicated here.
+          const isReplacement = tickerData.replacements.includes(lesson);
+          const overlapsCancelled = cancelledLessons.some((c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin);
+          if (isReplacement && overlapsCancelled) continue;
+
+          renderSingleLesson(lesson);
+        }
+
+        continue;
+      }
 
       // ── SPLIT VIEW rendering ──────────────────────────────────────────────────
-      if (isSplitView) {
+      // Only used when there are NO parallel lessons (< 2 ticker candidates).
+      // Shows cancelled lessons on left, replacements on right.
+      if (shouldUseSplitView) {
         const replacements = [...addedLessons, ...substLessons, ...eventLessons];
         const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
         const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
@@ -1634,88 +1872,6 @@ function getNowLineState(ctx) {
         }
 
         // Any non-ticker-candidate lessons in this group are rendered individually.
-        for (const lesson of lessons) {
-          if (tickerCandidates.includes(lesson)) continue;
-          renderSingleLesson(lesson);
-        }
-
-        continue;
-      }
-
-      // ── TICKER rendering ──────────────────────────────────────────────────────
-      //
-      // Sub-interval approach: split the combined span at each lesson boundary so
-      // each sub-interval animates only the truly-concurrent lessons.
-      //
-      // Bridge-absorption: short gaps (e.g. a class break) between multi-lesson
-      // intervals produce a single-active sub-interval → tiny artifact cell.
-      // Absorb these into the adjacent interval rather than rendering them alone.
-      if (isTickerGroup) {
-        const tYmd = Number(tickerCandidates[0].dateStr) || 0;
-        const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-        const isPast = calcIsPast(tYmd, tEMin);
-        const hasExam = tickerCandidates.some((l) => lessonHasExam(l));
-
-        // Pass 1: boundary-point sub-intervals
-        const boundarySet = new Set();
-        for (const l of tickerCandidates) {
-          const lS = Math.max(l.startMin, allStart);
-          const lE = Math.min(l.endMin, allEnd);
-          if (lE > lS) {
-            boundarySet.add(lS);
-            boundarySet.add(lE);
-          }
-        }
-        const boundaries = [...boundarySet].sort((a, b) => a - b);
-
-        const rawIntervals = [];
-        for (let bi = 0; bi < boundaries.length - 1; bi++) {
-          const iStart = boundaries[bi];
-          const iEnd = boundaries[bi + 1];
-          const active = tickerCandidates.filter((l) => Math.max(l.startMin, allStart) <= iStart && Math.min(l.endMin, allEnd) >= iEnd);
-          if (active.length > 0) rawIntervals.push({ iStart, iEnd, active });
-        }
-
-        // Pass 2: absorb bridge intervals
-        const renderIntervals = [];
-        for (let i = 0; i < rawIntervals.length; i++) {
-          const si = rawIntervals[i];
-          if (si.active.length === 1) {
-            const span = si.active[0];
-            if (renderIntervals.length > 0) {
-              const prev = renderIntervals[renderIntervals.length - 1];
-              if (prev.active.length >= 2 && prev.active.includes(span)) {
-                renderIntervals[renderIntervals.length - 1] = { ...prev, iEnd: si.iEnd };
-                continue;
-              }
-            }
-            const next = rawIntervals[i + 1];
-            if (next && next.active.length >= 2 && next.active.includes(span)) {
-              rawIntervals[i + 1] = { ...next, iStart: si.iStart };
-              continue;
-            }
-          }
-          renderIntervals.push(si);
-        }
-
-        // Pass 3: render merged intervals
-        for (const { iStart, iEnd, active } of renderIntervals) {
-          const subTop = Math.round(((iStart - allStart) / totalMinutes) * totalHeight);
-          const subH = Math.max(12, Math.round(((iEnd - iStart) / totalMinutes) * totalHeight));
-
-          if (active.length === 1) {
-            const lesson = active[0];
-            const cell = createLessonCell(subTop, subH, lesson.dateStr, iEnd);
-            applyLessonClasses(cell, lesson, { hasExam, isPast });
-            cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
-            if (checkHomeworkMatch(lesson, homeworks)) addHomeworkIcon(cell);
-            bothInner.appendChild(cell);
-          } else {
-            createTickerAnimation(active, subTop, subH, bothInner, ctx, escapeHtml, hasExam, isPast, homeworks, nowYmd, nowMin);
-          }
-        }
-
-        // Render any non-ticker-candidate lessons in this group individually
         for (const lesson of lessons) {
           if (tickerCandidates.includes(lesson)) continue;
           renderSingleLesson(lesson);
