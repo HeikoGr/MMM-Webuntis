@@ -2218,8 +2218,10 @@ function getNowLineState(ctx) {
           if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
         }
 
-        // Update all lesson-content divs within ticker
-        const lessonDivs = ticker.querySelectorAll('.lesson-content');
+        // Update only top-level lesson cells within ticker.
+        // Nested `.lesson-content` nodes from makeLessonInnerHTML() must not receive
+        // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
+        const lessonDivs = Array.from(ticker.querySelectorAll('.lesson-content')).filter((div) => div.style.position === 'absolute');
         lessonDivs.forEach((div) => {
           if (isPast) div.classList.add('past');
           else div.classList.remove('past');
