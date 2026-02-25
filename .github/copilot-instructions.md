@@ -172,6 +172,7 @@ console.warn('[feature] Warning:', error);
 - **Spell check**: `node --run test:spelling`
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)
+- **Low-level auth test**: `node --run test:auth:curl` (curl-based JSON-RPC test, bypasses module logic; useful for debugging credentials with special characters)
 
 ### Debugger: Node & Chrome
 

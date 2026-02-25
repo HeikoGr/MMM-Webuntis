@@ -487,6 +487,23 @@ REST API failed: 401 Unauthorized
    node -e "const c = require('./config/config.js'); console.log(c.modules[0].config.school, c.modules[0].config.server)"
    ```
 
+4. Test authentication with curl (low-level test):
+   ```bash
+   # Use credentials from config.js
+   node --run test:auth:curl
+
+   # Or test with specific credentials
+   ./scripts/test_auth_with_curl.sh "schulexyz" "schulexyz.webuntis.com" "username" "password"
+   ```
+
+   This curl-based test verifies that:
+   - Server connection works
+   - Credentials are valid
+   - UTF-8 encoding is correct (important for usernames with spaces/umlauts)
+   - JSON-RPC authentication endpoint is accessible
+
+   **Use case:** Bypass all module logic and test WebUntis API directly with curl.
+
 ### "No data returned"
 
 **Symptoms:**

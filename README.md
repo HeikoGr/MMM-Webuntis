@@ -331,6 +331,18 @@ cd ~/MagicMirror/modules/MMM-Webuntis
 node --run debug
 ```
 
+**Low-level authentication test** (curl-based, bypasses all module logic):
+
+```bash
+# Test with credentials from config.js
+node --run test:auth:curl
+
+# Or test with specific credentials
+./scripts/test_auth_with_curl.sh "school" "server.webuntis.com" "username" "password"
+```
+
+Useful for debugging authentication issues, especially with special characters (spaces, umlauts) in usernames.
+
 ## Development
 
 ```bash
