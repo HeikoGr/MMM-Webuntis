@@ -13,7 +13,9 @@
   "containerEnv": {
     "IN_DEVCONTAINER": "1",
     "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
-    "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu"
+    "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu",
+    "INSTALL_PLAYWRIGHT_BROWSERS": "0",
+    "ENABLE_PLAYWRIGHT_MCP": "1"
   },
   "forwardPorts": [8080],
   "customizations": {
@@ -26,5 +28,5 @@
     }
   },
   "postCreateCommand": "/bin/sh .devcontainer/postCreate.sh",
-  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && nohup npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo \"Playwright MCP started (logs: /tmp/playwright-mcp.log, port: 8931)\"; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
+  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && if [ \"${ENABLE_PLAYWRIGHT_MCP:-1}\" = \"1\" ]; then nohup npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo \"Playwright MCP started (logs: /tmp/playwright-mcp.log, port: 8931)\"; else echo 'Playwright MCP disabled via ENABLE_PLAYWRIGHT_MCP'; fi; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
 }
