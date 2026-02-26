@@ -475,16 +475,6 @@ function getNowLineState(ctx) {
         targetIndex + 1 < timeUnits.length &&
         timeUnits[targetIndex + 1]?.startMin !== undefined
       ) {
-        /**
-         * Get time unit start and line position
-         * Calculates where to draw horizontal grid lines between periods
-         *
-         * @param {Array} timeUnits - Array of time unit objects
-         * @param {number} ui - Time unit index
-         * @returns {Object} Boundary object:
-         *   - startMin: number|null - Start time in minutes
-         *   - lineMin: number|null - Line position in minutes (at period end or next period start)
-         */
         cutoff = timeUnits[targetIndex + 1].startMin;
       }
 
@@ -1020,13 +1010,13 @@ function getNowLineState(ctx) {
 
   /**
    * Create a lesson cell container
-   * Base element for all lesson types (regular, cancelled, substitution, exam)
+   * Base element for all lesson types(regular, cancelled, substitution, exam)
    *
-   * @param {number} topPx - Top position in pixels
-   * @param {number} heightPx - Height in pixels
-   * @param {string} dateStr - Date string (YYYYMMDD)
-   * @param {number} eMin - End time in minutes
-   * @returns {HTMLElement} Lesson cell div
+   * @param { number } topPx - Top position in pixels
+   * @param { number } heightPx - Height in pixels
+   * @param { string } dateStr - Date string(YYYYMMDD)
+   * @param { number } eMin - End time in minutes
+   * @returns { HTMLElement } Lesson cell div
    */
   function createLessonCell(topPx, heightPx, dateStr, eMin) {
     const cell = document.createElement('div');
@@ -1156,7 +1146,7 @@ function getNowLineState(ctx) {
       return false;
     }
 
-    const lessonDate = Number(lesson.date);
+    const lessonDateYmd = Number(lesson.date);
     const lessonNames = Array.isArray(lesson.su) ? lesson.su.flatMap((su) => [su.name, su.longname].filter(Boolean)) : [];
 
     return homeworks.some((hw) => {
@@ -1164,7 +1154,7 @@ function getNowLineState(ctx) {
       const hwSuArr = Array.isArray(hw.su) ? hw.su : hw.su ? [hw.su] : [];
       const hwNames = hwSuArr.flatMap((su) => [su.name, su.longname].filter(Boolean));
       const subjectMatch = lessonNames.some((ln) => hwNames.includes(ln));
-      return hwDueDate === lessonDate && subjectMatch;
+      return hwDueDate === lessonDateYmd && subjectMatch;
     });
   }
 
@@ -1932,17 +1922,16 @@ function getNowLineState(ctx) {
   }
 
   /**
-   * Add absence overlays to day column
    * Renders semi-transparent overlays for each absence period
    * Clamps overlays to visible time range
    *
-   * @param {HTMLElement} bothInner - Day column inner container
-   * @param {Array} dayAbsences - Array of absence objects for this day
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes
-   * @param {number} totalMinutes - Total minutes span
-   * @param {number} totalHeight - Total height in pixels
-   * @param {Object} ctx - Main module context
+   * @param { HTMLElement } bothInner - Day column inner container
+   * @param { Array } dayAbsences - Array of absence objects for this day
+   * @param { number } allStart - Start time in minutes
+   * @param { number } allEnd - End time in minutes
+   * @param { number } totalMinutes - Total minutes span
+   * @param { number } totalHeight - Total height in pixels
+   * @param { Object } ctx - Main module context
    */
   function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
     if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {

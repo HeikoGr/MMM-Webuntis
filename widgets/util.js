@@ -6,6 +6,9 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
 
+  const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
+  const LOG_LEVEL_WEIGHTS = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+
   /**
    * Global log function for widgets
    * Respects window.MMMWebuntisLogLevel set by main module
@@ -19,7 +22,7 @@
   function log(...fullArgs) {
     // Handle both log(level, ...args) and log(ctx, level, ...args) signatures
     let level, args;
-    if (fullArgs.length >= 1 && typeof fullArgs[0] === 'string' && ['error', 'warn', 'info', 'debug'].includes(fullArgs[0])) {
+    if (fullArgs.length >= 1 && typeof fullArgs[0] === 'string' && LOG_LEVELS.includes(fullArgs[0])) {
       // New signature: log(level, ...args)
       [level, ...args] = fullArgs;
     } else if (fullArgs.length >= 2) {
@@ -29,16 +32,15 @@
       return; // Not enough args
     }
 
-    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     const configured = window.MMMWebuntisLogLevel || 'none';
     // Special: if configured is 'none', never log
     if (configured === 'none') return;
 
-    const configuredLevel = levels[configured] !== undefined ? configured : 'info';
-    const msgLevel = levels[level] !== undefined ? level : 'info';
+    const configuredLevel = LOG_LEVEL_WEIGHTS[configured] !== undefined ? configured : 'info';
+    const msgLevel = LOG_LEVEL_WEIGHTS[level] !== undefined ? level : 'info';
 
     // Only log if the message level is important enough
-    if (levels[msgLevel] > levels[configuredLevel]) return;
+    if (LOG_LEVEL_WEIGHTS[msgLevel] > LOG_LEVEL_WEIGHTS[configuredLevel]) return;
 
     const prefix = '[MMM-Webuntis]';
     const tag = `${prefix} [${String(level).toUpperCase()}]`;
@@ -355,7 +357,7 @@
           ? util.createWidgetContext
           : () => ({ isVerbose: false, getConfig: () => undefined }),
       // Flexible field configuration functions
-      getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => '',
+      getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => [],
       getSubject: typeof util.getSubject === 'function' ? util.getSubject : () => '',
       getRoom: typeof util.getRoom === 'function' ? util.getRoom : () => '',
       getClass: typeof util.getClass === 'function' ? util.getClass : () => '',

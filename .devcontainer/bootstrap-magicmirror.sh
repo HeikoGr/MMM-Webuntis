@@ -16,13 +16,13 @@ mkdir -p "$MAGICMIRROR_PATH"
 
 if [ ! -d "$MAGICMIRROR_PATH/.git" ]; then
   echo "Cloning MagicMirror (${MAGICMIRROR_REPO_REF})..."
-  # We use init + fetch + checkout so it works even if the directory is not empty
+  # We use init + fetch + switch so it works even if the directory is not empty
   # (e.g. if a module is already mounted inside it)
   cd "$MAGICMIRROR_PATH"
   git init
   git remote add origin "$MAGICMIRROR_REPO_URL"
   git fetch --depth=1 origin "$MAGICMIRROR_REPO_REF"
-  git checkout FETCH_HEAD
+  git switch --detach FETCH_HEAD
 else
   echo "MagicMirror repository already present at $MAGICMIRROR_PATH"
 fi

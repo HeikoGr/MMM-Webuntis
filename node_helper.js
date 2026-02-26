@@ -7,7 +7,6 @@ const path = require('path');
 const fetchClient = require('./lib/fetchClient');
 
 // New utility modules for refactoring
-const { compactArray } = require('./lib/payloadCompactor');
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
 const webuntisApiService = require('./lib/webuntisApiService');
@@ -82,8 +81,6 @@ module.exports = NodeHelper.create({
     this._apiStatusBySession = new Map(); // sessionKey -> { timetable: 200, exams: 403, ... }
     // Initialize CacheManager for class ID and other caching
     this.cacheManager = new CacheManager(this._mmLog.bind(this));
-    // expose payload compactor so linters don't flag unused imports until full refactor
-    this.payloadCompactor = { compactArray };
     // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
     // Multi-instance support: store config per identifier
@@ -1837,11 +1834,7 @@ module.exports = NodeHelper.create({
     } finally {
       // Cleanup not needed - session managed by authService cache
       // Clear per-fetch warning dedupe set now that processing for this group finished
-      try {
-        this._currentFetchWarnings = undefined;
-      } catch {
-        this._currentFetchWarnings = undefined;
-      }
+      this._currentFetchWarnings = undefined;
     }
   },
 
@@ -2188,8 +2181,8 @@ module.exports = NodeHelper.create({
 
     // Sort unique start times chronologically (convert HH:MM to integer for comparison)
     const sortedStarts = Array.from(startTimes).sort((a, b) => {
-      const timeA = parseInt(a.replace(':', ''));
-      const timeB = parseInt(b.replace(':', ''));
+      const timeA = parseInt(a.replace(':', ''), 10);
+      const timeB = parseInt(b.replace(':', ''), 10);
       return timeA - timeB;
     });
 

@@ -66,9 +66,9 @@
         const nowMonth = Math.floor((nowYmd % 10000) / 100);
         const nowDay = nowYmd % 100;
 
-        const absDate = new Date(absYear, absMonth - 1, absDay);
-        const nowDate = new Date(nowYear, nowMonth - 1, nowDay);
-        const daysDiff = Math.floor((nowDate - absDate) / (1000 * 60 * 60 * 24));
+        const absUtcMs = Date.UTC(absYear, absMonth - 1, absDay);
+        const nowUtcMs = Date.UTC(nowYear, nowMonth - 1, nowDay);
+        const daysDiff = Math.floor((nowUtcMs - absUtcMs) / (1000 * 60 * 60 * 24));
 
         // daysDiff > 0 = past, daysDiff < 0 = future
         // rangeStart: show up to N days in the past
@@ -85,7 +85,7 @@
 
     let visibleCount = 0;
     for (const ab of sorted) {
-      if (maxItems !== null && maxItems > 0 && visibleCount >= maxItems) break;
+      if (maxItems > 0 && visibleCount >= maxItems) break;
 
       const dateRaw = ab?.date;
       const dateStr = dateRaw ? (formatDate ? formatDate(dateRaw, dateFormat) : '') : '';

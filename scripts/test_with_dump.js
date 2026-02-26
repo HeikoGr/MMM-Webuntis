@@ -56,9 +56,9 @@ const html = `<!DOCTYPE html>
     // Mock Date to use the first lesson's date from dump data
     // This ensures the grid shows the correct date range
     (function() {
-      const lessonDate = window.TEST_DUMP_DATA.timetableRange?.[0]?.date;
-      if (lessonDate) {
-        const dateStr = String(lessonDate); // e.g., "20260123"
+      const lessonDateYmd = window.TEST_DUMP_DATA.timetableRange?.[0]?.date;
+      if (lessonDateYmd) {
+        const dateStr = String(lessonDateYmd); // e.g., "20260123"
         const year = parseInt(dateStr.substring(0, 4), 10);
         const month = parseInt(dateStr.substring(4, 6), 10) - 1; // 0-indexed
         const day = parseInt(dateStr.substring(6, 8), 10);

@@ -5,11 +5,9 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
-import { exec, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import readline from 'node:readline';
-import { promisify } from 'node:util';
 
-const execAsync = promisify(exec);
 const UPSTREAM_REPO = 'https://github.com/MagicMirrorOrg/MagicMirror-3rd-Party-Modules.git';
 
 // ============================================================================
@@ -233,25 +231,79 @@ function parseCliArguments() {
 // Checker Setup Functions
 // ============================================================================
 
+/**
+ * Normalize and validate the checker repository path to avoid unsafe or
+ * unexpected values being passed into child_process exec/spawn calls.
+ *
+ * This ensures we always work with an absolute, normalized path and reject
+ * obvious shell-breaking characters that could affect command strings.
+ */
+function normalizeAndValidateCheckerRepo(checkerRepo) {
+  if (typeof checkerRepo !== 'string') {
+    throw new Error('Invalid checker repository path: expected a string');
+  }
+
+  const trimmed = checkerRepo.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Invalid checker repository path: path must not be empty');
+  }
+
+  const normalized = path.resolve(trimmed);
+
+  // Disallow characters that are commonly meaningful to shells and could
+  // interfere with command strings, even when quoted.
+  const disallowedPattern = /["'`$&|;<>]/;
+  if (disallowedPattern.test(normalized)) {
+    throw new Error('Invalid checker repository path: contains forbidden characters');
+  }
+
+  return normalized;
+}
+
 async function ensureCheckerRepository(checkerRepo) {
-  if (!existsSync(checkerRepo)) {
+  const safeCheckerRepo = normalizeAndValidateCheckerRepo(checkerRepo);
+
+  if (!existsSync(safeCheckerRepo)) {
     console.log('Fetching checker repository (git-free) via `degit` (first time only)...');
     try {
-      await execAsync(`npx degit MagicMirrorOrg/MagicMirror-3rd-Party-Modules#main "${checkerRepo}"`);
+      await new Promise((resolve, reject) => {
+        const child = spawn('npx', ['-y', 'degit', 'MagicMirrorOrg/MagicMirror-3rd-Party-Modules#main', safeCheckerRepo], {
+          stdio: 'inherit',
+        });
+        child.on('error', reject);
+        child.on('exit', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`degit exited with code ${code}`));
+        });
+      });
     } catch (err) {
       console.log('`degit` failed or not available, falling back to git clone and stripping .git:', err?.message || err);
-      await execAsync(`git clone --depth 1 ${UPSTREAM_REPO} "${checkerRepo}"`);
+      await new Promise((resolve, reject) => {
+        const child = spawn('git', ['clone', '--depth', '1', UPSTREAM_REPO, safeCheckerRepo], { stdio: 'inherit' });
+        child.on('error', reject);
+        child.on('exit', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`git clone exited with code ${code}`));
+        });
+      });
       try {
-        await fs.rm(path.join(checkerRepo, '.git'), { recursive: true, force: true });
+        await fs.rm(path.join(safeCheckerRepo, '.git'), { recursive: true, force: true });
       } catch {
         // Non-fatal
       }
     }
   }
 
-  if (!existsSync(path.join(checkerRepo, 'node_modules'))) {
+  if (!existsSync(path.join(safeCheckerRepo, 'node_modules'))) {
     console.log('📦 Installing dependencies...');
-    await execAsync('npm install', { cwd: checkerRepo });
+    await new Promise((resolve, reject) => {
+      const child = spawn('npm', ['install'], { cwd: safeCheckerRepo, stdio: 'inherit' });
+      child.on('error', reject);
+      child.on('exit', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`npm install exited with code ${code}`));
+      });
+    });
   }
 }
 
@@ -717,13 +769,14 @@ async function main() {
       let checkPath = scriptDir;
 
       for (let i = 0; i < 5; i++) {
-        const testPath = path.resolve(checkPath, '../'.repeat(i));
-        const parentPath = path.dirname(testPath);
+        const parentPath = path.dirname(checkPath);
 
-        if (parentPath === modulesRoot && existsSync(path.join(testPath, 'package.json'))) {
-          currentModuleName = path.basename(testPath);
+        if (parentPath === modulesRoot && existsSync(path.join(checkPath, 'package.json'))) {
+          currentModuleName = path.basename(checkPath);
           break;
         }
+
+        checkPath = parentPath;
       }
 
       if (!currentModuleName) {
