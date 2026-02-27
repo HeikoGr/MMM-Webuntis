@@ -14,7 +14,7 @@
     "IN_DEVCONTAINER": "1",
     "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
     "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu",
-    "INSTALL_PLAYWRIGHT_BROWSERS": "0",
+    "INSTALL_PLAYWRIGHT_BROWSERS": "1",
     "ENABLE_PLAYWRIGHT_MCP": "1"
   },
   "forwardPorts": [8080],

@@ -30,9 +30,13 @@
     const headerTitle = ctx.translate('messagesofday');
     addHeader(container, headerTitle);
 
+    const messagesContainer = document.createElement('div');
+    messagesContainer.className = 'messages-grid';
+    container.appendChild(messagesContainer);
+
     if (!Array.isArray(messagesOfDay) || messagesOfDay.length === 0) {
       log('debug', `[messagesofday] no data`);
-      addFullRow(container, 'messageRowEmpty', ctx.translate('no_messages'));
+      addFullRow(messagesContainer, 'messageRowEmpty', ctx.translate('no_messages'));
       return 1;
     }
 
@@ -51,7 +55,7 @@
 
       // Combine subject and text
       const fullContent = subjectHtml
-        ? `${subjectHtml}<br/><span class="message-text">${contentText}</span>`
+        ? `${subjectHtml}<span class="message-text">${contentText}</span>`
         : `<span class="message-text">${contentText}</span>`;
 
       // Build the row classes
@@ -62,7 +66,7 @@
 
       // Text contains safe HTML formatting tags from backend (b, i, u, etc.)
       // Don't escape - render as HTML via innerHTML. Backend sanitizes and only allows safe tags.
-      addFullRow(container, rowClasses, fullContent);
+      addFullRow(messagesContainer, rowClasses, fullContent);
       addedRows++;
     }
 

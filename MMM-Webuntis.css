@@ -23,7 +23,8 @@
   --wu-homework-icon-right: 0px;
   --wu-homework-padding: 2px;
   --wu-exam-border-width: 6px;
-  max-width: 31.25rem;
+  --wu-messages-min-width: 200px;
+  --wu-messages-max-cols: 3;
   width: 100%;
   box-sizing: border-box;
   font-size: 0.875rem;
@@ -756,10 +757,48 @@
 .MMM-Webuntis .message-subject {
   font-weight: 700;
   font-size: 1rem;
+  display: block;
+  margin-bottom: 4px;
 }
 
 /* Message Text */
 .MMM-Webuntis .message-text {
   font-size: 0.9rem;
   color: #ddd;
+  display: block;
+}
+
+/* Messages Grid Layout */
+.MMM-Webuntis .messages-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(var(--wu-messages-min-width), calc(100% / var(--wu-messages-max-cols) - 5px)), 1fr));
+  gap: 5px;
+  margin-bottom: 5px;
+  grid-column: 1 / -1; /* Ensure it spans full width of widget container */
+  width: 100%;
+}
+
+.MMM-Webuntis.messagesofday {
+  max-width: 100%;
+}
+
+.MMM-Webuntis .messages-grid .messageRow {
+  display: flex; /* Override display: contents from .wu-row */
+  background-color: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid #ffcc00;
+  border-radius: 4px;
+  padding: 2px 3px;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.MMM-Webuntis .messages-grid .messageRowEmpty {
+  display: block; /* Override display: contents */
+  padding: 2px 3px;
+  color: #999;
+  font-style: italic;
+}
+
+.MMM-Webuntis .messages-grid .wu-col-full-width {
+  width: 100%;
 }
