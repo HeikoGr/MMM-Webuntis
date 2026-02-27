@@ -92,7 +92,7 @@ let config = {
           //   secondary: 'teacher',  // Secondary field (second line)
           //   additional: ['room'],  // Additional fields shown as badges/parentheses
           //   format: {              // Display format: 'short' (abbreviation) or 'long' (full name)
-          //     subject: 'short',
+          //     subject: 'long',
           //     teacher: 'short',
           //     class: 'short',
           //     room: 'short',

@@ -97,8 +97,8 @@ Module.register('MMM-Webuntis', {
         secondary: 'teacher', // Secondary field to display
         additional: ['room'], // Array of additional fields to show as badges
         format: {
-          subject: 'short', // 'short' or 'long' name format
-          teacher: 'short',
+          subject: 'long', // 'short' or 'long' name format
+          teacher: 'long',
           class: 'short',
           room: 'short',
           studentGroup: 'short',
@@ -547,46 +547,18 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Build configuration object to send to backend
-   * Deep merges widget-specific defaults into module and student configs
-   * MagicMirror only does shallow merge, so nested widget configs need manual merging
+   * Backend performs normalization/default handling for nested widget configs
    *
-   * @returns {Object} Complete config object with merged defaults and student configs
+   * @returns {Object} Config object with session metadata for backend processing
    */
   _buildSendConfig() {
-    // Build config object to send to backend, merging widget defaults and student configs
-    const defNoStudents = { ...(this.config || {}) };
-    delete defNoStudents.students;
-
-    // Deep merge widget defaults from this.defaults into defNoStudents
-    // MagicMirror only does shallow merge, so nested widget configs need manual merging
-    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-    widgetKeys.forEach((widget) => {
-      if (this.defaults[widget]) {
-        // Start with module defaults
-        defNoStudents[widget] = { ...this.defaults[widget], ...(defNoStudents[widget] || {}) };
-      }
-    });
-
-    // NOTE: debugDate is never persisted - always use config.debugDate as-is (or null)
+    // Build config object to send to backend.
+    // Central normalization/default handling lives in node_helper.js.
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
-
-    const mergedStudents = rawStudents.map((s) => {
-      const merged = { ...defNoStudents, ...(s || {}) };
-      // Deep merge student-level widget configs
-      widgetKeys.forEach((widget) => {
-        if (s && s[widget]) {
-          merged[widget] = { ...defNoStudents[widget], ...s[widget] };
-        } else if (!merged[widget]) {
-          // Ensure widget defaults are present even if student doesn't have them
-          merged[widget] = { ...defNoStudents[widget] };
-        }
-      });
-      return merged;
-    });
 
     const sendConfig = {
       ...this.config,
-      students: mergedStudents,
+      students: rawStudents,
       id: this.identifier,
       sessionId: this._sessionId, // Include session ID for config isolation
     };
@@ -637,15 +609,11 @@ Module.register('MMM-Webuntis', {
     }
 
     // Validate numeric ranges
-    // Validate new and legacy range keys
     if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
       warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
     }
     if (Number.isFinite(config.pastDays) && config.pastDays < 0) {
       warnings.push(`pastDays cannot be negative. Value: ${config.pastDays}`);
-    }
-    if (Number.isFinite(config.daysToShow) && config.daysToShow < 0) {
-      warnings.push(`daysToShow cannot be negative (deprecated key). Value: ${config.daysToShow}`);
     }
     if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
@@ -1005,21 +973,13 @@ Module.register('MMM-Webuntis', {
   /**
    * Start periodic data fetch timer
    * Sends FETCH_DATA to backend at configured updateInterval
-   * Respects legacy fetchIntervalMs key for backwards compatibility
-   *
    * Timer is skipped if module is paused or interval is invalid
    */
   _startFetchTimer() {
     // Start periodic data fetch timer based on updateInterval
     if (this._paused) return;
     if (this._fetchTimer) return;
-    // Prefer the new `updateInterval` config key, fall back to legacy `fetchIntervalMs`.
-    const interval =
-      typeof this.config?.updateInterval === 'number'
-        ? Number(this.config.updateInterval)
-        : typeof this.config?.fetchIntervalMs === 'number'
-          ? Number(this.config.fetchIntervalMs)
-          : null;
+    const interval = typeof this.config?.updateInterval === 'number' ? Number(this.config.updateInterval) : null;
     if (!interval || !Number.isFinite(interval) || interval <= 0) return;
 
     this._fetchTimer = setInterval(() => {
@@ -1282,7 +1242,7 @@ Module.register('MMM-Webuntis', {
             sortedStudentTitles,
             (studentTitle, studentLabel, studentConfig, container) => {
               const exams = this.examsByStudent?.[studentTitle] || [];
-              if (!Array.isArray(exams) || Number(studentConfig?.examsDaysAhead) <= 0) return 0;
+              if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
               return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
             }
           );

@@ -15,63 +15,46 @@ MMM-Webuntis provides extensive CSS customization options for users with visual 
 
 ## Available CSS Variables
 
-Override these in `config/custom.css` to change colors globally:
+The module now uses a reduced design language:
+- **Blue** = new / active / informational
+- **Yellow** = important / changed / attention
+- **Red** = cancelled / error / critical
+
+`rgba(...)` values are used for transparency (overlays, glows). Base colors stay in hex.
+The overlay system uses shared alpha levels: `--wu-alpha-subtle`, `--wu-alpha-soft`, `--wu-alpha-medium`, `--wu-alpha-strong`.
+
+Override these in `config/custom.css` to customize globally:
 
 ```css
 .MMM-Webuntis {
-  /* Lesson background colors */
-  --wu-replacement-bg: #bfe6ff;        /* Substitutions (blue) */
-  --wu-replacement-text: #032f56;
-  --wu-cancelled-bg: #ffbdbd;          /* Cancelled lessons (red) */
-  --wu-cancelled-text: #7a0000;
-  --wu-regular-bg: #c9ffbf;            /* Regular lessons (green) */
-  --wu-regular-text: #0f6b0f;
+  /* Theme: neutral base */
+  --wu-lesson-surface: #ffffff;
+  --wu-time-color: #666;
+  --wu-secondary-text: #888;
+  --wu-muted-text: #999;
+  --wu-alpha-subtle: 0.06;
+  --wu-alpha-soft: 0.18;
+  --wu-alpha-medium: 0.45;
+  --wu-alpha-strong: 0.85;
 
-  /* Other elements */
-  --wu-exam-bar: #ffeb3b;              /* Exam indicator (yellow) */
-  --wu-no-lesson-bg: #642463;          /* No lesson notice (purple) */
-  --wu-lesson-surface: #fff;           /* Lesson surface background */
-  --wu-time-color: #666;               /* Time labels */
-  --wu-secondary-text: #888;           /* Secondary/teacher text */
-  --wu-muted-text: #999;               /* Muted helper text */
-  --wu-message-text: #ddd;             /* Message body text */
+  /* Theme: 3-color core accents */
+  --wu-accent-blue: #2f80ed;
+  --wu-accent-yellow: #e0b000;
+  --wu-accent-red: #d64545;
 
-  /* State & accent colors */
-  --wu-substitution-accent: #ff8800;   /* Substitution detail text */
-  --wu-exam-description-color: #ff6600;
-  --wu-holiday-notice-color: #d35400;
-  --wu-absence-excused-color: #2e7d32;
-  --wu-absence-unexcused-color: #b71c1c;
-  --wu-warning-color: #ff9800;
-  --wu-warning-bg-soft: rgba(255, 152, 0, 0.06);
-  --wu-warning-bg-strong: rgba(255, 152, 0, 0.1);
-  --wu-critical-color: #f44336;
-  --wu-critical-bg: rgba(244, 67, 54, 0.15);
-  --wu-error-text: #b71c1c;
-  --wu-error-bg: #ffebee;
-  --wu-error-border: #d32f2f;
+  /* Feedback mapping (blue/yellow/red) */
+  --wu-replacement-bg: #dbe9ff;
+  --wu-cancelled-bg: #f9d8d8;
+  --wu-regular-bg: #e8f1ff;
+  --wu-warning-color: #e0b000;
+  --wu-critical-color: #d64545;
+  --wu-message-card-border: #e0b000;
 
-  /* Today/day-column overrides */
-  --wu-today-replacement-bg: #82c6f0;
-  --wu-today-replacement-text: #01242f;
-  --wu-today-cancelled-bg: #ff8a8a;
-  --wu-today-cancelled-text: #590000;
-  --wu-today-regular-bg: #a8f59f;
-  --wu-today-regular-text: #054a05;
-  --wu-today-lesson-border: #cfcfcf;
+  /* Overlay & timeline (rgba for transparency) */
+  --wu-absence-overlay-bg: rgba(214, 69, 69, var(--wu-alpha-medium));
+  --wu-nowline-start: rgba(214, 69, 69, var(--wu-alpha-strong));
 
-  /* Overlay and timeline accents */
-  --wu-grid-more-bg: rgba(0, 0, 0, 0.45);
-  --wu-absence-overlay-bg: rgba(255, 100, 100, 0.5);
-  --wu-absence-overlay-border: rgba(255, 100, 100, 0.8);
-  --wu-absence-overlay-hover-bg: rgba(255, 100, 100, 0.65);
-  --wu-absence-overlay-hover-border: rgba(255, 100, 100, 1);
-  --wu-hourline-color: rgba(239, 239, 239, 0.5);
-  --wu-nowline-start: rgba(255, 0, 0, 0.95);
-  --wu-nowline-end: rgba(255, 0, 0, 0.85);
-  --wu-nowline-glow: rgba(255, 0, 0, 0.45);
-
-  /* Spacing & borders */
+  /* Layout & spacing */
   --wu-lesson-outline: #ccc;
   --wu-border-strong: #333;
   --wu-border-muted: #444;
@@ -79,11 +62,6 @@ Override these in `config/custom.css` to change colors globally:
   --wu-lesson-radius: 4px;
   --wu-lesson-padding: 2px;
   --wu-exam-border-width: 6px;
-
-  /* Message cards / changed fields */
-  --wu-message-card-bg: rgba(255, 255, 255, 0.05);
-  --wu-message-card-border: #ffcc00;
-  --wu-changed-highlight: #f0a030;
 }
 ```
 
@@ -124,7 +102,7 @@ All text elements have dedicated CSS classes for precise styling:
 | `.past` | Past lessons | Striped overlay |
 | `.homework-icon` | Homework indicator 📘 | Size/position |
 | `.grid-daylabel` | Day labels (Mo, Di, etc.) | Font weight |
-| `.absence-excused` | Excused absences | Green color |
+| `.absence-excused` | Excused absences | Blue color |
 | `.absence-unexcused` | Unexcused absences | Red color |
 
 ## Common Customization Examples
@@ -227,10 +205,9 @@ All text elements have dedicated CSS classes for precise styling:
 
 ```css
 .MMM-Webuntis {
-  --wu-cancelled-bg: #0077bb;      /* Blue instead of red */
-  --wu-cancelled-text: #ffffff;
-  --wu-regular-bg: #ee7733;        /* Orange instead of green */
-  --wu-regular-text: #000000;
+  --wu-accent-red: #0077bb;        /* Blue instead of red */
+  --wu-cancelled-bg: #dbe9ff;
+  --wu-cancelled-text: #0f2f57;
 }
 ```
 
@@ -238,10 +215,10 @@ All text elements have dedicated CSS classes for precise styling:
 
 ```css
 .MMM-Webuntis {
-  --wu-regular-bg: #0077bb;        /* Blue instead of green */
-  --wu-regular-text: #ffffff;
-  --wu-replacement-bg: #ee7733;    /* Orange */
-  --wu-replacement-text: #000000;
+  --wu-accent-blue: #0077bb;
+  --wu-accent-yellow: #ee7733;
+  --wu-replacement-bg: #dbe9ff;
+  --wu-warning-color: #ee7733;
 }
 ```
 

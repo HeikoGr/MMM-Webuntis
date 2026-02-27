@@ -330,6 +330,32 @@
   }
 
   /**
+   * Resolve widget config value with a unified precedence chain:
+   * 1) studentConfig.<widgetName>.<configKey>
+   * 2) ctx.defaults.<widgetName>.<configKey>
+   * 3) optional fallback value
+   *
+   * @param {Object} studentConfig - Student configuration object from backend
+   * @param {Object} ctx - Main module context (optional, used for defaults)
+   * @param {string} widgetName - Widget name (e.g., 'lessons', 'grid', 'exams')
+   * @param {string} configKey - Configuration key to retrieve
+   * @param {Object} options - Resolution options
+   * @param {*} [options.fallback] - Optional fallback if no value is found
+   * @returns {*} Resolved configuration value
+   */
+  function getWidgetConfigResolved(studentConfig, ctx, widgetName, configKey, options = {}) {
+    const { fallback } = options || {};
+
+    const directValue = getWidgetConfig(studentConfig, widgetName, configKey);
+    if (directValue !== undefined) return directValue;
+
+    const defaultValue = ctx?.defaults?.[widgetName]?.[configKey];
+    if (defaultValue !== undefined) return defaultValue;
+
+    return fallback;
+  }
+
+  /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
    * Provides safe fallbacks if any utility is missing
@@ -347,6 +373,7 @@
       formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
       toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
+      getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
       addRow: typeof dom.addRow === 'function' ? dom.addRow : () => {},
       addFullRow: typeof dom.addFullRow === 'function' ? dom.addFullRow : () => {},
       addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => {},
@@ -373,19 +400,25 @@
    * @param {string} widgetName - Widget name (e.g., 'lessons', 'grid', 'exams')
    * @param {Object} studentConfig - Student configuration from backend
    * @param {Object} util - Utility functions object
+   * @param {Object|null} ctx - Main module context (optional, used for defaults lookup)
    * @returns {Object} Widget config wrapper with:
    *   - name: Widget name
    *   - config: Student configuration
    *   - isVerbose: True if mode is 'verbose'
-   *   - getConfig(key, defaultValue): Get widget-specific config value
+   *   - getConfig(key, defaultValueOrOptions): Get resolved widget config value
    *   - log(level, msg): Logging function
    */
-  function createWidgetContext(widgetName, studentConfig, util) {
+  function createWidgetContext(widgetName, studentConfig, util, ctx = null) {
     return {
       name: widgetName,
       config: studentConfig,
       isVerbose: (studentConfig?.mode ?? 'compact') === 'verbose',
-      getConfig: (key, defaultValue) => getWidgetConfig(studentConfig, widgetName, key) ?? defaultValue,
+      getConfig: (key, optionsOrFallback) => {
+        if (optionsOrFallback && typeof optionsOrFallback === 'object' && !Array.isArray(optionsOrFallback)) {
+          return getWidgetConfigResolved(studentConfig, ctx, widgetName, key, optionsOrFallback);
+        }
+        return getWidgetConfigResolved(studentConfig, ctx, widgetName, key, { fallback: optionsOrFallback });
+      },
       log: (level, msg) => util?.log?.(level, msg),
     };
   }
@@ -498,6 +531,7 @@
     _log: log, // backward compatibility alias
     getWidgetConfig,
     initWidget,
+    getWidgetConfigResolved,
     createWidgetContext,
     // New dynamic field utilities
     getFieldValue,

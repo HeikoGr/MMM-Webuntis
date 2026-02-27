@@ -1,71 +1,100 @@
 .MMM-Webuntis {
-  /* Base palette variables - override in custom.css if needed */
-  --wu-bg: rgba(0, 0, 0, 0.05);
+  /* Theme: neutral base */
+  --wu-bg: rgba(var(--wu-rgb-black), var(--wu-alpha-subtle));
+  --wu-lesson-surface: #ffffff;
+  --wu-text-on-dark: #ffffff;
   --wu-time-color: #666;
-  --wu-replacement-bg: #bfe6ff;
-  --wu-replacement-text: #032f56;
-  --wu-cancelled-bg: #ffbdbd;
-  --wu-cancelled-text: #7a0000;
-  --wu-regular-bg: #c9ffbf;
-  --wu-regular-text: #0f6b0f;
-  --wu-lesson-border: #9fd39f;
-  --wu-no-lesson-bg: #642463;
-  --wu-lesson-surface: #fff;
-  --wu-text-on-dark: #fff;
   --wu-border-strong: #333;
   --wu-border-muted: #444;
   --wu-lesson-outline: #ccc;
-  --wu-split-divider: rgba(0, 0, 0, 0.06);
-  --wu-exam-bar: #ffeb3b;
-  --wu-break-supervision-bg: #d47aeb;
-  --wu-break-supervision-text: #fff;
-  --wu-stripe-light: rgba(255, 255, 255, 0.18);
-  --wu-stripe-dark: rgba(0, 0, 0, 0.12);
+  --wu-split-divider: rgba(var(--wu-rgb-black), var(--wu-alpha-subtle));
+  --wu-rgb-black: 0, 0, 0;
+  --wu-rgb-white: 255, 255, 255;
+  --wu-rgb-light-line: 239, 239, 239;
+  --wu-rgb-accent-red: 214, 69, 69;
+  --wu-alpha-subtle: 0.06;
+  --wu-alpha-soft: 0.18;
+  --wu-alpha-medium: 0.45;
+  --wu-alpha-strong: 0.85;
+
+  /* Theme: core accents (design language) */
+  --wu-accent-blue: #2f80ed;
+  --wu-accent-blue-bg: #dbe9ff;
+  --wu-accent-blue-bg-strong: #c6dcff;
+  --wu-accent-blue-text: #0f2f57;
+  --wu-accent-yellow: #e0b000;
+  --wu-accent-yellow-bg: #fff1bf;
+  --wu-accent-yellow-text: #5a4700;
+  --wu-accent-red: #d64545;
+  --wu-accent-red-bg: #f9d8d8;
+  --wu-accent-red-bg-strong: #f3bcbc;
+  --wu-accent-red-text: #5a1212;
+
+  /* Feedback: states (blue/yellow/red) */
+  --wu-replacement-bg: var(--wu-accent-blue-bg);
+  --wu-replacement-text: var(--wu-accent-blue-text);
+  --wu-cancelled-bg: var(--wu-accent-red-bg);
+  --wu-cancelled-text: var(--wu-accent-red-text);
+  --wu-regular-bg: #e8f1ff;
+  --wu-regular-text: #123a66;
+  --wu-lesson-border: #8fb5e6;
+  --wu-no-lesson-bg: var(--wu-accent-yellow-bg);
+  --wu-no-lesson-text: var(--wu-accent-yellow-text);
+  --wu-exam-bar: var(--wu-accent-yellow);
+  --wu-break-supervision-bg: var(--wu-accent-blue-bg-strong);
+  --wu-break-supervision-text: var(--wu-accent-blue-text);
+  --wu-substitution-generic: var(--wu-accent-yellow-text);
+  --wu-substitution-accent: #c69200;
+  --wu-exam-description-color: var(--wu-accent-yellow-text);
+  --wu-holiday-notice-color: var(--wu-accent-yellow-text);
+  --wu-absence-excused-color: var(--wu-accent-blue);
+  --wu-absence-unexcused-color: var(--wu-accent-red);
+  --wu-warning-color: var(--wu-accent-yellow);
+  --wu-warning-bg-soft: rgba(255, 241, 191, var(--wu-alpha-soft));
+  --wu-warning-bg-strong: rgba(255, 241, 191, var(--wu-alpha-medium));
+  --wu-critical-color: var(--wu-accent-red);
+  --wu-critical-bg: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-soft));
+  --wu-error-text: var(--wu-accent-red-text);
+  --wu-error-bg: var(--wu-accent-red-bg);
+  --wu-error-border: var(--wu-accent-red);
+  --wu-legacy-exam-row-color: var(--wu-accent-yellow);
+
+  /* Feedback: today variants (same color system, stronger intensity) */
+  --wu-today-replacement-bg: var(--wu-accent-blue-bg-strong);
+  --wu-today-replacement-text: #0b2a4f;
+  --wu-today-cancelled-bg: var(--wu-accent-red-bg-strong);
+  --wu-today-cancelled-text: #4c0e0e;
+  --wu-today-regular-bg: #d5e6ff;
+  --wu-today-regular-text: #0f335c;
+  --wu-today-lesson-border: #7da6da;
+
+  /* Overlay & Timeline */
+  --wu-grid-more-bg: rgba(var(--wu-rgb-black), var(--wu-alpha-medium));
+  --wu-absence-overlay-bg: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-medium));
+  --wu-absence-overlay-border: var(--wu-accent-red);
+  --wu-absence-overlay-today-bg: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-medium));
+  --wu-absence-overlay-today-border: var(--wu-accent-red);
+  --wu-absence-icon-shadow: rgba(var(--wu-rgb-black), var(--wu-alpha-medium));
+  --wu-absence-reason-color: var(--wu-accent-red-text);
+  --wu-absence-reason-shadow: rgba(var(--wu-rgb-white), var(--wu-alpha-strong));
+  --wu-hourline-color: rgba(var(--wu-rgb-light-line), var(--wu-alpha-medium));
+  --wu-nowline-start: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-strong));
+  --wu-nowline-end: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-medium));
+  --wu-nowline-glow: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-soft));
+
+  /* Text & Highlights */
   --wu-secondary-text: #888;
   --wu-muted-text: #999;
   --wu-message-text: #ddd;
-  --wu-substitution-generic: #ffa500;
-  --wu-substitution-accent: #ff8800;
-  --wu-exam-description-color: #ff6600;
-  --wu-holiday-notice-color: #d35400;
-  --wu-absence-excused-color: #2e7d32;
-  --wu-absence-unexcused-color: #b71c1c;
-  --wu-warning-color: #ff9800;
-  --wu-warning-bg-soft: rgba(255, 152, 0, 0.06);
-  --wu-warning-bg-strong: rgba(255, 152, 0, 0.1);
-  --wu-critical-color: #f44336;
-  --wu-critical-bg: rgba(244, 67, 54, 0.15);
-  --wu-error-text: #b71c1c;
-  --wu-error-bg: #ffebee;
-  --wu-error-border: #d32f2f;
-  --wu-legacy-exam-row-color: rgb(0, 255, 255);
-  --wu-today-replacement-bg: #82c6f0;
-  --wu-today-replacement-text: #01242f;
-  --wu-today-cancelled-bg: #ff8a8a;
-  --wu-today-cancelled-text: #590000;
-  --wu-today-regular-bg: #a8f59f;
-  --wu-today-regular-text: #054a05;
-  --wu-today-lesson-border: #cfcfcf;
-  --wu-grid-more-bg: rgba(0, 0, 0, 0.45);
-  --wu-absence-overlay-bg: rgba(255, 100, 100, 0.5);
-  --wu-absence-overlay-border: rgba(255, 100, 100, 0.8);
-  --wu-absence-overlay-hover-bg: rgba(255, 100, 100, 0.65);
-  --wu-absence-overlay-hover-border: rgba(255, 100, 100, 1);
-  --wu-absence-overlay-today-bg: rgba(255, 80, 80, 0.6);
-  --wu-absence-overlay-today-border: rgba(255, 80, 80, 0.9);
-  --wu-absence-overlay-today-hover-bg: rgba(255, 80, 80, 0.7);
-  --wu-absence-overlay-today-hover-border: rgba(255, 80, 80, 1);
-  --wu-absence-icon-shadow: rgba(0, 0, 0, 0.3);
-  --wu-absence-reason-color: rgba(100, 0, 0, 0.9);
-  --wu-absence-reason-hover-color: rgba(100, 0, 0, 1);
-  --wu-absence-reason-shadow: rgba(255, 255, 255, 0.8);
-  --wu-hourline-color: rgba(239, 239, 239, 0.5);
-  --wu-nowline-start: rgba(255, 0, 0, 0.95);
-  --wu-nowline-end: rgba(255, 0, 0, 0.85);
-  --wu-nowline-glow: rgba(255, 0, 0, 0.45);
-  --wu-changed-highlight: #f0a030;
-  --wu-message-card-bg: rgba(255, 255, 255, 0.05);
-  --wu-message-card-border: #ffcc00;
+  --wu-changed-highlight: var(--wu-accent-yellow-text);
+  --wu-message-card-bg: rgba(var(--wu-rgb-white), var(--wu-alpha-soft));
+  --wu-message-card-border: var(--wu-accent-yellow);
+
+  /* Patterns */
+  --wu-stripe-light: rgba(var(--wu-rgb-white), var(--wu-alpha-soft));
+  --wu-stripe-dark: rgba(var(--wu-rgb-black), 0.12);
+
+  /* Layout & Spacing */
   --wu-lesson-radius: 4px;
   --wu-lesson-padding: 2px;
   --wu-ticker-padding-block: 1px;
@@ -286,7 +315,7 @@
 .MMM-Webuntis .grid-combined .no-lesson {
   background-color: var(--wu-no-lesson-bg);
   padding: 0.313rem;
-  color: var(--wu-text-on-dark);
+  color: var(--wu-no-lesson-text);
   position: absolute;
   top: 0;
   left: 0;
@@ -444,8 +473,7 @@
   border-left: 2px solid var(--wu-absence-overlay-border);
   pointer-events: auto;
   z-index: 2;
-  cursor: help;
-  transition: all 200ms ease;
+  cursor: default;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -453,20 +481,9 @@
   overflow: visible;
 }
 
-.MMM-Webuntis .grid-combined .grid-absence-overlay:hover {
-  width: 38%;
-  background: var(--wu-absence-overlay-hover-bg);
-  border-left-color: var(--wu-absence-overlay-hover-border);
-}
-
 .MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay {
   background: var(--wu-absence-overlay-today-bg);
   border-left-color: var(--wu-absence-overlay-today-border);
-}
-
-.MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay:hover {
-  background: var(--wu-absence-overlay-today-hover-bg);
-  border-left-color: var(--wu-absence-overlay-today-hover-border);
 }
 
 /* Absence overlay icon and text */
@@ -486,10 +503,6 @@
   word-break: break-word;
   padding: 2px 4px;
   line-height: 1.2;
-}
-
-.MMM-Webuntis .grid-combined .grid-absence-overlay:hover .absence-reason {
-  color: var(--wu-absence-reason-hover-color);
 }
 
 .MMM-Webuntis .holiday-notice {

@@ -36,7 +36,7 @@ function getNowLineState(ctx) {
     log,
     escapeHtml,
     addHeader,
-    getWidgetConfig,
+    getWidgetConfigResolved,
     formatDate,
     formatTime,
     toMinutes,
@@ -93,27 +93,44 @@ function getNowLineState(ctx) {
    * Resolve field configuration from config
    * Extracts grid.fields.{primary, secondary, additional, format} from student config
    *
+   * Single source of truth: defaults are merged centrally in MMM-Webuntis.js / node_helper.js.
+   * This widget only validates values and applies minimal safety fallbacks for invalid/missing data.
+   *
    * @param {Object} config - Student configuration object
-   * @returns {Object} Resolved field configuration with defaults:
-   *   - primary: string - Primary field type (default: 'subject')
-   *   - secondary: string - Secondary field type (default: 'teacher')
-   *   - additional: string[] - Additional field types (default: ['room'])
-   *   - format: Object - Name format per field type (default: 'short')
+   * @returns {Object} Resolved field configuration
    */
-  function resolveFieldConfig(config) {
+  function resolveFieldConfig(config, ctx) {
     const gridConfig = config?.grid?.fields || {};
+    const defaultFields = ctx?.defaults?.grid?.fields || {};
+    const validFieldTypes = ['subject', 'teacher', 'room', 'class', 'studentGroup', 'info', 'none'];
+    const validFormats = ['short', 'long'];
+
+    const normalizeFieldType = (value, fallback) => {
+      const normalized = typeof value === 'string' ? value.trim() : '';
+      return validFieldTypes.includes(normalized) ? normalized : fallback;
+    };
+
+    const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ['room'];
+    const inputAdditional = Array.isArray(gridConfig.additional) ? gridConfig.additional : fallbackAdditional;
+    const additional = inputAdditional.map((field) => normalizeFieldType(field, null)).filter((field) => typeof field === 'string');
+
+    const defaultFormat = defaultFields.format && typeof defaultFields.format === 'object' ? defaultFields.format : {};
+    const localFormat = gridConfig.format && typeof gridConfig.format === 'object' ? gridConfig.format : {};
+    const rawFormat = { ...defaultFormat, ...localFormat };
+    const format = {};
+    Object.keys(rawFormat).forEach((key) => {
+      if (!validFieldTypes.includes(key)) return;
+      const value = String(rawFormat[key] || '').trim();
+      if (validFormats.includes(value)) {
+        format[key] = value;
+      }
+    });
+
     return {
-      primary: gridConfig.primary || 'subject',
-      secondary: gridConfig.secondary || 'teacher',
-      additional: gridConfig.additional || ['room'],
-      format: gridConfig.format || {
-        subject: 'short',
-        teacher: 'short',
-        class: 'short',
-        room: 'short',
-        studentGroup: 'short',
-        info: 'short',
-      },
+      primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, 'subject')),
+      secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, 'teacher')),
+      additional: additional.length > 0 ? additional : fallbackAdditional,
+      format,
     };
   }
 
@@ -180,8 +197,8 @@ function getNowLineState(ctx) {
    *   - additional: string[] - Additional field values (deduplicated)
    */
   function buildFlexibleLessonDisplay(lesson, config, options = {}) {
-    const fieldConfig = resolveFieldConfig(config);
-    const { includeAdditional = true } = options;
+    const { includeAdditional = true, ctx = null } = options;
+    const fieldConfig = resolveFieldConfig(config, ctx);
 
     const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
     const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
@@ -312,12 +329,15 @@ function getNowLineState(ctx) {
    *   - weekView: boolean - Whether week view mode is active
    */
   function validateAndExtractGridConfig(ctx, studentConfig) {
-    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const weekView = getWidgetConfig(studentConfig, 'grid', 'weekView') ?? false;
-    const configuredNext = getWidgetConfig(studentConfig, 'grid', 'nextDays') ?? 3;
-    const configuredPast = getWidgetConfig(studentConfig, 'grid', 'pastDays') ?? 0;
-    const gridDateFormat = getWidgetConfig(studentConfig, 'grid', 'dateFormat') ?? 'EEE dd.MM.';
-    const maxGridLessons = Math.max(0, Math.floor(Number(getWidgetConfig(studentConfig, 'grid', 'maxLessons') ?? 0)));
+    const getGridConfig = (key) => {
+      return getWidgetConfigResolved(studentConfig, ctx, 'grid', key);
+    };
+
+    const weekView = Boolean(getGridConfig('weekView'));
+    const configuredNext = getGridConfig('nextDays');
+    const configuredPast = getGridConfig('pastDays');
+    const gridDateFormat = getGridConfig('dateFormat');
+    const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig('maxLessons') ?? 0)));
 
     let daysToShow, pastDays, startOffset, totalDisplayDays;
 
@@ -361,7 +381,7 @@ function getNowLineState(ctx) {
       pastDays = 0;
     } else {
       // Standard view with configurable nextDays/pastDays
-      daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 3;
+      daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 0;
       pastDays = Math.max(0, parseInt(configuredPast, 10));
       startOffset = -pastDays;
       totalDisplayDays = pastDays + 1 + daysToShow;
@@ -1041,7 +1061,7 @@ function getNowLineState(ctx) {
    * @param {Object} ctx - Main module context (provides config)
    * @returns {string} HTML content for lesson cell
    */
-  function makeLessonInnerHTML(lesson, escapeHtml, ctx) {
+  function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
     // Special handling for BREAK_SUPERVISION (must run first, before flexible display)
     if (lesson.activityType === 'BREAK_SUPERVISION') {
       const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
@@ -1062,7 +1082,7 @@ function getNowLineState(ctx) {
     // Use flexible field configuration
     if (ctx) {
       try {
-        const displayParts = buildFlexibleLessonDisplay(lesson, ctx.config);
+        const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
         // Primary: show subject, highlight in changed colour when subject was swapped
         let primaryHtml;
@@ -1290,7 +1310,8 @@ function getNowLineState(ctx) {
     homeworks,
     nowYmd,
     nowMin,
-    tickerData
+    tickerData,
+    lessonConfig
   ) {
     // Group lessons by subject + studentGroup/class for parallel classes.
     // Teacher changes inside one subject/group should remain stacked in one item.
@@ -1460,7 +1481,7 @@ function getNowLineState(ctx) {
             nowMin,
           });
 
-          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
+          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
 
           if (checkHomeworkMatch(lesson, homeworks)) {
             addHomeworkIcon(lessonDiv);
@@ -1522,7 +1543,7 @@ function getNowLineState(ctx) {
             additionalClasses: ['split-left'],
           });
 
-          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
+          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(cancelled, homeworks)) {
             addHomeworkIcon(cancelledDiv);
           }
@@ -1548,7 +1569,7 @@ function getNowLineState(ctx) {
             additionalClasses: ['split-right'],
           });
 
-          replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx);
+          replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(replacement, homeworks)) {
             addHomeworkIcon(replacementDiv);
           }
@@ -1611,7 +1632,18 @@ function getNowLineState(ctx) {
    * @param {Object}   ctx
    * @param {Function} escapeHtml
    */
-  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml) {
+  function renderLessonCells(
+    lessonsToRender,
+    containers,
+    allStart,
+    allEnd,
+    totalMinutes,
+    totalHeight,
+    homeworks,
+    ctx,
+    escapeHtml,
+    lessonConfig
+  ) {
     const { bothInner } = containers;
 
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
@@ -1643,7 +1675,7 @@ function getNowLineState(ctx) {
 
       const cell = createLessonCell(topPx, heightPx, lesson.dateStr, lE);
       applyLessonClasses(cell, lesson, { hasExam: lessonHasExam(lesson), isPast: calcIsPast(ymd, lE) });
-      cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx);
+      cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
       if (checkHomeworkMatch(lesson, homeworks)) addHomeworkIcon(cell);
       bothInner.appendChild(cell);
     };
@@ -1751,7 +1783,8 @@ function getNowLineState(ctx) {
             homeworks,
             nowYmd,
             nowMin,
-            tickerData
+            tickerData,
+            lessonConfig
           );
         }
 
@@ -1792,7 +1825,7 @@ function getNowLineState(ctx) {
           const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
           applyLessonClasses(cell, cancelled, { hasExam, isPast, additionalClasses: ['split-left'] });
-          cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx);
+          cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
         }
@@ -1806,7 +1839,7 @@ function getNowLineState(ctx) {
           const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
           applyLessonClasses(cell, repl, { hasExam, isPast, additionalClasses: ['split-right'] });
-          cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx);
+          cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
         }
@@ -1841,7 +1874,7 @@ function getNowLineState(ctx) {
           const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
           applyLessonClasses(cell, spanning, { hasExam, isPast, additionalClasses: ['split-left'] });
-          cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx);
+          cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(spanning, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
         }
@@ -1856,7 +1889,7 @@ function getNowLineState(ctx) {
           const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
           applyLessonClasses(cell, sub, { hasExam, isPast, additionalClasses: ['split-right'] });
-          cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx);
+          cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(sub, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
         }
@@ -2121,7 +2154,18 @@ function getNowLineState(ctx) {
         }
       } else {
         // Render lesson cells
-        renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, homeworks, ctx, escapeHtml);
+        renderLessonCells(
+          lessonsToRender,
+          { bothInner },
+          allStart,
+          allEnd,
+          totalMinutes,
+          totalHeight,
+          homeworks,
+          ctx,
+          escapeHtml,
+          studentConfig
+        );
       }
 
       // Add absence overlays if any
@@ -2227,15 +2271,16 @@ function getNowLineState(ctx) {
    * Hides now-line if showNowLine config is false
    * Called by now-line updater every minute
    *
-   * @param {Object} ctx - Main module context (provides studentConfig.showNowLine)
+   * @param {Object} ctx - Main module context (provides studentConfig + defaults)
    * @param {HTMLElement} rootEl - Root element to search (defaults to document)
    * @returns {number} Number of now-lines updated
    */
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
+      const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, 'grid', 'showNowLine');
       // Respect the showNowLine config option (from current displayed student config)
-      if (ctx.studentConfig?.showNowLine === false) {
+      if (showNowLine === false) {
         // Hide all now lines if disabled
         const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
         const inners = scope.querySelectorAll('.day-column-inner');

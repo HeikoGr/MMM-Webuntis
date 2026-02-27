@@ -26,7 +26,7 @@
     let addedRows = 0;
 
     // Use widget context helper to reduce config duplication
-    const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {});
+    const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
     // Header is already added by main module if studentCellTitle is empty
     if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
@@ -36,9 +36,9 @@
       return 1;
     }
 
-    const dateFormat = widgetCtx.getConfig('dateFormat', 'dd.MM.');
-    const showSubject = widgetCtx.getConfig('showSubject', true);
-    const showText = widgetCtx.getConfig('showText', true);
+    const dateFormat = widgetCtx.getConfig('dateFormat');
+    const showSubject = Boolean(widgetCtx.getConfig('showSubject'));
+    const showText = Boolean(widgetCtx.getConfig('showText'));
 
     const sorted = homeworks
       .slice()
