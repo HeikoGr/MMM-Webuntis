@@ -13,7 +13,7 @@
   --wu-rgb-light-line: 239, 239, 239;
   --wu-rgb-accent-red: 214, 69, 69;
   --wu-alpha-subtle: 0.06;
-  --wu-alpha-soft: 0.18;
+  --wu-alpha-soft: 0.1;
   --wu-alpha-medium: 0.45;
   --wu-alpha-strong: 0.85;
 
@@ -802,9 +802,10 @@
 
 /* Messages Grid Layout */
 .MMM-Webuntis .messages-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(max(var(--wu-messages-min-width), calc(100% / var(--wu-messages-max-cols) - 5px)), 1fr));
-  gap: 5px;
+  display: block;
+  columns: var(--wu-messages-max-cols) var(--wu-messages-min-width);
+  column-gap: 5px;
+  column-fill: balance;
   margin-bottom: 5px;
   grid-column: 1 / -1; /* Ensure it spans full width of widget container */
   width: 100%;
@@ -822,6 +823,10 @@
   padding: 2px 3px;
   flex-direction: column;
   line-height: 1.1;
+  width: 100%;
+  margin-bottom: 5px;
+  break-inside: avoid;
+  break-inside: avoid-column;
 }
 
 .MMM-Webuntis .messages-grid .messageRowEmpty {
@@ -829,6 +834,10 @@
   padding: 2px 3px;
   color: var(--wu-muted-text);
   font-style: italic;
+  width: 100%;
+  margin-bottom: 5px;
+  break-inside: avoid;
+  break-inside: avoid-column;
 }
 
 .MMM-Webuntis .messages-grid .wu-col-full-width {
