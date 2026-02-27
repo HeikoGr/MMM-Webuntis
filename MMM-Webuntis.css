@@ -660,7 +660,7 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  background: var(--wu-exam-bar, #ffeb3b);
+  background: var(--wu-exam-bar);
 }
 
 /* Semantic CSS Classes for Accessibility */
