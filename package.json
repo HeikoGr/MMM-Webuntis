@@ -4,7 +4,7 @@
     "type": "git",
     "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "MagicMirror module to access Webuntis school timetables.",
   "main": "MMM-Webuntis.js",
   "keywords": [
@@ -51,6 +51,7 @@
     "pre-commit": "npx --no-install lint-staged"
   },
   "overrides": {
-    "glob": "^10.4.5"
+    "glob": "^10.4.5",
+    "minimatch": "^10.2.4"
   }
 }
