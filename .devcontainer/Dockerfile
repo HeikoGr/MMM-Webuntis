@@ -19,9 +19,8 @@ COPY .devcontainer/bootstrap-magicmirror.sh /usr/local/bin/bootstrap-magicmirror
 
 # Copy shell scripts and ensure correct line endings (LF) for cross-platform compatibility (Windows/Linux)
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
-COPY .devcontainer/postCreate.sh /tmp/postCreate.sh
-RUN sed -i 's/\r$//' /entrypoint.sh /tmp/postCreate.sh /usr/local/bin/bootstrap-magicmirror.sh && \
-    chmod +x /entrypoint.sh /tmp/postCreate.sh /usr/local/bin/bootstrap-magicmirror.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /usr/local/bin/bootstrap-magicmirror.sh && \
+    chmod +x /entrypoint.sh /usr/local/bin/bootstrap-magicmirror.sh
 
 # Ensure compatibility with generated Dockerfiles that expect /entrypoint
 RUN ln -sf /entrypoint.sh /entrypoint
