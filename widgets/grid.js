@@ -1077,7 +1077,10 @@ function getNowLineState(ctx) {
     const changedFields = Array.isArray(lesson.changedFields) ? lesson.changedFields : [];
 
     // MOVED indicator (lesson was shifted to a different time slot)
-    const movedBadge = lesson.statusDetail === 'MOVED' ? `<span class='lesson-moved-badge'>↕</span>` : '';
+    const hasMovedBadge = lesson.statusDetail === 'MOVED';
+    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge'>↕</span>` : '';
+    const iconsHtml = movedBadge ? `<span class='lesson-icons'>${movedBadge}</span>` : '';
+    const lessonContentClass = hasMovedBadge ? 'lesson-content has-icons' : 'lesson-content';
 
     // Use flexible field configuration
     if (ctx) {
@@ -1117,14 +1120,14 @@ function getNowLineState(ctx) {
 
         // Build the display
         const subst = lesson.substText
-          ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
+          ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
           : '';
-        const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+        const txt = lesson.text ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
 
         const secondaryLine =
-          secondaryHtml || additionalHtml ? `<br><span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
+          secondaryHtml || additionalHtml ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
 
-        return `<div class='lesson-content'>${movedBadge}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
+        return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
       } catch {
         // Silently fall through to legacy behavior on error
       }
@@ -1150,7 +1153,7 @@ function getNowLineState(ctx) {
     const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
     const secondaryLine = secondaryInfo ? `<br><span class='lesson-secondary'>${secondaryInfo}${roomInfo}</span>` : '';
 
-    return `<div class='lesson-content'>${movedBadge}<span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
+    return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
   /**
@@ -1189,7 +1192,15 @@ function getNowLineState(ctx) {
     icon.className = 'homework-icon';
     icon.innerHTML = '📘';
     if (cell && cell.innerHTML) {
-      cell.appendChild(icon.cloneNode(true));
+      const iconContainer = cell.querySelector('.lesson-content') || cell;
+      let icons = iconContainer.querySelector('.lesson-icons');
+      if (!icons) {
+        icons = document.createElement('span');
+        icons.className = 'lesson-icons';
+        iconContainer.appendChild(icons);
+      }
+      iconContainer.classList.add('has-homework', 'has-icons');
+      icons.appendChild(icon.cloneNode(true));
     }
   }
 
@@ -1525,48 +1536,22 @@ function getNowLineState(ctx) {
           };
         };
 
-        // Left side: cancelled lesson(s), stacked at natural positions
-        for (const cancelled of pair.cancelledLessons) {
-          const cancelledDiv = document.createElement('div');
-          cancelledDiv.className = 'lesson-content split-left';
-          const cancelledPos = toPairPercent(cancelled);
-          cancelledDiv.style.position = 'absolute';
-          cancelledDiv.style.top = `${cancelledPos.top}%`;
-          cancelledDiv.style.height = `${cancelledPos.height}%`;
-          cancelledDiv.style.left = '0';
-          cancelledDiv.style.width = '50%';
-
-          applyLessonClasses(cancelledDiv, cancelled, {
-            hasExam,
-            nowYmd,
-            nowMin,
-            additionalClasses: ['split-left'],
-          });
-
-          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(cancelled, homeworks)) {
-            addHomeworkIcon(cancelledDiv);
-          }
-
-          splitContainer.appendChild(cancelledDiv);
-        }
-
-        // Right side: replacement lesson(s)
+        // Left side: replacement lesson(s)
         for (const replacement of pair.replacements) {
           const replacementDiv = document.createElement('div');
-          replacementDiv.className = 'lesson-content split-right';
+          replacementDiv.className = 'lesson-content split-left';
           const replacementPos = toPairPercent(replacement);
           replacementDiv.style.position = 'absolute';
           replacementDiv.style.top = `${replacementPos.top}%`;
           replacementDiv.style.height = `${replacementPos.height}%`;
-          replacementDiv.style.right = '0';
+          replacementDiv.style.left = '0';
           replacementDiv.style.width = '50%';
 
           applyLessonClasses(replacementDiv, replacement, {
             hasExam,
             nowYmd,
             nowMin,
-            additionalClasses: ['split-right'],
+            additionalClasses: ['split-left'],
           });
 
           replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx, lessonConfig);
@@ -1575,6 +1560,32 @@ function getNowLineState(ctx) {
           }
 
           splitContainer.appendChild(replacementDiv);
+        }
+
+        // Right side: cancelled lesson(s), stacked at natural positions
+        for (const cancelled of pair.cancelledLessons) {
+          const cancelledDiv = document.createElement('div');
+          cancelledDiv.className = 'lesson-content split-right';
+          const cancelledPos = toPairPercent(cancelled);
+          cancelledDiv.style.position = 'absolute';
+          cancelledDiv.style.top = `${cancelledPos.top}%`;
+          cancelledDiv.style.height = `${cancelledPos.height}%`;
+          cancelledDiv.style.right = '0';
+          cancelledDiv.style.width = '50%';
+
+          applyLessonClasses(cancelledDiv, cancelled, {
+            hasExam,
+            nowYmd,
+            nowMin,
+            additionalClasses: ['split-right'],
+          });
+
+          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
+          if (checkHomeworkMatch(cancelled, homeworks)) {
+            addHomeworkIcon(cancelledDiv);
+          }
+
+          splitContainer.appendChild(cancelledDiv);
         }
 
         tickerItem.appendChild(splitContainer);
@@ -1600,8 +1611,8 @@ function getNowLineState(ctx) {
    *   Triggerred when the group contains CANCELLED + ADDITIONAL (any layoutWidth),
    *   OR CANCELLED + SUBSTITUTION where the substitution is a full-class course
    *   (layoutWidth ≥ 1000 → not a parallel half-group course).
-   *   Left side: cancelled lessons at their own positions.
-   *   Right side: replacement lesson(s) at their own positions.
+   *   Left side: replacement lesson(s) at their own positions.
+   *   Right side: cancelled lessons at their own positions.
    *
    *   layoutWidth for SUBSTITUTION:
    *     parallel half-group (lw=500) alongside its sibling half-group → NOT split
@@ -1808,7 +1819,7 @@ function getNowLineState(ctx) {
 
       // ── SPLIT VIEW rendering ──────────────────────────────────────────────────
       // Only used when there are NO parallel lessons (< 2 ticker candidates).
-      // Shows cancelled lessons on left, replacements on right.
+      // Shows replacement lessons on left, cancelled lessons on right.
       if (shouldUseSplitView) {
         const replacements = [...addedLessons, ...substLessons, ...eventLessons];
         const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
@@ -1816,21 +1827,7 @@ function getNowLineState(ctx) {
         const hasExam = lessons.some((l) => lessonHasExam(l));
         const isPast = calcIsPast(allLessonsYmd, groupEMin);
 
-        // Left side: each cancelled lesson at its own time slot
-        for (const cancelled of cancelledLessons) {
-          const cS = Math.max(cancelled.startMin, allStart);
-          const cE = Math.min(cancelled.endMin, allEnd);
-          if (cE <= cS) continue;
-          const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
-          const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
-          const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
-          applyLessonClasses(cell, cancelled, { hasExam, isPast, additionalClasses: ['split-left'] });
-          cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
-          bothInner.appendChild(cell);
-        }
-
-        // Right side: replacement lesson(s) — each at its own time slot
+        // Left side: replacement lesson(s) — each at its own time slot
         for (const repl of replacements) {
           const rS = Math.max(repl.startMin, allStart);
           const rE = Math.min(repl.endMin, allEnd);
@@ -1838,9 +1835,23 @@ function getNowLineState(ctx) {
           const rTop = Math.round(((rS - allStart) / totalMinutes) * totalHeight);
           const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
-          applyLessonClasses(cell, repl, { hasExam, isPast, additionalClasses: ['split-right'] });
+          applyLessonClasses(cell, repl, { hasExam, isPast, additionalClasses: ['split-left'] });
           cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
+          bothInner.appendChild(cell);
+        }
+
+        // Right side: each cancelled lesson at its own time slot
+        for (const cancelled of cancelledLessons) {
+          const cS = Math.max(cancelled.startMin, allStart);
+          const cE = Math.min(cancelled.endMin, allEnd);
+          if (cE <= cS) continue;
+          const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
+          const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
+          const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
+          applyLessonClasses(cell, cancelled, { hasExam, isPast, additionalClasses: ['split-right'] });
+          cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
+          if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
         }
 
@@ -2043,7 +2054,7 @@ function getNowLineState(ctx) {
     allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
-    const pxPerMinute = 0.75;
+    const pxPerMinute = 0.8;
     const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
 
     // 3. Determine base date
