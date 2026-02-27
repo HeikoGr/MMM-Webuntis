@@ -30,6 +30,13 @@ function getNowLineState(ctx) {
   return nowLineStates.get(ctx);
 }
 
+function getModuleRootElement(ctx) {
+  if (!ctx || typeof document === 'undefined') return null;
+  const id = typeof ctx.identifier === 'string' ? ctx.identifier : null;
+  if (!id) return null;
+  return document.getElementById(id);
+}
+
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const {
@@ -264,9 +271,10 @@ function getNowLineState(ctx) {
         }
 
         const gridWidget = ctx._getWidgetApi()?.grid;
+        const moduleRoot = getModuleRootElement(ctx);
         if (gridWidget) {
-          if (typeof gridWidget.updateNowLinesAll === 'function') gridWidget.updateNowLinesAll(ctx);
-          if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx);
+          if (typeof gridWidget.updateNowLinesAll === 'function') gridWidget.updateNowLinesAll(ctx, moduleRoot);
+          if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx, moduleRoot);
         }
       } catch (err) {
         log('debug', 'minute tick update failed', err);
@@ -2323,7 +2331,7 @@ function getNowLineState(ctx) {
         const allE = inner._allEnd;
         const h = inner._totalHeight;
         if (!nl || allS === undefined || allE === undefined || h === undefined) return;
-        if (nowMin < allS || nowMin > allE) {
+        if (nowMin < allS || nowMin >= allE) {
           nl.style.display = 'none';
           return;
         }

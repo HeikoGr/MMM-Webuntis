@@ -955,7 +955,7 @@ Module.register('MMM-Webuntis', {
    */
   _startNowLineUpdater() {
     // Start the now line updater for grid view if enabled
-    if (this.config.showNowLine === false) return;
+    if (this.config?.grid?.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
