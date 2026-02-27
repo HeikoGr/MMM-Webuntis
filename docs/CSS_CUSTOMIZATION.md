@@ -29,14 +29,61 @@ Override these in `config/custom.css` to change colors globally:
 
   /* Other elements */
   --wu-exam-bar: #ffeb3b;              /* Exam indicator (yellow) */
-  --wu-homework-bg: #e9e9e9;           /* Homework background */
   --wu-no-lesson-bg: #642463;          /* No lesson notice (purple) */
+  --wu-lesson-surface: #fff;           /* Lesson surface background */
   --wu-time-color: #666;               /* Time labels */
+  --wu-secondary-text: #888;           /* Secondary/teacher text */
+  --wu-muted-text: #999;               /* Muted helper text */
+  --wu-message-text: #ddd;             /* Message body text */
+
+  /* State & accent colors */
+  --wu-substitution-accent: #ff8800;   /* Substitution detail text */
+  --wu-exam-description-color: #ff6600;
+  --wu-holiday-notice-color: #d35400;
+  --wu-absence-excused-color: #2e7d32;
+  --wu-absence-unexcused-color: #b71c1c;
+  --wu-warning-color: #ff9800;
+  --wu-warning-bg-soft: rgba(255, 152, 0, 0.06);
+  --wu-warning-bg-strong: rgba(255, 152, 0, 0.1);
+  --wu-critical-color: #f44336;
+  --wu-critical-bg: rgba(244, 67, 54, 0.15);
+  --wu-error-text: #b71c1c;
+  --wu-error-bg: #ffebee;
+  --wu-error-border: #d32f2f;
+
+  /* Today/day-column overrides */
+  --wu-today-replacement-bg: #82c6f0;
+  --wu-today-replacement-text: #01242f;
+  --wu-today-cancelled-bg: #ff8a8a;
+  --wu-today-cancelled-text: #590000;
+  --wu-today-regular-bg: #a8f59f;
+  --wu-today-regular-text: #054a05;
+  --wu-today-lesson-border: #cfcfcf;
+
+  /* Overlay and timeline accents */
+  --wu-grid-more-bg: rgba(0, 0, 0, 0.45);
+  --wu-absence-overlay-bg: rgba(255, 100, 100, 0.5);
+  --wu-absence-overlay-border: rgba(255, 100, 100, 0.8);
+  --wu-absence-overlay-hover-bg: rgba(255, 100, 100, 0.65);
+  --wu-absence-overlay-hover-border: rgba(255, 100, 100, 1);
+  --wu-hourline-color: rgba(239, 239, 239, 0.5);
+  --wu-nowline-start: rgba(255, 0, 0, 0.95);
+  --wu-nowline-end: rgba(255, 0, 0, 0.85);
+  --wu-nowline-glow: rgba(255, 0, 0, 0.45);
 
   /* Spacing & borders */
+  --wu-lesson-outline: #ccc;
+  --wu-border-strong: #333;
+  --wu-border-muted: #444;
+  --wu-split-divider: rgba(0, 0, 0, 0.06);
   --wu-lesson-radius: 4px;
   --wu-lesson-padding: 2px;
   --wu-exam-border-width: 6px;
+
+  /* Message cards / changed fields */
+  --wu-message-card-bg: rgba(255, 255, 255, 0.05);
+  --wu-message-card-border: #ffcc00;
+  --wu-changed-highlight: #f0a030;
 }
 ```
 
@@ -229,7 +276,6 @@ All text elements have dedicated CSS classes for precise styling:
 - `.grid-hourline` - Hour separator lines
 - `.grid-nowline` - Current time indicator (red line)
 - `.grid-absence-overlay` - Absence indicator overlay
-- `.grid-holiday-notice` - Holiday notice
 
 ### Lesson State Classes
 - `.lesson-cancelled` - Cancelled lessons

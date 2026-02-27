@@ -8,3 +8,19 @@
 .MMM-Webuntis .module-content {
   opacity: 0.95;
 }
+
+/*
+.MMM-Webuntis {
+  --wu-warning-color: #ff9800;
+  --wu-warning-bg-soft: rgba(255, 152, 0, 0.06);
+  --wu-critical-color: #f44336;
+  --wu-critical-bg: rgba(244, 67, 54, 0.15);
+  --wu-secondary-text: #888;
+  --wu-muted-text: #999;
+  --wu-error-bg: #ffebee;
+  --wu-error-border: #d32f2f;
+  --wu-message-card-border: #ffcc00;
+  --wu-nowline-start: rgba(255, 0, 0, 0.95);
+  --wu-nowline-end: rgba(255, 0, 0, 0.85);
+}
+*/
