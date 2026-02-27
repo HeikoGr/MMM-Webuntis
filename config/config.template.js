@@ -83,6 +83,7 @@ let config = {
           showNowLine: true, // show current time line
           mergeGap: 15, // minutes gap to merge adjacent lessons
           maxLessons: 0, // max lessons per day (0 = no limit)
+          pxPerMinute: 0.8, // pixels per minute — controls the vertical scale of the grid (default: 0.8)
 
           // === FLEXIBLE FIELD DISPLAY ===
           // Optional: customize which fields to show in grid cells

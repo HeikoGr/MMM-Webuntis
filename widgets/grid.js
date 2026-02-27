@@ -338,6 +338,11 @@ function getNowLineState(ctx) {
     const configuredPast = getGridConfig('pastDays');
     const gridDateFormat = getGridConfig('dateFormat');
     const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig('maxLessons') ?? 0)));
+    const rawPxPerMinute = getGridConfig('pxPerMinute');
+    const pxPerMinute =
+      rawPxPerMinute !== undefined && rawPxPerMinute !== null && Number.isFinite(Number(rawPxPerMinute)) && Number(rawPxPerMinute) > 0
+        ? Number(rawPxPerMinute)
+        : 0.8;
 
     let daysToShow, pastDays, startOffset, totalDisplayDays;
 
@@ -394,6 +399,7 @@ function getNowLineState(ctx) {
       totalDisplayDays,
       gridDateFormat,
       maxGridLessons,
+      pxPerMinute,
       weekView,
     };
   }
@@ -2054,8 +2060,7 @@ function getNowLineState(ctx) {
     allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
-    const pxPerMinute = 0.8;
-    const totalHeight = Math.max(120, Math.round(totalMinutes * pxPerMinute));
+    const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
 
     // 3. Determine base date
     const baseDate = ctx._currentTodayYmd
