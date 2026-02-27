@@ -4,6 +4,52 @@
 
 - Nothing yet. 🚧
 
+## 0.7.0
+
+### ✨ Widgets & UI
+
+- MessagesOfDay cards now render in a responsive masonry layout: each card keeps its own height and columns are filled top-to-bottom so dense announcement sets no longer create table-like gaps.
+- The timetable grid received a major pass: `grid.pxPerMinute` lets you tune the vertical scale, split-view lessons swap sides for better readability, ticker rows preserve spacing, and the "now" line updater now targets the module root to avoid stale references.
+- Widget config lookup is now centralized, giving lessons/homework/exams consistent fallbacks for student-specific overrides and keeping per-widget options in sync.
+
+### ⚙️ Configuration & Data Flow
+
+- Added validation and documentation for `grid.pxPerMinute` (warns outside 0.2–5) and removed the obsolete `fetchIntervalMs` legacy mapping to reduce noisy warnings.
+- Node helper now merges student overrides once during init, reducing duplicated config mutations before fetch orchestration kicks in.
+
+### 🎨 Theming & Docs
+
+- Extended the CSS variable palette (including the exam bar) and refreshed `config/custom.template.css` plus `docs/CSS_CUSTOMIZATION.md` to reflect the new tokens and layout guidance.
+
+### 🐛 Fixes
+
+- Messages-of-day markup no longer inherits `display: contents`, preventing flex quirks in custom themes.
+- Lesson span spacing, split overlays, and the grid "now" line all receive targeted fixes to eliminate overlapping borders in dense schedules.
+
+## 0.6.14
+
+### 🧰 Developer Experience
+
+- Removed the redundant `bootstrap-magicmirror.sh` call from the devcontainer post-create hook and Dockerfile so provisioning runs exactly once and no longer double-installs MagicMirror dependencies.
+
+## 0.6.13
+
+### ⚙️ API & Widget Logic
+
+- Centralized the WebUntis `position1–7` mapping logic: lessons now expose `changedFields`, retain `teOld/suOld/roOld`, and log INFO entries for future debugging.
+- Homework and exam extraction use stricter student matching plus smarter subject fallback so reminders stay linked even when the underlying lesson is missing.
+- Updated absences/exams/homework/grid widgets (and `widgets/util.js`) to reuse the new config resolver, reducing per-widget drift.
+
+### 🧪 Tooling
+
+- `scripts/magicmirror-check.mjs` and related maintenance scripts gained clearer health output, better dump toggles, and improved MagicMirror bootstrap handling.
+
+## 0.6.12
+
+### 🛠️ Development Environment
+
+- Overhauled the devcontainer setup: streamlined Dockerfile layers, added a single bootstrap path via `bootstrap-magicmirror.sh`, and aligned `entrypoint.sh` / `postCreate.sh` so the local MagicMirror install is reliable on first launch.
+
 ## 0.6.1
 
 ### ✨ New Features
