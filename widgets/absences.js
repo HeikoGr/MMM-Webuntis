@@ -1,7 +1,7 @@
 /**
  * Absences Widget
  * Renders absence records with configurable display and filtering:
- * - Date range filtering (past/future days)
+ * - Date range filtering (past/next days)
  * - Date format customization
  * - Excused/unexcused status display
  * - Reason text display
@@ -11,13 +11,12 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, formatTime, createWidgetContext } =
-    root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDate, formatTime, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   /**
    * Render absences widget for a single student
    * Displays absences sorted by date and time
-   * Filters by date range (pastDays/futureDays) and respects maxItems limit
+   * Filters by date range (pastDays/nextDays) and respects maxItems limit
    *
    * @param {Object} ctx - Main module context (provides translate, config)
    * @param {HTMLElement} container - DOM element to append absence rows
@@ -30,7 +29,7 @@
     let addedRows = 0;
 
     // Determine mode and handle header using helper
-    const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {});
+    const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
     if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
@@ -40,17 +39,17 @@
     }
 
     // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const maxItems = getWidgetConfig(studentConfig, 'absences', 'maxItems') ?? null;
-    const showDate = getWidgetConfig(studentConfig, 'absences', 'showDate') ?? true;
-    const showExcused = getWidgetConfig(studentConfig, 'absences', 'showExcused') ?? true;
-    const showReason = getWidgetConfig(studentConfig, 'absences', 'showReason') ?? true;
+    const maxItems = widgetCtx.getConfig('maxItems');
+    const showDate = Boolean(widgetCtx.getConfig('showDate'));
+    const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
+    const showReason = Boolean(widgetCtx.getConfig('showReason'));
     const now = new Date();
     const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
     // Absence range options
-    const rangeStart = getWidgetConfig(studentConfig, 'absences', 'pastDays') ?? 30;
-    const rangeEnd = getWidgetConfig(studentConfig, 'absences', 'futureDays') ?? 7;
-    const dateFormat = getWidgetConfig(studentConfig, 'absences', 'dateFormat') ?? 'dd.MM.';
+    const rangeStart = widgetCtx.getConfig('pastDays');
+    const rangeEnd = widgetCtx.getConfig('nextDays');
+    const dateFormat = widgetCtx.getConfig('dateFormat');
 
     const sorted = absences
       .slice()

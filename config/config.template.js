@@ -83,6 +83,7 @@ let config = {
           showNowLine: true, // show current time line
           mergeGap: 15, // minutes gap to merge adjacent lessons
           maxLessons: 0, // max lessons per day (0 = no limit)
+          pxPerMinute: 0.8, // pixels per minute — controls the vertical scale of the grid (default: 0.8)
 
           // === FLEXIBLE FIELD DISPLAY ===
           // Optional: customize which fields to show in grid cells
@@ -92,7 +93,7 @@ let config = {
           //   secondary: 'teacher',  // Secondary field (second line)
           //   additional: ['room'],  // Additional fields shown as badges/parentheses
           //   format: {              // Display format: 'short' (abbreviation) or 'long' (full name)
-          //     subject: 'short',
+          //     subject: 'long',
           //     teacher: 'short',
           //     class: 'short',
           //     room: 'short',

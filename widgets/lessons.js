@@ -9,7 +9,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, getWidgetConfig, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
 
   /**
    * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
@@ -71,8 +71,11 @@
     log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
     let addedRows = 0;
 
-    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
-    const configuredNext = getWidgetConfig(studentConfig, 'lessons', 'nextDays');
+    const widgetCtx = createWidgetContext('lessons', studentConfig, root.util || {}, ctx);
+
+    const getLessonsConfig = (key, optionsOrFallback) => widgetCtx.getConfig(key, optionsOrFallback);
+
+    const configuredNext = getLessonsConfig('nextDays');
     log('debug', `[LESSONS-DEBUG] ${studentTitle}: configuredNext=${configuredNext}`);
     if (!configuredNext || Number(configuredNext) <= 0) {
       log('debug', `[LESSONS-DEBUG] ${studentTitle}: skipped - nextDays not configured`);
@@ -90,17 +93,16 @@
     log(
       ctx,
       'debug',
-      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength} | days: ${studentConfig.daysToShow}`
+      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength}`
     );
 
     // Use module's computed today value when available (supports debugDate), else local now
     const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
     const nowLocal = new Date();
     const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
-
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
-    // Group lessons by date
+    // Group lessons by date for efficient day-by-day rendering
     const lessonsByDate = {};
     const lessonsList = Array.isArray(timetable) ? timetable.slice() : [];
     for (const entry of lessonsList) {
@@ -108,27 +110,25 @@
       if (!lessonsByDate[dateYmd]) lessonsByDate[dateYmd] = [];
       lessonsByDate[dateYmd].push(entry);
     }
-
     const dateCount = Object.keys(lessonsByDate).length;
     log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
 
-    // Determine display window (align with grid behavior)
-    const daysToShow = Number(configuredNext) > 0 ? Math.max(1, parseInt(configuredNext, 10)) : 1;
-    const pastDays = Math.max(0, parseInt(getWidgetConfig(studentConfig, 'lessons', 'pastDays') ?? 0, 10));
+    // Determine display window (aligns with grid behavior: past + today + future)
+    const daysToShow = Math.max(1, parseInt(configuredNext, 10));
+    const pastDays = Math.max(0, parseInt(getLessonsConfig('pastDays') ?? 0, 10));
     const startOffset = -pastDays;
-    // totalDisplayDays = past + today + future
-    // Example: pastDays=1, daysToShow=7 → 1 + 1 + 7 = 9 days
     const totalDisplayDays = pastDays + 1 + daysToShow;
-
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    // Determine mode using helper
-    const widgetCtx = createWidgetContext('lessons', studentConfig, root.util || {});
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
     if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
-    // Determine lessons date format
-    const lessonsDateFormat = getWidgetConfig(studentConfig, 'lessons', 'dateFormat') ?? 'EEE';
+    const lessonsDateFormat = getLessonsConfig('dateFormat');
+    const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
+    const teacherMode = getLessonsConfig('showTeacherMode');
+    const showSubstitution = Boolean(getLessonsConfig('showSubstitution'));
+    const showRegular = Boolean(getLessonsConfig('showRegular'));
+    const showStartTime = Boolean(getLessonsConfig('showStartTime'));
 
     // Determine base date (supports debugDate via ctx._currentTodayYmd)
     let baseDate;
@@ -142,7 +142,7 @@
       baseDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
     }
 
-    // Iterate display days in order and render either lessons or holiday notices
+    // Iterate display days in order and render lessons or holiday notices
     for (let d = 0; d < totalDisplayDays; d++) {
       const dayIndex = startOffset + d;
       const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
@@ -155,18 +155,14 @@
         const aTime = Number(a.startTime) || 0;
         const bTime = Number(b.startTime) || 0;
         if (aTime !== bTime) return aTime - bTime;
-
-        // Same time: cancelled lessons first, then substitutions/irregulars
         const aCancelled = a.status === 'CANCELLED';
         const bCancelled = b.status === 'CANCELLED';
         if (aCancelled && !bCancelled) return -1;
         if (!aCancelled && bCancelled) return 1;
-
         return 0;
       });
 
       if (!entries || entries.length === 0) {
-        // No lessons that day — check for holiday
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
@@ -180,8 +176,6 @@
       log('debug', `[lessons] ${dateYmd}: ${entries.length} entries`);
 
       let renderedForDate = 0;
-
-      // Render lessons for this date
       for (const entry of entries) {
         const dateStr = String(entry.date);
         const year = parseInt(dateStr.substring(0, 4), 10);
@@ -194,10 +188,7 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
-        if (
-          (!(getWidgetConfig(studentConfig, 'lessons', 'showRegular') ?? true) && isRegularLesson) ||
-          (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')
-        ) {
+        if ((!showRegular && isRegularLesson) || (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
           continue;
         }
@@ -205,7 +196,6 @@
         addedRows++;
         renderedForDate++;
 
-        // Use only the lessons-specific date format as requested by configuration
         const dateLabel = formatDate(timeForDay, lessonsDateFormat);
         let timeStr = `${dateLabel}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
@@ -214,14 +204,12 @@
         const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
         const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
 
-        // Find end period label for lessons spanning multiple periods (e.g., 750-935 = "1.-2.")
         let endPeriodLabel = startLabel;
         if (startLabel && entry.endTime) {
-          // Find all period start times between this lesson's start and end
           const sortedStarts = Object.keys(startTimesMap)
             .map(Number)
             .filter((t) => t > entry.startTime && t < entry.endTime)
-            .sort((a, b) => b - a); // descending to get the latest period
+            .sort((a, b) => b - a);
 
           if (sortedStarts.length > 0) {
             const lastStart = sortedStarts[0];
@@ -229,10 +217,9 @@
           }
         }
 
-        if (getWidgetConfig(studentConfig, 'lessons', 'showStartTime')) {
+        if (showStartTime) {
           timeStr += formattedStart;
         } else if (startLabel !== undefined) {
-          // Show period range if lesson spans multiple periods (e.g., "1.-2.")
           if (endPeriodLabel !== undefined && endPeriodLabel !== startLabel) {
             timeStr += `${startLabel}.-${endPeriodLabel}.`;
           } else {
@@ -245,9 +232,8 @@
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = escapeHtml((studentConfig.useShortSubject ?? ctx.config.useShortSubject) ? subjShort : subjLong);
+        let subjectStr = escapeHtml(useShortSubject ? subjShort : subjLong);
 
-        const teacherMode = studentConfig.showTeacherMode ?? ctx.config.showTeacherMode;
         if (teacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
           if (teacherInitial !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherInitial)})</span>`;
@@ -256,7 +242,7 @@
           if (teacherFull !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherFull)})</span>`;
         }
 
-        if ((studentConfig.lessons?.showSubstitution ?? studentConfig?.showSubstitution ?? false) && (entry.substText || '') !== '') {
+        if (showSubstitution && (entry.substText || '') !== '') {
           subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(entry.substText)}</span>`;
         }
 
@@ -266,7 +252,6 @@
         }
 
         let addClass = '';
-        // Check for exam type: REST API activityType field ("EXAM" uppercase) or text-based fallback (lstext keywords)
         if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
           addClass = 'exam';
         } else {
@@ -283,7 +268,6 @@
         addRow(container, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
       }
 
-      // If no rows rendered for this date (all filtered), still show holiday notice if applicable
       if (renderedForDate === 0) {
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {

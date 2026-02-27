@@ -1218,26 +1218,19 @@ module.exports = NodeHelper.create({
             const { normalizedConfig: normalizedStudent } = applyLegacyMappings(s || {}, {
               warnCallback: (msg) => this._mmLog('warn', null, msg),
             });
-            // Merge with module defaults, preserving nested objects like grid, homework, absences
-            // Start with defaults, then layer in student-specific overrides
             const merged = {
               ...defNoStudents,
               ...normalizedStudent,
-              // Preserve nested grid config from defaults if not overridden
-              grid: { ...defNoStudents.grid, ...normalizedStudent.grid },
-              // Preserve nested homework config from defaults if not overridden
-              homework: {
-                ...defNoStudents.homework,
-                ...normalizedStudent.homework,
-              },
-              // Preserve nested absences config from defaults if not overridden
-              absences: {
-                ...defNoStudents.absences,
-                ...normalizedStudent.absences,
-              },
-              // Preserve nested exams config from defaults if not overridden
-              exams: { ...defNoStudents.exams, ...normalizedStudent.exams },
             };
+
+            const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+            widgetKeys.forEach((widget) => {
+              merged[widget] = {
+                ...(defNoStudents[widget] || {}),
+                ...(normalizedStudent[widget] || {}),
+              };
+            });
+
             // Ensure displayMode is lowercase
             if (typeof merged.displayMode === 'string') {
               merged.displayMode = merged.displayMode.toLowerCase();
@@ -1300,26 +1293,19 @@ module.exports = NodeHelper.create({
               warnCallback: (msg) => this._mmLog('warn', null, msg),
             }
           );
-          // Merge with module defaults, preserving nested objects like grid, homework, absences
-          // Start with defaults, then layer in student-specific overrides
           const merged = {
             ...defNoStudents,
             ...normalizedStudent,
-            // Preserve nested grid config from defaults if not overridden
-            grid: { ...defNoStudents.grid, ...normalizedStudent.grid },
-            // Preserve nested homework config from defaults if not overridden
-            homework: {
-              ...defNoStudents.homework,
-              ...normalizedStudent.homework,
-            },
-            // Preserve nested absences config from defaults if not overridden
-            absences: {
-              ...defNoStudents.absences,
-              ...normalizedStudent.absences,
-            },
-            // Preserve nested exams config from defaults if not overridden
-            exams: { ...defNoStudents.exams, ...normalizedStudent.exams },
           };
+
+          const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+          widgetKeys.forEach((widget) => {
+            merged[widget] = {
+              ...(defNoStudents[widget] || {}),
+              ...(normalizedStudent[widget] || {}),
+            };
+          });
+
           // Ensure displayMode is lowercase
           if (typeof merged.displayMode === 'string') {
             merged.displayMode = merged.displayMode.toLowerCase();

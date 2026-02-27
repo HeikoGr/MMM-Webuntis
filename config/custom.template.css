@@ -8,3 +8,27 @@
 .MMM-Webuntis .module-content {
   opacity: 0.95;
 }
+
+/*
+.MMM-Webuntis {
+  --wu-accent-blue: #2f80ed;
+  --wu-accent-yellow: #e0b000;
+  --wu-accent-red: #d64545;
+
+  --wu-alpha-subtle: 0.06;
+  --wu-alpha-soft: 0.18;
+  --wu-alpha-medium: 0.45;
+  --wu-alpha-strong: 0.85;
+
+  --wu-warning-color: #e0b000;
+  --wu-critical-color: #d64545;
+  --wu-error-border: #d64545;
+
+  --wu-secondary-text: #888;
+  --wu-muted-text: #999;
+
+  --wu-message-card-border: #e0b000;
+  --wu-nowline-start: rgba(214, 69, 69, var(--wu-alpha-strong));
+  --wu-nowline-end: rgba(214, 69, 69, var(--wu-alpha-medium));
+}
+*/

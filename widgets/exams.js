@@ -34,13 +34,13 @@
       const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
 
       // Use widget context helper to reduce config duplication
-      const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {});
+      const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {}, ctx);
       const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
       // Header is already added by main module if studentCellTitle is empty
       if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
 
-      const showSubject = studentConfig?.exams?.showSubject ?? studentConfig?.showExamSubject ?? true;
-      const showTeacher = studentConfig?.exams?.showTeacher ?? studentConfig?.showExamTeacher ?? true;
+      const showSubject = Boolean(widgetCtx.getConfig('showSubject', false));
+      const showTeacher = Boolean(widgetCtx.getConfig('showTeacher', false));
 
       exams
         .slice()
@@ -60,7 +60,7 @@
 
           addedRows++;
 
-          const examDateFormat = studentConfig?.exams?.dateFormat ?? 'dd.MM.';
+          const examDateFormat = widgetCtx.getConfig('dateFormat');
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
           const formattedDate = formatDate ? formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
