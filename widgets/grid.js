@@ -1622,7 +1622,7 @@ function getModuleRootElement(ctx) {
    * Three rendering strategies (evaluated in order for each transitive overlap group):
    *
    * SPLIT VIEW — when a lesson was cancelled and a replacement runs in its slot:
-   *   Triggerred when the group contains CANCELLED + ADDITIONAL (any layoutWidth),
+   *   Triggered when the group contains CANCELLED + ADDITIONAL (any layoutWidth),
    *   OR CANCELLED + SUBSTITUTION where the substitution is a full-class course
    *   (layoutWidth ≥ 1000 → not a parallel half-group course).
    *   Left side: replacement lesson(s) at their own positions.
