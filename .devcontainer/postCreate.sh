@@ -2,17 +2,10 @@
 
 set -eu
 
-MAGICMIRROR_PATH="/opt/magic_mirror"
 MODULE_DIR="$(pwd)"
 MODULE_NAME="$(basename "$MODULE_DIR")"
 
 echo "Running postCreate setup for $MODULE_NAME..."
-
-if command -v bootstrap-magicmirror.sh >/dev/null 2>&1; then
-  bootstrap-magicmirror.sh
-else
-  echo "WARNING: bootstrap-magicmirror.sh not found; skipping MagicMirror setup"
-fi
 
 # Install module dependencies
 if [ -f "$MODULE_DIR/package.json" ]; then
