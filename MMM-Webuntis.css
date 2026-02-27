@@ -735,6 +735,7 @@
   color: var(--wu-substitution-accent);
   font-style: italic;
   font-weight: 500;
+  display: block;
 }
 
 /* General Lesson Info Text (lstext field) */
@@ -742,6 +743,7 @@
   font-size: 0.75rem;
   color: var(--wu-muted-text);
   font-style: italic;
+  display: block;
 }
 
 .MMM-Webuntis .lesson-changed-new {
