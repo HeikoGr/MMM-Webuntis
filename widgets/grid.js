@@ -948,19 +948,26 @@ function getModuleRootElement(ctx) {
    *
    * @param {HTMLElement} inner - Day column inner container
    * @param {number} totalHeight - Total height in pixels
-   * @param {string} icon - Icon emoji or text (e.g., '🏖️', '📅')
+   * @param {string} noticeType - Notice type ('holiday' or 'no-lessons')
    * @param {string} text - Notice text (HTML allowed)
    * @param {string} iconSize - Icon font size (default: '1.5em')
    */
-  function addDayNotice(inner, totalHeight, icon, text, iconSize = '1.5em') {
+  function addDayNotice(inner, totalHeight, noticeType, text, iconSize = '1.5em') {
     // Unified function for both holiday and no-lessons notices
     const notice = document.createElement('div');
     notice.className = 'grid-lesson lesson lesson-content no-lesson';
     notice.style.height = `${totalHeight}px`;
-    notice.innerHTML = `
-      <div style="font-size: ${iconSize}; margin-bottom: 4px;">${icon}</div>
-      <div style="font-weight: bold;">${text}</div>
-    `;
+    const icon = document.createElement('span');
+    icon.className = `day-notice-icon day-notice-icon-${noticeType}`;
+    icon.setAttribute('aria-hidden', 'true');
+    icon.style.fontSize = iconSize;
+
+    const label = document.createElement('div');
+    label.style.fontWeight = 'bold';
+    label.innerHTML = text;
+
+    notice.appendChild(icon);
+    notice.appendChild(label);
     inner.appendChild(notice);
   }
 
@@ -1081,8 +1088,8 @@ function getModuleRootElement(ctx) {
       const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
       const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
       const supervisedArea = lesson.room || lesson.roomLong || '';
-      const displayText = supervisedArea ? `🔔 ${shortLabel} (${supervisedArea})` : `🔔 ${shortLabel}`;
-      return `<div class='lesson-content break-supervision'><span class='lesson-primary'>${escapeHtml(displayText)}</span></div>`;
+      const displayText = supervisedArea ? `${shortLabel} (${supervisedArea})` : shortLabel;
+      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='lesson-inline-icon lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
     }
 
     // Build change-diff indicators for CHANGED lessons.
@@ -1092,7 +1099,7 @@ function getModuleRootElement(ctx) {
 
     // MOVED indicator (lesson was shifted to a different time slot)
     const hasMovedBadge = lesson.statusDetail === 'MOVED';
-    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge'>↕</span>` : '';
+    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : '';
     const iconsHtml = movedBadge ? `<span class='lesson-icons'>${movedBadge}</span>` : '';
     const lessonContentClass = hasMovedBadge ? 'lesson-content has-icons' : 'lesson-content';
 
@@ -1197,14 +1204,14 @@ function getModuleRootElement(ctx) {
 
   /**
    * Add homework icon to lesson cell
-   * Displays 📘 icon when homework is due
+   * Displays configured homework icon when homework is due
    *
    * @param {HTMLElement} cell - Lesson cell element
    */
   function addHomeworkIcon(cell) {
     const icon = document.createElement('span');
     icon.className = 'homework-icon';
-    icon.innerHTML = '📘';
+    icon.setAttribute('aria-hidden', 'true');
     if (cell && cell.innerHTML) {
       const iconContainer = cell.querySelector('.lesson-content') || cell;
       let icons = iconContainer.querySelector('.lesson-icons');
@@ -1966,7 +1973,7 @@ function getModuleRootElement(ctx) {
     // Add icon and reason text
     const icon = document.createElement('span');
     icon.className = 'absence-icon';
-    icon.textContent = '⚡';
+    icon.setAttribute('aria-hidden', 'true');
     overlay.appendChild(icon);
 
     if (absence.reason) {
@@ -2152,7 +2159,7 @@ function getModuleRootElement(ctx) {
       // Add holiday notice if applicable - use totalHeight to respect maxLessons
       const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
       if (holiday) {
-        addDayNotice(bothInner, totalHeight, '🏖️', escapeHtml(holiday.longName || holiday.name), '2em');
+        addDayNotice(bothInner, totalHeight, 'holiday', escapeHtml(holiday.longName || holiday.name), '2em');
       }
 
       // Add to grid
@@ -2174,7 +2181,7 @@ function getModuleRootElement(ctx) {
       if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
         // Don't show "no lessons" if there's a holiday notice
         if (!holiday) {
-          addDayNotice(bothInner, totalHeight, '📅', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
+          addDayNotice(bothInner, totalHeight, 'no-lessons', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
         }
       } else {
         // Render lesson cells

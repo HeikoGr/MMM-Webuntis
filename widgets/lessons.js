@@ -167,7 +167,13 @@
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
-          addRow(container, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
+          addRow(
+            container,
+            'lessonRow holiday-notice',
+            studentCell,
+            holidayDateStr,
+            `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
+          );
           addedRows++;
         }
         continue;
@@ -273,7 +279,13 @@
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
           const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
-          addRow(container, 'lessonRow holiday-notice', studentCell, holidayDateStr, `🏖️ ${escapeHtml(holiday.longName || holiday.name)}`);
+          addRow(
+            container,
+            'lessonRow holiday-notice',
+            studentCell,
+            holidayDateStr,
+            `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
+          );
           addedRows++;
         }
       }

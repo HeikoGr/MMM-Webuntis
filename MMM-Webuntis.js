@@ -1153,6 +1153,12 @@ Module.register('MMM-Webuntis', {
     // Build and return DOM for module, rendering widgets and warnings
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
+    const withWarningIcon = (element, text) => {
+      const icon = document.createElement('span');
+      icon.className = 'wu-inline-icon wu-icon-warning';
+      icon.setAttribute('aria-hidden', 'true');
+      element.replaceChildren(icon, document.createTextNode(` ${text}`));
+    };
 
     const sortedStudentTitles = this._getSortedStudentTitles();
 
@@ -1165,9 +1171,9 @@ Module.register('MMM-Webuntis', {
         const isCritical = w.includes('Dependency issues') || w.includes('npm install') || w.includes('node_modules');
         warnDiv.className = isCritical ? 'mmm-webuntis-warning critical small bright' : 'mmm-webuntis-warning small bright';
         try {
-          warnDiv.textContent = `⚠️ ${w}`;
+          withWarningIcon(warnDiv, w);
         } catch {
-          warnDiv.textContent = '⚠️ Configuration warning';
+          withWarningIcon(warnDiv, 'Configuration warning');
         }
         warnContainer.appendChild(warnDiv);
       }
@@ -1204,7 +1210,7 @@ Module.register('MMM-Webuntis', {
               this._log('error', `Failed to render grid widget for ${studentTitle}: ${error.message}`);
               const errorDiv = document.createElement('div');
               errorDiv.className = 'widget-error dimmed';
-              errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Grid' })}`;
+              withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Grid' }));
               wrapper.appendChild(errorDiv);
             }
           }
@@ -1230,7 +1236,7 @@ Module.register('MMM-Webuntis', {
           this._log('error', `Failed to render lessons widget: ${error.message}`);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'widget-error dimmed';
-          errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Lessons' })}`;
+          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Lessons' }));
           wrapper.appendChild(errorDiv);
         }
         continue;
@@ -1251,7 +1257,7 @@ Module.register('MMM-Webuntis', {
           this._log('error', `Failed to render exams widget: ${error.message}`);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'widget-error dimmed';
-          errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Exams' })}`;
+          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Exams' }));
           wrapper.appendChild(errorDiv);
         }
         continue;
@@ -1271,7 +1277,7 @@ Module.register('MMM-Webuntis', {
           this._log('error', `Failed to render homework widget: ${error.message}`);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'widget-error dimmed';
-          errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Homework' })}`;
+          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Homework' }));
           wrapper.appendChild(errorDiv);
         }
         continue;
@@ -1283,7 +1289,7 @@ Module.register('MMM-Webuntis', {
         if (hasUnavailableAbsences) {
           const infoDiv = document.createElement('div');
           infoDiv.className = 'dimmed small absences-unavailable-info';
-          infoDiv.innerHTML = `⚠️ ${this.translate('absences_unavailable_parent_account')}`;
+          withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
           wrapper.appendChild(infoDiv);
         }
 
@@ -1300,7 +1306,7 @@ Module.register('MMM-Webuntis', {
           this._log('error', `Failed to render absences widget: ${error.message}`);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'widget-error dimmed';
-          errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Absences' })}`;
+          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Absences' }));
           wrapper.appendChild(errorDiv);
         }
         continue;
@@ -1320,7 +1326,7 @@ Module.register('MMM-Webuntis', {
           this._log('error', `Failed to render messagesofday widget: ${error.message}`);
           const errorDiv = document.createElement('div');
           errorDiv.className = 'widget-error dimmed';
-          errorDiv.innerHTML = `⚠️ ${this.translate('widget_render_error', { widget: 'Messages of Day' })}`;
+          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Messages of Day' }));
           wrapper.appendChild(errorDiv);
         }
         continue;
