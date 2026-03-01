@@ -49,6 +49,29 @@
 
     return false;
   }
+
+  function getChangedFieldSet(entry) {
+    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
+
+    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
+    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
+    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
+
+    return changed;
+  }
+
+  function hasVisibleLessonChange(entry, teacherMode, showSubstitution) {
+    const changed = getChangedFieldSet(entry);
+    const hasUnknownChangedDetails = entry?.status === 'CHANGED' && changed.size === 0;
+
+    if (changed.has('su')) return true;
+    if (changed.has('te') && (teacherMode === 'initial' || teacherMode === 'full')) return true;
+    if (changed.has('ro')) return true;
+    if (hasUnknownChangedDetails) return true;
+    if (showSubstitution && String(entry?.substText || '').trim() !== '') return true;
+
+    return false;
+  }
   /**
    * Render lessons widget for a single student
    * Displays lessons grouped by date, sorted by time, with visual indicators for:
@@ -129,6 +152,7 @@
     const showSubstitution = Boolean(getLessonsConfig('showSubstitution'));
     const showRegular = Boolean(getLessonsConfig('showRegular'));
     const showStartTime = Boolean(getLessonsConfig('showStartTime'));
+    const naText = String(getLessonsConfig('naText', 'N/A'));
 
     // Determine base date (supports debugDate via ctx._currentTodayYmd)
     let baseDate;
@@ -238,14 +262,35 @@
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
+        const changedFields = getChangedFieldSet(entry);
+
         let subjectStr = escapeHtml(useShortSubject ? subjShort : subjLong);
+        if (changedFields.has('su') && !entry.su?.[0]) {
+          subjectStr = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+        }
 
         if (teacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
-          if (teacherInitial !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherInitial)})</span>`;
+          if (teacherInitial !== '') {
+            subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherInitial)})</span>`;
+          } else if (changedFields.has('te')) {
+            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+          }
         } else if (teacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
-          if (teacherFull !== '') subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherFull)})</span>`;
+          if (teacherFull !== '') {
+            subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherFull)})</span>`;
+          } else if (changedFields.has('te')) {
+            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+          }
+        }
+
+        if (changedFields.has('ro') && !entry.ro?.[0]) {
+          subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+        }
+
+        if (entry.status === 'CHANGED' && changedFields.size === 0) {
+          subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
         }
 
         if (showSubstitution && (entry.substText || '') !== '') {
@@ -258,6 +303,7 @@
         }
 
         let addClass = '';
+        const visibleChangedInLessons = entry.status === 'CHANGED' ? hasVisibleLessonChange(entry, teacherMode, showSubstitution) : false;
         if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
           addClass = 'exam';
         } else {
@@ -266,6 +312,8 @@
             addClass = 'exam';
           } else if (entry.status === 'CANCELLED') {
             addClass = 'cancelled';
+          } else if (entry.status === 'CHANGED') {
+            addClass = visibleChangedInLessons ? 'substitution' : '';
           } else if (isIrregularStatus(entry) || (entry.substText && entry.substText.trim() !== '')) {
             addClass = 'substitution';
           }

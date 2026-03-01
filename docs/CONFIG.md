@@ -80,6 +80,7 @@ Configure lessons widget behavior using the `lessons` namespace:
 | `lessons.useShortSubject` | bool | `false` | Use short subject names where available. |
 | `lessons.showTeacherMode` | string | `'full'` | Teacher display: `'full'` (full name), `'initial'` (initials), or null/falsy. |
 | `lessons.showSubstitution` | bool | `false` | Show substitution text/notes for changed lessons. |
+| `lessons.naText` | string | `'N/A'` | Placeholder text when a changed value has no current replacement (e.g., removed room/teacher/subject). |
 
 **Example:**
 ```javascript
@@ -105,6 +106,7 @@ Configure grid widget behavior using the `grid` namespace:
 | `grid.weekView` | bool | `false` | **Calendar week view (Mon-Fri only)**. Overrides `nextDays`/`pastDays`. Auto-switches to next week on Friday after 16:00, Saturday, and Sunday. |
 | `grid.nextDays` | int | - | Days ahead to display. Ignored when `weekView: true`. |
 | `grid.pastDays` | int | - | Days past to display. Ignored when `weekView: true`. |
+| `grid.naText` | string | `'N/A'` | Placeholder text when a changed value has no current replacement (e.g., removed room/teacher/subject). |
 
 **Example (5-day view):**
 ```javascript

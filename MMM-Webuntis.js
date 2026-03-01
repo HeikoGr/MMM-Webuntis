@@ -81,6 +81,7 @@ Module.register('MMM-Webuntis', {
       useShortSubject: false, // use short subject names
       showTeacherMode: 'full', // 'off'|'initial'|'full'
       showSubstitution: false, // show substitution info
+      naText: 'N/A', // placeholder for changed fields with no current value
     },
 
     grid: {
@@ -91,6 +92,7 @@ Module.register('MMM-Webuntis', {
       showNowLine: true, // show current time line
       mergeGap: 15, // minutes gap to merge adjacent lessons
       maxLessons: 0, // max lessons per day (0 = no limit)
+      naText: 'N/A', // placeholder for changed fields with no current value
       // Flexible field display configuration
       fields: {
         primary: 'subject', // Primary field to display (subject, teacher, room, class, studentGroup)

@@ -314,6 +314,8 @@ For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
 | `updateInterval` | `5 * 60 * 1000` | Update frequency (milliseconds) |
 | `grid.weekView` | `false` | Enable Mon-Fri week view |
 | `grid.maxLessons` | `0` | Limit grid height (0 = all) |
+| `grid.naText` | `'N/A'` | Placeholder text for changed fields without current value in grid |
+| `lessons.naText` | `'N/A'` | Placeholder text for changed fields without current value in lessons |
 | `logLevel` | `'none'` | Debug logging: `'debug'`, `'info'`, `'warn'`, `'error'`, `'none'` |
 
 ## Troubleshooting

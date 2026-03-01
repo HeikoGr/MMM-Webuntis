@@ -156,6 +156,23 @@ function getModuleRootElement(ctx) {
     const upperStatus = String(status || '').toUpperCase();
     return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
   }
+
+  function getChangedFieldSet(lesson) {
+    const changed = new Set(Array.isArray(lesson?.changedFields) ? lesson.changedFields : []);
+
+    if (Array.isArray(lesson?.suOld) && lesson.suOld.length > 0) changed.add('su');
+    if (Array.isArray(lesson?.teOld) && lesson.teOld.length > 0) changed.add('te');
+    if (Array.isArray(lesson?.roOld) && lesson.roOld.length > 0) changed.add('ro');
+
+    return changed;
+  }
+
+  function getFirstChangedName(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return '';
+    const first = entries[0];
+    if (!first || typeof first !== 'object') return '';
+    return first.name || first.longname || '';
+  }
   /**
    * Get field value based on flexible configuration
    * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
@@ -1019,8 +1036,9 @@ function getModuleRootElement(ctx) {
       // regular colour — the inline change markers still highlight the diff.
       // Any other irregular status (ADDITIONAL, SUBSTITUTION, …) or CHANGED
       // with a more significant field (subject, class, …) keeps the blue tint.
-      const changedFields = Array.isArray(lesson.changedFields) ? lesson.changedFields : [];
-      const isMinorChange = lesson.status === 'CHANGED' && changedFields.length > 0 && changedFields.every((f) => f === 'te' || f === 'ro');
+      const changedFields = getChangedFieldSet(lesson);
+      const isMinorChange =
+        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'te' || f === 'ro');
       element.classList.add(isMinorChange ? 'lesson-regular' : 'lesson-substitution');
     } else {
       element.classList.add('lesson-regular');
@@ -1095,13 +1113,17 @@ function getModuleRootElement(ctx) {
     // Build change-diff indicators for CHANGED lessons.
     // These are injected INLINE into the existing primary/secondary/additional lines
     // (not appended as a new row) to avoid overflow in compact grid cells.
-    const changedFields = Array.isArray(lesson.changedFields) ? lesson.changedFields : [];
+    const changedFields = getChangedFieldSet(lesson);
+    const hasUnknownChangedDetails = lesson.status === 'CHANGED' && changedFields.size === 0;
 
     // MOVED indicator (lesson was shifted to a different time slot)
     const hasMovedBadge = lesson.statusDetail === 'MOVED';
     const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : '';
-    const iconsHtml = movedBadge ? `<span class='lesson-icons'>${movedBadge}</span>` : '';
-    const lessonContentClass = hasMovedBadge ? 'lesson-content has-icons' : 'lesson-content';
+    const changedBadge = hasUnknownChangedDetails ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>` : '';
+    const iconsHtml = movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : '';
+    const lessonContentClass = movedBadge || changedBadge ? 'lesson-content has-icons' : 'lesson-content';
+
+    const naText = String(lessonConfig?.grid?.naText ?? ctx?.defaults?.grid?.naText ?? 'N/A');
 
     // Use flexible field configuration
     if (ctx) {
@@ -1110,8 +1132,16 @@ function getModuleRootElement(ctx) {
 
         // Primary: show subject, highlight in changed colour when subject was swapped
         let primaryHtml;
-        if (changedFields.includes('su') && lesson.su?.[0]) {
-          primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(lesson.su[0].name)}</span>`;
+        if (changedFields.has('su')) {
+          const newSubject = lesson.su?.[0]?.name || '';
+          const oldSubject = getFirstChangedName(lesson.suOld);
+          if (newSubject) {
+            primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
+          } else if (oldSubject) {
+            primaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldSubject)}</span>`;
+          } else {
+            primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+          }
         } else {
           primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : '';
         }
@@ -1119,16 +1149,32 @@ function getModuleRootElement(ctx) {
         // Secondary: show current teacher; highlight when changed
         // Always use displayParts so teacher + room from field config are respected.
         let secondaryHtml;
-        if (changedFields.includes('te') && lesson.te?.[0]) {
-          secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(lesson.te[0].name)}</span>`;
+        if (changedFields.has('te')) {
+          const newTeacher = lesson.te?.[0]?.name || '';
+          const oldTeacher = getFirstChangedName(lesson.teOld);
+          if (newTeacher) {
+            secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
+          } else if (oldTeacher) {
+            secondaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldTeacher)}</span>`;
+          } else {
+            secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+          }
         } else {
           secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
         }
 
         // Additional (e.g. room): show current room; highlight when changed
         let additionalHtml = '';
-        if (changedFields.includes('ro') && lesson.ro?.[0]) {
-          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(lesson.ro[0].name)}</span>)</span>`;
+        if (changedFields.has('ro')) {
+          const newRoom = lesson.ro?.[0]?.name || '';
+          const oldRoom = getFirstChangedName(lesson.roOld);
+          if (newRoom) {
+            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
+          } else if (oldRoom) {
+            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-removed'>${escapeHtml(oldRoom)}</span>)</span>`;
+          } else {
+            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
+          }
         } else if (displayParts.additional && displayParts.additional.length > 0) {
           const additionalParts = displayParts.additional
             .filter(Boolean)
@@ -1137,6 +1183,10 @@ function getModuleRootElement(ctx) {
           if (additionalParts) {
             additionalHtml = ` ${additionalParts}`;
           }
+        }
+
+        if (hasUnknownChangedDetails && !additionalHtml) {
+          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
         }
 
         // Build the display

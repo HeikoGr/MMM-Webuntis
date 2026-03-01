@@ -17,7 +17,7 @@ fi
 
 if [ "${INSTALL_PLAYWRIGHT_BROWSERS:-1}" = "1" ]; then
   echo "Installing Playwright Chrome browser..."
-  npx playwright install chrome --with-deps || {
+  npx -y playwright install chrome --with-deps || {
     echo "WARNING: Playwright browser install failed"
   }
 else

@@ -768,6 +768,28 @@
   font-weight: 700;
 }
 
+.MMM-Webuntis .lesson-changed-removed {
+  color: var(--wu-changed-highlight);
+  font-weight: 500;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.MMM-Webuntis .lesson-changed-generic-badge {
+  font-size: 0.85rem;
+  line-height: 1;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  color: var(--wu-changed-highlight);
+}
+
+.MMM-Webuntis .lesson-changed-generic-badge::before {
+  content: '↺';
+}
+
 /* MOVED lesson badge (lesson shifted to different time) */
 .MMM-Webuntis .lesson-moved-badge {
   font-size: 0.85rem;

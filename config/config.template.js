@@ -73,6 +73,7 @@ let config = {
           useShortSubject: false, // use short subject names
           showTeacherMode: 'full', // 'off'|'initial'|'full'
           showSubstitution: false, // show substitution info
+          naText: 'N/A', // placeholder for changed fields with no current value
         },
 
         grid: {
@@ -84,6 +85,7 @@ let config = {
           mergeGap: 15, // minutes gap to merge adjacent lessons
           maxLessons: 0, // max lessons per day (0 = no limit)
           pxPerMinute: 0.8, // pixels per minute — controls the vertical scale of the grid (default: 0.8)
+          naText: 'N/A', // placeholder for changed fields with no current value
 
           // === FLEXIBLE FIELD DISPLAY ===
           // Optional: customize which fields to show in grid cells
