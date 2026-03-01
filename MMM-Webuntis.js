@@ -642,6 +642,54 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Store runtime warnings per student so they can be cleared on the next successful fetch
+   * @param {string} studentTitle - Student label from the payload
+   * @param {string[]} warningsList - Warning messages returned by the backend
+   */
+  _updateRuntimeWarnings(studentTitle, warningsList) {
+    const key = studentTitle || '__module__';
+    this.runtimeWarningsByStudent = this.runtimeWarningsByStudent || {};
+    if (Array.isArray(warningsList) && warningsList.length > 0) {
+      this.runtimeWarningsByStudent[key] = new Set(warningsList);
+    } else {
+      delete this.runtimeWarningsByStudent[key];
+    }
+  },
+
+  /**
+   * Aggregate the currently active runtime warnings across all students
+   * @returns {string[]} Unique runtime warnings still active
+   */
+  _getRuntimeWarnings() {
+    if (!this.runtimeWarningsByStudent) return [];
+    const aggregate = new Set();
+    Object.values(this.runtimeWarningsByStudent).forEach((warningSet) => {
+      if (!warningSet) return;
+      if (warningSet instanceof Set) {
+        warningSet.forEach((w) => aggregate.add(w));
+      } else if (Array.isArray(warningSet)) {
+        warningSet.forEach((w) => aggregate.add(w));
+      }
+    });
+    return Array.from(aggregate);
+  },
+
+  /**
+   * Log runtime warnings once to avoid spamming the console while an outage persists
+   * @param {string[]} warningsList - Warning messages returned by the backend
+   */
+  _logRuntimeWarnings(warningsList) {
+    if (!Array.isArray(warningsList) || warningsList.length === 0) return;
+    this._runtimeWarningsLogged = this._runtimeWarningsLogged || new Set();
+    warningsList.forEach((warning) => {
+      if (!this._runtimeWarningsLogged.has(warning)) {
+        this._runtimeWarningsLogged.add(warning);
+        this._log('warn', `Runtime warning: ${warning}`);
+      }
+    });
+  },
+
+  /**
    * Convert time string or integer to minutes since midnight
    * Supports multiple formats:
    *   - "13:50" → 830 minutes
@@ -903,6 +951,8 @@ Module.register('MMM-Webuntis', {
     this.holidayMapByStudent = {};
     this.preprocessedByStudent = {};
     this.moduleWarningsSet = new Set();
+    this.runtimeWarningsByStudent = {};
+    this._runtimeWarningsLogged = new Set();
     this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
 
@@ -1178,6 +1228,22 @@ Module.register('MMM-Webuntis', {
         warnContainer.appendChild(warnDiv);
       }
       wrapper.appendChild(warnContainer);
+    }
+
+    const runtimeWarnings = this._getRuntimeWarnings();
+    if (runtimeWarnings.length > 0) {
+      const runtimeContainer = document.createDocumentFragment();
+      for (const warning of runtimeWarnings) {
+        const warnDiv = document.createElement('div');
+        warnDiv.className = 'mmm-webuntis-warning runtime small bright';
+        try {
+          withWarningIcon(warnDiv, warning);
+        } catch {
+          withWarningIcon(warnDiv, 'Fetch warning');
+        }
+        runtimeContainer.appendChild(warnDiv);
+      }
+      wrapper.appendChild(runtimeContainer);
     }
 
     if (sortedStudentTitles.length === 0) {
@@ -1468,17 +1534,8 @@ Module.register('MMM-Webuntis', {
     }
 
     const warningsList = Array.isArray(payload.warnings) ? payload.warnings : [];
-
-    // Collect module-level warnings (deduped) and log newly seen ones to console
-    if (warningsList.length > 0) {
-      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-      warningsList.forEach((w) => {
-        if (!this.moduleWarningsSet.has(w)) {
-          this.moduleWarningsSet.add(w);
-          this._log('warn', `Module warning: ${w}`);
-        }
-      });
-    }
+    this._updateRuntimeWarnings(title, warningsList);
+    this._logRuntimeWarnings(warningsList);
 
     const apiStatus = payload.apiStatus || {};
     const fetchFlags = payload.fetchFlags || {};

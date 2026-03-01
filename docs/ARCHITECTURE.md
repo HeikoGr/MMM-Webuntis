@@ -464,7 +464,8 @@ sequenceDiagram
 
     Note over FE: Store & Render
     FE->>FE: socketNotificationReceived() L606<br/>(store config, warnings)
-    FE->>FE: moduleWarningsSet.add()<br/>(dedupe + console.warn)
+    FE->>FE: _updateRuntimeWarnings()<br/>(per-student runtime state)
+    FE->>FE: moduleWarningsSet.add()<br/>(config warnings only)
     FE->>FE: updateDom()
     FE->>FE: getDom() L700<br/>(render all widgets)
 ```
@@ -735,15 +736,18 @@ graph TD
     C --> D["Dedupe within fetch<br/>(same student, same warning)"]
     D --> P["Attach to GOT_DATA<br/>payload._warnings[]"]
     P --> FE["Send to Frontend"]
-    FE --> MW["moduleWarningsSet<br/>(dedupe across all students)"]
-    MW --> Console["console.warn()"]
-    MW --> UI["Render above widgets<br/>⚠️ message per warning"]
+    FE --> Runtime["_updateRuntimeWarnings()<br/>(per student)"]
+    Runtime --> Agg["_getRuntimeWarnings()<br/>(union of active warnings)"]
+    Agg --> Console["console.warn()<br/>once per warning"]
+    Agg --> UI["Render runtime warnings<br/>above widgets"]
 
     style A1 fill:#ffcdd2
     style A2 fill:#ffcdd2
     style A3 fill:#ffcdd2
     style UI fill:#ffeb3b
 ```
+
+Runtime warnings now live in a per-student map and disappear automatically once a subsequent fetch has no warnings. Persistent configuration or dependency issues still flow through `moduleWarningsSet`, so those messages remain visible until the user fixes the root cause.
 
 ## Key Function Relationships
 
@@ -973,9 +977,10 @@ graph TB
         WarnSet["warnings Set<br/>(per-fetch deduplication)"]
         --> PayloadWarn["Attach to payload._warnings[]"]
         PayloadWarn --> Frontend["Send to Frontend"]
-        Frontend --> Dedupe["moduleWarningsSet<br/>(global deduplication)"]
-        Dedupe --> Console["console.warn()"]
-        Dedupe --> UI["Render ⚠️ message<br/>above widgets"]
+        Frontend --> Runtime["_updateRuntimeWarnings()<br/>(per-student store)"]
+        Runtime --> Aggregate["_getRuntimeWarnings()<br/>current active"]
+        Aggregate --> Console["console.warn()<br/>once per warning"]
+        Aggregate --> UI["Render runtime warnings<br/>above widgets"]
     end
 
     Return --> End["Continue execution"]
