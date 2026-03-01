@@ -9,6 +9,7 @@ This directory contains comprehensive documentation for the MMM-Webuntis module.
 - **[API_REFERENCE.md](API_REFERENCE.md)** - REST and JSON-RPC endpoints, authentication, data normalization
 - **[CONFIG.md](CONFIG.md)** - Complete configuration reference
 - **[CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)** - Styling guide, CSS variables, and accessibility options
+- **[LEGACY_COLOR_SCHEME.md](LEGACY_COLOR_SCHEME.md)** - Recreate the previous multi-color look via CSS overrides
 
 ---
 

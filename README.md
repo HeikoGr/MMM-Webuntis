@@ -257,6 +257,30 @@ Set via `displayMode` (comma-separated):
 displayMode: "grid,exams,homework"
 ```
 
+## Color Scheme Philosophy
+
+MMM-Webuntis now uses a reduced, semantic color system with **three core colors**:
+
+- **Blue** → new / active / informational
+- **Yellow** → changed / warning / attention
+- **Red** → cancelled / critical / error
+
+### Why reduce the number of colors?
+
+- **Faster recognition:** fewer colors make state meaning easier to learn and remember.
+- **Higher consistency across widgets:** grid, lessons, exams, absences, and messages use the same semantics.
+- **Better accessibility baseline:** reduced palette helps keep contrast and emphasis predictable.
+- **Simpler customization:** users can theme the whole module by changing a small set of CSS variables.
+
+### Consistent color logic
+
+- Colors represent **state meaning**, not widget type.
+- The same state keeps the same color family in every widget.
+- Intensity variants (e.g. "today" styles, overlays) are derived from the same semantic base colors.
+
+If you prefer the previous multi-color look, see:
+- [docs/LEGACY_COLOR_SCHEME.md](docs/LEGACY_COLOR_SCHEME.md)
+
 ## Class Timetable Mode
 
 By default, MMM-Webuntis shows the **student's personal timetable** with their specific schedule. Some schools only provide **class timetables** that show the entire class schedule.
@@ -356,6 +380,7 @@ node --run check          # Verify configuration
 
 - **[docs/CONFIG.md](docs/CONFIG.md)** - Complete configuration reference
 - **[docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md)** - Styling and themes
+- **[docs/LEGACY_COLOR_SCHEME.md](docs/LEGACY_COLOR_SCHEME.md)** - Recreate legacy multi-color look via CSS
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture
 - **[config/config.template.js](config/config.template.js)** - Full example config
 
