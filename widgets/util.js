@@ -383,6 +383,7 @@
         typeof util.createWidgetContext === 'function'
           ? util.createWidgetContext
           : () => ({ isVerbose: false, getConfig: () => undefined }),
+      buildWidgetHeaderTitle: typeof util.buildWidgetHeaderTitle === 'function' ? util.buildWidgetHeaderTitle : () => '',
       // Flexible field configuration functions
       getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => [],
       getSubject: typeof util.getSubject === 'function' ? util.getSubject : () => '',
@@ -421,6 +422,84 @@
       },
       log: (level, msg) => util?.log?.(level, msg),
     };
+  }
+
+  function normalizeDays(value, fallback = 0) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(0, parsed);
+  }
+
+  function widgetDisplayName(ctx, widgetName) {
+    const t = (key, fallback) => {
+      const translated = ctx?.translate?.(key);
+      return translated && translated !== key ? translated : fallback;
+    };
+
+    if (widgetName === 'messagesofday') return ctx?.translate?.('messagesofday') || 'Messages of the Day';
+    if (widgetName === 'exams') return ctx?.translate?.('exams') || 'Exams';
+    if (widgetName === 'homework') return ctx?.translate?.('homework') || 'Homework';
+    if (widgetName === 'absences') return ctx?.translate?.('absences') || 'Absences';
+    if (widgetName === 'lessons') return t('widget_lessons', 'Lessons');
+    if (widgetName === 'grid') return t('widget_timetable', 'Timetable');
+    return String(widgetName || 'Widget');
+  }
+
+  function widgetFilterLabel(ctx, widgetName, widgetCtx) {
+    const t = (key, fallback) => {
+      const translated = ctx?.translate?.(key);
+      return translated && translated !== key ? translated : fallback;
+    };
+    const daysLabel = t('widget_filter_days', 'days');
+    const weekViewLabel = t('widget_filter_week_view', 'week view');
+    const allLabel = t('widget_filter_all', 'all');
+
+    if (!widgetCtx || typeof widgetCtx.getConfig !== 'function') return allLabel;
+
+    if (widgetName === 'grid') {
+      const weekView = Boolean(widgetCtx.getConfig('weekView'));
+      if (weekView) return weekViewLabel;
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    }
+
+    if (widgetName === 'lessons') {
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    }
+
+    if (widgetName === 'exams') {
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `+${nextDays} ${daysLabel}`;
+    }
+
+    if (widgetName === 'homework') {
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    }
+
+    if (widgetName === 'absences') {
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    }
+
+    if (widgetName === 'messagesofday') {
+      return allLabel;
+    }
+
+    return allLabel;
+  }
+
+  function buildWidgetHeaderTitle(ctx, widgetName, widgetCtx, studentName = '') {
+    const name = escapeHtml(widgetDisplayName(ctx, widgetName));
+    const filter = escapeHtml(widgetFilterLabel(ctx, widgetName, widgetCtx));
+    const student = escapeHtml(String(studentName || '').trim());
+    const meta = student ? `${student}, ${filter}` : filter;
+    return `${name} <span class="wu-header-meta">(${meta})</span>`;
   }
 
   /**
@@ -533,6 +612,7 @@
     initWidget,
     getWidgetConfigResolved,
     createWidgetContext,
+    buildWidgetHeaderTitle,
     // New dynamic field utilities
     getFieldValue,
     getTeachers,

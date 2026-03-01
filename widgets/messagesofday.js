@@ -9,7 +9,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addFullRow, addHeader } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addFullRow, addHeader, createWidgetContext, buildWidgetHeaderTitle } = root.util?.initWidget?.(root) || {};
 
   /**
    * Render messages of day widget for a single student
@@ -26,8 +26,10 @@
   function renderMessagesOfDayForStudent(ctx, container, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;
 
-    // Add localized header "Messages of the Day" / "Nachrichten des Tages"
-    const headerTitle = ctx.translate('messagesofday');
+    const widgetCtx = createWidgetContext('messagesofday', studentConfig, root.util || {}, ctx);
+
+    // Add widget header with active filter/range context
+    const headerTitle = buildWidgetHeaderTitle(ctx, 'messagesofday', widgetCtx, studentCellTitle);
     addHeader(container, headerTitle);
 
     const messagesContainer = document.createElement('div');

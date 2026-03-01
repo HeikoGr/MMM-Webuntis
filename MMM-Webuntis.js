@@ -46,6 +46,7 @@ Module.register('MMM-Webuntis', {
     // === DEBUG OPTIONS ===
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
     debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+    demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
     dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
     timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
@@ -211,6 +212,95 @@ Module.register('MMM-Webuntis', {
       return window.MMMWebuntisWidgets || null;
     } catch {
       return null;
+    }
+  },
+
+  _isDemoModeEnabled() {
+    const raw = this.config?.demoDataFile;
+    return typeof raw === 'string' && raw.trim() !== '';
+  },
+
+  _getDemoDataUrl() {
+    const raw = String(this.config?.demoDataFile || '')
+      .trim()
+      .replace(/^\/+/, '');
+    if (!raw) return null;
+    return this.file(raw);
+  },
+
+  _normalizeDemoPayloads(rawData) {
+    if (!rawData) return [];
+    if (Array.isArray(rawData)) return rawData;
+    if (Array.isArray(rawData?.payloads)) return rawData.payloads;
+    return [rawData];
+  },
+
+  async _loadDemoPayloads() {
+    const demoUrl = this._getDemoDataUrl();
+    if (!demoUrl) return [];
+
+    const cacheKey = String(this.config?.demoDataFile || '').trim();
+    if (this._demoPayloadCacheKey === cacheKey && Array.isArray(this._demoPayloadCache) && this._demoPayloadCache.length > 0) {
+      return this._demoPayloadCache;
+    }
+
+    const response = await fetch(demoUrl, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Failed to load demo fixture (${response.status}) from ${demoUrl}`);
+    }
+
+    const json = await response.json();
+    const payloads = this._normalizeDemoPayloads(json);
+    if (!Array.isArray(payloads) || payloads.length === 0) {
+      throw new Error(`Demo fixture ${demoUrl} contains no payloads`);
+    }
+
+    this._demoPayloadCacheKey = cacheKey;
+    this._demoPayloadCache = payloads;
+    return payloads;
+  },
+
+  async _emitDemoPayload(reason = 'manual') {
+    try {
+      const payloads = await this._loadDemoPayloads();
+      const statusDefaults = {
+        timetable: 200,
+        exams: 200,
+        homework: 200,
+        absences: 200,
+        messagesOfDay: 200,
+      };
+      const fetchDefaults = {
+        fetchTimetable: true,
+        fetchTimegrid: true,
+        fetchExams: true,
+        fetchHomeworks: true,
+        fetchAbsences: true,
+        fetchMessagesOfDay: true,
+      };
+
+      payloads.forEach((entry, index) => {
+        const fallbackTitle = this.config?.students?.[index]?.title || this.config?.students?.[0]?.title || `Demo Student ${index + 1}`;
+        const payload = {
+          ...(entry || {}),
+          title: String(entry?.title || fallbackTitle),
+          config: entry?.config || this.config,
+          warnings: Array.isArray(entry?.warnings) ? entry.warnings : [],
+          apiStatus: { ...statusDefaults, ...(entry?.apiStatus || {}) },
+          fetchFlags: { ...fetchDefaults, ...(entry?.fetchFlags || {}) },
+          sessionId: this._sessionId,
+          id: this.identifier,
+        };
+        this.socketNotificationReceived('GOT_DATA', payload);
+      });
+
+      this._log('debug', `[DEMO] Rendered ${payloads.length} demo payload(s) (${reason})`);
+    } catch (error) {
+      const msg = `Demo mode failed: ${error?.message || String(error)}`;
+      this._log('error', msg);
+      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+      this.moduleWarningsSet.add(msg);
+      this.updateDom();
     }
   },
 
@@ -994,6 +1084,16 @@ Module.register('MMM-Webuntis', {
       this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     }
 
+    // Optional demo mode: load local fixture payload in frontend and skip backend/API entirely.
+    if (this._isDemoModeEnabled()) {
+      this._initialized = true;
+      this._initializedAt = Date.now();
+      this._log('info', `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
+      this._emitDemoPayload('start');
+      this._startFetchTimer();
+      return;
+    }
+
     // Initialize module with backend (separate from data fetching)
     this._sendInit();
 
@@ -1060,6 +1160,11 @@ Module.register('MMM-Webuntis', {
   _sendFetchData(reason = 'manual') {
     // Send FETCH_DATA notification to backend, unless not initialized
     // Prevent fetch before initialization is complete
+    if (this._isDemoModeEnabled()) {
+      this._emitDemoPayload(reason);
+      return;
+    }
+
     if (!this._initialized) {
       // Store pending resume request to execute after initialization
       if (reason === 'resume') {

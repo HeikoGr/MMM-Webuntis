@@ -8,7 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } = root.util?.initWidget?.(root) || {};
 
   /**
    * Render homework widget for a single student
@@ -29,7 +29,9 @@
     const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
     // Header is already added by main module if studentCellTitle is empty
-    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    if (widgetCtx.isVerbose && studentCellTitle !== '') {
+      addHeader(container, buildWidgetHeaderTitle(ctx, 'homework', widgetCtx, studentCellTitle));
+    }
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
       addRow(container, 'homeworkRowEmpty', studentCell, ctx.translate('no_homework'));

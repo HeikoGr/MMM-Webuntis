@@ -8,7 +8,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.initWidget?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -37,7 +38,9 @@
       const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {}, ctx);
       const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
       // Header is already added by main module if studentCellTitle is empty
-      if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
+      if (widgetCtx.isVerbose && studentCellTitle !== '') {
+        addHeader(container, buildWidgetHeaderTitle(ctx, 'exams', widgetCtx, studentCellTitle));
+      }
 
       const showSubject = Boolean(widgetCtx.getConfig('showSubject', false));
       const showTeacher = Boolean(widgetCtx.getConfig('showTeacher', false));

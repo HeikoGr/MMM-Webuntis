@@ -19,6 +19,11 @@
   "no_reason": "Keine Angabe",
   "absences_unavailable_parent_account": "Fehlzeiten sind mit Elternaccounts nicht verfügbar (WebUntis API-Limitation)",
   "widget_render_error": "Widget konnte nicht geladen werden",
+  "widget_lessons": "Unterricht",
+  "widget_timetable": "Stundenplan",
+  "widget_filter_days": "Tage",
+  "widget_filter_week_view": "Wochenansicht",
+  "widget_filter_all": "alle",
   "break_supervision": "Pausenaufsicht",
   "hidden_lessons": "weitere Stunde",
   "hidden_lessons_plural": "weitere Stunden"

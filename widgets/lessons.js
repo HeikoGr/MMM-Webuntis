@@ -9,7 +9,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.initWidget?.(root) || {};
 
   /**
    * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
@@ -144,7 +145,9 @@
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    if (widgetCtx.isVerbose && studentCellTitle !== '') {
+      addHeader(container, buildWidgetHeaderTitle(ctx, 'lessons', widgetCtx, studentCellTitle));
+    }
 
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));

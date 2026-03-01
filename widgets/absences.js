@@ -11,7 +11,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, formatTime, createWidgetContext } = root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDate, formatTime, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.initWidget?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -31,7 +32,9 @@
     // Determine mode and handle header using helper
     const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
     const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') addHeader(container, studentCellTitle);
+    if (widgetCtx.isVerbose && studentCellTitle !== '') {
+      addHeader(container, buildWidgetHeaderTitle(ctx, 'absences', widgetCtx, studentCellTitle));
+    }
 
     if (!Array.isArray(absences) || absences.length === 0) {
       addRow(container, 'absenceRowEmpty', studentCell, ctx.translate('no_absences'));

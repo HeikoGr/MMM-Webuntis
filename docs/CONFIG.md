@@ -31,6 +31,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 | `header` | string | `'MMM-Webuntis'` | Title displayed by MagicMirror for this module. |
 | `updateInterval` | int | `5 * 60 * 1000` | Fetch interval in milliseconds (default 5 minutes). |
 | `logLevel` | string | `'none'` | Log verbosity: `'debug'`, `'info'`, `'warn'`, `'error'`, or `'none'`. |
+| `demoDataFile` | string\|null | `null` | Relative path to local fixture JSON for frontend-only demo mode (backend/API skipped). |
 
 ---
 
@@ -125,9 +126,6 @@ grid: {
 grid: {
   weekView: true,  // Mon-Fri of current/next week
   dateFormat: 'EEE dd.MM.',
-  mergeGap: 15,
-  maxLessons: 8,
-  showNowLine: true,
 }
 ```
 
@@ -347,6 +345,23 @@ students: [
 | `dumpRawApiResponses` | bool | `false` | Dump raw REST API responses to `debug_dumps/raw_api_*.json`. |
 | `debugDate` | string | `null` | Override "today" for testing (format: `YYYY-MM-DD`). |
 | `timezone` | string | `'Europe/Berlin'` | Timezone for date calculations. |
+
+### Frontend Demo Fixtures
+
+Use `demoDataFile` for screenshot/UI testing with anonymized synthetic data:
+
+```javascript
+config: {
+  demoDataFile: 'demo/fixtures/single-student-week.json',
+  debugDate: '2026-03-02',
+  displayMode: 'messagesofday, grid, lessons, exams, homework, absences',
+}
+```
+
+Notes:
+- Path is relative to module root.
+- Supports one payload object, an array of payloads, or `{ payloads: [...] }`.
+- In demo mode, MMM-Webuntis renders fixture data directly in frontend and does not call backend/API.
 
 ---
 

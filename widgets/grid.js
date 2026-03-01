@@ -54,6 +54,7 @@ function getModuleRootElement(ctx) {
     getClass,
     getStudentGroup,
     getInfo,
+    buildWidgetHeaderTitle,
   } = root.util?.initWidget?.(root) || {};
 
   // ============================================================================
@@ -870,9 +871,7 @@ function getModuleRootElement(ctx) {
 
   /**
    * Check if lesson is an exam
-   * Uses two detection methods:
-   * 1. REST API activityType field (activityType === 'EXAM')
-   * 2. Fallback text-based keywords (Klassenarbeit, Klausur, Arbeit)
+   * Uses lesson payload field activityType (activityType === 'EXAM')
    *
    * Note: The raw REST API sends 'type: "EXAM"' which is mapped to 'activityType'
    * during transformation (see lib/webuntisApiService.js#L260). The 'type' field
@@ -884,12 +883,6 @@ function getModuleRootElement(ctx) {
   function lessonHasExam(lesson) {
     // Primary check: REST API activityType field (mapped from raw API's 'type' field)
     if (lesson?.activityType && String(lesson.activityType).toUpperCase() === 'EXAM') return true;
-
-    // Fallback: Check if lesson text contains exam keywords
-    const lText = String(lesson?.text || lesson?.lstext || '').toLowerCase();
-    if (lText.includes('klassenarbeit') || lText.includes('klausur') || lText.includes('arbeit')) {
-      return true;
-    }
 
     return false;
   }
@@ -1374,7 +1367,6 @@ function getModuleRootElement(ctx) {
    * @param {HTMLElement} container - Day column container
    * @param {Object} ctx - Main module context
    * @param {Function} escapeHtml - HTML escape function
-   * @param {boolean} hasExam - True if any lesson in group is an exam
    * @param {boolean} isPast - True if lesson group is in the past (used for ticker wrapper)
    * @param {Array} homeworks - Array of homework objects
    * @param {number} nowYmd - Current date as YYYYMMDD integer
@@ -1387,7 +1379,6 @@ function getModuleRootElement(ctx) {
     container,
     ctx,
     escapeHtml,
-    hasExam,
     isPast,
     homeworks,
     nowYmd,
@@ -1517,6 +1508,8 @@ function getModuleRootElement(ctx) {
       for (const [, subjectLessons] of subjectGroups.entries()) {
         const tickerItem = document.createElement('div');
         tickerItem.className = 'ticker-item';
+        const groupHasExam = subjectLessons.some((lesson) => lessonHasExam(lesson));
+        if (groupHasExam) tickerItem.classList.add('has-exam');
 
         // Set item width as percentage of track
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
@@ -1558,7 +1551,7 @@ function getModuleRootElement(ctx) {
 
           // Apply lesson classes (type, past, exam)
           applyLessonClasses(lessonDiv, lesson, {
-            hasExam,
+            hasExam: lessonHasExam(lesson),
             nowYmd,
             nowMin,
           });
@@ -1579,6 +1572,8 @@ function getModuleRootElement(ctx) {
       for (const pair of splitViewPairs) {
         const tickerItem = document.createElement('div');
         tickerItem.className = 'ticker-item ticker-item-split';
+        const pairHasExam = [...pair.replacements, ...pair.cancelledLessons].some((lesson) => lessonHasExam(lesson));
+        if (pairHasExam) tickerItem.classList.add('has-exam');
 
         // Set item width as percentage of track
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
@@ -1619,7 +1614,7 @@ function getModuleRootElement(ctx) {
           replacementDiv.style.width = '50%';
 
           applyLessonClasses(replacementDiv, replacement, {
-            hasExam,
+            hasExam: lessonHasExam(replacement),
             nowYmd,
             nowMin,
             additionalClasses: ['split-left'],
@@ -1645,7 +1640,7 @@ function getModuleRootElement(ctx) {
           cancelledDiv.style.width = '50%';
 
           applyLessonClasses(cancelledDiv, cancelled, {
-            hasExam,
+            hasExam: lessonHasExam(cancelled),
             nowYmd,
             nowMin,
             additionalClasses: ['split-right'],
@@ -1838,7 +1833,6 @@ function getModuleRootElement(ctx) {
         const tYmd = Number(tickerCandidates[0].dateStr) || 0;
         const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
         const isPast = calcIsPast(tYmd, tEMin);
-        const hasExam = tickerCandidates.some((l) => lessonHasExam(l));
 
         // Pass cancelled lessons and replacements to ticker for split-view rendering
         const tickerData = {
@@ -1860,7 +1854,6 @@ function getModuleRootElement(ctx) {
             bothInner,
             ctx,
             escapeHtml,
-            hasExam,
             isPast,
             homeworks,
             nowYmd,
@@ -1895,7 +1888,6 @@ function getModuleRootElement(ctx) {
         const replacements = [...addedLessons, ...substLessons, ...eventLessons];
         const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
         const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
-        const hasExam = lessons.some((l) => lessonHasExam(l));
         const isPast = calcIsPast(allLessonsYmd, groupEMin);
 
         // Left side: replacement lesson(s) — each at its own time slot
@@ -1906,7 +1898,7 @@ function getModuleRootElement(ctx) {
           const rTop = Math.round(((rS - allStart) / totalMinutes) * totalHeight);
           const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
-          applyLessonClasses(cell, repl, { hasExam, isPast, additionalClasses: ['split-left'] });
+          applyLessonClasses(cell, repl, { hasExam: lessonHasExam(repl), isPast, additionalClasses: ['split-left'] });
           cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
@@ -1920,7 +1912,11 @@ function getModuleRootElement(ctx) {
           const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
           const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
-          applyLessonClasses(cell, cancelled, { hasExam, isPast, additionalClasses: ['split-right'] });
+          applyLessonClasses(cell, cancelled, {
+            hasExam: lessonHasExam(cancelled),
+            isPast,
+            additionalClasses: ['split-right'],
+          });
           cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
@@ -1945,7 +1941,6 @@ function getModuleRootElement(ctx) {
         const tYmd = Number(spanningLessons[0].dateStr) || 0;
         const tEMin = Math.min(tcGroupEnd, allEnd);
         const isPast = calcIsPast(tYmd, tEMin);
-        const hasExam = lessons.some((l) => lessonHasExam(l));
 
         // Left: spanning lesson(s) at their full natural height
         for (const spanning of spanningLessons) {
@@ -1955,7 +1950,7 @@ function getModuleRootElement(ctx) {
           const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
           const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
-          applyLessonClasses(cell, spanning, { hasExam, isPast, additionalClasses: ['split-left'] });
+          applyLessonClasses(cell, spanning, { hasExam: lessonHasExam(spanning), isPast, additionalClasses: ['split-left'] });
           cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(spanning, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
@@ -1970,7 +1965,7 @@ function getModuleRootElement(ctx) {
           const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
           const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
           const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
-          applyLessonClasses(cell, sub, { hasExam, isPast, additionalClasses: ['split-right'] });
+          applyLessonClasses(cell, sub, { hasExam: lessonHasExam(sub), isPast, additionalClasses: ['split-right'] });
           cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
           if (checkHomeworkMatch(sub, homeworks)) addHomeworkIcon(cell);
           bothInner.appendChild(cell);
@@ -2115,7 +2110,7 @@ function getModuleRootElement(ctx) {
    * @param {Array} absences - Array of absence objects
    * @returns {HTMLElement} Grid widget wrapper element
    */
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
+  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, _exams, absences) {
     // 1. Validate and extract configuration
     const config = validateAndExtractGridConfig(ctx, studentConfig);
 
@@ -2143,12 +2138,12 @@ function getModuleRootElement(ctx) {
     const wrapper = document.createElement('div');
 
     // Add student title header if in verbose mode using helper
-    const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {});
+    const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {}, ctx);
     if (widgetCtx.isVerbose && studentTitle && typeof addHeader === 'function') {
       // Create a separate container for the header with the standard widget styling
       const headerContainer = document.createElement('div');
       headerContainer.className = 'wu-widget-container bright small light';
-      addHeader(headerContainer, studentTitle);
+      addHeader(headerContainer, buildWidgetHeaderTitle(ctx, 'grid', widgetCtx, studentTitle));
       wrapper.appendChild(headerContainer);
     }
 

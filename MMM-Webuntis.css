@@ -178,6 +178,12 @@
   text-align: left;
 }
 
+.MMM-Webuntis .wu-row-header .wu-header-meta {
+  font-weight: 400;
+  opacity: 0.72;
+  font-size: 0.88em;
+}
+
 /* Widget Columns (replaces td) */
 .MMM-Webuntis .wu-col {
   white-space: pre-line;
