@@ -64,7 +64,7 @@ graph TB
     end
 
     subgraph External["🌐 External APIs"]
-        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homework<br/>/absences, /messagesofday)"]
+        REST["WebUntis REST API<br/>(/app/data, /timetable<br/>/exams, /homeworks/lessons<br/>/absences, /public/news/newsWidgetData)"]
         JSONRPC["JSON-RPC API<br/>(authenticate, OTP)"]
     end
 
@@ -231,7 +231,7 @@ graph TB
 **[restClient.js](../lib/restClient.js)** - REST API wrapper
 - [`callRestAPI()`](../lib/restClient.js#L27) - Generic REST caller
 - Bearer token authentication
-- Tenant ID header management (`X-Webuntis-Api-Tenant-Id`)
+- Tenant ID header management (`Tenant-Id`)
 - Response parsing and error handling
 - **Dependencies**: fetchClient.js, errorHandler.js, logger.js, errorUtils.js
 
@@ -248,7 +248,7 @@ graph TB
 
 **[payloadBuilder.js](../lib/payloadBuilder.js)** - GOT_DATA payload construction (NEW)
 - [`buildGotDataPayload()`](../lib/payloadBuilder.js#L30) - Build complete payload for frontend
-- Holiday-by-date mapping for fast lookups
+- Attach compact holiday ranges (`data.holidays.ranges`) and active holiday (`data.holidays.current`)
 - Warning collection and deduplication
 - Debug dump generation (non-blocking)
 - **Dependencies**: payloadCompactor.js, errorUtils.js
@@ -435,7 +435,7 @@ sequenceDiagram
         and
             Orch->>API: getHomework() L234
             API->>REST: GET /homeworks/lessons
-            REST-->>API: homework[]
+            REST-->>API: homeworks[]
             API-->>Orch: normalized homework
         and
             Orch->>API: getAbsences() L269
@@ -444,8 +444,8 @@ sequenceDiagram
             API-->>Orch: normalized absences
         and
             Orch->>API: getMessagesOfDay() L304
-            API->>REST: GET /messagesofday
-            REST-->>API: messages[]
+            API->>REST: GET /public/news/newsWidgetData
+            REST-->>API: messagesOfDay[]
             API-->>Orch: normalized messages
         end
 
@@ -455,7 +455,7 @@ sequenceDiagram
     Note over NH: Error Handling & Payload Building
     NH->>PayBuild: buildGotDataPayload() L30
     PayBuild->>PayBuild: Compact arrays via schemas
-    PayBuild->>PayBuild: Build holidayByDate mapping
+    PayBuild->>PayBuild: Attach data.holidays.ranges + data.holidays.current
     PayBuild->>PayBuild: Collect & dedupe warnings
     PayBuild->>PayBuild: Generate debug dumps (optional)
     PayBuild-->>NH: Complete GOT_DATA payload
@@ -466,24 +466,25 @@ sequenceDiagram
     FE->>FE: socketNotificationReceived() L606<br/>(store config, warnings)
     FE->>FE: _updateRuntimeWarnings()<br/>(per-student runtime state)
     FE->>FE: moduleWarningsSet.add()<br/>(config warnings only)
+    FE->>FE: _buildHolidayMapFromRanges()<br/>(ranges → YYYYMMDD day-map)
     FE->>FE: updateDom()
     FE->>FE: getDom() L700<br/>(render all widgets)
 ```
 
 ### 2. **Configuration Normalization**
 
-**Process**: [`MMM-Webuntis.js#_buildSendConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182) → [`node_helper.js#_normalizeLegacyConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470) → [`configValidator.js#applyLegacyMappings()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85)
+**Process**: [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L182) → [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L1470) → [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L85)
 
 ```mermaid
 graph LR
     A["Raw Config<br/>(user input)"]:::input
-    --> B["_buildSendConfig() L182<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182'>Frontend</a>"]:::frontend
+    --> B["_buildSendConfig() L182<br/><a href='../MMM-Webuntis.js#L182'>Frontend</a>"]:::frontend
     --> C["Merged student[]<br/>(defaults + per-student)"]:::merged
     --> D["sendSocketNotification<br/>INIT_MODULE"]:::socket
-    --> E["_normalizeLegacyConfig() L1470<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470'>Backend</a>"]:::backend
-    --> F["applyLegacyMappings() L85<br/>(25 legacy keys)<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85'>configValidator</a>"]:::validator
+    --> E["_normalizeLegacyConfig() L1470<br/><a href='../node_helper.js#L1470'>Backend</a>"]:::backend
+    --> F["applyLegacyMappings() L85<br/>(25 legacy keys)<br/><a href='../lib/configValidator.js#L85'>configValidator</a>"]:::validator
     --> G["Normalized Config<br/>(canonical keys only)"]:::normalized
-    --> H["fetchData() L1536<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536'>Backend fetch logic</a>"]:::fetch
+    --> H["fetchData() L1536<br/><a href='../node_helper.js#L1536'>Backend fetch logic</a>"]:::fetch
 
     classDef input fill:#e3f2fd
     classDef frontend fill:#bbdefb
@@ -498,43 +499,43 @@ graph LR
 ### 3. **Widget Rendering Pipeline**
 
 **Main Functions**:
-- [`MMM-Webuntis.js#getDom()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L700) - Main render entry
-- [`MMM-Webuntis.js#_renderWidgetTableRows()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L283) - Render helper
+- [`MMM-Webuntis.js#getDom()`](../MMM-Webuntis.js#L700) - Main render entry
+- [`MMM-Webuntis.js#_renderWidgetTableRows()`](../MMM-Webuntis.js#L283) - Render helper
 
 **Widget Renderers**:
-- [`widgets/lessons.js#renderLessonsForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js#L26)
-- [`widgets/grid.js#renderGridForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js#L33) (1,300+ LOC - see ISSUES.md HIGH-3)
-- [`widgets/exams.js#renderExamsForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/exams.js#L26)
-- [`widgets/homework.js#renderHomeworkForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/homework.js#L26)
-- [`widgets/absences.js#renderAbsencesForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/absences.js#L27)
-- [`widgets/messagesofday.js#renderMessagesForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/messagesofday.js#L23)
+- [`widgets/lessons.js#renderLessonsForStudent()`](../widgets/lessons.js#L26)
+- [`widgets/grid.js#renderGridForStudent()`](../widgets/grid.js#L33) (1,300+ LOC; marked as high-complexity area)
+- [`widgets/exams.js#renderExamsForStudent()`](../widgets/exams.js#L26)
+- [`widgets/homework.js#renderHomeworksForStudent()`](../widgets/homework.js#L26)
+- [`widgets/absences.js#renderAbsencesForStudent()`](../widgets/absences.js#L27)
+- [`widgets/messagesofday.js#renderMessagesOfDayForStudent()`](../widgets/messagesofday.js#L23)
 
 ```mermaid
 graph TD
     FE["socketNotificationReceived() L606<br/>(GOT_DATA)"]:::frontend
-    --> CB["configByStudent[title] =<br/>payload.config"]:::store
+    --> CB["configByStudent[title] =<br/>payload.context.config"]:::store
     --> VW["_getDisplayWidgets() L741<br/>(parse displayMode)"]:::parse
     --> DOM["getDom() L700"]:::render
     --> WRN["render module warnings<br/>(above all widgets)"]:::warn
     --> RW["_renderWidgetTableRows() L283<br/>for each widget type"]:::loop
 
-    RW --> W1["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js#L26'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
-    W1 --> W1B["uses: lessons.nextDays<br/>lessons.dateFormat<br/>timetableRange[]<br/>holidayByDate{}"]:::config
+    RW --> W1["<a href='../widgets/lessons.js#L26'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
+    W1 --> W1B["uses: lessons.nextDays<br/>lessons.dateFormat<br/>lessons[]<br/>derived holidayMap{}"]:::config
 
-    RW --> W2["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js#L33'>grid.js</a><br/>renderGridForStudent()<br/>⚠️ 1,300+ LOC"]:::widget
-    W2 --> W2B["uses: grid.mergeGap<br/>grid.dateFormat<br/>timeUnits[]<br/>holidayByDate{}"]:::config
+    RW --> W2["<a href='../widgets/grid.js#L33'>grid.js</a><br/>renderGridForStudent()<br/>⚠️ 1,300+ LOC"]:::widget
+    W2 --> W2B["uses: grid.mergeGap<br/>grid.dateFormat<br/>timeUnits[]<br/>derived holidayMap{}"]:::config
 
-    RW --> W3["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/exams.js#L26'>exams.js</a><br/>renderExamsForStudent()"]:::widget
+    RW --> W3["<a href='../widgets/exams.js#L26'>exams.js</a><br/>renderExamsForStudent()"]:::widget
     W3 --> W3B["uses: exams.daysAhead<br/>exams.dateFormat<br/>exams[]"]:::config
 
-    RW --> W4["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/homework.js#L26'>homework.js</a><br/>renderHomeworkForStudent()"]:::widget
+    RW --> W4["<a href='../widgets/homework.js#L26'>homework.js</a><br/>renderHomeworksForStudent()"]:::widget
     W4 --> W4B["uses: homework.dateFormat<br/>homeworks[]"]:::config
 
-    RW --> W5["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/absences.js#L27'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
+    RW --> W5["<a href='../widgets/absences.js#L27'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
     W5 --> W5B["uses: absences.pastDays<br/>absences.dateFormat<br/>absences[]"]:::config
 
-    RW --> W6["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/messagesofday.js#L23'>messagesofday.js</a><br/>renderMessagesForStudent()"]:::widget
-    W6 --> W6B["uses: messagesofday.dateFormat<br/>messages[]"]:::config
+    RW --> W6["<a href='../widgets/messagesofday.js#L23'>messagesofday.js</a><br/>renderMessagesOfDayForStudent()"]:::widget
+    W6 --> W6B["uses: messagesofday.dateFormat<br/>messagesOfDay[]"]:::config
 
     classDef frontend fill:#e3f2fd
     classDef store fill:#bbdefb
@@ -546,7 +547,7 @@ graph TD
     classDef config fill:#c8e6c9
 ```
 
-**Code Duplication Issue**: All 6 widgets share ~400 LOC of common code (mode handling, config retrieval, table creation, empty state) - see [ISSUES.md HIGH-1](https://github.com/HeikoGr/MMM-Webuntis/blob/master/docs/ISSUES.md#-high-1-widget-code-duplication-400-lines)
+**Code Duplication Issue**: All 6 widgets share ~400 LOC of common code (mode handling, config retrieval, table creation, empty state). This is tracked as a high-priority refactoring topic in the project backlog.
 
 ### 4. **REST API Request Flow** (per data type)
 
@@ -554,7 +555,7 @@ graph TD
 - [dataFetchOrchestrator.js#orchestrateFetch()](../lib/dataFetchOrchestrator.js#L25) - Parallel orchestration (NEW)
 - [webuntisApiService.js#callWebUntisAPI()](../lib/webuntisApiService.js#L85) - Generic API caller
 - [authService.js#getAuth()](../lib/authService.js#L121) - Auth with caching
-- [restClient.js#callRestEndpoint()](../lib/restClient.js#L27) - REST wrapper
+- [restClient.js#callRestAPI()](../lib/restClient.js#L27) - REST wrapper
 - [errorUtils.js#wrapAsync()](../lib/errorUtils.js#L48) - Error handling wrapper (NEW)
 
 ```mermaid
@@ -562,7 +563,7 @@ sequenceDiagram
     participant Orch as dataFetchOrchestrator
     participant API as webuntisApiService<br/>callWebUntisAPI() L85
     participant Auth as authService<br/>getAuth() L121
-    participant RC as restClient<br/>callRestEndpoint() L27
+    participant RC as restClient<br/>callRestAPI() L27
     participant REST as WebUntis REST API
     participant ErrUtils as errorUtils<br/>wrapAsync()
 
@@ -587,9 +588,9 @@ sequenceDiagram
             Auth-->>API: return { token, cookies, tenantId }
         end
 
-        API->>RC: callRestEndpoint('/timetable/entries', auth)
+        API->>RC: callRestAPI('/timetable/entries', auth)
         RC->>REST: GET /WebUntis/api/rest/view/v1/timetable/entries
-        Note over REST: headers:<br/>Authorization: Bearer {token}<br/>Cookie: {session_cookies}<br/>X-Webuntis-Api-Tenant-Id: {tenantId}<br/>X-Webuntis-Api-School-Year-Id: {schoolYearId}
+        Note over REST: headers:<br/>Authorization: Bearer {token}<br/>Cookie: {session_cookies}<br/>Tenant-Id: {tenantId}<br/>X-Webuntis-Api-School-Year-Id: {schoolYearId}
 
         alt Success
             REST-->>RC: JSON response { data: [...] }
@@ -623,7 +624,7 @@ sequenceDiagram
 
 ### 5. **Caching Strategy**
 
-**Implementation**: [`lib/cacheManager.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/cacheManager.js), [`lib/authService.js#L47-L56`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/authService.js#L47-L56)
+**Implementation**: [`lib/cacheManager.js`](../lib/cacheManager.js), [`lib/authService.js#L47-L56`](../lib/authService.js#L47-L56)
 
 ```mermaid
 graph TB
@@ -664,26 +665,26 @@ graph TB
 - ✅ **Class ID Cache**: High hit rate (~98%), saves API lookup
 - ⚠️ **No Response Cache**: Each fetch cycle (init-triggered or FETCH_DATA) triggers full API calls (potential optimization)
 
-**See**: [ISSUES.md MED-11](https://github.com/HeikoGr/MMM-Webuntis/blob/master/docs/ISSUES.md#-med-11-cache-invalidierung-nicht-konsistent) for cache invalidation consistency issues
+**Note**: Cache invalidation consistency remains a medium-priority backlog topic.
 
 ### 6. **Configuration Merging & Inheritance**
 
 **Process Flow**: User config → Frontend merge → Backend normalization → Fetch logic
 
 **Key Functions**:
-- [`MMM-Webuntis.js#defaults`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L26-L120) - Module defaults
-- [`MMM-Webuntis.js#_buildSendConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182) - Merge defaults with user config
-- [`node_helper.js#_normalizeLegacyConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470) - Apply legacy mappings
-- [`configValidator.js#applyLegacyMappings()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85) - 25 legacy key transformations
+- [`MMM-Webuntis.js#defaults`](../MMM-Webuntis.js#L26-L120) - Module defaults
+- [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L182) - Merge defaults with user config
+- [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L1470) - Apply legacy mappings
+- [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L85) - 25 legacy key transformations
 
 ```mermaid
 graph LR
-    Defaults["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L26-L120'>Module Defaults</a><br/>(MMM-Webuntis.js L26)"]:::defaults
+    Defaults["<a href='../MMM-Webuntis.js#L26-L120'>Module Defaults</a><br/>(MMM-Webuntis.js L26)"]:::defaults
     --> GlobalConf["Global Config<br/>(config/config.js)"]:::global
     --> StudentConf["Per-Student Config<br/>(students[i] overrides)"]:::student
-    --> Merged["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182'>Merged Config</a><br/>_buildSendConfig() L182<br/>(defaults + global + student)"]:::merged
-    --> Normalized["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470'>Normalized Config</a><br/>_normalizeLegacyConfig() L1470<br/>(25 legacy keys mapped)"]:::normalized
-    --> FetchLogic["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536'>Fetch Logic</a><br/>fetchData() L1536<br/>(respects per-student overrides)"]:::fetch
+    --> Merged["<a href='../MMM-Webuntis.js#L182'>Merged Config</a><br/>_buildSendConfig() L182<br/>(defaults + global + student)"]:::merged
+    --> Normalized["<a href='../node_helper.js#L1470'>Normalized Config</a><br/>_normalizeLegacyConfig() L1470<br/>(25 legacy keys mapped)"]:::normalized
+    --> FetchLogic["<a href='../node_helper.js#L1262'>Fetch Orchestration</a><br/>processGroup() L1262<br/>(respects per-student overrides)"]:::fetch
 
     classDef defaults fill:#e1f5fe
     classDef global fill:#b3e5fc
@@ -734,7 +735,7 @@ graph TD
     A2 --> C
     A3 --> C
     C --> D["Dedupe within fetch<br/>(same student, same warning)"]
-    D --> P["Attach to GOT_DATA<br/>payload._warnings[]"]
+    D --> P["Attach to GOT_DATA<br/>state.warnings[]"]
     P --> FE["Send to Frontend"]
     FE --> Runtime["_updateRuntimeWarnings()<br/>(per student)"]
     Runtime --> Agg["_getRuntimeWarnings()<br/>(union of active warnings)"]
@@ -794,44 +795,44 @@ Runtime warnings now live in a per-student map and disappear automatically once 
 
 ```javascript
 {
-  title: "Student Name",              // per-student identifier
-  id: "module-instance-id",           // MagicMirror module ID
-  config: {                           // normalized student config
-    studentId: 1234,
-    title: "Student Name",
-    daysToShow: 7,
-    examsDaysAhead: 15,
-    absencesPastDays: 21,
-    __warnings: ["studentId not found in app/data. Possible: 456, 789"]
+    contractVersion: 2,
+    meta: {
+        generatedAt: "2026-03-02T12:22:21.968Z",
+        moduleVersion: "0.7.2",
+        sessionId: "session-uuid",
+        moduleId: "module_1_MMM-Webuntis"
+    },
+    context: {
+        student: { id: 1234, title: "Student Name" },
+        config: { displayMode: "grid, lessons", mode: "verbose" },
+        timezone: "Europe/Berlin",
+        todayYmd: 20260302,
+        range: { startYmd: 20260302, endYmd: 20260306 },
+        display: { mode: "verbose", widgets: ["grid", "lessons"] }
   },
-  timeUnits: [                        // lesson time slots (grid)
-    { startTime: "08:00", endTime: "09:00", name: "1. Stunde" }
-  ],
-  timetableRange: [                   // lessons for date range
-    { date: 20251226, startTime: "08:00", subject: "Math", ... }
-  ],
-  exams: [                            // upcoming exams
-    { date: 20260110, subject: "Math", teacher: "Dr. X", ... }
-  ],
-  homeworks: [                        // homework items
-    { dueDate: "20260115", subject: "Math", title: "Ex 1-5", ... }
-  ],
-  absences: [                         // absence records
-    { date: 20251220, excused: true, ... }
-  ],
-  holidays: [                         // all holiday periods
-    { id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105 }
-  ],
-  holidayByDate: {                    // pre-computed holiday lookup by YMD
-    20251226: { id: 1, name: "Xmas", longName: "Christmas", ... },
-    20251227: { id: 1, name: "Xmas", longName: "Christmas", ... }
+    data: {
+        timeUnits: [
+            { startTime: "08:00", endTime: "08:45", name: "1" }
+        ],
+        lessons: [
+            { date: 20260302, startTime: 800, endTime: 845, su: [{ name: "MA" }] }
+        ],
+        exams: [],
+        homework: [],
+        absences: [],
+        messages: [],
+        holidays: {
+            ranges: [
+                { id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105 }
+            ],
+            current: { id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105 }
+        }
   },
-  currentHoliday: {                   // active holiday for today (or null)
-    id: 1, name: "Xmas", longName: "Christmas", startDate: 20251223, endDate: 20260105
-  },
-  warnings: [                         // top-level deduped warnings
-    "Configured studentId 7777 ... Possible studentIds: 1234, 5678"
-  ]
+    state: {
+        fetch: { timegrid: true, timetable: true, exams: true, homework: true, absences: true, messages: true },
+        api: { timetable: 200, exams: 200, homework: 200, absences: 200, messages: 200 },
+        warnings: []
+    }
 }
 ```
 
@@ -975,7 +976,7 @@ graph TB
 
     subgraph Warning["Warning Collection & Display"]
         WarnSet["warnings Set<br/>(per-fetch deduplication)"]
-        --> PayloadWarn["Attach to payload._warnings[]"]
+        --> PayloadWarn["Attach to payload.state.warnings[]"]
         PayloadWarn --> Frontend["Send to Frontend"]
         Frontend --> Runtime["_updateRuntimeWarnings()<br/>(per-student store)"]
         Runtime --> Aggregate["_getRuntimeWarnings()<br/>current active"]
@@ -1051,7 +1052,7 @@ graph TD
     E -->|studentId invalid| F["Add warning<br/>Include candidates"]
     E -->|OK| G["Return data[]"]
 
-    F --> H["Attach to payload.config.__warnings"]
+    F --> H["Attach warning to payload.state.warnings[]"]
     G --> H
 
     H --> I["Collect top-level warnings"]
@@ -1310,12 +1311,12 @@ graph TB
 5. **HIGH-1: Widget Code Duplication** (400 LOC)
    - Create widget base class to eliminate duplication
    - Shared: mode handling, config retrieval, table creation
-   - See [ISSUES.md HIGH-1](./ISSUES.md#-high-1-widget-code-duplication-400-lines)
+    - Track in project backlog (high priority)
 
 6. **HIGH-3: Grid Widget Complexity** (1,300+ LOC)
    - Split into smaller, focused functions
    - Extract timegrid rendering logic
-   - See [ISSUES.md HIGH-3](./ISSUES.md#-high-3-grid-widget-complexity-1300-lines)
+    - Track in project backlog (high priority)
 
 7. **Add JSDoc to all public functions**
    - Current coverage: ~50%
@@ -1329,7 +1330,7 @@ graph TB
 
 9. **MED-11: Cache Invalidation**
    - Implement consistent cache invalidation strategy
-   - See [ISSUES.md MED-11](./ISSUES.md#-med-11-cache-invalidierung-nicht-konsistent)
+    - Track in project backlog (medium priority)
 
 10. **Extract magic numbers to constants**
     - Example: 14min token TTL, 1min safety buffer

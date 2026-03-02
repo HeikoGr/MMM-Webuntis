@@ -752,6 +752,12 @@
   font-size: inherit;
 }
 
+.MMM-Webuntis .lesson-room-name {
+  color: var(--wu-secondary-text);
+  font-weight: 400;
+  font-size: inherit;
+}
+
 /* Substitution Text (yellow/orange) */
 .MMM-Webuntis .lesson-substitution-text {
   font-size: 0.75rem;

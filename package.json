@@ -13,15 +13,12 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "MMM-Webuntis.js",
     "MMM-Webuntis.css",
     "node_helper.js",
     "lib/",
     "widgets/",
     "config/",
-    "translations/",
-    "README.md",
-    "LICENSE"
+    "translations/"
   ],
   "sideEffects": true,
   "keywords": [

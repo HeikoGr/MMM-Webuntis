@@ -47,17 +47,14 @@ node --run debug -- --verbose
 # Test specific student
 node --run debug -- --student 1
 
-# Test only authentication
-node --run debug -- --action auth
-
-# Create a JSON dump for frontend testing
-node --run debug -- --dump
+# Test all configured students
+node --run debug -- --all
 
 # Use custom config file
 node --run debug -- --config ./custom-config.js
 
 # Combine options
-node --run debug -- --student 0 --action exams --verbose --dump
+node --run debug -- --student 0 --verbose
 ```
 
 ---
@@ -75,7 +72,7 @@ The CLI automatically detects and loads your configuration:
 
 ### ✅ Production-Grade Testing
 
-Uses the **real** `node_helper.fetchData()` function:
+Uses the same production initialization/fetch flow as the frontend (`_handleInitModule()` → `_handleFetchData()`):
 
 - Tests actual production code paths
 - Full REST API integration
@@ -85,18 +82,16 @@ Uses the **real** `node_helper.fetchData()` function:
 
 ### ✅ Flexible Data Fetching
 
-Control what gets fetched:
+Control how students are tested:
 
-- Fetch all data types or specific ones
 - Test individual students or run batch tests
-- Selective action targeting (auth, timetable, exams, homework, absences, messages)
 - Date range configuration from config file
 
 ### ✅ Debug Dump Creation
 
 Generate JSON files for offline testing:
 
-- Saves complete API response payloads to `debug_dumps/`
+- Saves payloads to `debug_dumps/` via module config (`dumpBackendPayloads`, `dumpRawApiResponses`)
 - Test frontend widgets without live WebUntis access
 - Use for automated CI/CD testing
 - Sample data viewing with `--verbose`
@@ -131,9 +126,8 @@ node --run debug [options]
 | `--help` | `-h` | boolean | - | Show command help |
 | `--config` | `-c` | string | auto | Path to config.js file |
 | `--student` | `-s` | number | 0 | Student index to test |
-| `--action` | `-a` | string | all | What to test: `auth`, `timetable`, `exams`, `homework`, `absences`, `all` |
 | `--verbose` | `-v` | boolean | false | Show detailed output including sample data |
-| `--dump` | `-d` | boolean | false | Create JSON debug dump file |
+| `--all` | - | boolean | false | Iterate all students in the module config |
 
 **Examples:**
 
@@ -141,14 +135,11 @@ node --run debug [options]
 # Test all data for first student (simplest)
 node --run debug
 
-# Test authentication only for second student
-node --run debug -- --student 1 --action auth
+# Verbose output for second student
+node --run debug -- --student 1 -v
 
-# Verbose output with exams only
-node --run debug -- --action exams -v
-
-# Create a dump for testing
-node --run debug -- --dump
+# Test all configured students in module
+node --run debug -- --all -v
 
 # Use custom config
 node --run debug -- --config ./my-config.js --student 0
@@ -271,8 +262,8 @@ students: [
 # Test if config is readable
 node --run debug -- --help
 
-# Test authentication only
-node --run debug -- --action auth --verbose
+# Test with verbose output (includes auth + fetch flow)
+node --run debug -- --verbose
 
 # If auth passes, fetch all data
 node --run debug
@@ -287,19 +278,17 @@ node --run debug
 node --run debug -- --verbose
 
 # Test student at index 1
-node --run debug -- --student 1 --action all --verbose
+node --run debug -- --student 1 --verbose
 
 # Inspect the JSON dump
-cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head -20
+cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.data.lessons' | head -20
 ```
 
 ### Example 3: Generate Offline Test Data
 
 ```bash
 # Create fresh dumps for all students
-node --run debug -- --student 0 --dump
-node --run debug -- --student 1 --dump
-node --run debug -- --student 2 --dump
+node --run debug -- --all --verbose
 
 # Use dumps in your widget tests
 cp debug_dumps/*.json test_data/
@@ -313,17 +302,14 @@ set -e
 
 echo "Testing WebUntis configuration..."
 
-# Test auth
-node --run debug -- --action auth || exit 1
-
 # Fetch data for each student
 for i in {0..2}; do
   echo "Testing student $i..."
   node --run debug -- --student $i || exit 1
 done
 
-# Create dumps for regression testing
-node --run debug -- --dump
+# Optional: run once in verbose mode for snapshot output
+node --run debug -- --verbose
 
 echo "✓ All tests passed!"
 ```
@@ -334,11 +320,8 @@ echo "✓ All tests passed!"
 # Get detailed output about what's failing
 node --run debug -- --verbose
 
-# Test each component separately
-node --run debug -- --action auth --verbose      # Check authentication
-node --run debug -- --action timetable --verbose # Check timetable fetching
-node --run debug -- --action exams --verbose     # Check exam API
-node --run debug -- --action homework --verbose  # Check homework API
+# Narrow scope to one student
+node --run debug -- --student 0 --verbose
 
 # Check the log output for specific error messages
 # Look for patterns like "REST API failed" or "parse error"
@@ -359,9 +342,11 @@ User Input (CLI args)
        ↓
     [Load config.js]
        ↓
-    [Extract student credentials]
+    [Build INIT payload]
        ↓
-    [Call node_helper.fetchData()]  ← Real production code!
+    [_handleInitModule()]
+       ↓
+    [_handleFetchData()]  ← Real production fetch flow
        ↓
     [Send/cache results]
        ↓
@@ -388,23 +373,20 @@ User Input (CLI args)
 
 ### Data Fetching Pipeline
 
-For each data type (timetable, exams, homework, absences):
+For each selected student:
 
-1. **Determine login mode** (QR code or parent account)
-2. **Check cache** (30-second in-memory cache)
-3. **Call REST API** with appropriate parameters
-4. **Transform/compact** response for frontend
-5. **Cache result** for subsequent requests
-6. **Send to frontend** via notification
+1. **Initialize module config** (`_handleInitModule`)
+2. **Trigger fetch orchestration** (`_handleFetchData`)
+3. **Run timetable-first + parallel API calls** (backend orchestration)
+4. **Build v2 payload** (`contractVersion/meta/context/data/state`)
+5. **Capture `GOT_DATA` payload** from `sendSocketNotification`
 
 ### Response Caching
 
-The CLI uses a built-in cache to avoid repeated API calls:
+The CLI wrapper does **not** implement a separate response cache.
 
-- **TTL:** 30 seconds (configurable)
-- **Key:** Credential + action signature
-- **Cleanup:** Automatic periodic cleanup
-- **Benefits:** Fast repeated testing, reduced API load
+- It clears module caches at command start for fresh runs.
+- Runtime caching (auth/token/session) is handled by backend services.
 
 ---
 
@@ -474,12 +456,12 @@ REST API failed: 401 Unauthorized
 
 1. Test with `--verbose` flag:
    ```bash
-   node --run debug -- --action auth --verbose
+   node --run debug -- --verbose
    ```
 
-2. Check authentication specifically:
+2. Check one student specifically:
    ```bash
-   node --run debug -- --action auth
+   node --run debug -- --student 0 --verbose
    ```
 
 3. Verify school/server values:
@@ -528,7 +510,7 @@ REST API returned 0 exams
 
 2. Verify student ID:
    ```bash
-   node --run debug -- --verbose --action all
+   node --run debug -- --all --verbose
    ```
 
 3. Check WebUntis web interface directly for the student
@@ -604,15 +586,26 @@ interface ModuleConfig {
 
 ```typescript
 interface FetchResponse {
-  title: string;
-  config: StudentConfig;
-  timeUnits: Array;              // Grid time slots
-  timetableRange: Array;         // Lessons
-  exams: Array;                  // Exam records
-  homeworks: Array;              // Homework assignments
-  absences: Array;               // Absence records
-  messagesOfDay: Array;          // Daily messages
-  holidays: Array;               // Holiday periods
+   contractVersion: 2;
+   meta: Record<string, unknown>;
+   context: {
+      student: { id: number | null; title: string };
+      config: Record<string, unknown>;
+   };
+   data: {
+      timeUnits: Array;
+      lessons: Array;
+      exams: Array;
+      homework: Array;
+      absences: Array;
+      messages: Array;
+      holidays: { ranges: Array; current: object | null };
+   };
+   state: {
+      fetch: Record<string, boolean>;
+      api: Record<string, number | null>;
+      warnings: string[];
+   };
 }
 ```
 
@@ -622,12 +615,11 @@ interface FetchResponse {
 |----------|---------|---------------|
 | `/WebUntis/jsonrpc.do` | Session login (JSON-RPC) | Username/Password |
 | `/WebUntis/api/token/new` | Get JWT bearer token | Session cookie |
-| `/WebUntis/api/timegrid` | Fetch timegrid/periods | Bearer token |
-| `/WebUntis/api/timetable` | Fetch lessons by date range | Bearer token |
-| `/WebUntis/api/exams` | Fetch exam schedule | Bearer token |
-| `/WebUntis/api/homeworks` | Fetch homework | Bearer token |
-| `/WebUntis/api/absences` | Fetch absences (REST) | Bearer token |
-| `/WebUntis/api/messagesofday` | Fetch daily messages | Bearer token |
+| `/WebUntis/api/rest/view/v1/timetable/entries` | Fetch lessons by date range | Bearer + Cookie |
+| `/WebUntis/api/exams` | Fetch exam schedule | Bearer + Cookie |
+| `/WebUntis/api/homeworks/lessons` | Fetch homework | Bearer + Cookie |
+| `/WebUntis/api/classreg/absences/students` | Fetch absences | Bearer + Cookie |
+| `/WebUntis/api/public/news/newsWidgetData` | Fetch daily messages | Bearer + Cookie |
 
 ---
 
@@ -649,10 +641,9 @@ export WEBUNTIS_CONFIG=/path/to/config.js
 
 ### Cache Behavior
 
-- **In-Memory Cache:** 30 seconds (default)
-- **Cache Key:** `credentialHash + actionType`
-- **Hit Rate:** Typical 80-90% for repeated testing
-- **Memory Usage:** <1MB for typical configuration
+- **CLI wrapper cache:** none (fresh run behavior)
+- **Backend auth/session cache:** used transparently by services
+- **Start behavior:** wrapper clears module caches before each run
 
 ### Typical Timing
 
@@ -696,13 +687,13 @@ node --run debug -- --config /tmp/test-config.js
 
 ```bash
 # Show all timetable entries
-cat debug_dumps/*.json | jq '.timetableRange' | jq '.[] | {start: .startTime, subject: .subject}'
+cat debug_dumps/*.json | jq '.data.lessons' | jq '.[] | {start: .startTime, subject: .su}'
 
 # Count exams
-cat debug_dumps/*.json | jq '.exams | length'
+cat debug_dumps/*.json | jq '.data.exams | length'
 
 # Show all homework
-cat debug_dumps/*.json | jq '.homeworks[] | {title, dueDate}'
+cat debug_dumps/*.json | jq '.data.homework[] | {text, dueDate}'
 ```
 
 ### Integration with Development Workflow
@@ -711,7 +702,7 @@ cat debug_dumps/*.json | jq '.homeworks[] | {title, dueDate}'
 # Watch for changes and re-test
 while true; do
   clear
-  node --run debug -- --action all
+   node --run debug -- --all
   sleep 5
 done
 ```
@@ -744,10 +735,9 @@ When reporting CLI issues, include:
 
 - [ ] Config file exists and is readable
 - [ ] Credentials are correct in config
-- [ ] `node --run debug -- --action auth` passes
+- [ ] `node --run debug -- --verbose` runs without auth/fetch errors
 - [ ] `node --run debug` fetches data successfully
-- [ ] `node --run debug -- --dump` creates JSON file
-- [ ] JSON dump contains expected student data
+- [ ] Debug dumps (if enabled in config) contain expected student data
 
 ---
 

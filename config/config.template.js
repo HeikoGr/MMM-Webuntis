@@ -38,6 +38,7 @@ let config = {
         // === DISPLAY OPTIONS ===
         displayMode: 'lessons, exams', // comma-separated list: lessons, exams, grid, homework, absences, messagesofday
         mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+        useClassTimetable: true,
 
         // === AUTHENTICATION ===
         // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
@@ -73,6 +74,7 @@ let config = {
           showRegular: false, // show also regular lessons
           useShortSubject: false, // use short subject names
           showTeacherMode: 'full', // 'off'|'initial'|'full'
+          showRoom: false, // show room in lessons widget
           showSubstitution: false, // show substitution info
           naText: 'N/A', // placeholder for changed fields with no current value
         },

@@ -43,8 +43,8 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 - All data fetching via `webuntisApiService.callWebUntisAPI()` - no direct REST calls
 - Generic signature: `{ dataType, getAuth, server, params, transform, logger }`
 - Endpoint configs in `webuntisApiService.js#ENDPOINTS` - update if adding new data types
-- Required headers: `Authorization: Bearer {token}`, `X-Webuntis-Api-Tenant-Id: {tenantId}`
-- Error responses mapped to user-friendly warnings via `errorHandler.mapRestError()`
+- Required headers: `Authorization: Bearer {token}`, `Tenant-Id: {tenantId}`, `X-Webuntis-Api-School-Year-Id: {schoolYearId}`
+- Error responses are mapped in `restClient.mapRestError()` (and converted for UI warnings via `errorHandler.convertRestErrorToWarning()`)
 - **Return value**: `{ data, status }` object (status code tracked per session)
 
 ### API Status Tracking & Fetch Strategy
@@ -59,7 +59,7 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Core Principle**: Deterministic transformations based on data source. No compatibility layers needed since frontend and backend always update synchronously.
 
-- All API responses normalized in `dataTransformer.js` - use pure functions only
+- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `payloadBuilder.js`
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
 - HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
 - Never send raw API objects to frontend - run through `compactArray()` with schema
@@ -81,8 +81,8 @@ This was NOT always the case. Previously it whitelisted explicit field names, ca
 ```
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → payloadCompactor.js#schemas.lesson        – declares field for compaction
-    → payloadBuilder.js#compactArray()        – compacts timetableRange
-      → socket GOT_DATA payload               – field present in timetableRange[]
+    → payloadBuilder.js#compactArray()        – compacts lessons
+      → socket GOT_DATA payload               – field present in data.lessons[]
         → MMM-Webuntis.js#_filterTimetableRange()  – passes through unchanged
           → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
@@ -160,15 +160,13 @@ console.warn('[feature] Warning:', error);
 - **Do NOT initialize git repositories without explicit order** or change git configuration
 - Changes are ready when:
   1. Code is edited and saved
-  2. Tests pass (`npm test` succeeds)
+  2. Available checks pass (`node --run lint`, optional `node --run check`)
   3. Linting passes (`node --run lint` succeeds without errors)
   4. Changes are staged with `git add` if needed
   5. User is notified of completion and can review/commit manually
 ## How to build and test
 
 - **Lint code**: `node --run lint` (or `node --run lint:fix` to auto-fix)
-- **Test**: `npm test` (runs linting)
-- **Unit tests**: `node --run test:unit`
 - **Spell check**: `node --run test:spelling`
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)
@@ -305,7 +303,7 @@ If you're uncertain whether something is an issue, don't comment. False positive
 3. **Implement** → make focused, testable changes
 4. **Validate**:
    - Run `node --run lint` to catch ESLint/Prettier issues
-   - Run `npm test` to validate behavior
+  - Run `node --run check` / `node --run debug` to validate behavior
    - Use `node --run debug` to test backend functionality with real config
    - Inspect debug dumps if transformations changed
 5. **Complete** → notify user, **DO NOT commit**, user handles git operations
@@ -315,7 +313,6 @@ If you're uncertain whether something is an issue, don't comment. False positive
 | Command | Purpose | Output Behavior | Use Case |
 |---------|---------|-----------------|----------|
 | `node --run lint` | ESLint + Prettier validation | Returns immediately | Before finishing any code changes |
-| `npm test` | Jest unit tests (includes lint) | Returns immediately | Validate logic, run after major refactors |
 | `node --run debug` | Interactive CLI test (config, auth, fetch) | Returns immediately | Debug auth issues, test data fetching, config loading |
 | `node --run check` | Same as debug, quieter mode | Returns immediately | Quick validation |
 | `pm2 logs --lines 200` | View recent PM2 logs | Returns immediately with last 200 lines | Check runtime behavior |
@@ -340,14 +337,8 @@ If you're uncertain whether something is an issue, don't comment. False positive
 
 ### Playwright (node) frontend capture
 
-- **Purpose:** Capture the MagicMirror frontend console and a full-page screenshot non-interactively.
-- **Install (once):**
-  - `npm install --save-dev playwright`
-- **Run capture script:**
-  - `node --run capture:console`
-- **Output:** `debug_dumps/magicmirror_playwright.png` and `debug_dumps/magicmirror_console_logs.json`
-
-This script runs a headless Chromium session, navigates to `http://localhost:8080`, waits for network idle, captures console messages and a screenshot, and writes results to `debug_dumps/`.
+- There is currently no integrated `capture:console` script in `package.json`.
+- For non-interactive captures, either run a local ad-hoc Playwright script or use Playwright MCP.
 
 ### Playwright MCP (interactive) — Notes
 
@@ -361,9 +352,8 @@ Startup / environment options:
 - Running Chromium as root (e.g. in Codespaces) requires `--no-sandbox`. Set `PLAYWRIGHT_CHROMIUM_ARGS="--no-sandbox"` or export that environment variable before launching.
 - Use a separate user data directory for parallel runs: `PLAYWRIGHT_CHROMIUM_USER_DATA_DIR=$(mktemp -d)`.
 
-Migration guidance for the existing `scripts/playwright_capture_console.js`:
-- The capture script remains useful as a non‑interactive fallback (CI, cron), but MCP can replace it for interactive investigations.
-- If you adopt MCP for interactive work, you may either keep the capture script as a lightweight CLI wrapper or remove it after transition.
+Migration guidance:
+- If a dedicated capture script is introduced, it should be registered in `package.json` and documented here.
 
 Security note:
 - MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/payloadBuilder.js`).

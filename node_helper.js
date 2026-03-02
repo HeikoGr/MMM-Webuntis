@@ -1090,114 +1090,115 @@ module.exports = NodeHelper.create({
       // Check if parent credentials are configured (username/password/school OR qrcode)
       // Parent credentials enable auto-discovery and parent-mode authentication
       const hasParentCreds = Boolean((moduleConfig.username && moduleConfig.password && moduleConfig.school) || moduleConfig.qrcode);
-      if (!hasParentCreds) return;
 
       // SCENARIO 1: Students are already configured (have credentials or IDs)
       // Try to improve configured data by filling missing titles or suggesting IDs
       if (configuredStudents.length > 0) {
         // However, if any student is missing a title but has a studentId,
         // try to fetch auto-discovered data to fill in the missing titles
-        const server = moduleConfig.server || 'webuntis.com';
-        try {
-          let authResult;
+        if (hasParentCreds) {
+          const server = moduleConfig.server || 'webuntis.com';
+          try {
+            let authResult;
 
-          // Authenticate using parent credentials (QR code or username/password)
-          if (moduleConfig.qrcode) {
-            authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
-              cacheKey: `parent-qr:${moduleConfig.qrcode}`,
-            });
-          } else {
-            authResult = await moduleConfig._authService.getAuth({
-              school: moduleConfig.school,
-              username: moduleConfig.username,
-              password: moduleConfig.password,
-              server,
-              options: this._getStandardAuthOptions(),
-            });
-          }
+            // Authenticate using parent credentials (QR code or username/password)
+            if (moduleConfig.qrcode) {
+              authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
+                cacheKey: `parent-qr:${moduleConfig.qrcode}`,
+              });
+            } else {
+              authResult = await moduleConfig._authService.getAuth({
+                school: moduleConfig.school,
+                username: moduleConfig.username,
+                password: moduleConfig.password,
+                server,
+                options: this._getStandardAuthOptions(),
+              });
+            }
 
-          autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
+            autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
-          if (autoStudents && autoStudents.length > 0) {
-            // For each configured student try to improve the configured data:
-            // - If studentId exists but title is missing, fill title from auto-discovered list
-            // - If title exists but no studentId, compute candidate ids (prefer title matches)
-            configuredStudents.forEach((configStudent) => {
-              if (!configStudent || typeof configStudent !== 'object') return;
+            if (autoStudents && autoStudents.length > 0) {
+              // For each configured student try to improve the configured data:
+              // - If studentId exists but title is missing, fill title from auto-discovered list
+              // - If title exists but no studentId, compute candidate ids (prefer title matches)
+              configuredStudents.forEach((configStudent) => {
+                if (!configStudent || typeof configStudent !== 'object') return;
 
-              // IMPROVEMENT 1: Fill missing title when we have a student ID
-              if (configStudent.studentId && !configStudent.title) {
-                const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
-                if (autoStudent) {
-                  configStudent.title = autoStudent.title;
-                  this._mmLog(
-                    'debug',
-                    configStudent,
-                    `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
-                  );
+                // IMPROVEMENT 1: Fill missing title when we have a student ID
+                if (configStudent.studentId && !configStudent.title) {
+                  const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
+                  if (autoStudent) {
+                    configStudent.title = autoStudent.title;
+                    this._mmLog(
+                      'debug',
+                      configStudent,
+                      `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
+                    );
+                    return;
+                  }
+                }
+
+                // IMPROVEMENT 2: If title is present but no studentId, suggest candidate IDs based on title match
+                // If there's exactly one match, auto-assign it for convenience
+                if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
+                  const titleLower = String(configStudent.title).toLowerCase();
+                  const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
+                  const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
+
+                  if (candidateIds.length === 1) {
+                    // Auto-assign the only match
+                    configStudent.studentId = candidateIds[0];
+                    configStudent._autoDiscovered = true;
+                    // Remove own credentials that might have been inherited from module config
+                    // to ensure parent-mode authentication is used
+                    delete configStudent.username;
+                    delete configStudent.password;
+                    delete configStudent.school;
+                    delete configStudent.server;
+                    const msg = `Auto-assigned studentId=${candidateIds[0]} for "${configStudent.title}" (only match found)`;
+                    this._mmLog('debug', configStudent, msg);
+                  } else {
+                    // Multiple or no matches - show warning
+                    const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
+                    configStudent.__warnings = configStudent.__warnings || [];
+                    configStudent.__warnings.push(msg);
+                    this._mmLog('warn', configStudent, msg);
+                  }
                   return;
                 }
-              }
-
-              // IMPROVEMENT 2: If title is present but no studentId, suggest candidate IDs based on title match
-              // If there's exactly one match, auto-assign it for convenience
-              if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
-                const titleLower = String(configStudent.title).toLowerCase();
-                const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
-                const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
-
-                if (candidateIds.length === 1) {
-                  // Auto-assign the only match
-                  configStudent.studentId = candidateIds[0];
-                  configStudent._autoDiscovered = true;
-                  // Remove own credentials that might have been inherited from module config
-                  // to ensure parent-mode authentication is used
-                  delete configStudent.username;
-                  delete configStudent.password;
-                  delete configStudent.school;
-                  delete configStudent.server;
-                  const msg = `Auto-assigned studentId=${candidateIds[0]} for "${configStudent.title}" (only match found)`;
-                  this._mmLog('debug', configStudent, msg);
-                } else {
-                  // Multiple or no matches - show warning
-                  const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
+              });
+            }
+          } catch (err) {
+            this._mmLog(
+              'warn',
+              null,
+              `Could not fetch auto-discovered names for title fallback (server=${server || 'unknown'}). Is the WebUntis server reachable? ${this._formatErr(err)}`
+            );
+          }
+          // VALIDATION: Check if configured studentIds actually exist in discovered students
+          // Warn user if they configured an invalid studentId
+          try {
+            if (autoStudents && autoStudents.length > 0) {
+              configuredStudents.forEach((configStudent) => {
+                if (!configStudent || !configStudent.studentId) return;
+                const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
+                if (!match) {
+                  // Prefer candidates that match by title; otherwise include all ids
+                  const candidateMatches = configStudent.title
+                    ? autoStudents.filter((a) => (a.title || '').toLowerCase().includes(String(configStudent.title).toLowerCase()))
+                    : [];
+                  const candidateIds = (candidateMatches.length > 0 ? candidateMatches : autoStudents).map((s) => Number(s.studentId));
+                  const msg = `Configured studentId ${configStudent.studentId} for title "${configStudent.title || ''}" was not found in auto-discovered students. Possible studentIds: ${candidateIds.join(', ')}.`;
                   configStudent.__warnings = configStudent.__warnings || [];
                   configStudent.__warnings.push(msg);
                   this._mmLog('warn', configStudent, msg);
                 }
-                return;
-              }
-            });
+              });
+            }
+          } catch {
+            // ignore validation errors
           }
-        } catch (err) {
-          this._mmLog(
-            'warn',
-            null,
-            `Could not fetch auto-discovered names for title fallback (server=${server || 'unknown'}). Is the WebUntis server reachable? ${this._formatErr(err)}`
-          );
-        }
-        // VALIDATION: Check if configured studentIds actually exist in discovered students
-        // Warn user if they configured an invalid studentId
-        try {
-          if (autoStudents && autoStudents.length > 0) {
-            configuredStudents.forEach((configStudent) => {
-              if (!configStudent || !configStudent.studentId) return;
-              const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
-              if (!match) {
-                // Prefer candidates that match by title; otherwise include all ids
-                const candidateMatches = configStudent.title
-                  ? autoStudents.filter((a) => (a.title || '').toLowerCase().includes(String(configStudent.title).toLowerCase()))
-                  : [];
-                const candidateIds = (candidateMatches.length > 0 ? candidateMatches : autoStudents).map((s) => Number(s.studentId));
-                const msg = `Configured studentId ${configStudent.studentId} for title "${configStudent.title || ''}" was not found in auto-discovered students. Possible studentIds: ${candidateIds.join(', ')}.`;
-                configStudent.__warnings = configStudent.__warnings || [];
-                configStudent.__warnings.push(msg);
-                this._mmLog('warn', configStudent, msg);
-              }
-            });
-          }
-        } catch {
-          // ignore validation errors
         }
 
         // Merge module-level defaults into configured students
@@ -1244,6 +1245,8 @@ module.exports = NodeHelper.create({
         }
         return;
       }
+
+      if (!hasParentCreds) return;
 
       // SCENARIO 2: No students configured -> auto-discover from parent account
       // This is the default behavior when students[] is empty or not provided
@@ -1718,19 +1721,65 @@ module.exports = NodeHelper.create({
           };
           // Sending error to frontend silently
           this.sendSocketNotification('GOT_DATA', {
-            title: student.title,
+            contractVersion: 2,
             id: identifier,
             sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
-            config: student,
-            warnings: groupWarnings,
-            timeUnits: [],
-            timetableRange: [],
-            exams: [],
-            homeworks: [],
-            absences: [],
-            messagesOfDay: [],
-            apiStatus: {},
-            fetchFlags,
+            meta: {
+              moduleId: identifier,
+              sessionId: sessionKey.split(':')[1],
+              generatedAt: new Date().toISOString(),
+            },
+            context: {
+              student: {
+                id: student.studentId ?? null,
+                title: student.title || '',
+              },
+              config: student,
+              timezone: config?.timezone || 'Europe/Berlin',
+              todayYmd: null,
+              range: {
+                startYmd: null,
+                endYmd: null,
+              },
+              display: {
+                mode: student.mode || config?.mode || 'verbose',
+                widgets: String(student.displayMode || config?.displayMode || 'lessons,exams')
+                  .toLowerCase()
+                  .split(',')
+                  .map((entry) => entry.trim())
+                  .filter(Boolean),
+              },
+            },
+            data: {
+              timeUnits: [],
+              lessons: [],
+              exams: [],
+              homework: [],
+              absences: [],
+              messages: [],
+              holidays: {
+                ranges: [],
+                current: null,
+              },
+            },
+            state: {
+              fetch: {
+                timegrid: fetchFlags.fetchTimegrid,
+                timetable: fetchFlags.fetchTimetable,
+                exams: fetchFlags.fetchExams,
+                homework: fetchFlags.fetchHomeworks,
+                absences: fetchFlags.fetchAbsences,
+                messages: fetchFlags.fetchMessagesOfDay,
+              },
+              api: {
+                timetable: null,
+                exams: null,
+                homework: null,
+                absences: null,
+                messages: null,
+              },
+              warnings: groupWarnings,
+            },
           });
         }
         return;
@@ -1777,7 +1826,16 @@ module.exports = NodeHelper.create({
           } else {
             // Add warnings to payload
             const uniqWarnings = Array.from(new Set(groupWarnings));
-            studentPayloads.push({ ...payload, id: identifier, warnings: uniqWarnings });
+            const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
+            const nextPayload = {
+              ...payload,
+              id: identifier,
+              state: {
+                ...(payload.state || {}),
+                warnings: mergedWarnings,
+              },
+            };
+            studentPayloads.push(nextPayload);
           }
         } catch (err) {
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
@@ -2462,6 +2520,8 @@ module.exports = NodeHelper.create({
         fetchTimetable,
         fetchFlags,
         activeHoliday,
+        moduleId: identifier,
+        sessionId: sessionKey.split(':')[1],
         moduleConfig: config,
         currentFetchWarnings: this._currentFetchWarnings,
         compactTimegrid: this._compactTimegrid.bind(this),

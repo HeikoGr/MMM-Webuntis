@@ -31,7 +31,7 @@ Comprehensive reference for REST and JSON-RPC APIs used in MMM-Webuntis.
 **Workflow:**
 1. POST JSON-RPC `authenticate` with username + password
 2. Session cookies stored automatically
-3. GET `/api/rest/view/v1/app/data` to discover student IDs (auto-discovery)
+3. GET `/WebUntis/api/rest/view/v1/app/data` to discover student IDs (auto-discovery)
 4. Use `studentId` parameter for student-specific API calls
 
 ### Token Caching
@@ -39,8 +39,8 @@ Comprehensive reference for REST and JSON-RPC APIs used in MMM-Webuntis.
 **REST Bearer Tokens:**
 - Lifetime: 15 minutes (WebUntis server)
 - Cache duration: 14 minutes (with 5-minute buffer to prevent silent failures)
-- Generation: GET `/api/token/new` (requires active session)
-- Header: `Authorization: Bearer <token>`, `X-Webuntis-Api-Tenant-Id: <tenantId>`
+- Generation: GET `/WebUntis/api/token/new` (requires active session)
+- Header: `Authorization: Bearer <token>`, `Tenant-Id: <tenantId>`, `X-Webuntis-Api-School-Year-Id: <schoolYearId>`
 
 **Session Cookies:**
 - Lifetime: ~1 hour (varies by server)
@@ -57,69 +57,50 @@ All REST endpoints require active session cookies or Bearer token (where noted).
 
 #### Get Student Timetable
 ```
-GET /api/public/timetable/weekly/data
+GET /WebUntis/api/rest/view/v1/timetable/entries
 ```
 **Auth:** Session cookies or Bearer token
 **Parameters:**
-- `elementType=5` (students)
-- `elementId=<studentId>`
-- `date=<YYYYMMDD>` (Monday of target week)
-- `formatId=<formatId>` (from app/data response)
+- `start=<YYYY-MM-DD>`
+- `end=<YYYY-MM-DD>`
+- `resourceType=STUDENT|CLASS`
+- `resources=<studentId_or_classId>`
+- `timetableType=MY_TIMETABLE`
 
 **Response:**
 ```json
 {
-  "data": {
-    "elementPeriods": {
-      "<studentId>": [
+  "days": [
+    {
+      "date": "2026-01-19",
+      "gridEntries": [
         {
-          "id": 123456,
-          "date": 20260119,
-          "startTime": 800,
-          "endTime": 945,
-          "elements": [
-            { "type": 3, "id": 789, "name": "Math", "longName": "Mathematics" },
-            { "type": 2, "id": 456, "name": "SM", "longName": "Smith, John" }
-          ],
-          "studentGroup": "10a",
-          "code": "REGULAR|CANCELLED|IRREGULAR"
+          "ids": [123456],
+          "duration": { "start": "2026-01-19T08:00:00", "end": "2026-01-19T09:45:00" },
+          "status": "REGULAR",
+          "type": "NORMAL_TEACHING_PERIOD"
         }
       ]
     }
-  }
+  ]
 }
 ```
 
-**Parent Account:** ✅ Supported via `elementId` parameter
+**Parent Account:** ✅ Supported via `resourceType/resources` parameters
 
 #### Get Timegrid (School Hours)
-```
-GET /api/timegrid
-```
-**Auth:** Session cookies
-**Response:**
-```json
-{
-  "data": {
-    "days": [
-      {
-        "day": 2,
-        "timeUnits": [
-          { "name": "1", "startTime": "08:00", "endTime": "08:45" },
-          { "name": "2", "startTime": "08:50", "endTime": "09:35" }
-        ]
-      }
-    ]
-  }
-}
-```
+There is no separate production Timegrid REST call.
+
+**Source in this module:**
+- Primary: `GET /WebUntis/api/rest/view/v1/app/data` (`currentSchoolYear.timeGrid.units`)
+- Fallback: derived from timetable data when no timegrid units are available
 
 ---
 
 ### Exams
 
 ```
-GET /api/exams
+GET /WebUntis/api/exams
 ```
 **Auth:** Session cookies or Bearer token
 **Parameters:**
@@ -152,7 +133,7 @@ GET /api/exams
 ### Homework
 
 ```
-GET /api/homeworks/lessons
+GET /WebUntis/api/homeworks/lessons
 ```
 **Auth:** Session cookies
 **Parameters:**
@@ -195,7 +176,7 @@ GET /api/homeworks/lessons
 ### Absences
 
 ```
-GET /api/classreg/absences/students
+GET /WebUntis/api/classreg/absences/students
 ```
 **Auth:** Session cookies
 **Parameters:**
@@ -230,7 +211,7 @@ GET /api/classreg/absences/students
 ### Messages of Day
 
 ```
-GET /api/public/news/newsWidgetData
+GET /WebUntis/api/public/news/newsWidgetData
 ```
 **Auth:** Session cookies
 **Parameters:**
@@ -257,38 +238,21 @@ GET /api/public/news/newsWidgetData
 
 ### Holidays
 
-```
-GET /api/schoolyear/holidays
-```
-**Auth:** Session cookies
-**Response:**
-```json
-{
-  "data": {
-    "holidays": [
-      {
-        "id": 123,
-        "name": "Winter Break",
-        "longName": "Winter Break 2026",
-        "startDate": 20260201,
-        "endDate": 20260207
-      }
-    ]
-  }
-}
-```
+In this module, holidays are read from `GET /WebUntis/api/rest/view/v1/app/data` (school year data), not from a separate holiday endpoint.
 
 **Implementation:**
-- Backend pre-computes `holidayByDate` map (YYYYMMDD → holiday object)
-- Grid widget uses lookup map for instant holiday detection
-- `currentHoliday` field suppresses "No lessons" warning during vacation
+- Backend sends holiday ranges (`startDate`/`endDate`)
+- Backend also provides `data.holidays.current` (active holiday for `today`, or `null`)
+- Frontend derives a per-day lookup map from `data.holidays.ranges` for instant widget lookup
+- The range expansion is inclusive (`startDate..endDate`), so one-day holidays (`startDate === endDate`) are mapped and rendered correctly
+- Empty-lessons warning suppression during vacation is decided in backend using the active holiday (`data.holidays.current`)
 
 ---
 
 ### App Initialization Data
 
 ```
-GET /api/rest/view/v1/app/data
+GET /WebUntis/api/rest/view/v1/app/data
 ```
 **Auth:** Bearer token
 **Response:**
@@ -353,14 +317,14 @@ POST /WebUntis/jsonrpc.do?school=<school>
 
 ---
 
-## Data Normalization
+### Data Normalization
 
-All REST API responses are normalized before frontend consumption.
+Relevant REST payload parts are normalized before frontend consumption.
 
 ### Date Normalization
 - **Input:** `20260125` (YYYYMMDD integer) or `"2026-01-25"` (ISO string)
 - **Output:** `20260125` (YYYYMMDD integer)
-- **Function:** `normalizeDateToInteger(date)` in [dataTransformer.js](../lib/dataTransformer.js)
+- **Function:** `normalizeDateToInteger(date)` in [dataOrchestration.js](../lib/dataOrchestration.js)
 
 ### Time Normalization
 
@@ -368,7 +332,7 @@ All REST API responses are normalized before frontend consumption.
 - **Pass-through:** No transformation needed
 - **Frontend:** `formatTime(1350)` → `"13:50"`
 
-**Timegrid API:** HH:MM strings (e.g., `"13:50"`)
+**Timegrid Source Data:** HH:MM strings (e.g., `"13:50"`)
 - **Transformation:** `parseTimegridTimeString("13:50")` → `1350`
 - **Location:** [payloadCompactor.js](../lib/payloadCompactor.js)
 
@@ -452,17 +416,16 @@ Errors are mapped to user-friendly warnings in [errorHandler.js](../lib/errorHan
 
 | Feature | REST API | JSON-RPC | Auth Method | Parent Support |
 |---------|----------|----------|-------------|----------------|
-| Timetable | ✅ Primary | ⚠️ Fallback | Cookies/Bearer | ✅ |
-| Exams | ✅ Primary | ⚠️ Fallback | Cookies/Bearer | ✅ |
+| Timetable | ✅ Primary | ❌ None | Cookies/Bearer | ✅ |
+| Exams | ✅ Primary | ❌ None | Cookies/Bearer | ✅ |
 | Homework | ✅ Only | ❌ None | Cookies | ✅ |
 | Absences | ✅ Only | ❌ None | Cookies | ✅ |
-| Messages | ✅ Only | ⚠️ Fallback | Cookies | ✅ |
-| Holidays | ✅ Only | ⚠️ Fallback | Cookies | ✅ |
+| Messages | ✅ Only | ❌ None | Cookies | ✅ |
+| Holidays | ✅ Via app/data | ❌ None | Cookies/Bearer | ✅ |
 | Authentication | ❌ N/A | ✅ Required | Password/TOTP | ✅ |
 
 **Legend:**
 - ✅ Fully supported and tested
-- ⚠️ Available but not actively used
 - ❌ Not available
 
 ---
@@ -471,5 +434,4 @@ For implementation details, see:
 - [authService.js](../lib/authService.js) - Authentication and token caching
 - [webuntisApiService.js](../lib/webuntisApiService.js) - REST endpoint wrappers
 - [dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js) - Timetable-first fetch strategy
-- [dataTransformer.js](../lib/dataTransformer.js) - Data normalization
-- [payloadCompactor.js](../lib/payloadCompactor.js) - HTML sanitization and time parsing
+- [payloadCompactor.js](../lib/payloadCompactor.js) - Payload compaction, HTML sanitization, and time parsing

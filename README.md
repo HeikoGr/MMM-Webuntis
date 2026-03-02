@@ -2,9 +2,9 @@
 
 > ⚠️ **Disclaimer / Haftungsausschluss**:
 >
-> **English:** This project is **not** an official Untis product, is **not** affiliated with, endorsed by, or supported by Untis GmbH or any of its subsidiaries. WebUntis is a registered trademark of Untis GmbH. This is an independent, community-developed module for MagicMirror² that interfaces with WebUntis APIs. Use at your own risk.
+> **English:** This project is **not** an official Untis product and is not affiliated with, endorsed by, or supported by Untis GmbH or any of its subsidiaries. WebUntis is a registered trademark of Untis GmbH. The software is provided without warranty, including accuracy, completeness, or error-free operation of displayed WebUntis data. Use is at your own risk.
 >
-> **Deutsch:** Dieses Projekt ist **kein** offizielles Untis-Produkt und steht in **keiner** Verbindung zu Untis GmbH oder deren Tochtergesellschaften. Es wird **nicht** von Untis unterstützt oder empfohlen. WebUntis ist eine eingetragene Marke der Untis GmbH. Dies ist ein unabhängiges, von der Community entwickeltes Modul für MagicMirror², das die WebUntis-APIs nutzt. Nutzung auf eigene Gefahr.
+> **Deutsch:** Dieses Projekt ist **kein** offizielles Untis-Produkt und steht in **keiner** Verbindung zu Untis GmbH oder deren Tochtergesellschaften; es wird nicht von Untis unterstützt oder empfohlen. WebUntis ist eine eingetragene Marke der Untis GmbH. Die Software wird ohne Gewähr bereitgestellt; insbesondere wird keine Haftung für Fehlerfreiheit sowie für Vollständigkeit, Aktualität oder Richtigkeit der angezeigten WebUntis-Daten übernommen. Die Nutzung erfolgt auf eigene Gefahr.
 
 > ⚠️ **Important Notice**:
 >
@@ -316,6 +316,7 @@ For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
 | `grid.maxLessons` | `0` | Limit grid height (0 = all) |
 | `grid.naText` | `'N/A'` | Placeholder text for changed fields without current value in grid |
 | `lessons.naText` | `'N/A'` | Placeholder text for changed fields without current value in lessons |
+| `lessons.showRoom` | `false` | Show room in lessons rows (enables visible room-change highlighting) |
 | `logLevel` | `'none'` | Debug logging: `'debug'`, `'info'`, `'warn'`, `'error'`, `'none'` |
 
 ## Troubleshooting
