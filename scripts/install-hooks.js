@@ -2,7 +2,6 @@ const { execSync } = require('child_process');
 
 try {
   // Prüfen, ob simple-git-hooks überhaupt installiert ist
-  /* eslint-disable-next-line n/no-unpublished-require */
   require.resolve('simple-git-hooks');
 
   // Falls vorhanden: CLI ausführen (vermeidet Abhängigkeit von interner API)
