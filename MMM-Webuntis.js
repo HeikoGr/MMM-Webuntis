@@ -1206,6 +1206,14 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
+    // Hard guard: never send FETCH_DATA while module is suspended/paused.
+    // This covers timer race conditions where a queued callback might still fire
+    // right around suspend().
+    if (this._paused) {
+      this._log('debug', `[FETCH_DATA] Skipped while suspended (reason=${reason})`);
+      return;
+    }
+
     if (!this._initialized) {
       // Store pending resume request to execute after initialization
       if (reason === 'resume') {
@@ -1239,7 +1247,7 @@ Module.register('MMM-Webuntis', {
    */
   suspend() {
     // Suspend module: stop timers and clear update state
-    this._log('debug', '[suspend] Module suspended');
+    this._log('info', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
@@ -1304,6 +1312,7 @@ Module.register('MMM-Webuntis', {
     // This prevents duplicate FETCH_DATA immediately after initialization
     if (this._initialized && Date.now() - this._initializedAt < 5000) {
       this._log('debug', '[resume] Skipping resume fetch - backend auto-triggered fetch recently');
+      this._startFetchTimer();
       this._startNowLineUpdater();
       return;
     }
@@ -1318,6 +1327,7 @@ Module.register('MMM-Webuntis', {
           'debug',
           `[resume] Skipping fetch - data is fresh (age=${Math.round(dataAge / 1000)}s < interval=${Math.round(interval / 1000)}s)`
         );
+        this._startFetchTimer();
         this._startNowLineUpdater();
         return;
       }

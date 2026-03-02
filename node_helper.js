@@ -454,15 +454,13 @@ module.exports = NodeHelper.create({
     const authOptions = this._getStandardAuthOptions({ cacheKey: cacheKeyBase });
     const authResult = qrCodeUrl
       ? await authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: cacheKeyBase })
-      : await authService.getAuth(
-          {
-            school,
-            username,
-            password,
-            server,
-          },
-          authOptions
-        );
+      : await authService.getAuth({
+          school,
+          username,
+          password,
+          server,
+          options: authOptions,
+        });
     const { token, cookieString, tenantId, schoolYearId } = authResult || {};
 
     if (!cookieString) {
@@ -704,15 +702,13 @@ module.exports = NodeHelper.create({
         getAuth: () =>
           qrCodeUrl
             ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth(
-                {
-                  school,
-                  username,
-                  password,
-                  server,
-                },
-                authOptions
-              ),
+            : authService.getAuth({
+                school,
+                username,
+                password,
+                server,
+                options: authOptions,
+              }),
         onAuthError: () => {
           if (authRefreshTracker) authRefreshTracker.refreshed = true;
           return authService.invalidateCache(effectiveCacheKey);
@@ -785,15 +781,13 @@ module.exports = NodeHelper.create({
         getAuth: () =>
           qrCodeUrl
             ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth(
-                {
-                  school,
-                  username,
-                  password,
-                  server,
-                },
-                authOptions
-              ),
+            : authService.getAuth({
+                school,
+                username,
+                password,
+                server,
+                options: authOptions,
+              }),
         onAuthError: () => {
           if (authRefreshTracker) authRefreshTracker.refreshed = true;
           return authService.invalidateCache(effectiveCacheKey);
@@ -866,15 +860,13 @@ module.exports = NodeHelper.create({
         getAuth: () =>
           qrCodeUrl
             ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth(
-                {
-                  school,
-                  username,
-                  password,
-                  server,
-                },
-                authOptions
-              ),
+            : authService.getAuth({
+                school,
+                username,
+                password,
+                server,
+                options: authOptions,
+              }),
         onAuthError: () => {
           if (authRefreshTracker) authRefreshTracker.refreshed = true;
           return authService.invalidateCache(effectiveCacheKey);
@@ -944,15 +936,13 @@ module.exports = NodeHelper.create({
         getAuth: () =>
           qrCodeUrl
             ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth(
-                {
-                  school,
-                  username,
-                  password,
-                  server,
-                },
-                authOptions
-              ),
+            : authService.getAuth({
+                school,
+                username,
+                password,
+                server,
+                options: authOptions,
+              }),
         onAuthError: () => {
           if (authRefreshTracker) authRefreshTracker.refreshed = true;
           return authService.invalidateCache(effectiveCacheKey);
@@ -1020,15 +1010,13 @@ module.exports = NodeHelper.create({
         getAuth: () =>
           qrCodeUrl
             ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth(
-                {
-                  school,
-                  username,
-                  password,
-                  server,
-                },
-                authOptions
-              ),
+            : authService.getAuth({
+                school,
+                username,
+                password,
+                server,
+                options: authOptions,
+              }),
         onAuthError: () => {
           if (authRefreshTracker) authRefreshTracker.refreshed = true;
           return authService.invalidateCache(effectiveCacheKey);
