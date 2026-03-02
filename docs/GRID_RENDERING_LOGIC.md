@@ -53,8 +53,14 @@ If ticker is active, cancelled+replacement is rendered as split content **inside
 - at least one cancelled lesson exists, and
 - replacement exists via one of:
   - `ADDITIONAL`
-  - `SUBSTITUTION` with `layoutWidth >= 1000`
+  - `SUBSTITUTION` **without** `studentGroup/class` hint (treated as full-class replacement)
   - `EVENT`
+
+### Why no `layoutWidth` in decision logic
+
+`layoutWidth` is still forwarded in the payload, but split-vs-ticker strategy does **not** depend on it.
+Reason: `layoutWidth` is a vendor-specific WebUntis rendering hint and may change or disappear.
+For rendering stability, the grid uses `studentGroup/class` presence as the parallelism indicator.
 
 Rendering:
 

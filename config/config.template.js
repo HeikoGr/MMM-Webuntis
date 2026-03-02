@@ -38,6 +38,7 @@ let config = {
         // === DISPLAY OPTIONS ===
         displayMode: 'lessons, exams', // comma-separated list: lessons, exams, grid, homework, absences, messagesofday
         mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+        useClassTimetable: true,
 
         // === AUTHENTICATION ===
         // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)

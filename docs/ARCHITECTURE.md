@@ -473,18 +473,18 @@ sequenceDiagram
 
 ### 2. **Configuration Normalization**
 
-**Process**: [`MMM-Webuntis.js#_buildSendConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182) → [`node_helper.js#_normalizeLegacyConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470) → [`configValidator.js#applyLegacyMappings()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85)
+**Process**: [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L182) → [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L1470) → [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L85)
 
 ```mermaid
 graph LR
     A["Raw Config<br/>(user input)"]:::input
-    --> B["_buildSendConfig() L182<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182'>Frontend</a>"]:::frontend
+    --> B["_buildSendConfig() L182<br/><a href='../MMM-Webuntis.js#L182'>Frontend</a>"]:::frontend
     --> C["Merged student[]<br/>(defaults + per-student)"]:::merged
     --> D["sendSocketNotification<br/>INIT_MODULE"]:::socket
-    --> E["_normalizeLegacyConfig() L1470<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470'>Backend</a>"]:::backend
-    --> F["applyLegacyMappings() L85<br/>(25 legacy keys)<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85'>configValidator</a>"]:::validator
+    --> E["_normalizeLegacyConfig() L1470<br/><a href='../node_helper.js#L1470'>Backend</a>"]:::backend
+    --> F["applyLegacyMappings() L85<br/>(25 legacy keys)<br/><a href='../lib/configValidator.js#L85'>configValidator</a>"]:::validator
     --> G["Normalized Config<br/>(canonical keys only)"]:::normalized
-    --> H["fetchData() L1536<br/><a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1536'>Backend fetch logic</a>"]:::fetch
+    --> H["fetchData() L1536<br/><a href='../node_helper.js#L1536'>Backend fetch logic</a>"]:::fetch
 
     classDef input fill:#e3f2fd
     classDef frontend fill:#bbdefb
@@ -499,16 +499,16 @@ graph LR
 ### 3. **Widget Rendering Pipeline**
 
 **Main Functions**:
-- [`MMM-Webuntis.js#getDom()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L700) - Main render entry
-- [`MMM-Webuntis.js#_renderWidgetTableRows()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L283) - Render helper
+- [`MMM-Webuntis.js#getDom()`](../MMM-Webuntis.js#L700) - Main render entry
+- [`MMM-Webuntis.js#_renderWidgetTableRows()`](../MMM-Webuntis.js#L283) - Render helper
 
 **Widget Renderers**:
-- [`widgets/lessons.js#renderLessonsForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js#L26)
-- [`widgets/grid.js#renderGridForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js#L33) (1,300+ LOC; marked as high-complexity area)
-- [`widgets/exams.js#renderExamsForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/exams.js#L26)
-- [`widgets/homework.js#renderHomeworksForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/homework.js#L26)
-- [`widgets/absences.js#renderAbsencesForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/absences.js#L27)
-- [`widgets/messagesofday.js#renderMessagesOfDayForStudent()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/messagesofday.js#L23)
+- [`widgets/lessons.js#renderLessonsForStudent()`](../widgets/lessons.js#L26)
+- [`widgets/grid.js#renderGridForStudent()`](../widgets/grid.js#L33) (1,300+ LOC; marked as high-complexity area)
+- [`widgets/exams.js#renderExamsForStudent()`](../widgets/exams.js#L26)
+- [`widgets/homework.js#renderHomeworksForStudent()`](../widgets/homework.js#L26)
+- [`widgets/absences.js#renderAbsencesForStudent()`](../widgets/absences.js#L27)
+- [`widgets/messagesofday.js#renderMessagesOfDayForStudent()`](../widgets/messagesofday.js#L23)
 
 ```mermaid
 graph TD
@@ -519,22 +519,22 @@ graph TD
     --> WRN["render module warnings<br/>(above all widgets)"]:::warn
     --> RW["_renderWidgetTableRows() L283<br/>for each widget type"]:::loop
 
-    RW --> W1["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/lessons.js#L26'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
+    RW --> W1["<a href='../widgets/lessons.js#L26'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
     W1 --> W1B["uses: lessons.nextDays<br/>lessons.dateFormat<br/>lessons[]<br/>derived holidayMap{}"]:::config
 
-    RW --> W2["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/grid.js#L33'>grid.js</a><br/>renderGridForStudent()<br/>⚠️ 1,300+ LOC"]:::widget
+    RW --> W2["<a href='../widgets/grid.js#L33'>grid.js</a><br/>renderGridForStudent()<br/>⚠️ 1,300+ LOC"]:::widget
     W2 --> W2B["uses: grid.mergeGap<br/>grid.dateFormat<br/>timeUnits[]<br/>derived holidayMap{}"]:::config
 
-    RW --> W3["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/exams.js#L26'>exams.js</a><br/>renderExamsForStudent()"]:::widget
+    RW --> W3["<a href='../widgets/exams.js#L26'>exams.js</a><br/>renderExamsForStudent()"]:::widget
     W3 --> W3B["uses: exams.daysAhead<br/>exams.dateFormat<br/>exams[]"]:::config
 
-    RW --> W4["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/homework.js#L26'>homework.js</a><br/>renderHomeworksForStudent()"]:::widget
+    RW --> W4["<a href='../widgets/homework.js#L26'>homework.js</a><br/>renderHomeworksForStudent()"]:::widget
     W4 --> W4B["uses: homework.dateFormat<br/>homeworks[]"]:::config
 
-    RW --> W5["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/absences.js#L27'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
+    RW --> W5["<a href='../widgets/absences.js#L27'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
     W5 --> W5B["uses: absences.pastDays<br/>absences.dateFormat<br/>absences[]"]:::config
 
-    RW --> W6["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/widgets/messagesofday.js#L23'>messagesofday.js</a><br/>renderMessagesOfDayForStudent()"]:::widget
+    RW --> W6["<a href='../widgets/messagesofday.js#L23'>messagesofday.js</a><br/>renderMessagesOfDayForStudent()"]:::widget
     W6 --> W6B["uses: messagesofday.dateFormat<br/>messagesOfDay[]"]:::config
 
     classDef frontend fill:#e3f2fd
@@ -624,7 +624,7 @@ sequenceDiagram
 
 ### 5. **Caching Strategy**
 
-**Implementation**: [`lib/cacheManager.js`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/cacheManager.js), [`lib/authService.js#L47-L56`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/authService.js#L47-L56)
+**Implementation**: [`lib/cacheManager.js`](../lib/cacheManager.js), [`lib/authService.js#L47-L56`](../lib/authService.js#L47-L56)
 
 ```mermaid
 graph TB
@@ -672,19 +672,19 @@ graph TB
 **Process Flow**: User config → Frontend merge → Backend normalization → Fetch logic
 
 **Key Functions**:
-- [`MMM-Webuntis.js#defaults`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L26-L120) - Module defaults
-- [`MMM-Webuntis.js#_buildSendConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182) - Merge defaults with user config
-- [`node_helper.js#_normalizeLegacyConfig()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470) - Apply legacy mappings
-- [`configValidator.js#applyLegacyMappings()`](https://github.com/HeikoGr/MMM-Webuntis/blob/master/lib/configValidator.js#L85) - 25 legacy key transformations
+- [`MMM-Webuntis.js#defaults`](../MMM-Webuntis.js#L26-L120) - Module defaults
+- [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L182) - Merge defaults with user config
+- [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L1470) - Apply legacy mappings
+- [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L85) - 25 legacy key transformations
 
 ```mermaid
 graph LR
-    Defaults["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L26-L120'>Module Defaults</a><br/>(MMM-Webuntis.js L26)"]:::defaults
+    Defaults["<a href='../MMM-Webuntis.js#L26-L120'>Module Defaults</a><br/>(MMM-Webuntis.js L26)"]:::defaults
     --> GlobalConf["Global Config<br/>(config/config.js)"]:::global
     --> StudentConf["Per-Student Config<br/>(students[i] overrides)"]:::student
-    --> Merged["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/MMM-Webuntis.js#L182'>Merged Config</a><br/>_buildSendConfig() L182<br/>(defaults + global + student)"]:::merged
-    --> Normalized["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1470'>Normalized Config</a><br/>_normalizeLegacyConfig() L1470<br/>(25 legacy keys mapped)"]:::normalized
-    --> FetchLogic["<a href='https://github.com/HeikoGr/MMM-Webuntis/blob/master/node_helper.js#L1262'>Fetch Orchestration</a><br/>processGroup() L1262<br/>(respects per-student overrides)"]:::fetch
+    --> Merged["<a href='../MMM-Webuntis.js#L182'>Merged Config</a><br/>_buildSendConfig() L182<br/>(defaults + global + student)"]:::merged
+    --> Normalized["<a href='../node_helper.js#L1470'>Normalized Config</a><br/>_normalizeLegacyConfig() L1470<br/>(25 legacy keys mapped)"]:::normalized
+    --> FetchLogic["<a href='../node_helper.js#L1262'>Fetch Orchestration</a><br/>processGroup() L1262<br/>(respects per-student overrides)"]:::fetch
 
     classDef defaults fill:#e1f5fe
     classDef global fill:#b3e5fc

@@ -56,6 +56,7 @@ Module.register('MMM-Webuntis', {
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
     displayMode: 'lessons, exams',
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+    useClassTimetable: true,
 
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)

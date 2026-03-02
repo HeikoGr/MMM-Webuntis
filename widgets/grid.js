@@ -1674,15 +1674,15 @@ function getModuleRootElement(ctx) {
    * Three rendering strategies (evaluated in order for each transitive overlap group):
    *
    * SPLIT VIEW — when a lesson was cancelled and a replacement runs in its slot:
-   *   Triggered when the group contains CANCELLED + ADDITIONAL (any layoutWidth),
-   *   OR CANCELLED + SUBSTITUTION where the substitution is a full-class course
-   *   (layoutWidth ≥ 1000 → not a parallel half-group course).
+   *   Triggered when the group contains CANCELLED + ADDITIONAL,
+   *   OR CANCELLED + SUBSTITUTION without studentGroup/class hint
+   *   (treated as a full-class replacement, not a parallel half-group course).
    *   Left side: replacement lesson(s) at their own positions.
    *   Right side: cancelled lessons at their own positions.
    *
-   *   layoutWidth for SUBSTITUTION:
-   *     parallel half-group (lw=500) alongside its sibling half-group → NOT split
-   *     full-class replacement (lw=1000) → SPLIT
+   *   studentGroup/class hint for SUBSTITUTION:
+   *     substitution with studentGroup/class → likely parallel half-group → NOT split
+   *     substitution without studentGroup/class → likely full-class replacement → SPLIT
    *
    * SPAN SPLIT — one lesson spans the full group range while others cover sub-periods:
    *   The spanning lesson appears full-height on the left; sub-period lessons are
@@ -1780,12 +1780,20 @@ function getModuleRootElement(ctx) {
       //
       // SPLIT VIEW: cancelled lesson(s) + a replacement in the same slot.
       //   ADDITIONAL always triggers split (a replacement was explicitly scheduled).
-      //   SUBSTITUTION triggers split only for full-class courses (layoutWidth ≥ 1000);
-      //   parallel half-group sibling lessons (lw=500) do not trigger split.
+      //   SUBSTITUTION triggers split only when no studentGroup/class hint exists
+      //   (full-class heuristic). With studentGroup/class hint, treat as parallel
+      //   sibling course and keep ticker/parallel rendering.
       //   EVENT (school trips, class excursions, …) alongside CANCELLED → split.
+      const hasStudentGroupOrClassHint = (lesson) => {
+        const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
+        const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
+        const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+        const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+        return hasStudentGroup || hasClass;
+      };
+      const substitutionTriggersSplit = substLessons.some((lesson) => !hasStudentGroupOrClassHint(lesson));
       const isSplitView =
-        cancelledLessons.length >= 1 &&
-        (addedLessons.length >= 1 || substLessons.some((l) => (l.layoutWidth ?? 1000) >= 1000) || eventLessons.length >= 1);
+        cancelledLessons.length >= 1 && (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
 
       // SPAN SPLIT: one ticker candidate spans the entire group range while at least
       // one other covers only a sub-period. The spanning lesson goes left; sub-period
