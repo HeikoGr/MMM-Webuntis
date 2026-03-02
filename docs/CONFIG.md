@@ -84,6 +84,7 @@ Configure lessons widget behavior using the `lessons` namespace:
 | `lessons.showRegular` | bool | `false` | Show regular lessons (not only substitutions/cancellations). |
 | `lessons.useShortSubject` | bool | `false` | Use short subject names where available. |
 | `lessons.showTeacherMode` | string | `'full'` | Teacher display: `'full'` (full name), `'initial'` (initials), or null/falsy. |
+| `lessons.showRoom` | bool | `false` | Show room in lessons rows. Required to make room changes visible in the lessons widget. |
 | `lessons.showSubstitution` | bool | `false` | Show substitution text/notes for changed lessons. |
 | `lessons.naText` | string | `'N/A'` | Placeholder text when a changed value has no current replacement (e.g., removed room/teacher/subject). |
 

@@ -316,6 +316,7 @@ For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
 | `grid.maxLessons` | `0` | Limit grid height (0 = all) |
 | `grid.naText` | `'N/A'` | Placeholder text for changed fields without current value in grid |
 | `lessons.naText` | `'N/A'` | Placeholder text for changed fields without current value in lessons |
+| `lessons.showRoom` | `false` | Show room in lessons rows (enables visible room-change highlighting) |
 | `logLevel` | `'none'` | Debug logging: `'debug'`, `'info'`, `'warn'`, `'error'`, `'none'` |
 
 ## Troubleshooting

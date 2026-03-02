@@ -56,7 +56,7 @@ Module.register('MMM-Webuntis', {
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
     displayMode: 'lessons, exams',
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
-    useClassTimetable: true,
+    useClassTimetable: false,
 
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
@@ -82,6 +82,7 @@ Module.register('MMM-Webuntis', {
       showRegular: false, // show also regular lessons
       useShortSubject: false, // use short subject names
       showTeacherMode: 'full', // 'off'|'initial'|'full'
+      showRoom: false, // show room in lessons widget
       showSubstitution: false, // show substitution info
       naText: 'N/A', // placeholder for changed fields with no current value
     },

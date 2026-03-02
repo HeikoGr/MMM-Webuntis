@@ -61,15 +61,45 @@
     return changed;
   }
 
-  function hasVisibleLessonChange(entry, teacherMode, showSubstitution) {
-    const changed = getChangedFieldSet(entry);
-    const hasUnknownChangedDetails = entry?.status === 'CHANGED' && changed.size === 0;
+  function getPrimaryFieldName(fieldArray) {
+    if (!Array.isArray(fieldArray) || fieldArray.length === 0) return '';
+    const first = fieldArray[0] || {};
+    return String(first.name || first.longname || '').trim();
+  }
 
-    if (changed.has('su')) return true;
-    if (changed.has('te') && (teacherMode === 'initial' || teacherMode === 'full')) return true;
-    if (changed.has('ro')) return true;
-    if (hasUnknownChangedDetails) return true;
-    if (showSubstitution && String(entry?.substText || '').trim() !== '') return true;
+  function hasEffectiveFieldChange(entry, fieldKey) {
+    const changed = getChangedFieldSet(entry);
+    if (!changed.has(fieldKey)) return false;
+
+    const currentMap = {
+      su: entry?.su,
+      te: entry?.te,
+      ro: entry?.ro,
+    };
+
+    const oldMap = {
+      su: entry?.suOld,
+      te: entry?.teOld,
+      ro: entry?.roOld,
+    };
+
+    const currentName = getPrimaryFieldName(currentMap[fieldKey]);
+    const oldName = getPrimaryFieldName(oldMap[fieldKey]);
+
+    if (currentName === '' && oldName === '') return true;
+    if (currentName === '' || oldName === '') return true;
+
+    return currentName !== oldName;
+  }
+
+  function hasVisibleLessonChange(entry, teacherMode, showRoom) {
+    const subjectChanged = hasEffectiveFieldChange(entry, 'su');
+    const teacherChanged = hasEffectiveFieldChange(entry, 'te');
+    const roomChanged = hasEffectiveFieldChange(entry, 'ro');
+
+    if (subjectChanged) return true;
+    if (teacherChanged && (teacherMode === 'initial' || teacherMode === 'full')) return true;
+    if (roomChanged && showRoom) return true;
 
     return false;
   }
@@ -153,6 +183,7 @@
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
     const teacherMode = getLessonsConfig('showTeacherMode');
     const showSubstitution = Boolean(getLessonsConfig('showSubstitution'));
+    const showRoom = Boolean(getLessonsConfig('showRoom'));
     const showRegular = Boolean(getLessonsConfig('showRegular'));
     const showStartTime = Boolean(getLessonsConfig('showStartTime'));
     const naText = String(getLessonsConfig('naText', 'N/A'));
@@ -221,8 +252,20 @@
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
+        const changedFields = getChangedFieldSet(entry);
+        const subjectChanged = hasEffectiveFieldChange(entry, 'su');
+        const teacherChanged = hasEffectiveFieldChange(entry, 'te');
+        const roomChanged = hasEffectiveFieldChange(entry, 'ro');
+        const visibleChangedInLessons = entry.status === 'CHANGED' ? hasVisibleLessonChange(entry, teacherMode, showRoom) : false;
+
+        const isChangedButNotVisible = entry.status === 'CHANGED' && !showRegular && !visibleChangedInLessons;
         if ((!showRegular && isRegularLesson) || (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
+          continue;
+        }
+
+        if (isChangedButNotVisible) {
+          log('debug', `[lessons] filter: hidden non-visible CHANGED lesson at ${stNum}`);
           continue;
         }
 
@@ -265,31 +308,51 @@
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        const changedFields = getChangedFieldSet(entry);
-
         let subjectStr = escapeHtml(useShortSubject ? subjShort : subjLong);
-        if (changedFields.has('su') && !entry.su?.[0]) {
+        if (subjectChanged && !entry.su?.[0]) {
           subjectStr = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+        } else if (subjectChanged) {
+          subjectStr = `<span class='lesson-changed-new'>${subjectStr}</span>`;
         }
 
         if (teacherMode === 'initial') {
           const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
           if (teacherInitial !== '') {
-            subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherInitial)})</span>`;
-          } else if (changedFields.has('te')) {
+            const teacherText = `(${escapeHtml(teacherInitial)})`;
+            if (teacherChanged) {
+              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${teacherText}</span>`;
+            } else {
+              subjectStr += '&nbsp;' + `<span class="teacher-name">${teacherText}</span>`;
+            }
+          } else if (teacherChanged) {
             subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         } else if (teacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
           if (teacherFull !== '') {
-            subjectStr += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacherFull)})</span>`;
-          } else if (changedFields.has('te')) {
+            const teacherText = `(${escapeHtml(teacherFull)})`;
+            if (teacherChanged) {
+              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${teacherText}</span>`;
+            } else {
+              subjectStr += '&nbsp;' + `<span class="teacher-name">${teacherText}</span>`;
+            }
+          } else if (teacherChanged) {
             subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         }
 
-        if (changedFields.has('ro') && !entry.ro?.[0]) {
-          subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+        if (showRoom) {
+          const roomName = entry.ro?.[0]?.name || entry.ro?.[0]?.longname || '';
+          if (roomName !== '') {
+            const roomText = `(${escapeHtml(roomName)})`;
+            if (roomChanged) {
+              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${roomText}</span>`;
+            } else {
+              subjectStr += '&nbsp;' + `<span class="lesson-room-name">${roomText}</span>`;
+            }
+          } else if (roomChanged) {
+            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+          }
         }
 
         if (entry.status === 'CHANGED' && changedFields.size === 0) {
@@ -306,7 +369,6 @@
         }
 
         let addClass = '';
-        const visibleChangedInLessons = entry.status === 'CHANGED' ? hasVisibleLessonChange(entry, teacherMode, showSubstitution) : false;
         if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
           addClass = 'exam';
         } else {
@@ -315,10 +377,6 @@
             addClass = 'exam';
           } else if (entry.status === 'CANCELLED') {
             addClass = 'cancelled';
-          } else if (entry.status === 'CHANGED') {
-            addClass = visibleChangedInLessons ? 'substitution' : '';
-          } else if (isIrregularStatus(entry) || (entry.substText && entry.substText.trim() !== '')) {
-            addClass = 'substitution';
           }
         }
 
