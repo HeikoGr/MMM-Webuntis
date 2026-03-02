@@ -1718,19 +1718,65 @@ module.exports = NodeHelper.create({
           };
           // Sending error to frontend silently
           this.sendSocketNotification('GOT_DATA', {
-            title: student.title,
+            contractVersion: 2,
             id: identifier,
             sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
-            config: student,
-            warnings: groupWarnings,
-            timeUnits: [],
-            timetableRange: [],
-            exams: [],
-            homeworks: [],
-            absences: [],
-            messagesOfDay: [],
-            apiStatus: {},
-            fetchFlags,
+            meta: {
+              moduleId: identifier,
+              sessionId: sessionKey.split(':')[1],
+              generatedAt: new Date().toISOString(),
+            },
+            context: {
+              student: {
+                id: student.studentId ?? null,
+                title: student.title || '',
+              },
+              config: student,
+              timezone: config?.timezone || 'Europe/Berlin',
+              todayYmd: null,
+              range: {
+                startYmd: null,
+                endYmd: null,
+              },
+              display: {
+                mode: student.mode || config?.mode || 'verbose',
+                widgets: String(student.displayMode || config?.displayMode || 'lessons,exams')
+                  .toLowerCase()
+                  .split(',')
+                  .map((entry) => entry.trim())
+                  .filter(Boolean),
+              },
+            },
+            data: {
+              timeUnits: [],
+              lessons: [],
+              exams: [],
+              homework: [],
+              absences: [],
+              messages: [],
+              holidays: {
+                ranges: [],
+                current: null,
+              },
+            },
+            state: {
+              fetch: {
+                timegrid: fetchFlags.fetchTimegrid,
+                timetable: fetchFlags.fetchTimetable,
+                exams: fetchFlags.fetchExams,
+                homework: fetchFlags.fetchHomeworks,
+                absences: fetchFlags.fetchAbsences,
+                messages: fetchFlags.fetchMessagesOfDay,
+              },
+              api: {
+                timetable: null,
+                exams: null,
+                homework: null,
+                absences: null,
+                messages: null,
+              },
+              warnings: groupWarnings,
+            },
           });
         }
         return;
@@ -1777,7 +1823,16 @@ module.exports = NodeHelper.create({
           } else {
             // Add warnings to payload
             const uniqWarnings = Array.from(new Set(groupWarnings));
-            studentPayloads.push({ ...payload, id: identifier, warnings: uniqWarnings });
+            const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
+            const nextPayload = {
+              ...payload,
+              id: identifier,
+              state: {
+                ...(payload.state || {}),
+                warnings: mergedWarnings,
+              },
+            };
+            studentPayloads.push(nextPayload);
           }
         } catch (err) {
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
@@ -2462,6 +2517,8 @@ module.exports = NodeHelper.create({
         fetchTimetable,
         fetchFlags,
         activeHoliday,
+        moduleId: identifier,
+        sessionId: sessionKey.split(':')[1],
         moduleConfig: config,
         currentFetchWarnings: this._currentFetchWarnings,
         compactTimegrid: this._compactTimegrid.bind(this),

@@ -10,7 +10,7 @@ Lessons are grouped by overlapping time slots. For each overlap group, exactly o
 
 - **Ticker candidates**: lessons with `activityType === NORMAL_TEACHING_PERIOD`
 - **Planned parallel base**: ticker candidates with status in `REGULAR | CHANGED | CANCELLED`
-- **Split view**: cancelled lesson(s) on the left + replacement lesson(s) on the right
+- **Split view**: replacement lesson(s) on the left + cancelled lesson(s) on the right
 - **Span split**: one lesson spans the full group, others cover sub-periods
 
 ## Strategy Order (Actual Code Order)
@@ -58,8 +58,8 @@ If ticker is active, cancelled+replacement is rendered as split content **inside
 
 Rendering:
 
-- Left: cancelled lesson(s), each at natural top/height
-- Right: replacement lesson(s), each at natural top/height
+- Left: replacement lesson(s), each at natural top/height
+- Right: cancelled lesson(s), each at natural top/height
 - Remaining non-pair lessons render as individual cells
 
 ## 3) SPAN SPLIT
@@ -92,7 +92,7 @@ flowchart TD
     Ticker --> Stop1[continue - STOP]
 
     CheckTicker -->|No| CheckSplit{Split View?\ncancelled + replacement exists}
-    CheckSplit -->|Yes| Split[SPLIT VIEW\nLeft: cancelled\nRight: replacement]
+    CheckSplit -->|Yes| Split[SPLIT VIEW\nLeft: replacement\nRight: cancelled]
     Split --> Stop2[continue - STOP]
 
     CheckSplit -->|No| CheckSpan{Span Split?\nfull-span + sub-period pattern}

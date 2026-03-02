@@ -39,7 +39,7 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `displayMode` | string | `'lessons,exams'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. |
+| `displayMode` | string | `'lessons, exams'` | Comma-separated list of widgets to render (top-to-bottom). Supported: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`. |
 | `mode` | string | `'verbose'` | Display mode for lists: `'verbose'` (per-student sections) or `'compact'` (combined). |
 
 ---
@@ -48,10 +48,14 @@ All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `nextDays` | int | `7` | Number of upcoming days to display **starting from tomorrow**. |
-| `pastDays` | int | `0` | Number of past days to display **before today**. |
+| `nextDays` | int | `0` | Global fallback for days ahead (widget-specific `grid.nextDays` / `lessons.nextDays` have their own defaults). |
+| `pastDays` | int | `0` | Global fallback for past days (widget-specific `grid.pastDays` / `lessons.pastDays` have priority). |
 
 **Range Calculation:** `totalDays = pastDays + 1 (today) + nextDays`
+
+Note:
+- The display window is today-inclusive (`+1`), not "starting tomorrow".
+- In practice, day counts usually come from widget namespaces (`grid`/`lessons`), not from global fields.
 
 Examples:
 - `pastDays: 1, nextDays: 3` = Yesterday + Today + 3 future days = **5 days total**
@@ -104,7 +108,7 @@ Configure grid widget behavior using the `grid` namespace:
 | `grid.mergeGap` | int | `15` | Maximum gap (minutes) between lessons to merge them. |
 | `grid.maxLessons` | int | `0` | Limit lessons per day. `0` = show all; `>=1` limits to first N timeUnits. |
 | `grid.showNowLine` | bool | `true` | Show current time line in grid. |
-| `grid.weekView` | bool | `false` | **Calendar week view (Mon-Fri only)**. Overrides `nextDays`/`pastDays`. Auto-switches to next week on Friday after 16:00, Saturday, and Sunday. |
+| `grid.weekView` | bool | `false` | **Calendar week view (Mon-Fri only)**. Overrides `nextDays`/`pastDays`. Auto-switches to next week on Friday from 15:45 onward (or >=16:00), plus Saturday and Sunday (real-time mode only, i.e., without `debugDate`). |
 | `grid.nextDays` | int | - | Days ahead to display. Ignored when `weekView: true`. |
 | `grid.pastDays` | int | - | Days past to display. Ignored when `weekView: true`. |
 | `grid.naText` | string | `'N/A'` | Placeholder text when a changed value has no current replacement (e.g., removed room/teacher/subject). |
