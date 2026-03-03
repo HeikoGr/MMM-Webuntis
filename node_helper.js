@@ -88,6 +88,7 @@ module.exports = NodeHelper.create({
     // Session-based config isolation: each browser window keeps its own config
     // debugDate is now stored session-specifically in _configsBySession, not globally
     this._configsBySession = new Map();
+    this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     // Track which identifiers have completed student auto-discovery
     this._studentsDiscovered = {};
@@ -491,7 +492,7 @@ module.exports = NodeHelper.create({
       normalizedRole.includes('ELTERN');
 
     if (isParentAccount && studentId) {
-      // ===== STRATEGY 1: classservices for parent accounts (with studentId→classId mapping) =====
+      // ===== Strategy 1: Classservices For Parent Accounts =====
       this._mmLog(
         'debug',
         null,
@@ -537,7 +538,7 @@ module.exports = NodeHelper.create({
         this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
       }
     } else {
-      // ===== STRATEGY 2: timetable/filter for student/teacher accounts (with preSelected class) =====
+      // ===== Strategy 2: Timetable Filter For Student/Teacher Accounts =====
       this._mmLog(
         'debug',
         null,
@@ -1565,7 +1566,7 @@ module.exports = NodeHelper.create({
       });
   },
 
-  // ===== WARNING VALIDATION FUNCTIONS =====
+  // ===== Warning Validation =====
 
   /**
    * Validate student credentials and configuration before attempting fetch
@@ -1773,7 +1774,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      // ===== EXTRACT HOLIDAYS ONCE FOR ALL STUDENTS =====
+      // ===== Holiday Extraction =====
       // Holidays are shared across all students in the same school/group.
       // Extract and compact them once before processing students to avoid redundant work.
       // Holidays come from appData (no separate API call needed)
@@ -1795,7 +1796,7 @@ module.exports = NodeHelper.create({
 
       for (const student of students) {
         try {
-          // ===== VALIDATE STUDENT CONFIG =====
+          // ===== Student Config Validation =====
           const studentValidationWarnings = this._validateStudentConfig(student);
           if (studentValidationWarnings.length > 0) {
             studentValidationWarnings.forEach((w) => {
@@ -1829,7 +1830,7 @@ module.exports = NodeHelper.create({
           const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
           this._mmLog('error', student, errorMsg);
 
-          // ===== CONVERT REST ERRORS TO USER-FRIENDLY WARNINGS =====
+          // ===== REST Error Warning Conversion =====
           const warningMsg = this._convertRestErrorToWarning(err, {
             studentTitle: student.title,
             school: student.school || config?.school,
@@ -1870,6 +1871,8 @@ module.exports = NodeHelper.create({
     }
   },
 
+  // ===== Socket Notifications =====
+
   /**
    * Handle socket notifications sent by the frontend module
    * Main entry point for all frontend-to-backend communication
@@ -1877,8 +1880,9 @@ module.exports = NodeHelper.create({
    * Listens for:
    *   - INIT_MODULE: First-time module initialization (config validation, student discovery)
    *   - FETCH_DATA: Data refresh request (periodic updates, manual refresh)
+   *   - SESSION_STATE: Per-session lifecycle state updates (paused/active)
    *
-   * @param {string} notification - Notification name (INIT_MODULE, FETCH_DATA)
+   * @param {string} notification - Notification name (INIT_MODULE, FETCH_DATA, SESSION_STATE)
    * @param {any} payload - Notification payload (config object, refresh request)
    * @returns {Promise<void>}
    */
@@ -1894,7 +1898,38 @@ module.exports = NodeHelper.create({
       await this._handleFetchData(payload);
       return;
     }
+
+    if (notification === 'SESSION_STATE') {
+      this._handleSessionState(payload);
+      return;
+    }
   },
+
+  // ===== Session State =====
+
+  /**
+   * Track frontend lifecycle state per session (suspend/resume)
+   * so backend can guard against cross-session/background fetches.
+   *
+   * @param {Object} payload - Session state payload ({id, sessionId, state, reason})
+   */
+  _handleSessionState(payload = {}) {
+    const identifier = payload.id || 'default';
+    const sessionId = payload.sessionId || 'unknown';
+    const state = payload.state === 'active' ? 'active' : 'paused';
+    const reason = payload.reason || 'unspecified';
+    const sessionKey = `${identifier}:${sessionId}`;
+
+    if (state === 'paused') {
+      this._pausedSessions.add(sessionKey);
+    } else {
+      this._pausedSessions.delete(sessionKey);
+    }
+
+    this._mmLog('debug', null, `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${reason})`);
+  },
+
+  // ===== Initialization & Fetch Flow =====
 
   /**
    * Handle INIT_MODULE notification - performs one-time module initialization
@@ -1929,8 +1964,11 @@ module.exports = NodeHelper.create({
 
       identifier = normalizedConfig.id || 'default';
       const sessionId = payload.sessionId || 'unknown';
+      const initReason = payload?.reason || 'unspecified';
       // Session key format: "identifier:sessionId" for complete browser-window isolation
       sessionKey = `${identifier}:${sessionId}`;
+
+      this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
       // Store config per session for isolation
       this._configsBySession.set(sessionKey, normalizedConfig);
@@ -1997,9 +2035,10 @@ module.exports = NodeHelper.create({
       // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
       // Simplifies the initialization flow: INIT_MODULE -> MODULE_INITIALIZED + GOT_DATA
       await this._handleFetchData({
+        ...normalizedConfig,
         id: identifier,
         sessionId: payload.sessionId,
-        ...normalizedConfig,
+        reason: 'post-init-auto-fetch',
       });
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
@@ -2031,7 +2070,15 @@ module.exports = NodeHelper.create({
   async _handleFetchData(payload) {
     const identifier = payload.id || 'default';
     const sessionId = payload.sessionId || 'unknown';
+    const fetchReason = payload?.reason || 'unspecified';
     const sessionKey = `${identifier}:${sessionId}`;
+
+    this._mmLog('debug', null, `[FETCH_DATA] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+
+    if (this._pausedSessions.has(sessionKey)) {
+      this._mmLog('debug', null, `[FETCH_DATA] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+      return;
+    }
 
     // Track FETCH_DATA requests to debug duplicate calls (silently)
     const fetchTimestamp = Date.now();
@@ -2418,7 +2465,7 @@ module.exports = NodeHelper.create({
 
     const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
 
-    // ===== STEP 1: Calculate date ranges using dateRangeCalculator module =====
+    // ===== Step 1: Date Range Calculation =====
     // This determines start/end dates for timetable, exams, homework, absences based on config
     const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences);
 
@@ -2436,7 +2483,7 @@ module.exports = NodeHelper.create({
       }
     }
 
-    // ===== STEP 2: Fetch all data in parallel using dataFetchOrchestrator module =====
+    // ===== Step 2: Parallel Data Fetch =====
     const fetchResults = await orchestrateFetch({
       student,
       dateRanges,
@@ -2485,7 +2532,7 @@ module.exports = NodeHelper.create({
     };
     const activeHoliday = findHolidayForDate(todayYmd, compactHolidays);
 
-    // ===== STEP 3: Build payload using payloadBuilder module =====
+    // ===== Step 3: Payload Build =====
     // This compacts all data, applies transformations, and adds warnings
     try {
       // Get API status for this session (includes HTTP status codes for each endpoint)

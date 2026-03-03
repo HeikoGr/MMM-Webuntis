@@ -1,6 +1,6 @@
 Module.register('MMM-Webuntis', {
   // Increment this value to ensure browser reloads updated scripts/styles
-  _cacheVersion: '2.0.1',
+  _cacheVersion: '2.0.2',
 
   /**
    * Simple frontend logger factory for widget logging
@@ -1158,7 +1158,7 @@ Module.register('MMM-Webuntis', {
    *   2. Initialize data storage structures (timetableByStudent, examsByStudent, etc.)
    *   3. Generate unique session ID for browser window isolation
    *   4. Parse and set debugDate if configured (frozen date for testing)
-   *   5. Send INIT_MODULE to backend to start data fetching
+   *   5. Defer INIT_MODULE until first visible resume() (avoids hidden-start fetches)
    *
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
@@ -1213,14 +1213,20 @@ Module.register('MMM-Webuntis', {
     this._runtimeWarningsLogged = new Set();
     this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
+    this._initRequested = false; // Track whether INIT_MODULE was already sent
 
-    this._paused = false;
-    this._startNowLineUpdater();
+    this._paused = this._isModuleSuspended();
+    if (this._paused) {
+      this._log('debug', '[start] Module starts hidden/suspended, deferring timers until resume()');
+    } else {
+      this._startNowLineUpdater();
+    }
 
     // Generate unique session ID for this browser window/tab instance
     // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
     this._sessionId = this._generateSessionId(9);
     this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
+    this._sendSessionState(this._paused ? 'paused' : 'active', 'start');
 
     // Track when data was last received to optimize resume() behavior
     // (prevents unnecessary API calls during rapid carousel page switches)
@@ -1260,11 +1266,13 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    // Initialize module with backend (separate from data fetching)
-    this._sendInit();
+    // Defer backend initialization until module is actually visible (resume)
+    // to avoid unnecessary initial fetches on hidden carousel slides.
 
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
+
+  // ===== Visibility & Timer State =====
 
   /**
    * Start the now line updater for grid view
@@ -1289,31 +1297,70 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Check whether module is currently hidden/suspended by MagicMirror
+   *
+   * @returns {boolean} True if module should be treated as suspended
+   */
+  _isModuleSuspended() {
+    return this._paused === true || this.hidden === true || this.data?.hidden === true;
+  },
+
+  /**
    * Start periodic data fetch timer
    * Sends FETCH_DATA to backend at configured updateInterval
    * Timer is skipped if module is paused or interval is invalid
    */
   _startFetchTimer() {
     // Start periodic data fetch timer based on updateInterval
-    if (this._paused) return;
+    if (this._isModuleSuspended()) {
+      this._paused = true;
+      return;
+    }
     if (this._fetchTimer) return;
     const interval = typeof this.config?.updateInterval === 'number' ? Number(this.config.updateInterval) : null;
     if (!interval || !Number.isFinite(interval) || interval <= 0) return;
 
     this._fetchTimer = setInterval(() => {
+      if (this._isModuleSuspended()) {
+        this._paused = true;
+        this._stopFetchTimer();
+        return;
+      }
       this._sendFetchData('periodic');
     }, interval);
+  },
+
+  // ===== Socket Notifications =====
+
+  /**
+   * Notify backend about current session visibility state
+   *
+   * @param {'paused'|'active'} state - Session state from frontend lifecycle
+   * @param {string} reason - Lifecycle reason
+   */
+  _sendSessionState(state, reason = 'manual') {
+    this.sendSocketNotification('SESSION_STATE', {
+      id: this.identifier,
+      sessionId: this._sessionId,
+      state,
+      reason,
+    });
   },
 
   /**
    * Send INIT_MODULE notification to backend
    * Triggers one-time module initialization (config validation, student discovery)
    * Backend responds with MODULE_INITIALIZED when ready
+   *
+   * @param {string} reason - Reason for initialization trigger
    */
-  _sendInit() {
+  _sendInit(reason = 'manual') {
     // Send INIT_MODULE notification to backend with config
-    this._log('debug', '[INIT] Sending INIT_MODULE to backend');
-    this.sendSocketNotification('INIT_MODULE', this._buildSendConfig());
+    this._log('debug', `[INIT] Sending INIT_MODULE to backend (reason=${reason})`);
+    this.sendSocketNotification('INIT_MODULE', {
+      ...this._buildSendConfig(),
+      reason,
+    });
   },
 
   /**
@@ -1347,7 +1394,10 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    this.sendSocketNotification('FETCH_DATA', this._buildSendConfig());
+    this.sendSocketNotification('FETCH_DATA', {
+      ...this._buildSendConfig(),
+      reason,
+    });
   },
 
   /**
@@ -1361,6 +1411,8 @@ Module.register('MMM-Webuntis', {
       this._fetchTimer = null;
     }
   },
+
+  // ===== Lifecycle Hooks =====
 
   /**
    * Suspend module - called by MagicMirror when module becomes hidden
@@ -1386,6 +1438,8 @@ Module.register('MMM-Webuntis', {
       clearTimeout(this._resumeFallbackTimer);
       this._resumeFallbackTimer = null;
     }
+
+    this._sendSessionState('paused', 'suspend');
   },
 
   /**
@@ -1404,7 +1458,25 @@ Module.register('MMM-Webuntis', {
   resume() {
     // Resume module: refresh date, fetch data if needed, restart timers
     this._log('debug', `[resume] Module resumed, _currentTodayYmd=${this._currentTodayYmd}, config.debugDate=${this.config?.debugDate}`);
+
+    // Guard against startup race: MagicMirror may call resume() while module is still hidden
+    // (e.g. inactive MMM-Carousel slide). In that case do not unpause/start timers.
+    if (this.hidden === true || this.data?.hidden === true) {
+      this._paused = true;
+      this._log('debug', '[resume] Ignoring resume() because module is still hidden');
+      this._sendSessionState('paused', 'resume-while-hidden');
+      return;
+    }
+
     this._paused = false;
+    this._sendSessionState('active', 'resume');
+
+    // Initialize backend lazily on first real visible resume.
+    if (!this._initialized && !this._initRequested) {
+      this._initRequested = true;
+      this._log('debug', '[resume] First visible resume - sending INIT_MODULE');
+      this._sendInit('first-visible-resume');
+    }
 
     // If the module was suspended across midnight, reset the cached day so filtering uses the current date
     // Only reset if debugDate is not configured (i.e., using real time, not frozen test date)
@@ -1427,9 +1499,9 @@ Module.register('MMM-Webuntis', {
     // Only fetch on resume if module was actually suspended before (e.g., by MMM-Carousel)
     if (!this._hasBeenResumedOnce) {
       this._hasBeenResumedOnce = true;
-      this._log('debug', '[resume] Skipping initial resume() - post-init will trigger fetch and timer');
+      this._log('debug', '[resume] Skipping initial resume() fetch - ensuring timers are running');
+      this._startFetchTimer();
       this._startNowLineUpdater();
-      // Note: Timer is already started by MODULE_INITIALIZED handler
       return;
     }
 
