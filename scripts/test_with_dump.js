@@ -13,6 +13,7 @@ const http = require('node:http');
 
 const dumpPath = process.argv[2] || 'debug_dumps/forged/api.json';
 const port = 8888;
+const STATIC_ROOT = path.join(__dirname, '..');
 
 if (!fs.existsSync(dumpPath)) {
   throw new Error(`Dump file not found: ${dumpPath}`);
@@ -160,20 +161,33 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 const server = http.createServer((req, res) => {
-  const filePath = req.url === '/' ? null : path.join(__dirname, '..', req.url);
+  let safePath = null;
 
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
-  } else if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-    const ext = path.extname(filePath);
+    return;
+  }
+
+  // Normalize and restrict requested path to STATIC_ROOT to prevent directory traversal.
+  const requestedPath = req.url.replace(/^\//, '');
+  safePath = path.resolve(STATIC_ROOT, requestedPath);
+
+  if (!safePath.startsWith(STATIC_ROOT + path.sep) && safePath !== STATIC_ROOT) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+
+  if (fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+    const ext = path.extname(safePath);
     const contentTypes = {
       '.css': 'text/css',
       '.js': 'application/javascript',
       '.json': 'application/json',
     };
     res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
-    res.end(fs.readFileSync(filePath));
+    res.end(fs.readFileSync(safePath));
   } else {
     res.writeHead(404);
     res.end('Not found');
