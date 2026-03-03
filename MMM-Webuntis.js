@@ -871,6 +871,91 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Normalize runtime warnings against current effective data and API status.
+   *
+   * Goals:
+   * - Remove stale "No <type> found..." warnings if data for that type exists again.
+   * - Remove stale critical connection/auth warnings when all fetched APIs are healthy (2xx).
+   *
+   * @param {string[]} warningsList - Raw warnings from backend payload
+   * @param {Object} context - Runtime context
+   * @param {Object} context.effectiveData - Effective data arrays after preserve logic
+   * @param {Object} context.apiStatus - API status object from payload.state.api
+   * @param {Object} context.fetchFlags - Fetch flags object from payload.state.fetch
+   * @returns {string[]} Normalized warnings
+   */
+  _normalizeRuntimeWarnings(warningsList, context = {}) {
+    if (!Array.isArray(warningsList) || warningsList.length === 0) return [];
+
+    const effectiveData = context.effectiveData || {};
+    const apiStatus = context.apiStatus || {};
+    const fetchFlags = context.fetchFlags || {};
+    const warningMeta = Array.isArray(context.warningMeta) ? context.warningMeta : [];
+
+    const metaByMessage = new Map();
+    warningMeta.forEach((entry) => {
+      const message = String(entry?.message || '');
+      if (!message) return;
+      metaByMessage.set(message, entry);
+    });
+
+    const typeAlias = {
+      lesson: 'lessons',
+      lessons: 'lessons',
+      exam: 'exams',
+      exams: 'exams',
+      homework: 'homework',
+      homeworks: 'homework',
+      absence: 'absences',
+      absences: 'absences',
+      message: 'messages',
+      messages: 'messages',
+      messagesofday: 'messages',
+    };
+
+    const isStatusOk = (status) => {
+      const numericStatus = Number(status);
+      return Number.isFinite(numericStatus) && numericStatus >= 200 && numericStatus < 300;
+    };
+
+    const fetchedApiChecks = [
+      { enabled: fetchFlags.timetable, status: apiStatus.timetable },
+      { enabled: fetchFlags.exams, status: apiStatus.exams },
+      { enabled: fetchFlags.homework, status: apiStatus.homework },
+      { enabled: fetchFlags.absences, status: apiStatus.absences },
+      { enabled: fetchFlags.messages, status: apiStatus.messages },
+    ].filter((entry) => entry.enabled === true);
+
+    const allFetchedApisHealthy = fetchedApiChecks.length > 0 && fetchedApiChecks.every((entry) => isStatusOk(entry.status));
+
+    return warningsList.filter((warning) => {
+      const warningText = String(warning || '');
+      const warningMetaEntry = metaByMessage.get(warningText) || null;
+
+      if (warningMetaEntry?.kind === 'config') {
+        return true;
+      }
+
+      if (warningMetaEntry?.kind === 'no_data') {
+        const canonicalType =
+          typeAlias[String(warningMetaEntry.dataType || '').toLowerCase()] || String(warningMetaEntry.dataType || '').toLowerCase();
+        const currentData = effectiveData[canonicalType];
+        if (Array.isArray(currentData) && currentData.length > 0) {
+          return false;
+        }
+        return true;
+      }
+
+      // For generic API warnings, rely on API status health instead of text patterns.
+      if (allFetchedApisHealthy) {
+        return false;
+      }
+
+      return true;
+    });
+  },
+
+  /**
    * Decide whether to preserve previous data when new data is empty or fetch failed
    * Preserves data if:
    *   - Previous data exists AND new data is empty
@@ -1085,6 +1170,7 @@ Module.register('MMM-Webuntis', {
     this.preprocessedByStudent = {};
     this.moduleWarningsSet = new Set();
     this.runtimeWarningsByStudent = {};
+    this._runtimeWarningStreakByStudent = {};
     this._runtimeWarningsLogged = new Set();
     this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
@@ -1701,8 +1787,7 @@ Module.register('MMM-Webuntis', {
     }
 
     const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
-    this._updateRuntimeWarnings(title, warningsList);
-    this._logRuntimeWarnings(warningsList);
+    const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
 
     const apiStatus = payload?.state?.api || {};
     const fetchFlags = payload?.state?.fetch || {};
@@ -1814,6 +1899,48 @@ Module.register('MMM-Webuntis', {
     if (!keepMessages) {
       this.messagesOfDayByStudent[title] = nextMessages;
     }
+
+    // Normalize runtime warnings after all effective datasets are resolved.
+    // This keeps warning visibility aligned with real current data/status.
+    const effectiveExams = keepExams ? prevExams : this.examsByStudent[title] || [];
+    const effectiveHomeworks = keepHomeworks ? prevHomeworks : this.homeworksByStudent[title] || [];
+    const effectiveAbsences = keepAbsences ? prevAbsences : this.absencesByStudent[title] || [];
+    const effectiveMessages = keepMessages ? prevMessages : this.messagesOfDayByStudent[title] || [];
+
+    const warningsAfterNormalization = this._normalizeRuntimeWarnings(warningsList, {
+      effectiveData: {
+        lessons: effectiveTimetable,
+        exams: effectiveExams,
+        homework: effectiveHomeworks,
+        absences: effectiveAbsences,
+        messages: effectiveMessages,
+      },
+      apiStatus,
+      fetchFlags,
+      warningMeta,
+    });
+
+    const metaByMessage = new Map();
+    warningMeta.forEach((entry) => {
+      const message = String(entry?.message || '');
+      if (!message) return;
+      metaByMessage.set(message, entry);
+    });
+
+    const persistentWarnings = warningsAfterNormalization.filter((warning) => metaByMessage.get(String(warning))?.kind === 'config');
+    const debouncedWarnings = warningsAfterNormalization.filter((warning) => metaByMessage.get(String(warning))?.kind !== 'config');
+
+    const hasAnyDebouncedWarningNow = debouncedWarnings.length > 0;
+    const prevRuntimeWarningStreak = Number(this._runtimeWarningStreakByStudent?.[title] || 0);
+    const nextRuntimeWarningStreak = hasAnyDebouncedWarningNow ? prevRuntimeWarningStreak + 1 : 0;
+    this._runtimeWarningStreakByStudent[title] = nextRuntimeWarningStreak;
+
+    const visibleWarnings = nextRuntimeWarningStreak >= 2 ? [...persistentWarnings, ...debouncedWarnings] : [...persistentWarnings];
+    if (hasAnyDebouncedWarningNow && nextRuntimeWarningStreak < 2) {
+      this._log('debug', `[GOT_DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
+    }
+    this._updateRuntimeWarnings(title, visibleWarnings);
+    this._logRuntimeWarnings(visibleWarnings);
 
     const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
     this.holidaysByStudent[title] = holidays;
