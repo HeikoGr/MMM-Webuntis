@@ -38,6 +38,45 @@ Module.register('MMM-Webuntis', {
     };
   },
 
+  /**
+   * Generate a random session identifier.
+   * Uses a cryptographically secure random number generator when available.
+   *
+   * @param {number} length - Length of the identifier to generate.
+   * @returns {string} Random session identifier consisting of [0-9a-z].
+   * @private
+   */
+  _generateSessionId(length = 9) {
+    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+    const alphabetLength = alphabet.length;
+
+    // Prefer cryptographically secure random values when available
+    const cryptoObj =
+      (typeof window !== 'undefined' && window.crypto) ||
+      (typeof self !== 'undefined' && self.crypto) ||
+      (typeof crypto !== 'undefined' && crypto);
+
+    let result = '';
+
+    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+      const array = new Uint8Array(length);
+      cryptoObj.getRandomValues(array);
+      for (let i = 0; i < length; i += 1) {
+        // Map each random byte to a character in the alphabet
+        const idx = array[i] % alphabetLength;
+        result += alphabet.charAt(idx);
+      }
+      return result;
+    }
+
+    // Fallback to Math.random() only if crypto is not available
+    for (let i = 0; i < length; i += 1) {
+      const idx = Math.floor(Math.random() * alphabetLength);
+      result += alphabet.charAt(idx);
+    }
+    return result;
+  },
+
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
@@ -1180,7 +1219,7 @@ Module.register('MMM-Webuntis', {
 
     // Generate unique session ID for this browser window/tab instance
     // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
-    this._sessionId = Math.random().toString(36).substring(2, 11);
+    this._sessionId = this._generateSessionId(9);
     this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
 
     // Track when data was last received to optimize resume() behavior
