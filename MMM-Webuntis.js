@@ -48,7 +48,6 @@ Module.register('MMM-Webuntis', {
    */
   _generateSessionId(length = 9) {
     const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
-    const alphabetLength = alphabet.length;
 
     // Prefer cryptographically secure random values when available
     const cryptoObj =
@@ -63,7 +62,7 @@ Module.register('MMM-Webuntis', {
       cryptoObj.getRandomValues(array);
       for (let i = 0; i < length; i += 1) {
         // Map each random byte to a character in the alphabet
-        const idx = array[i] % alphabetLength;
+        const idx = array[i] % alphabet.length;
         result += alphabet.charAt(idx);
       }
       return result;
@@ -71,7 +70,7 @@ Module.register('MMM-Webuntis', {
 
     // Fallback to Math.random() only if crypto is not available
     for (let i = 0; i < length; i += 1) {
-      const idx = Math.floor(Math.random() * alphabetLength);
+      const idx = Math.floor(Math.random() * alphabet.length);
       result += alphabet.charAt(idx);
     }
     return result;
@@ -81,6 +80,7 @@ Module.register('MMM-Webuntis', {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
     updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+    timezone: 'Europe/Berlin', // timezone for date calculations
 
     // === DEBUG OPTIONS ===
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
@@ -88,7 +88,6 @@ Module.register('MMM-Webuntis', {
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
     dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
-    timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
@@ -127,7 +126,7 @@ Module.register('MMM-Webuntis', {
     },
 
     grid: {
-      nextDays: 4, // widget-specific days ahead (shows school week Mon-Fri if today is Monday)
+      nextDays: 4, // widget-specific days ahead
       pastDays: 0, // widget-specific days past
       weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
       dateFormat: 'EEE dd.MM.', // format for grid dates
@@ -135,6 +134,7 @@ Module.register('MMM-Webuntis', {
       mergeGap: 15, // minutes gap to merge adjacent lessons
       maxLessons: 0, // max lessons per day (0 = no limit)
       naText: 'N/A', // placeholder for changed fields with no current value
+
       // Flexible field display configuration
       fields: {
         primary: 'subject', // Primary field to display (subject, teacher, room, class, studentGroup)
@@ -190,11 +190,8 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Return array of JavaScript files to load for this module
-   * Dynamically loads only the widget scripts that are enabled in displayMode
-   * This reduces bundle size by skipping unused widgets
-   *
    * Called by MagicMirror during module initialization
+   * Return array of JavaScript files to load for this module
    *
    * @returns {string[]} Array of JavaScript file paths
    */
@@ -667,57 +664,6 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Filter timetable entries by date range based on config
-   * Uses grid-specific config (grid.nextDays, grid.pastDays) with fallbacks to student/module level
-   *
-   * @param {Array} entries - Timetable entries to filter
-   * @param {Object} studentConfig - Student configuration object
-   * @returns {Array} Filtered timetable entries within date range
-   */
-  _filterTimetableRange(entries, studentConfig) {
-    // Filter timetable entries by date range based on config (nextDays/pastDays)
-    // IMPORTANT: If weekView is enabled, backend already calculated correct range (Mon-Fri),
-    // so we should NOT filter again with static nextDays/pastDays values
-    if (!Array.isArray(entries) || entries.length === 0) return [];
-    const cfg = studentConfig || {};
-    const defaults = this.defaults || {};
-
-    // Check if weekView is enabled - if yes, skip filtering (backend handles it correctly)
-    const weekView = cfg.grid?.weekView ?? defaults.grid?.weekView ?? false;
-    if (weekView) {
-      this._log('debug', `[filterTimetable] weekView=true, skipping frontend date filter (backend handles range)`);
-      return entries.slice();
-    }
-
-    // Legacy keys are already normalized in backend (configValidator.js)
-    // Priority: grid-specific > student-level > defaults
-    const daysVal = cfg.grid?.nextDays ?? cfg.nextDays ?? defaults.nextDays ?? 0;
-    const pastVal = cfg.grid?.pastDays ?? cfg.pastDays ?? defaults.pastDays ?? 0;
-    const daysToShow = Number(daysVal);
-    const pastDaysToShow = Number(pastVal);
-    const limitFuture = Number.isFinite(daysToShow) && daysToShow > 0;
-    const limitPast = Number.isFinite(pastDaysToShow);
-
-    if (!limitFuture && !limitPast) {
-      return entries.slice();
-    }
-
-    const todayYmd = this._currentTodayYmd || this._computeTodayYmdValue();
-    if (!this._currentTodayYmd) this._currentTodayYmd = todayYmd;
-
-    const minYmd = limitPast ? this._shiftYmd(todayYmd, -pastDaysToShow) : null;
-    const maxYmd = limitFuture ? this._shiftYmd(todayYmd, daysToShow) : null;
-
-    return entries.filter((lesson) => {
-      const ymd = Number(lesson?.date);
-      if (!Number.isFinite(ymd)) return false;
-      if (minYmd !== null && ymd < minYmd) return false;
-      if (maxYmd !== null && ymd > maxYmd) return false;
-      return true;
-    });
-  },
-
-  /**
    * Build configuration object to send to backend
    * Backend performs normalization/default handling for nested widget configs
    *
@@ -1163,9 +1109,23 @@ Module.register('MMM-Webuntis', {
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
   start() {
-    // Module initialization logic
-    // Normalization moved to backend (node_helper); keep frontend config untouched
+    // --- 1. Session Context & Identifiers ---
+    // Generate unique session ID for this browser window/tab instance
+    // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
+    this._sessionId = this._generateSessionId(9);
 
+    // Multi-instance support via explicit identifiers.
+    // For multiple MMM-Webuntis instances, you MUST add unique 'identifier' fields in config.js:
+    // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
+    // Without explicit identifiers, MagicMirror will auto-assign them (MMM-Webuntis_0, MMM-Webuntis_1, etc)
+    if (this.identifier) {
+      this._log('debug', `[start] Using explicit identifier from config: ${this.identifier}`);
+    } else {
+      this._log('warn', '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js');
+    }
+    this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
+
+    // --- 2. Global Config & Environment ---
     // Store logLevel in global config so widgets can access it independently
     if (typeof window !== 'undefined') {
       window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
@@ -1180,57 +1140,6 @@ Module.register('MMM-Webuntis', {
     } catch {
       // ignore
     }
-
-    // Multi-instance support via explicit identifiers.
-    // For multiple MMM-Webuntis instances, you MUST add unique 'identifier' fields in config.js:
-    // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
-    // Without explicit identifiers, MagicMirror will auto-assign them (MMM-Webuntis_0, MMM-Webuntis_1, etc)
-    if (this.identifier) {
-      this._log('debug', `[start] Using explicit identifier from config: ${this.identifier}`);
-    } else {
-      this._log('warn', '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js');
-    }
-
-    this.timetableByStudent = {};
-    this.examsByStudent = {};
-    this.configByStudent = {};
-    this.timeUnitsByStudent = {};
-    this.periodNamesByStudent = {};
-    this.homeworksByStudent = {};
-    this.absencesByStudent = {};
-    this.absencesUnavailableByStudent = {};
-
-    // Track if module has been resumed at least once (MagicMirror calls resume() on all modules at startup)
-    // We want to skip the initial resume() call to avoid duplicate FETCH_DATA with post-init
-    this._hasBeenResumedOnce = false;
-    this.messagesOfDayByStudent = {};
-    this.holidaysByStudent = {};
-    this.holidayMapByStudent = {};
-    this.preprocessedByStudent = {};
-    this.moduleWarningsSet = new Set();
-    this.runtimeWarningsByStudent = {};
-    this._runtimeWarningStreakByStudent = {};
-    this._runtimeWarningsLogged = new Set();
-    this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
-    this._initialized = false; // Track initialization status
-    this._initRequested = false; // Track whether INIT_MODULE was already sent
-
-    this._paused = this._isModuleSuspended();
-    if (this._paused) {
-      this._log('debug', '[start] Module starts hidden/suspended, deferring timers until resume()');
-    } else {
-      this._startNowLineUpdater();
-    }
-
-    // Generate unique session ID for this browser window/tab instance
-    // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
-    this._sessionId = this._generateSessionId(9);
-    this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
-    this._sendSessionState(this._paused ? 'paused' : 'active', 'start');
-
-    // Track when data was last received to optimize resume() behavior
-    // (prevents unnecessary API calls during rapid carousel page switches)
-    this._lastDataReceivedAt = null;
 
     // Initialize module-level today value. If `debugDate` is configured, use it
     // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
@@ -1256,6 +1165,47 @@ Module.register('MMM-Webuntis', {
       this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     }
 
+    // --- 3. Initial State & Data Objects ---
+    this.timetableByStudent = {};
+    this.examsByStudent = {};
+    this.configByStudent = {};
+    this.timeUnitsByStudent = {};
+    this.periodNamesByStudent = {};
+    this.homeworksByStudent = {};
+    this.absencesByStudent = {};
+    this.absencesUnavailableByStudent = {};
+    this.messagesOfDayByStudent = {};
+    this.holidaysByStudent = {};
+    this.holidayMapByStudent = {};
+    this.preprocessedByStudent = {};
+
+    this.moduleWarningsSet = new Set();
+    this.runtimeWarningsByStudent = {};
+    this._runtimeWarningStreakByStudent = {};
+    this._runtimeWarningsLogged = new Set();
+
+    this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
+    this._initialized = false; // Track initialization status
+    this._initRequested = false; // Track whether INIT_MODULE was already sent
+
+    // Track if module has been resumed at least once (MagicMirror calls resume() on all modules at startup)
+    // We want to skip the initial resume() call to avoid duplicate FETCH_DATA with post-init
+    this._hasBeenResumedOnce = false;
+
+    // Track when data was last received to optimize resume() behavior
+    // (prevents unnecessary API calls during rapid carousel page switches)
+    this._lastDataReceivedAt = null;
+
+    // --- 4. Visibility & Timers ---
+    this._paused = this._isModuleSuspended();
+    if (this._paused) {
+      this._log('debug', '[start] Module starts hidden/suspended, deferring timers until resume()');
+    } else {
+      this._startNowLineUpdater();
+    }
+    this._sendSessionState(this._paused ? 'paused' : 'active', 'start');
+
+    // --- 5. Special Modes (Demo) ---
     // Optional demo mode: load local fixture payload in frontend and skip backend/API entirely.
     if (this._isDemoModeEnabled()) {
       this._initialized = true;
@@ -1420,23 +1370,17 @@ Module.register('MMM-Webuntis', {
    *   - Now line updater (grid widget)
    *   - Periodic fetch timer
    *   - DOM update batching timer
-   *   - Resume fallback timer
    */
   suspend() {
-    // Suspend module: stop timers and clear update state
     this._log('info', '[suspend] Module suspended');
     this._paused = true;
     this._stopNowLineUpdater();
     this._stopFetchTimer();
-    // Clear update dom timer
+
+    // Clear update dom timer batching
     if (this._updateDomTimer) {
       clearTimeout(this._updateDomTimer);
       this._updateDomTimer = null;
-    }
-    // Clear any pending resume timers
-    if (this._resumeFallbackTimer) {
-      clearTimeout(this._resumeFallbackTimer);
-      this._resumeFallbackTimer = null;
     }
 
     this._sendSessionState('paused', 'suspend');
@@ -1446,24 +1390,17 @@ Module.register('MMM-Webuntis', {
    * Resume module - called by MagicMirror when module becomes visible
    *
    * Performs:
-   *   1. Reset _currentTodayYmd if date changed during suspend (only if not using debugDate)
-   *   2. Skip initial resume() call (MagicMirror calls resume on all modules at startup)
-   *   3. Skip resume fetch if recently initialized (prevents duplicate with auto-fetch)
-   *   4. Skip fetch if data is fresh (within updateInterval)
-   *   5. Send FETCH_DATA to backend for stale data
-   *   6. Set fallback timer to retry if no data arrives within 3 seconds
-   *
-   * Optimization: Only fetches when needed to reduce API load during carousel page switches
+   *   1. Aborts immediately if module is secretly hidden (e.g. MMM-Carousel background loading)
+   *   2. Starts visual timers and background data loops
+   *   3. Detects midnight/date rollovers across sleep
+   *   4. Lazily triggers initialization OR smart-fetches stale data if needed
    */
   resume() {
-    // Resume module: refresh date, fetch data if needed, restart timers
-    this._log('debug', `[resume] Module resumed, _currentTodayYmd=${this._currentTodayYmd}, config.debugDate=${this.config?.debugDate}`);
+    this._log('debug', `[resume] Module resumed (hidden=${this.hidden}, config.debugDate=${this.config?.debugDate})`);
 
-    // Guard against startup race: MagicMirror may call resume() while module is still hidden
-    // (e.g. inactive MMM-Carousel slide). In that case do not unpause/start timers.
+    // 1. Guard against startup race: MagicMirror may call resume() while module is still hidden
     if (this.hidden === true || this.data?.hidden === true) {
       this._paused = true;
-      this._log('debug', '[resume] Ignoring resume() because module is still hidden');
       this._sendSessionState('paused', 'resume-while-hidden');
       return;
     }
@@ -1471,87 +1408,46 @@ Module.register('MMM-Webuntis', {
     this._paused = false;
     this._sendSessionState('active', 'resume');
 
-    // Initialize backend lazily on first real visible resume.
-    if (!this._initialized && !this._initRequested) {
-      this._initRequested = true;
-      this._log('debug', '[resume] First visible resume - sending INIT_MODULE');
-      this._sendInit('first-visible-resume');
-    }
+    // 2. Start recurrent visual/fetch timers now that module is visible
+    this._startFetchTimer();
+    this._startNowLineUpdater();
 
-    // If the module was suspended across midnight, reset the cached day so filtering uses the current date
-    // Only reset if debugDate is not configured (i.e., using real time, not frozen test date)
+    // 3. Handle midnight / date rollover (only if not using a fixed debug test date)
     if (!this.config?.debugDate) {
       const now = new Date();
       const realTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
       if (this._currentTodayYmd !== realTodayYmd) {
-        this._log('debug', `[resume] Detected day change while suspended (${this._currentTodayYmd || 'unset'} -> ${realTodayYmd})`);
+        this._log('debug', `[resume] Detected day change while suspended: ${this._currentTodayYmd || 'unset'} -> ${realTodayYmd}`);
         this._currentTodayYmd = realTodayYmd;
       }
-    } else {
-      this._log('debug', `[resume] debugDate is configured, NOT resetting _currentTodayYmd`);
     }
 
-    // Store timestamp to detect if data arrives within reasonable time
-    const resumeTimestamp = Date.now();
-    this._lastResumeTime = resumeTimestamp;
+    // 4. Initialization: Sent only once upon first visible resume
+    if (!this._initialized && !this._initRequested) {
+      this._initRequested = true;
+      this._sendInit('first-visible-resume');
+      return; // Backend auto-triggers the first FETCH_DATA internally upon init success
+    }
 
-    // Skip initial resume() call (MagicMirror calls resume on all modules at startup)
-    // Only fetch on resume if module was actually suspended before (e.g., by MMM-Carousel)
+    // 5. Initial MagicMirror boot cycle skip (MagicMirror aggressively calls resume() on all modules at boot)
     if (!this._hasBeenResumedOnce) {
       this._hasBeenResumedOnce = true;
-      this._log('debug', '[resume] Skipping initial resume() fetch - ensuring timers are running');
-      this._startFetchTimer();
-      this._startNowLineUpdater();
       return;
     }
 
-    // Also skip resume fetch if module was just initialized (backend auto-triggers fetch)
-    // This prevents duplicate FETCH_DATA immediately after initialization
-    if (this._initialized && Date.now() - this._initializedAt < 5000) {
-      this._log('debug', '[resume] Skipping resume fetch - backend auto-triggered fetch recently');
-      this._startFetchTimer();
-      this._startNowLineUpdater();
-      return;
-    }
+    // 6. Carousel Optimization: Only trigger a fetch if data is actually stale
+    const dataAge = this._lastDataReceivedAt ? Date.now() - this._lastDataReceivedAt : Infinity;
+    const interval = this.config?.updateInterval || 5 * 60 * 1000; // Default: 5 minutes
 
-    // Optimization: Skip fetch if data is fresh enough (within updateInterval)
-    // This prevents unnecessary API calls during rapid carousel page switches
-    if (this._lastDataReceivedAt) {
-      const dataAge = Date.now() - this._lastDataReceivedAt;
-      const interval = this.config?.updateInterval || 5 * 60 * 1000; // Default: 5 minutes
-      if (dataAge < interval) {
-        this._log(
-          'debug',
-          `[resume] Skipping fetch - data is fresh (age=${Math.round(dataAge / 1000)}s < interval=${Math.round(interval / 1000)}s)`
-        );
-        this._startFetchTimer();
-        this._startNowLineUpdater();
-        return;
-      }
+    if (dataAge >= interval) {
+      this._log('debug', `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s), sending FETCH_DATA...`);
+      this._sendFetchData('resume-stale-data');
+    } else {
       this._log(
         'debug',
-        `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s >= interval=${Math.round(interval / 1000)}s), fetching...`
+        `[resume] Data is fresh (age=${Math.round(dataAge / 1000)}s < ${Math.round(interval / 1000)}s), skipping duplicate fetch`
       );
     }
-
-    // Immediately try to fetch data
-    this._sendFetchData('resume');
-
-    // Fallback: If no data arrives within 3 seconds, retry fetch
-    // This handles cases where the resume fetch was skipped or failed silently
-    if (this._resumeFallbackTimer) {
-      clearTimeout(this._resumeFallbackTimer);
-    }
-    this._resumeFallbackTimer = setTimeout(() => {
-      this._resumeFallbackTimer = null;
-      // Only retry if we still haven't received data since resume
-      if (this._lastResumeTime === resumeTimestamp && this._initialized) {
-        this._sendFetchData('resume-fallback');
-      }
-    }, 3000);
-
-    this._startFetchTimer();
-    this._startNowLineUpdater();
   },
 
   getDom() {
@@ -1770,89 +1666,101 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  // ===== Socket Notification Handlers =====
+
   socketNotificationReceived(notification, payload) {
-    // Handle backend socket notifications: initialization, config errors, data updates
-    // Filter by sessionId (preferred) or id (fallback) to ensure data goes to correct instance
-    // This allows multi-instance support without requiring explicit identifiers in config
-    if (payload && payload.sessionId && this._sessionId !== payload.sessionId) {
-      return;
+    if (!this._isValidTargetInstance(payload)) return;
+
+    switch (notification) {
+      case 'MODULE_INITIALIZED':
+        this._handleModuleInitialized(payload);
+        break;
+
+      case 'INIT_ERROR':
+        this._handleInitError(payload);
+        break;
+
+      case 'CONFIG_WARNING':
+      case 'CONFIG_ERROR':
+        this._handleConfigIssues(payload);
+        break;
+
+      case 'GOT_DATA':
+        this._handleGotData(payload);
+        break;
+
+      default:
+        // Ignore unknown notifications
+        break;
     }
-    // Fallback to id filtering if sessionId is not present (backward compatibility)
-    if (payload && payload.id && !payload.sessionId && this.identifier !== payload.id) {
-      return;
-    }
+  },
 
-    // Handle initialization response
-    if (notification === 'MODULE_INITIALIZED') {
-      // Prevent duplicate initialization (backend might send MODULE_INITIALIZED twice due to race conditions)
-      if (this._initialized) {
-        this._log('debug', `[MODULE_INITIALIZED] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
-        return;
-      }
+  /**
+   * Ensure the payload matches the current module instance's sessionId or identifier
+   */
+  _isValidTargetInstance(payload) {
+    if (payload?.sessionId && this._sessionId !== payload.sessionId) return false;
+    if (payload?.id && !payload?.sessionId && this.identifier !== payload.id) return false;
+    return true;
+  },
 
-      this._log('info', `Module initialized successfully, sessionId=${payload?.sessionId}`);
-      this._initialized = true;
-      this._initializedAt = Date.now(); // Track initialization time for resume() logic
-
-      // Clear pending resume request (backend auto-triggers initial fetch, no need for frontend to send FETCH_DATA)
-      if (this._pendingResumeRequest) {
-        this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
-        this._pendingResumeRequest = false;
-      }
-
-      // Process initialization warnings if present
-      if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-        this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-        payload.warnings.forEach((w) => {
-          if (!this.moduleWarningsSet.has(w)) {
-            this.moduleWarningsSet.add(w);
-            this._log('warn', `Init warning: ${w}`);
-          }
-        });
-      }
-
-      // Start periodic fetching timer
-      // Note: Backend automatically triggers initial data fetch after MODULE_INITIALIZED,
-      // so no need to send FETCH_DATA here (eliminates 1 roundtrip)
-      this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
-      this._startFetchTimer();
+  _handleModuleInitialized(payload) {
+    if (this._initialized) {
+      this._log('debug', `[MODULE_INITIALIZED] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
       return;
     }
 
-    // Handle initialization errors
-    if (notification === 'INIT_ERROR') {
-      this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
-      if (Array.isArray(payload.errors)) {
-        payload.errors.forEach((err) => this._log('error', `  - ${err}`));
-      }
-      if (Array.isArray(payload.warnings)) {
-        payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
-      }
-      this._initialized = false;
-      this.updateDom();
-      return;
+    this._log('info', `Module initialized successfully, sessionId=${payload?.sessionId}`);
+    this._initialized = true;
+    this._initializedAt = Date.now();
+
+    if (this._pendingResumeRequest) {
+      this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
+      this._pendingResumeRequest = false;
     }
 
-    if (notification === 'CONFIG_WARNING' || notification === 'CONFIG_ERROR') {
-      const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
+    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
       this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-      warnList.forEach((w) => {
+      payload.warnings.forEach((w) => {
         if (!this.moduleWarningsSet.has(w)) {
           this.moduleWarningsSet.add(w);
-          this._log('warn', `Config warning: ${w}`);
-
-          // Show critical dependency warnings as browser notification
-          if (w.includes('Dependency issues') || w.includes('npm install')) {
-            this._log('error', `CRITICAL: ${w}`);
-          }
+          this._log('warn', `Init warning: ${w}`);
         }
       });
-      this.updateDom();
-      return;
     }
 
-    if (notification !== 'GOT_DATA') return;
+    this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
+    this._startFetchTimer();
+  },
 
+  _handleInitError(payload) {
+    this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
+    if (Array.isArray(payload.errors)) {
+      payload.errors.forEach((err) => this._log('error', `  - ${err}`));
+    }
+    if (Array.isArray(payload.warnings)) {
+      payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
+    }
+    this._initialized = false;
+    this.updateDom();
+  },
+
+  _handleConfigIssues(payload) {
+    const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
+    this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+    warnList.forEach((w) => {
+      if (!this.moduleWarningsSet.has(w)) {
+        this.moduleWarningsSet.add(w);
+        this._log('warn', `Config warning: ${w}`);
+        if (w.includes('Dependency issues') || w.includes('npm install')) {
+          this._log('error', `CRITICAL: ${w}`);
+        }
+      }
+    });
+    this.updateDom();
+  },
+
+  _handleGotData(payload) {
     if (Number(payload?.contractVersion) !== 2) {
       this._log('warn', `[GOT_DATA] Ignored unsupported contractVersion=${payload?.contractVersion}`);
       return;
@@ -1863,32 +1771,28 @@ Module.register('MMM-Webuntis', {
       this._log('warn', '[GOT_DATA] Missing context.student.title in payload');
       return;
     }
-    const cfg = payload?.context?.config || {};
 
     this._log('debug', `[GOT_DATA] Received for student=${title}, sessionId=${payload?.sessionId}`);
-
-    // Track when data was last received for resume freshness check
     this._lastDataReceivedAt = Date.now();
+    this.configByStudent[title] = payload?.context?.config || {};
 
-    // Cancel resume fallback timer since we received data
-    if (this._resumeFallbackTimer) {
-      clearTimeout(this._resumeFallbackTimer);
-      this._resumeFallbackTimer = null;
-      this._log('debug', '[GOT_DATA] Cancelled resume fallback timer - data received');
+    this._syncDebugDate(this.configByStudent[title]);
+    this._processPayloadData(title, payload);
+    this._processGotDataWarnings(title, payload);
+
+    // Update DOM immediately
+    if (this._updateDomTimer) {
+      clearTimeout(this._updateDomTimer);
+      this._updateDomTimer = null;
     }
-    // Reset resume timestamp to prevent fallback retry
-    this._lastResumeTime = null;
+    this.updateDom();
+  },
 
-    this.configByStudent[title] = cfg;
-
-    // IMPORTANT: Update _currentTodayYmd BEFORE filtering timetable, so the filter uses the correct date
-    // debugDate comes from backend response (session-specific, set during INIT_MODULE)
+  _syncDebugDate(cfg) {
     this._log('debug', `[GOT_DATA] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
     if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
       this._log('debug', `[GOT_DATA] Using debugDate="${cfg.debugDate}" from backend`);
-      // Keep _currentTodayYmd aligned with the active debugDate so filtering and grid base date stay in sync after resume
-      const dbg = String(cfg.debugDate).trim();
-      const dbgNum = Number(dbg.replace(/-/g, ''));
+      const dbgNum = Number(String(cfg.debugDate).trim().replace(/-/g, ''));
       if (Number.isFinite(dbgNum) && dbgNum > 0) {
         this._currentTodayYmd = dbgNum;
         this._log('debug', `[GOT_DATA] Updated _currentTodayYmd=${dbgNum} (before timetable filtering)`);
@@ -1896,18 +1800,18 @@ Module.register('MMM-Webuntis', {
     } else {
       this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
+  },
 
-    const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
-    const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
-
+  _processPayloadData(title, payload) {
     const apiStatus = payload?.state?.api || {};
     const fetchFlags = payload?.state?.fetch || {};
+    const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
 
-    const timeUnitsList = payload?.data?.timeUnits || [];
+    // --- 1. Time Units ---
     let timeUnits = [];
     try {
-      if (Array.isArray(timeUnitsList)) {
-        timeUnits = timeUnitsList.map((u) => ({
+      if (Array.isArray(payload?.data?.timeUnits)) {
+        timeUnits = payload.data.timeUnits.map((u) => ({
           startTime: u.startTime ?? u.start,
           endTime: u.endTime ?? u.end,
           startMin: this._toMinutes(u.startTime ?? u.start),
@@ -1918,128 +1822,116 @@ Module.register('MMM-Webuntis', {
     } catch (e) {
       this._log('warn', 'failed to build timeUnits from grid', e);
     }
-    const prevTimeUnits = this.timeUnitsByStudent[title] || [];
-    const keepTimeUnits = this._shouldPreserveData(
-      timeUnits,
-      prevTimeUnits,
-      fetchFlags.timegrid ?? fetchFlags.timetable ?? true,
-      apiStatus.timetable,
-      warningsList
-    );
-    if (!keepTimeUnits) {
+
+    if (
+      !this._shouldPreserveData(
+        timeUnits,
+        this.timeUnitsByStudent[title] || [],
+        fetchFlags.timegrid ?? fetchFlags.timetable ?? true,
+        apiStatus.timetable,
+        warningsList
+      )
+    ) {
       this.timeUnitsByStudent[title] = timeUnits;
     }
-    const effectiveTimeUnits = keepTimeUnits ? prevTimeUnits : timeUnits;
 
     const periodMap = {};
-    effectiveTimeUnits.forEach((u) => {
+    (this.timeUnitsByStudent[title] || []).forEach((u) => {
       periodMap[u.startTime] = u.name;
     });
     this.periodNamesByStudent[title] = periodMap;
 
-    const timetableRange = Array.isArray(payload?.data?.lessons) ? payload.data.lessons : [];
-    const prevTimetable = this.timetableByStudent[title] || [];
-    const keepTimetable = this._shouldPreserveData(
-      timetableRange,
-      prevTimetable,
-      fetchFlags.timetable ?? true,
-      apiStatus.timetable,
-      warningsList
-    );
-    if (!keepTimetable) {
-      this.timetableByStudent[title] = this._filterTimetableRange(timetableRange, cfg);
+    // --- 2. Timetable ---
+    const rawLessons = Array.isArray(payload?.data?.lessons) ? payload.data.lessons : [];
+    if (
+      !this._shouldPreserveData(
+        rawLessons,
+        this.timetableByStudent[title] || [],
+        fetchFlags.timetable ?? true,
+        apiStatus.timetable,
+        warningsList
+      )
+    ) {
+      this.timetableByStudent[title] = rawLessons;
     }
-    const effectiveTimetable = keepTimetable ? prevTimetable : this.timetableByStudent[title] || [];
-    this._log(
-      'debug',
-      `[GOT_DATA] Timetable filtered: ${payload?.data?.lessons?.length || 0} total -> ${effectiveTimetable?.length || 0} after filter`
-    );
+    this._log('debug', `[GOT_DATA] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`);
 
     const groupedRaw = {};
-    (effectiveTimetable || []).forEach((el) => {
+    (this.timetableByStudent[title] || []).forEach((el) => {
       const key = el && el.date != null ? String(el.date) : null;
       if (!key) return;
       if (!groupedRaw[key]) groupedRaw[key] = [];
       groupedRaw[key].push(el);
     });
-    Object.keys(groupedRaw).forEach((k) => {
-      groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+    Object.keys(groupedRaw).forEach((k) => groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0)));
+    this.preprocessedByStudent[title] = { ...(this.preprocessedByStudent[title] || {}), rawGroupedByDate: groupedRaw };
+
+    // --- 3. Exams, Homeworks, Absences, Messages ---
+    const dataMaps = [
+      { key: 'exams', source: payload?.data?.exams, target: this.examsByStudent, flag: fetchFlags.exams, status: apiStatus.exams },
+      {
+        key: 'homework',
+        source: payload?.data?.homework,
+        target: this.homeworksByStudent,
+        flag: fetchFlags.homework,
+        status: apiStatus.homework,
+      },
+      {
+        key: 'absences',
+        source: payload?.data?.absences,
+        target: this.absencesByStudent,
+        flag: fetchFlags.absences,
+        status: apiStatus.absences,
+      },
+      {
+        key: 'messages',
+        source: payload?.data?.messages,
+        target: this.messagesOfDayByStudent,
+        flag: fetchFlags.messages,
+        status: apiStatus.messages,
+      },
+    ];
+
+    dataMaps.forEach(({ source, target, flag, status }) => {
+      const parsedArray = Array.isArray(source) ? source : [];
+      if (!this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList)) {
+        target[title] = parsedArray;
+        if (target === this.absencesByStudent) {
+          this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(status));
+        }
+      }
     });
-    this.preprocessedByStudent[title] = {
-      ...(this.preprocessedByStudent[title] || {}),
-      rawGroupedByDate: groupedRaw,
-    };
 
-    const nextExams = Array.isArray(payload?.data?.exams) ? payload.data.exams : [];
-    const prevExams = this.examsByStudent[title] || [];
-    const keepExams = this._shouldPreserveData(nextExams, prevExams, fetchFlags.exams ?? true, apiStatus.exams, warningsList);
-    if (!keepExams) {
-      this.examsByStudent[title] = nextExams;
-    }
+    // --- 4. Holidays ---
+    const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
+    this.holidaysByStudent[title] = holidays;
+    this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);
+  },
 
-    const hwNorm = Array.isArray(payload?.data?.homework) ? payload.data.homework : [];
-    const prevHomeworks = this.homeworksByStudent[title] || [];
-    const keepHomeworks = this._shouldPreserveData(hwNorm, prevHomeworks, fetchFlags.homework ?? true, apiStatus.homework, warningsList);
-    if (!keepHomeworks) {
-      this.homeworksByStudent[title] = hwNorm;
-    }
-
-    const nextAbsences = Array.isArray(payload?.data?.absences) ? payload.data.absences : [];
-    const prevAbsences = this.absencesByStudent[title] || [];
-    const keepAbsences = this._shouldPreserveData(
-      nextAbsences,
-      prevAbsences,
-      fetchFlags.absences ?? true,
-      apiStatus.absences,
-      warningsList
-    );
-    if (!keepAbsences) {
-      this.absencesByStudent[title] = nextAbsences;
-      this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(apiStatus.absences));
-    }
-
-    const nextMessages = Array.isArray(payload?.data?.messages) ? payload.data.messages : [];
-    const prevMessages = this.messagesOfDayByStudent[title] || [];
-    const keepMessages = this._shouldPreserveData(
-      nextMessages,
-      prevMessages,
-      fetchFlags.messages ?? true,
-      apiStatus.messages,
-      warningsList
-    );
-    if (!keepMessages) {
-      this.messagesOfDayByStudent[title] = nextMessages;
-    }
-
-    // Normalize runtime warnings after all effective datasets are resolved.
-    // This keeps warning visibility aligned with real current data/status.
-    const effectiveExams = keepExams ? prevExams : this.examsByStudent[title] || [];
-    const effectiveHomeworks = keepHomeworks ? prevHomeworks : this.homeworksByStudent[title] || [];
-    const effectiveAbsences = keepAbsences ? prevAbsences : this.absencesByStudent[title] || [];
-    const effectiveMessages = keepMessages ? prevMessages : this.messagesOfDayByStudent[title] || [];
+  _processGotDataWarnings(title, payload) {
+    const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
+    const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
 
     const warningsAfterNormalization = this._normalizeRuntimeWarnings(warningsList, {
       effectiveData: {
-        lessons: effectiveTimetable,
-        exams: effectiveExams,
-        homework: effectiveHomeworks,
-        absences: effectiveAbsences,
-        messages: effectiveMessages,
+        lessons: this.timetableByStudent[title] || [],
+        exams: this.examsByStudent[title] || [],
+        homework: this.homeworksByStudent[title] || [],
+        absences: this.absencesByStudent[title] || [],
+        messages: this.messagesOfDayByStudent[title] || [],
       },
-      apiStatus,
-      fetchFlags,
+      apiStatus: payload?.state?.api || {},
+      fetchFlags: payload?.state?.fetch || {},
       warningMeta,
     });
 
     const metaByMessage = new Map();
     warningMeta.forEach((entry) => {
-      const message = String(entry?.message || '');
-      if (!message) return;
-      metaByMessage.set(message, entry);
+      if (entry?.message) metaByMessage.set(String(entry.message), entry);
     });
 
-    const persistentWarnings = warningsAfterNormalization.filter((warning) => metaByMessage.get(String(warning))?.kind === 'config');
-    const debouncedWarnings = warningsAfterNormalization.filter((warning) => metaByMessage.get(String(warning))?.kind !== 'config');
+    const persistentWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind === 'config');
+    const debouncedWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind !== 'config');
 
     const hasAnyDebouncedWarningNow = debouncedWarnings.length > 0;
     const prevRuntimeWarningStreak = Number(this._runtimeWarningStreakByStudent?.[title] || 0);
@@ -2050,18 +1942,8 @@ Module.register('MMM-Webuntis', {
     if (hasAnyDebouncedWarningNow && nextRuntimeWarningStreak < 2) {
       this._log('debug', `[GOT_DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
     }
+
     this._updateRuntimeWarnings(title, visibleWarnings);
     this._logRuntimeWarnings(visibleWarnings);
-
-    const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
-    this.holidaysByStudent[title] = holidays;
-    this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);
-
-    // Update DOM immediately; debounce removed to reflect data as soon as it arrives
-    if (this._updateDomTimer) {
-      clearTimeout(this._updateDomTimer);
-      this._updateDomTimer = null;
-    }
-    this.updateDom();
   },
 });

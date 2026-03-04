@@ -161,8 +161,6 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 const server = http.createServer((req, res) => {
-  let safePath = null;
-
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(html);
@@ -171,7 +169,7 @@ const server = http.createServer((req, res) => {
 
   // Normalize and restrict requested path to STATIC_ROOT to prevent directory traversal.
   const requestedPath = req.url.replace(/^\//, '');
-  safePath = path.resolve(STATIC_ROOT, requestedPath);
+  const safePath = path.resolve(STATIC_ROOT, requestedPath);
 
   if (!safePath.startsWith(STATIC_ROOT + path.sep) && safePath !== STATIC_ROOT) {
     res.writeHead(403);

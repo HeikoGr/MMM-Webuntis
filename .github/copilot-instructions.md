@@ -83,8 +83,7 @@ webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → payloadCompactor.js#schemas.lesson        – declares field for compaction
     → payloadBuilder.js#compactArray()        – compacts lessons
       → socket GOT_DATA payload               – field present in data.lessons[]
-        → MMM-Webuntis.js#_filterTimetableRange()  – passes through unchanged
-          → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
+        → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
 ```
 

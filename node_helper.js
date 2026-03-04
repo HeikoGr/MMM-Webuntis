@@ -4,56 +4,11 @@ const Log = require('logger');
 /* eslint-enable n/no-missing-require */
 const fs = require('fs');
 const path = require('path');
-const fetchClient = require('./lib/fetchClient');
 
-// New utility modules for refactoring
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
-const webuntisApiService = require('./lib/webuntisApiService');
-const AuthService = require('./lib/authService');
-const { calculateFetchRanges, sanitizeHtmlText, normalizeDateToInteger, normalizeTimeToMinutes } = require('./lib/dataOrchestration');
-const CacheManager = require('./lib/cacheManager');
-const errorHandler = require('./lib/errorHandler');
+const { WebUntisClient } = require('./lib/webuntis/webuntisClient');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
-
-// Refactored modules for fetchData simplification (CRIT-1 from ISSUES.md)
-const { orchestrateFetch } = require('./lib/dataFetchOrchestrator');
-const { buildGotDataPayload } = require('./lib/payloadBuilder');
-
-/**
- * ERROR HANDLING STRATEGY:
- *
- * node_helper.js uses try/catch blocks selectively for specific patterns:
- *
- * 1. CLEANUP PATTERNS (try/finally):
- *    - Lines ~1490-1506: Pending fetch cleanup via _pendingFetchByCredKey
- *    - Ensures proper state management even if errors occur
- *    - Correctly uses try/finally (not try/catch) for guaranteed cleanup
- *
- * 2. GRACEFUL DEGRADATION (try/catch with logging):
- *    - Lines ~99-130: Config processing & JSON.stringify (non-critical)
- *    - Lines ~193-220: Debug dump cleanup (low-priority file ops)
- *    - Lines ~1030-1050: Data extraction with optional fallback
- *    - Errors logged but don't block main flow
- *    - Appropriate because these are non-blocking operations
- *
- * 3. API ERROR HANDLING (already wrapped via dataFetchOrchestrator):
- *    - Lines ~345-376: REST API calls
- *    - Lines ~603-839: Auto-discovery logic
- *    - Lines ~1262-1275: processGroup() orchestration
- *    - These are called from orchestrateFetch() which uses wrapAsync()
- *    - Error collection/warnings handled at higher level via errorUtils
- *    - No need to refactor inner try/catch (already wrapped)
- *
- * Decision: Keep existing try/catch patterns as-is because:
- * - Cleanup code requires try/finally (not errorUtils pattern)
- * - Non-critical ops appropriately use silent error handling
- * - API calls already wrapped by higher-level orchestrator (wrapAsync)
- * - Massive refactoring would increase risk for minimal gain
- */
-
-// Always fetch current data from WebUntis to ensure the frontend shows up-to-date information.
-// Create a NodeHelper module
 module.exports = NodeHelper.create({
   /**
    * Called when the helper is initialized by the MagicMirror backend.
@@ -79,8 +34,6 @@ module.exports = NodeHelper.create({
 
     // API Status tracking - maps endpoint to last HTTP status code
     this._apiStatusBySession = new Map(); // sessionKey -> { timetable: 200, exams: 403, ... }
-    // Initialize CacheManager for class ID and other caching
-    this.cacheManager = new CacheManager(this._mmLog.bind(this));
     // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
     // Multi-instance support: store config per identifier
@@ -148,7 +101,7 @@ module.exports = NodeHelper.create({
   _getAuthServiceForIdentifier(identifier) {
     if (!this._authServicesByIdentifier.has(identifier)) {
       // Creating AuthService silently
-      this._authServicesByIdentifier.set(identifier, new AuthService({ logger: this._libLogger }));
+      this._authServicesByIdentifier.set(identifier, WebUntisClient.createAuthService({ logger: this._libLogger }));
     }
     return this._authServicesByIdentifier.get(identifier);
   },
@@ -212,22 +165,6 @@ module.exports = NodeHelper.create({
     return normalizedConfig;
   },
 
-  /**
-   * Invoke a REST helper with a target descriptor (school/server + credentials).
-   * Keeps call sites concise and consistent by wrapping context objects.
-   *
-   * @param {Function} fn - REST API function to call (e.g., _getTimetableViaRest)
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {...any} args - Additional arguments to pass to the function
-   * @returns {Promise<any>} Result from the REST API function
-   */
-  async _callRest(fn, authCtx, sessionCtx, logCtx, flagsCtx, ...args) {
-    return fn.call(this, authCtx, sessionCtx, logCtx, flagsCtx, ...args);
-  },
-
   // ---------------------------------------------------------------------------
   // Logging and error helpers
   // ---------------------------------------------------------------------------
@@ -270,23 +207,14 @@ module.exports = NodeHelper.create({
 
   /**
    * Format error objects into human-readable strings
-   * Delegates to errorHandler module for consistent error formatting
+   * Delegates to WebUntisClient static helper for consistent error formatting
    *
    * @param {Error|any} err - Error object or value to format
    * @returns {string} Formatted error message
    */
   _formatErr(err) {
-    return errorHandler.formatError(err);
+    return WebUntisClient.formatError(err);
   },
-
-  /**
-   * Map REST API HTTP status codes to legacy JSON-RPC code format
-   * This maintains compatibility with legacy error handling code
-   *
-   * @param {number} status - HTTP status code (e.g., 200, 401, 403, 404, 500)
-   * @param {string} substitutionText - Optional text to include in error message
-   * @returns {number} Legacy code format for frontend consumption
-   */
   /**
    * Cleanup old debug dumps, keeping only the N most recent files
    * @param {string} dumpDir - Directory containing debug dump files
@@ -333,715 +261,6 @@ module.exports = NodeHelper.create({
       mmLog: this._mmLog.bind(this),
       formatErr: this._formatErr.bind(this),
     };
-  },
-
-  /**
-   * Collect class candidates from WebUntis API response data
-   * Reads structured class information from known API response fields:
-   *   - timetable/filter: data.classes[].class
-   *   - classservices: data (direct array or nested structure)
-   *
-   * @param {any} data - API response data (object or array)
-   * @returns {Array} Array of class candidates with {id, name, shortName, longName}
-   */
-  _collectClassCandidates(data) {
-    const candidates = new Map(); // id -> candidate
-
-    // Helper to add a class candidate
-    const addCandidate = (classObj) => {
-      if (!classObj || typeof classObj !== 'object') return;
-      if (!classObj.id) return;
-
-      const name = classObj.shortName || classObj.displayName || classObj.name || classObj.longName;
-      if (!name) return;
-
-      if (!candidates.has(classObj.id)) {
-        candidates.set(classObj.id, {
-          id: classObj.id,
-          name: name,
-          shortName: classObj.shortName || classObj.displayName || name,
-          longName: classObj.longName || name,
-        });
-      }
-    };
-
-    // Strategy 1: timetable/filter response format - classes in structured array
-    // Example: { classes: [{ class: {...}, classTeacher1: {...}, classTeacher2: {...} }] }
-    if (data?.classes && Array.isArray(data.classes)) {
-      data.classes.forEach((item) => {
-        if (item.class) {
-          addCandidate(item.class); // Read from classes[].class
-        }
-      });
-    }
-
-    // Strategy 2: classservices response format - array of class objects
-    // Could be direct array or nested in data.data
-    const classArray = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : null;
-    if (classArray) {
-      classArray.forEach((item) => {
-        // Only add items that have type='CLASS' or look like class objects
-        const type = (item.resourceType || item.elementType || item.type || '').toString().toUpperCase();
-        if (!type || type === 'CLASS') {
-          addCandidate(item);
-        }
-      });
-    }
-
-    // Strategy 3: Single class object (fallback)
-    if (data?.id && (data.shortName || data.longName || data.displayName)) {
-      addCandidate(data);
-    }
-
-    return Array.from(candidates.values());
-  },
-
-  /**
-   * Resolve class ID from class name using REST API
-   * Strategy depends on user role:
-   *   - LEGAL_GUARDIAN: Uses classservices API (provides studentId→classId mapping)
-   *   - STUDENT/TEACHER: Uses timetable/filter API (provides preSelected class)
-   * Caches results for 24 hours to avoid repeated API calls
-   *
-   * Priority order:
-   *   1. personKlasseMap (LEGAL_GUARDIAN only) - maps studentId to classId
-   *   2. preSelected class from timetable/filter (STUDENT/TEACHER) - WebUntis assignment
-   *   3. Match by configured className (case-insensitive)
-   *   4. Auto-select if only one class available
-   *
-   * @param {Object} authCtx - Authentication context (server, credentials, authService)
-   * @param {Object} sessionCtx - Session context (for tracking)
-   * @param {Date} rangeStart - Start date for the query range
-   * @param {Date} rangeEnd - End date for the query range
-   * @param {string} className - Name of the class to search for (e.g., "5a", "10B")
-   * @param {string} role - User role (STUDENT, LEGAL_GUARDIAN, TEACHER)
-   * @param {Object} options - Additional options (studentId for parent accounts)
-   * @returns {Promise<number>} Resolved class ID
-   */
-  async _resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className, role, options = {}) {
-    const { school, username, password, server, qrCodeUrl, cacheKey, authService } = authCtx || {};
-    const desiredName = className && String(className).trim();
-    const studentId = options?.studentId;
-    const cacheKeyBase = cacheKey || `user:${username || 'session'}@${server || school || 'default'}`;
-    // Cache key includes role, studentId (for parents), and className to allow different resolutions per config
-    const roleKey = String(role || 'unknown').toLowerCase();
-    const studentKey = studentId ? `student${studentId}` : 'nostudent';
-    const classCacheKey = `${cacheKeyBase}::class::${roleKey}::${studentKey}::${(desiredName || 'auto').toLowerCase()}`;
-    if (this.cacheManager.has('classId', classCacheKey)) {
-      return this.cacheManager.get('classId', classCacheKey);
-    }
-
-    // Date formatting helper for API request
-    // ISO format (YYYY-MM-DD) for timetable/filter endpoint
-    const formatDateISO = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-
-    // Integer format (YYYYMMDD) for classservices endpoint
-    const formatDateInt = (date) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      return `${year}${month}${day}`;
-    };
-
-    // Authenticate using authService (handles caching internally)
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-    const authOptions = this._getStandardAuthOptions({ cacheKey: cacheKeyBase });
-    const authResult = qrCodeUrl
-      ? await authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: cacheKeyBase })
-      : await authService.getAuth({
-          school,
-          username,
-          password,
-          server,
-          options: authOptions,
-        });
-    const { token, cookieString, tenantId, schoolYearId } = authResult || {};
-
-    if (!cookieString) {
-      throw new Error('Missing REST auth cookies for class resolution');
-    }
-
-    // Build REST API headers with authentication tokens
-    const headers = {
-      Cookie: cookieString,
-      Accept: 'application/json',
-    };
-    if (tenantId) headers['Tenant-Id'] = String(tenantId);
-    if (schoolYearId) headers['X-Webuntis-Api-School-Year-Id'] = String(schoolYearId);
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    let candidates = [];
-    let preSelectedClassId = null;
-
-    // Strategy depends on role:
-    // - Parent roles (LEGAL_GUARDIAN, PARENT, GUARDIAN, ELTERN): Use classservices (provides studentId→classId mapping)
-    // - STUDENT/TEACHER: Use timetable/filter (provides preSelected class)
-    // Check multiple variants of parent role names (different WebUntis instances may use different role names)
-    const normalizedRole = role ? String(role).toUpperCase() : '';
-    const isParentAccount =
-      normalizedRole.includes('LEGAL_GUARDIAN') ||
-      normalizedRole.includes('GUARDIAN') ||
-      normalizedRole.includes('PARENT') ||
-      normalizedRole.includes('ELTERN');
-
-    if (isParentAccount && studentId) {
-      // ===== Strategy 1: Classservices For Parent Accounts =====
-      this._mmLog(
-        'debug',
-        null,
-        `[REST] Parent account detected (role=${role}): fetching class information via classservices (studentId=${studentId})`
-      );
-      try {
-        const url = new URL(`https://${server}/WebUntis/api/classreg/classservices`);
-        url.searchParams.append('startDate', formatDateInt(rangeStart));
-        url.searchParams.append('endDate', formatDateInt(rangeEnd));
-        url.searchParams.append('elementId', studentId);
-
-        this._mmLog('debug', null, `[REST] classservices API: ${url.toString()}`);
-
-        const resp = await fetchClient.get(url.toString(), {
-          headers,
-          timeout: 15000,
-        });
-
-        if (resp.data) {
-          candidates = this._collectClassCandidates(resp.data);
-
-          // Extract personKlasseMap (maps studentId to classId)
-          const map = resp.data?.personKlasseMap || resp.data?.data?.personKlasseMap;
-          if (map && typeof map === 'object') {
-            const mapSummary = Object.entries(map)
-              .map(([k, v]) => `${k}→${v}`)
-              .join(', ');
-            this._mmLog('debug', null, `[REST] personKlasseMap: ${mapSummary}`);
-
-            // Try to resolve classId from studentId mapping
-            const mappedClassId = map[String(studentId)];
-            if (mappedClassId) {
-              preSelectedClassId = Number(mappedClassId);
-              this._mmLog('info', null, `[REST] personKlasseMap: studentId ${studentId} → classId ${preSelectedClassId}`);
-            } else {
-              this._mmLog('warn', null, `[REST] personKlasseMap: studentId ${studentId} not found in map`);
-            }
-          }
-
-          this._mmLog('debug', null, `[REST] classservices returned ${candidates.length} class candidates`);
-        }
-      } catch (err) {
-        this._mmLog('debug', null, `[REST] classservices error: ${this._formatErr(err)}`);
-      }
-    } else {
-      // ===== Strategy 2: Timetable Filter For Student/Teacher Accounts =====
-      this._mmLog(
-        'debug',
-        null,
-        `[REST] Student/Teacher account (role=${role || 'unknown'}): fetching class information via timetable/filter`
-      );
-      try {
-        const url = new URL(`https://${server}/WebUntis/api/rest/view/v1/timetable/filter`);
-        url.searchParams.append('resourceType', 'CLASS');
-        url.searchParams.append('timetableType', 'STANDARD');
-        url.searchParams.append('start', formatDateISO(rangeStart));
-        url.searchParams.append('end', formatDateISO(rangeEnd));
-
-        this._mmLog('debug', null, `[REST] timetable/filter API: ${url.toString()}`);
-
-        const resp = await fetchClient.get(url.toString(), {
-          headers,
-          timeout: 15000,
-        });
-
-        if (resp.data) {
-          candidates = this._collectClassCandidates(resp.data);
-
-          // Extract preSelected class (the student's/teacher's assigned class)
-          const preSelected = resp.data?.preSelected || resp.data?.data?.preSelected;
-          if (preSelected && preSelected.id) {
-            preSelectedClassId = Number(preSelected.id);
-            this._mmLog(
-              'info',
-              null,
-              `[REST] preSelected class detected: ${preSelected.displayName || preSelected.shortName || preSelected.longName} (id=${preSelectedClassId})`
-            );
-          }
-
-          this._mmLog('debug', null, `[REST] timetable/filter returned ${candidates.length} class candidates`);
-        }
-      } catch (err) {
-        this._mmLog('debug', null, `[REST] timetable/filter error: ${this._formatErr(err)}`);
-      }
-    }
-
-    if (!candidates || candidates.length === 0) {
-      throw new Error('No accessible classes returned by REST API');
-    }
-
-    let chosen = null;
-
-    // PRIORITY 1: Use preSelected/mapped class (personKlasseMap for parents, preSelected for students)
-    // This is the class WebUntis associates with the authenticated user
-    if (preSelectedClassId) {
-      if (candidates.some((c) => Number(c.id) === Number(preSelectedClassId))) {
-        chosen = candidates.find((c) => Number(c.id) === Number(preSelectedClassId));
-        const source = isParentAccount ? 'personKlasseMap' : 'preSelected';
-        this._mmLog('info', null, `[REST] ✓ ${source} class: ${chosen.name} (classId=${preSelectedClassId})`);
-      } else {
-        this._mmLog('warn', null, `[REST] preSelected/mapped classId=${preSelectedClassId} not found in candidates`);
-      }
-    }
-
-    // PRIORITY 2: Match by configured class name (case-insensitive)
-    if (!chosen && desiredName) {
-      const desiredLower = desiredName.toLowerCase();
-      chosen = candidates.find((c) =>
-        [c.name, c.shortName, c.longName].filter(Boolean).some((n) => String(n).toLowerCase() === desiredLower)
-      );
-      if (chosen) {
-        this._mmLog('info', null, `[REST] ✓ Matched className="${desiredName}" to classId=${chosen.id} (${chosen.name})`);
-      } else {
-        this._mmLog('warn', null, `[REST] className="${desiredName}" not found in candidates`);
-      }
-    }
-
-    // PRIORITY 3: If no class name configured and only one class exists, auto-select it
-    if (!chosen && !desiredName && candidates.length === 1) {
-      chosen = candidates[0];
-      this._mmLog('info', null, `[REST] ✓ Auto-selected sole available class ${chosen.name} (classId=${chosen.id})`);
-    }
-
-    // No match found - provide helpful error message with available classes
-    if (!chosen) {
-      const available = candidates
-        .map((c) => `${c.name || c.shortName || c.longName || c.id}`)
-        .filter(Boolean)
-        .join(', ');
-      const hint = desiredName ? `Class "${desiredName}" not found. Available: ${available}` : `Multiple classes available: ${available}`;
-      throw new Error(hint);
-    }
-
-    // Cache the resolved class ID for 24 hours to avoid repeated API calls
-    this.cacheManager.set('classId', classCacheKey, chosen.id, 24 * 60 * 60 * 1000); // TTL: 24 hours
-    return chosen.id;
-  },
-
-  /**
-   * Get timetable data via REST API using unified restClient
-   *
-   * Supports both:
-   *   - Person timetable (student's personal schedule)
-   *   - Class timetable (entire class schedule, requires class ID resolution)
-   *
-   * Uses API status tracking to skip permanent errors (403, 404, 410).
-   *
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {Date} rangeStart - Start date for timetable query
-   * @param {Date} rangeEnd - End date for timetable query
-   * @param {number} personId - Person ID (student or parent)
-   * @param {Object} options - Additional options (classId, className, studentId)
-   * @param {boolean} useClassTimetable - Whether to fetch class timetable instead of personal
-   * @param {string} className - Class name for resolution (e.g., "5a")
-   * @param {string} resourceType - Resource type filter (CLASS, TEACHER, SUBJECT, ROOM)
-   * @returns {Promise<Array>} Timetable array with lesson entries
-   */
-  async _getTimetableViaRest(
-    authCtx,
-    sessionCtx,
-    logCtx,
-    flagsCtx,
-    rangeStart,
-    rangeEnd,
-    personId,
-    options = {},
-    useClassTimetable = false,
-    className = null,
-    resourceType = null
-  ) {
-    const { sessionKey, authRefreshTracker } = sessionCtx || {};
-    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
-    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
-    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
-    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
-
-    // Check if API should be skipped based on previous status
-    if (sessionKey && this._shouldSkipApi(sessionKey, 'timetable')) {
-      const prevStatus = this._apiStatusBySession.get(sessionKey).timetable;
-      mmLog('debug', null, `[timetable] Skipping API call due to previous status ${prevStatus} (permanent error)`);
-      return [];
-    }
-
-    const wantsClass = Boolean(useClassTimetable || options.useClassTimetable);
-    let classId = options.classId;
-    const role = options.role || sessionCtx?.authSession?.role || null;
-    // Resolve class ID if needed
-    if (wantsClass && !classId) {
-      classId = await this._resolveClassIdViaRest(authCtx, sessionCtx, rangeStart, rangeEnd, className || options.className || null, role, {
-        ...options,
-        personId,
-        studentId: options.studentId || personId,
-      });
-    }
-
-    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
-
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-
-    let response;
-    try {
-      response = await webuntisApiService.getTimetable({
-        getAuth: () =>
-          qrCodeUrl
-            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth({
-                school,
-                username,
-                password,
-                server,
-                options: authOptions,
-              }),
-        onAuthError: () => {
-          if (authRefreshTracker) authRefreshTracker.refreshed = true;
-          return authService.invalidateCache(effectiveCacheKey);
-        },
-        server,
-        rangeStart,
-        rangeEnd,
-        personId,
-        useClassTimetable: wantsClass,
-        classId,
-        resourceType: resourceType || null,
-        logger: this._mmLog.bind(this),
-        debugApi: Boolean(debugApi),
-        dumpRaw: Boolean(dumpRawApiResponses),
-      });
-    } catch (err) {
-      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'timetable', err);
-      throw err;
-    }
-
-    // Track API status if sessionKey provided
-    if (sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(sessionKey)) {
-        this._apiStatusBySession.set(sessionKey, {});
-      }
-      this._apiStatusBySession.get(sessionKey).timetable = response.status;
-    }
-
-    return response.data;
-  },
-
-  /**
-   * Get exams data via REST API
-   * Fetches upcoming exams/tests for the specified person and date range
-   *
-   * Uses API status tracking to skip permanent errors (403, 404, 410).
-   *
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {Date} rangeStart - Start date for exams query
-   * @param {Date} rangeEnd - End date for exams query
-   * @param {number} personId - Person ID (student)
-   * @returns {Promise<Array>} Exams array with exam entries
-   */
-  async _getExamsViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
-    const { sessionKey, authRefreshTracker } = sessionCtx || {};
-    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
-    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
-    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
-    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
-
-    // Check if API should be skipped based on previous status
-    if (sessionKey && this._shouldSkipApi(sessionKey, 'exams')) {
-      const prevStatus = this._apiStatusBySession.get(sessionKey).exams;
-      mmLog('debug', null, `[exams] Skipping API call due to previous status ${prevStatus} (permanent error)`);
-      return [];
-    }
-
-    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
-
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-
-    let response;
-    try {
-      response = await webuntisApiService.getExams({
-        getAuth: () =>
-          qrCodeUrl
-            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth({
-                school,
-                username,
-                password,
-                server,
-                options: authOptions,
-              }),
-        onAuthError: () => {
-          if (authRefreshTracker) authRefreshTracker.refreshed = true;
-          return authService.invalidateCache(effectiveCacheKey);
-        },
-        server,
-        rangeStart,
-        rangeEnd,
-        personId,
-        logger: this._mmLog.bind(this),
-        normalizeDate: this._normalizeDateToInteger.bind(this),
-        normalizeTime: this._normalizeTimeToMinutes.bind(this),
-        sanitizeHtml: this._sanitizeHtmlText.bind(this),
-        debugApi: Boolean(debugApi),
-        dumpRaw: Boolean(dumpRawApiResponses),
-      });
-    } catch (err) {
-      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'exams', err);
-      throw err;
-    }
-
-    // Track API status
-    if (sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(sessionKey)) {
-        this._apiStatusBySession.set(sessionKey, {});
-      }
-      this._apiStatusBySession.get(sessionKey).exams = response.status;
-    }
-
-    return response.data;
-  },
-
-  /**
-   * Get homework data via REST API
-   * Fetches homework assignments for the specified person and date range
-   *
-   * Uses API status tracking to skip permanent errors (403, 404, 410).
-   *
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {Date} rangeStart - Start date for homework query
-   * @param {Date} rangeEnd - End date for homework query
-   * @param {number} personId - Person ID (student)
-   * @returns {Promise<Array>} Homework array with homework entries
-   */
-  async _getHomeworkViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
-    const { sessionKey, authRefreshTracker } = sessionCtx || {};
-    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
-    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
-    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
-    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
-
-    // Check if API should be skipped based on previous status
-    if (sessionKey && this._shouldSkipApi(sessionKey, 'homework')) {
-      const prevStatus = this._apiStatusBySession.get(sessionKey).homework;
-      mmLog('debug', null, `[homework] Skipping API call due to previous status ${prevStatus} (permanent error)`);
-      return [];
-    }
-
-    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
-
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-
-    let response;
-    try {
-      response = await webuntisApiService.getHomework({
-        getAuth: () =>
-          qrCodeUrl
-            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth({
-                school,
-                username,
-                password,
-                server,
-                options: authOptions,
-              }),
-        onAuthError: () => {
-          if (authRefreshTracker) authRefreshTracker.refreshed = true;
-          return authService.invalidateCache(effectiveCacheKey);
-        },
-        server,
-        rangeStart,
-        rangeEnd,
-        personId,
-        logger: this._mmLog.bind(this),
-        debugApi: Boolean(debugApi),
-        dumpRaw: Boolean(dumpRawApiResponses),
-      });
-    } catch (err) {
-      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'homework', err);
-      throw err;
-    }
-
-    // Track API status
-    if (sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(sessionKey)) {
-        this._apiStatusBySession.set(sessionKey, {});
-      }
-      this._apiStatusBySession.get(sessionKey).homework = response.status;
-    }
-
-    return response.data;
-  },
-
-  /**
-   * Get absences data via REST API
-   * Fetches absence records for the specified person and date range
-   *
-   * Uses API status tracking to skip permanent errors (403, 404, 410).
-   *
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {Date} rangeStart - Start date for absences query
-   * @param {Date} rangeEnd - End date for absences query
-   * @param {number} personId - Person ID (student)
-   * @returns {Promise<Array>} Absences array with absence entries
-   */
-  async _getAbsencesViaRest(authCtx, sessionCtx, logCtx, flagsCtx, rangeStart, rangeEnd, personId) {
-    const { sessionKey, authRefreshTracker } = sessionCtx || {};
-    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
-    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
-    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
-    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
-
-    // Check if API should be skipped based on previous status
-    if (sessionKey && this._shouldSkipApi(sessionKey, 'absences')) {
-      const prevStatus = this._apiStatusBySession.get(sessionKey).absences;
-      mmLog('debug', null, `[absences] Skipping API call due to previous status ${prevStatus} (permanent error)`);
-      return [];
-    }
-
-    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
-
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-
-    let response;
-    try {
-      response = await webuntisApiService.getAbsences({
-        getAuth: () =>
-          qrCodeUrl
-            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth({
-                school,
-                username,
-                password,
-                server,
-                options: authOptions,
-              }),
-        onAuthError: () => {
-          if (authRefreshTracker) authRefreshTracker.refreshed = true;
-          return authService.invalidateCache(effectiveCacheKey);
-        },
-        server,
-        rangeStart,
-        rangeEnd,
-        personId,
-        logger: this._mmLog.bind(this),
-        debugApi: Boolean(debugApi),
-        dumpRaw: Boolean(dumpRawApiResponses),
-      });
-    } catch (err) {
-      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'absences', err);
-      throw err;
-    }
-
-    // Track API status
-    if (sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(sessionKey)) {
-        this._apiStatusBySession.set(sessionKey, {});
-      }
-      this._apiStatusBySession.get(sessionKey).absences = response.status;
-    }
-
-    return response.data;
-  },
-
-  /**
-   * Get messages of day via REST API
-   * Fetches school announcements/messages for a specific date
-   *
-   * Uses API status tracking to skip permanent errors (403, 404, 410).
-   *
-   * @param {Object} authCtx - Authentication context (authService, credentials, cacheKey)
-   * @param {Object} sessionCtx - Session context (sessionKey, authRefreshTracker)
-   * @param {Object} logCtx - Logging context (logger, mmLog, formatErr)
-   * @param {Object} flagsCtx - Debug flags (debugApi, dumpRawApiResponses)
-   * @param {Date} date - Date for messages query (typically today)
-   * @returns {Promise<Array>} Messages array with message entries
-   */
-  async _getMessagesOfDayViaRest(authCtx, sessionCtx, logCtx, flagsCtx, date) {
-    const { sessionKey, authRefreshTracker } = sessionCtx || {};
-    const { debugApi, dumpRawApiResponses } = flagsCtx || {};
-    const { authService, qrCodeUrl, cacheKey, school, server, username, password } = authCtx || {};
-    const effectiveCacheKey = cacheKey || `user:${username}@${server}/${school}`;
-    const mmLog = logCtx?.mmLog || this._mmLog.bind(this);
-
-    // Check if API should be skipped based on previous status
-    if (sessionKey && this._shouldSkipApi(sessionKey, 'messagesOfDay')) {
-      const prevStatus = this._apiStatusBySession.get(sessionKey).messagesOfDay;
-      mmLog('debug', null, `[messagesOfDay] Skipping API call due to previous status ${prevStatus} (permanent error)`);
-      return [];
-    }
-
-    const authOptions = this._getStandardAuthOptions({ cacheKey: effectiveCacheKey });
-
-    if (!authService) {
-      throw new Error('AuthService not available in authCtx');
-    }
-
-    let response;
-    try {
-      response = await webuntisApiService.getMessagesOfDay({
-        getAuth: () =>
-          qrCodeUrl
-            ? authService.getAuthFromQRCode(qrCodeUrl, { cacheKey: effectiveCacheKey })
-            : authService.getAuth({
-                school,
-                username,
-                password,
-                server,
-                options: authOptions,
-              }),
-        onAuthError: () => {
-          if (authRefreshTracker) authRefreshTracker.refreshed = true;
-          return authService.invalidateCache(effectiveCacheKey);
-        },
-        server,
-        date,
-        logger: this._mmLog.bind(this),
-        debugApi: Boolean(debugApi),
-        dumpRaw: Boolean(dumpRawApiResponses),
-      });
-    } catch (err) {
-      if (sessionKey) this._recordApiStatusFromError(sessionKey, 'messagesOfDay', err);
-      throw err;
-    }
-
-    // Track API status
-    if (sessionKey && response.status) {
-      if (!this._apiStatusBySession.has(sessionKey)) {
-        this._apiStatusBySession.set(sessionKey, {});
-      }
-      this._apiStatusBySession.get(sessionKey).messagesOfDay = response.status;
-    }
-
-    return response.data;
   },
 
   /**
@@ -1447,27 +666,6 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Sanitize HTML text
-   */
-  _sanitizeHtmlText(text, preserveLineBreaks = true) {
-    return sanitizeHtmlText(text, preserveLineBreaks);
-  },
-
-  /**
-   * Normalize date format
-   */
-  _normalizeDateToInteger(date) {
-    return normalizeDateToInteger(date);
-  },
-
-  /**
-   * Normalize time format
-   */
-  _normalizeTimeToMinutes(time) {
-    return normalizeTimeToMinutes(time);
-  },
-
-  /**
    * Compact holidays data from WebUntis API
    * Handles both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
    * Normalizes all dates to YYYYMMDD integer format
@@ -1519,15 +717,15 @@ module.exports = NodeHelper.create({
         // Check if holidays are directly in appData or nested
         if (Array.isArray(authSession.appData.holidays)) {
           rawHolidays = authSession.appData.holidays;
-          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData (no API call needed)`);
+          // this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData (no API call needed)`);
         } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
           rawHolidays = authSession.appData.data.holidays;
-          this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData.data (no API call needed)`);
+          // this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData.data (no API call needed)`);
         } else {
-          this._mmLog('debug', null, 'Holidays: not found in appData (no API call - holidays unavailable)');
+          // this._mmLog('debug', null, 'Holidays: not found in appData (no API call - holidays unavailable)');
         }
       } else {
-        this._mmLog('debug', null, 'Holidays: no appData available');
+        // this._mmLog('debug', null, 'Holidays: no appData available');
       }
     } catch (error) {
       this._mmLog('error', null, `Holidays extraction failed: ${error && error.message ? error.message : error}`);
@@ -1582,20 +780,6 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Convert REST API errors to user-friendly warning messages
-   */
-  _convertRestErrorToWarning(error, context = {}) {
-    return errorHandler.convertRestErrorToWarning(error, context);
-  },
-
-  /**
-   * Check if empty data array should trigger a warning
-   */
-  _checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData = true) {
-    return errorHandler.checkEmptyDataWarning(dataArray, dataType, studentTitle, isExpectedData);
-  },
-
-  /**
    * Validate module configuration for common issues
    */
   _validateModuleConfig(config) {
@@ -1629,13 +813,6 @@ module.exports = NodeHelper.create({
 
   // Backend performs API calls only; no data normalization here.
 
-  /*
-   * Small in-memory cache helpers keyed by a request signature (stringified
-
-
-
-
-
   /**
    * Process a credential group: authenticate, fetch data for all students, send to frontend
    * This is the main orchestration function that:
@@ -1654,7 +831,7 @@ module.exports = NodeHelper.create({
    * @returns {Promise<void>}
    */
   async processGroup(credKey, students, identifier, sessionKey, config) {
-    // Single-run processing: authenticate (authService handles caching), fetch data for each student, and logout.
+    // Single-run processing: authenticate (authService handles caching) and fetch data for each student.
     let authSession;
     const sample = students[0];
     const groupWarnings = [];
@@ -1783,11 +960,11 @@ module.exports = NodeHelper.create({
       const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
       if (shouldFetchHolidays) {
-        this._mmLog(
-          'debug',
-          null,
-          `Holidays extracted for group: ${sharedCompactHolidays.length} periods (shared across ${students.length} students)`
-        );
+        // this._mmLog(
+        //   'debug',
+        //   null,
+        //   `Holidays extracted for group: ${sharedCompactHolidays.length} periods (shared across ${students.length} students)`
+        // );
       }
 
       // Authentication complete via authService (no explicit login() needed)
@@ -1831,7 +1008,7 @@ module.exports = NodeHelper.create({
           this._mmLog('error', student, errorMsg);
 
           // ===== REST Error Warning Conversion =====
-          const warningMsg = this._convertRestErrorToWarning(err, {
+          const warningMsg = WebUntisClient.convertRestErrorToWarning(err, {
             studentTitle: student.title,
             school: student.school || config?.school,
             server: student.server || config?.server || 'webuntis.com',
@@ -2294,15 +1471,7 @@ module.exports = NodeHelper.create({
 
   /**
    * Main data fetch orchestrator for a single student
-   * This simplified version delegates to specialized modules:
-   *   - lib/dateRangeCalculator.js: calculates date ranges for all data types
-   *   - lib/dataFetchOrchestrator.js: fetches all data in parallel (2.7x speedup vs sequential)
-   *   - lib/payloadBuilder.js: builds GOT_DATA payload with compacting and warnings
-   *
-   * Flow:
-   *   1. Calculate date ranges (nextDays, previousDays, examsDays, etc.)
-   *   2. Fetch all data types in parallel (timetable-first strategy prevents silent token failures)
-   *   3. Build and return compacted payload for frontend
+   * Delegates orchestrating, API calls, and payload creation to WebUntisClient.
    *
    * @param {Object} authSession - Authenticated session with server, school, cookies, token
    * @param {Object} student - Student config object
@@ -2314,261 +1483,33 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
    */
   async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey) {
-    // Accept both logger(message) and logger(level, student, message) signatures
-    // This provides flexibility for calling code while maintaining consistent logging
-    const logger = (...args) => {
-      // Standard signature: logger(level, student, message)
-      if (args.length >= 3 && typeof args[0] === 'string' && typeof args[2] === 'string') {
-        const [level, studentCtx, message] = args;
-        this._mmLog(level || 'debug', studentCtx || student, message);
-        return;
-      }
-
-      // logger(level, message)
-      if (args.length === 2 && typeof args[0] === 'string' && typeof args[1] === 'string') {
-        const [level, message] = args;
-        this._mmLog(level || 'debug', student, message);
-        return;
-      }
-
-      // Fallback: treat first argument as message
-      const [msg] = args;
-      this._mmLog('debug', student, typeof msg === 'string' ? msg : JSON.stringify(msg));
-    };
-
-    // Build context objects for passing to API functions
-    // These group related parameters to keep function signatures clean
-    const logCtx = {
-      logger,
+    const client = new WebUntisClient({
       mmLog: this._mmLog.bind(this),
       formatErr: this._formatErr.bind(this),
-    };
-
-    const authRefreshTracker = { refreshed: false };
-    const authCtx = {
-      authService: config._authService,
-      cacheKey: credKey,
-      qrCodeUrl: authSession.qrCodeUrl || null,
-      school: authSession.school,
-      server: authSession.server,
-      username: authSession.username || null,
-      password: authSession.password || null,
-    };
-    const sessionCtx = {
-      sessionKey,
-      authRefreshTracker,
-      authSession,
-    };
-    const flagsCtx = {
-      debugApi: Boolean(config.debugApi),
-      dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
-    };
-
-    const { school, server } = authSession;
-    const ownPersonId = authSession.personId;
-    const bearerToken = authSession.token;
-    const appData = authSession.appData;
-    const role = authSession.role || null;
-    const authService = config._authService;
-    const restTargets = authService.buildRestTargets(student, config, school, server, ownPersonId, bearerToken, appData, role);
-
-    // Log built REST targets for debugging
-    if (restTargets && restTargets.length > 0) {
-      const targetSummaries = restTargets.map((t) => {
-        const roleLabel = t.role || 'unknown';
-        const personIdLabel = t.personId ? `personId=${t.personId}` : 'personId=null';
-        const serverLabel = t.server || 'unknown-server';
-        return `${roleLabel} (${personIdLabel}, ${serverLabel})`;
-      });
-      this._mmLog('debug', student, `REST targets: ${targetSummaries.join(', ')}`);
-    }
-
-    // Verify REST targets were successfully built
-    // If empty, authentication likely failed or credentials are invalid
-    if (!restTargets || restTargets.length === 0) {
-      const hasQrCode = Boolean(student.qrcode);
-      const hasStudentCreds = Boolean(student.username && student.password && student.school && student.server);
-      const hasParentCreds = Boolean(config?.username && config?.password);
-      const hasStudentId = Boolean(student.studentId && Number.isFinite(Number(student.studentId)));
-      const emptyStringCreds = student.username === '' || student.password === '';
-
-      let hint = 'Check authentication and credentials.';
-      if (emptyStringCreds) {
-        hint = 'Student credentials are empty strings - remove username/password fields or provide valid credentials.';
-      } else if (!hasQrCode && !hasStudentCreds && !hasParentCreds) {
-        hint =
-          'No credentials configured. Need either: (1) student.qrcode, (2) student username/password/school/server, or (3) config-level username/password with student.studentId.';
-      } else if (hasParentCreds && !hasStudentId) {
-        hint = 'Parent credentials configured but student.studentId is missing (required for parent mode).';
-      } else if (hasParentCreds && hasStudentId && (!appData || !appData.user || !appData.user.students)) {
-        hint =
-          'Parent credentials configured but appData.user.students is empty/missing (check if parent account has linked children in WebUntis).';
-      }
-
-      this._mmLog('warn', student, `No REST targets built - cannot fetch data! ${hint}`);
-    }
-
-    const describeTarget = (t) => {
-      const roleLabel = t.role || 'unknown';
-      if (t.role === 'LEGAL_GUARDIAN') {
-        return `${roleLabel} (parentId=${ownPersonId}, childId=${t.personId})`;
-      }
-      return `${roleLabel}${t.personId ? ` (id=${t.personId})` : ''}`;
-    };
-
-    const className = student.class || student.className || null;
-    const effectiveDisplayMode = student.displayMode || config.displayMode;
-
-    // Determine which widgets are requested based on displayMode configuration
-    // This controls which API endpoints we need to call
-    const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
-    const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
-    const wantsExamsWidget = this._wantsWidget('exams', effectiveDisplayMode);
-    const wantsHomeworkWidget = this._wantsWidget('homework', effectiveDisplayMode);
-    const wantsAbsencesWidget = this._wantsWidget('absences', effectiveDisplayMode);
-    const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', effectiveDisplayMode);
-
-    const fetchTimegrid = Boolean(wantsGridWidget || wantsLessonsWidget);
-    const fetchTimetable = Boolean(wantsGridWidget || wantsLessonsWidget);
-    const fetchExams = Boolean(wantsGridWidget || wantsExamsWidget);
-    const fetchHomeworks = Boolean(wantsGridWidget || wantsHomeworkWidget);
-    const fetchAbsences = Boolean(wantsGridWidget || wantsAbsencesWidget);
-    const fetchMessagesOfDay = Boolean(wantsMessagesOfDayWidget);
-    const fetchFlags = {
-      fetchTimegrid,
-      fetchTimetable,
-      fetchExams,
-      fetchHomeworks,
-      fetchAbsences,
-      fetchMessagesOfDay,
-    };
-
-    // Calculate base date (with optional debugDate support for testing)
-    // debugDate allows simulating "today" for testing future/past scenarios
-    const baseNow = function () {
-      try {
-        const dbg = (typeof config?.debugDate === 'string' && config.debugDate) || null;
-        if (dbg) {
-          const s = String(dbg).trim();
-          if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00');
-          if (/^\d{8}$/.test(s)) return new Date(`${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}T00:00:00`);
+      wantsWidget: this._wantsWidget.bind(this),
+      extractTimegridFromTimetable: this._extractTimegridFromTimetable.bind(this),
+      compactTimegrid: this._compactTimegrid.bind(this),
+      cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
+      getApiStatus: (key) => this._apiStatusBySession.get(key) || {},
+      shouldSkipApi: this._shouldSkipApi.bind(this),
+      recordApiStatusFromError: this._recordApiStatusFromError.bind(this),
+      setApiStatus: (key, endpoint, status) => {
+        if (!this._apiStatusBySession.has(key)) {
+          this._apiStatusBySession.set(key, {});
         }
-      } catch {
-        // fall through to real now
-      }
-      // Use local timezone date (important for schools in non-UTC timezones)
-      // This ensures date calculations match the school's local day
-      const now = new Date(Date.now());
-      const localDate = new Date(now.toLocaleString('en-US', { timeZone: config.timezone || 'Europe/Berlin' }));
-      return localDate;
-    }.call(this);
-
-    const todayYmd = baseNow.getFullYear() * 10000 + (baseNow.getMonth() + 1) * 100 + baseNow.getDate();
-
-    // ===== Step 1: Date Range Calculation =====
-    // This determines start/end dates for timetable, exams, homework, absences based on config
-    const dateRanges = calculateFetchRanges(student, config, baseNow, wantsGridWidget, fetchExams, fetchAbsences);
-
-    // Get Timegrid from appData if available (avoids extra API call)
-    // appData is fetched during authentication and includes the school's time schedule
-    let grid = [];
-    if (authSession?.appData?.currentSchoolYear?.timeGrid?.units) {
-      const units = authSession.appData.currentSchoolYear.timeGrid.units;
-      if (Array.isArray(units) && units.length > 0) {
-        grid = units.map((u) => ({
-          name: String(u.unitOfDay || u.period || ''),
-          startTime: u.startTime || 0,
-          endTime: u.endTime || 0,
-        }));
-      }
-    }
-
-    // ===== Step 2: Parallel Data Fetch =====
-    const fetchResults = await orchestrateFetch({
-      student,
-      dateRanges,
-      baseNow,
-      restTargets,
-      authCtx,
-      sessionCtx,
-      logCtx,
-      flagsCtx,
-      fetchFlags: {
-        fetchTimetable,
-        fetchExams,
-        fetchHomeworks,
-        fetchAbsences,
-        fetchMessagesOfDay,
+        this._apiStatusBySession.get(key)[endpoint] = status;
       },
-      callRest: this._callRest.bind(this),
-      getTimetableViaRest: this._getTimetableViaRest.bind(this),
-      getExamsViaRest: this._getExamsViaRest.bind(this),
-      getHomeworkViaRest: this._getHomeworkViaRest.bind(this),
-      getAbsencesViaRest: this._getAbsencesViaRest.bind(this),
-      getMessagesOfDayViaRest: this._getMessagesOfDayViaRest.bind(this),
-      logger: logCtx.logger,
-      describeTarget,
-      className,
-      currentFetchWarnings: this._currentFetchWarnings,
     });
 
-    const timetable = fetchResults.timetable;
-    const rawExams = fetchResults.exams;
-    const hwResult = fetchResults.homeworks;
-    const rawAbsences = fetchResults.absences;
-    const rawMessagesOfDay = fetchResults.messagesOfDay;
-
-    // Extract timegrid from timetable data if not available from appData
-    // This is a fallback for schools that don't include timegrid in appData
-    if (fetchTimegrid && grid.length === 0 && timetable.length > 0) {
-      grid = this._extractTimegridFromTimetable(timetable);
-    }
-
-    // Find active holiday for today (to show in widget if currently on holiday)
-    const findHolidayForDate = (ymd, holidays) => {
-      if (!Array.isArray(holidays) || holidays.length === 0) return null;
-      const dateNum = Number(ymd);
-      return holidays.find((h) => Number(h.startDate) <= dateNum && dateNum <= Number(h.endDate)) || null;
-    };
-    const activeHoliday = findHolidayForDate(todayYmd, compactHolidays);
-
-    // ===== Step 3: Payload Build =====
-    // This compacts all data, applies transformations, and adds warnings
-    try {
-      // Get API status for this session (includes HTTP status codes for each endpoint)
-      const apiStatus = this._apiStatusBySession.get(sessionKey) || {};
-
-      const payload = buildGotDataPayload({
-        student,
-        grid,
-        timetable,
-        rawExams,
-        hwResult,
-        rawAbsences,
-        rawMessagesOfDay,
-        compactHolidays,
-        fetchHomeworks,
-        fetchAbsences,
-        fetchMessagesOfDay,
-        dateRanges,
-        todayYmd,
-        fetchTimetable,
-        fetchFlags,
-        activeHoliday,
-        moduleId: identifier,
-        sessionId: sessionKey.split(':')[1],
-        moduleConfig: config,
-        currentFetchWarnings: this._currentFetchWarnings,
-        compactTimegrid: this._compactTimegrid.bind(this),
-        checkEmptyDataWarning: this._checkEmptyDataWarning.bind(this),
-        mmLog: this._mmLog.bind(this),
-        cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
-        apiStatus, // Include API status codes
-      });
-      return payload;
-    } catch (err) {
-      this._mmLog('error', student, `Failed to prepare payload for ${identifier}: ${this._formatErr(err)}`);
-      return null;
-    }
+    return client.fetchStudentData({
+      authSession,
+      student,
+      identifier,
+      credKey,
+      compactHolidays,
+      config,
+      sessionKey,
+      currentFetchWarnings: this._currentFetchWarnings,
+    });
   },
 });

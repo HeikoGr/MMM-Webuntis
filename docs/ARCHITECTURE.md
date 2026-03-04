@@ -776,7 +776,6 @@ Runtime warnings now live in a per-student map and disappear automatically once 
 | [`getDom()`](../MMM-Webuntis.js#L700) | L700 | Render all widgets | MagicMirror | `_getDisplayWidgets()`, `_renderWidgetTableRows()` |
 | [`_renderWidgetTableRows()`](../MMM-Webuntis.js#L283) | L283 | Render per-student tables | `getDom()` | Widget renderers (lessons/grid/exams/etc) |
 | [`_getDisplayWidgets()`](../MMM-Webuntis.js#L741) | L741 | Parse displayMode config | `getDom()` | — |
-| [`_filterTimetableRange()`](../MMM-Webuntis.js#L352) | L352 | Apply date filters | Widgets | — |
 | [`_scheduleDomUpdate()`](../MMM-Webuntis.js#L671) | L671 | Debounce DOM updates | `socketNotificationReceived()` | `updateDom()` |
 
 ### **Orchestration Services**

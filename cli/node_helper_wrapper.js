@@ -308,12 +308,27 @@ async function cmdFetch(flags) {
               continue;
             }
 
+            // If payload has data object (V2 format), use it
+            const dataObj = studentData.data || studentData;
+
             const results = {
-              timetable: Array.isArray(studentData.timetableRange) ? studentData.timetableRange.length : 0,
-              exams: Array.isArray(studentData.exams) ? studentData.exams.length : 0,
-              homework: Array.isArray(studentData.homeworks) ? studentData.homeworks.length : 0,
-              absences: Array.isArray(studentData.absences) ? studentData.absences.length : 0,
-              messagesofday: Array.isArray(studentData.messagesOfDay) ? studentData.messagesOfDay.length : 0,
+              timetable: Array.isArray(dataObj.lessons)
+                ? dataObj.lessons.length
+                : Array.isArray(dataObj.timetableRange)
+                  ? dataObj.timetableRange.length
+                  : 0,
+              exams: Array.isArray(dataObj.exams) ? dataObj.exams.length : 0,
+              homework: Array.isArray(dataObj.homework)
+                ? dataObj.homework.length
+                : Array.isArray(dataObj.homeworks)
+                  ? dataObj.homeworks.length
+                  : 0,
+              absences: Array.isArray(dataObj.absences) ? dataObj.absences.length : 0,
+              messagesofday: Array.isArray(dataObj.messages)
+                ? dataObj.messages.length
+                : Array.isArray(dataObj.messagesOfDay)
+                  ? dataObj.messagesOfDay.length
+                  : 0,
             };
 
             Log.wrapper_info(`\n  📊 Final Payload for "${title}":`);
