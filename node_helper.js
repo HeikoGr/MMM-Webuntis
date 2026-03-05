@@ -752,16 +752,23 @@ module.exports = NodeHelper.create({
   // ===== Warning Validation =====
 
   /**
+   * Merge multiple warning arrays into one flattened warning list.
+   *
+   * @param {...Array} warningGroups - Warning arrays from validators
+   * @returns {Array} Flattened warnings
+   */
+  _collectValidationWarnings(...warningGroups) {
+    return warningGroups.flat().filter((warning) => typeof warning === 'string' && warning.length > 0);
+  },
+
+  /**
    * Validate student credentials and configuration before attempting fetch
    */
   _validateStudentConfig(student) {
-    // Validate credentials
-    const credentialWarnings = widgetConfigValidator.validateStudentCredentials(student);
-
-    // Validate widget-specific configurations
-    const widgetWarnings = widgetConfigValidator.validateStudentWidgets(student);
-
-    return [...credentialWarnings, ...widgetWarnings];
+    return this._collectValidationWarnings(
+      widgetConfigValidator.validateStudentCredentials(student),
+      widgetConfigValidator.validateStudentWidgets(student)
+    );
   },
 
   /**
@@ -789,11 +796,7 @@ module.exports = NodeHelper.create({
       warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
     }
 
-    // Validate widget-specific configurations
-    const widgetWarnings = widgetConfigValidator.validateAllWidgets(config);
-    warnings.push(...widgetWarnings);
-
-    return warnings;
+    return this._collectValidationWarnings(warnings, widgetConfigValidator.validateAllWidgets(config));
   },
 
   // Backend performs API calls only; no data normalization here.
