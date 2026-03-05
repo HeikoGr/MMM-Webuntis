@@ -264,6 +264,32 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Authenticate with module-level parent credentials (QR or username/password).
+   * Centralizes parent auth flow used by student auto-discovery paths.
+   *
+   * @param {Object} moduleConfig - Module configuration object
+   * @param {string} server - Target server hostname
+   * @param {string|null} cacheKey - Optional cache key for username/password auth
+   * @returns {Promise<Object>} Auth result from authService
+   */
+  async _getParentAuthResult(moduleConfig, server, cacheKey = null) {
+    if (moduleConfig.qrcode) {
+      return moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
+        cacheKey: `parent-qr:${moduleConfig.qrcode}`,
+      });
+    }
+
+    const options = cacheKey ? this._getStandardAuthOptions({ cacheKey }) : this._getStandardAuthOptions();
+    return moduleConfig._authService.getAuth({
+      school: moduleConfig.school,
+      username: moduleConfig.username,
+      password: moduleConfig.password,
+      server,
+      options,
+    });
+  },
+
+  /**
    * Auto-discover students from parent account (app/data endpoint)
    * This function handles three scenarios:
    *   1. No students configured -> auto-discover all students from parent account
@@ -307,22 +333,8 @@ module.exports = NodeHelper.create({
         if (hasParentCreds) {
           const server = moduleConfig.server || 'webuntis.com';
           try {
-            let authResult;
-
             // Authenticate using parent credentials (QR code or username/password)
-            if (moduleConfig.qrcode) {
-              authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
-                cacheKey: `parent-qr:${moduleConfig.qrcode}`,
-              });
-            } else {
-              authResult = await moduleConfig._authService.getAuth({
-                school: moduleConfig.school,
-                username: moduleConfig.username,
-                password: moduleConfig.password,
-                server,
-                options: this._getStandardAuthOptions(),
-              });
-            }
+            const authResult = await this._getParentAuthResult(moduleConfig, server);
 
             autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
@@ -459,22 +471,8 @@ module.exports = NodeHelper.create({
       // SCENARIO 2: No students configured -> auto-discover from parent account
       // This is the default behavior when students[] is empty or not provided
       const server = moduleConfig.server || 'webuntis.com';
-      let authResult;
-
       // Use QR code auth if available (LEGAL_GUARDIAN), otherwise username/password
-      if (moduleConfig.qrcode) {
-        authResult = await moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
-          cacheKey: `parent-qr:${moduleConfig.qrcode}`,
-        });
-      } else {
-        authResult = await moduleConfig._authService.getAuth({
-          school: moduleConfig.school,
-          username: moduleConfig.username,
-          password: moduleConfig.password,
-          server,
-          options: this._getStandardAuthOptions({ cacheKey: `parent:${moduleConfig.username}@${server}` }),
-        });
-      }
+      const authResult = await this._getParentAuthResult(moduleConfig, server, `parent:${moduleConfig.username}@${server}`);
 
       autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
