@@ -34,7 +34,7 @@ graph TB
             WebClient["webuntisClient.js<br/>(Core Fetch Pipeline)"]
             Auth["authService.js<br/>(Auth & Token Cache)"]
             API["webuntisApiService.js<br/>(Unified API Client)"]
-            Orch["dataFetchOrchestrator.js<br/>(Parallel Fetch via Promise.all)"]
+            Orch["dataFetchOrchestrator.js<br/>(Timetable-first + Promise.all)"]
         end
 
         subgraph AdapterBuild["🔌 Adapter Build Layer (lib/webuntis-client)"]
@@ -145,7 +145,7 @@ graph TB
 
     subgraph Orch["🎯 Orchestration Layer (lib/webuntis)"]
         DataOrch["dataOrchestration.js<br/>(Transform & Ranges)"]
-        FetchOrch["dataFetchOrchestrator.js<br/>(Parallel Fetch)"]
+        FetchOrch["dataFetchOrchestrator.js<br/>(Timetable-first + parallel remainder)"]
     end
 
     subgraph Adapter["🔌 Adapter Layer (MagicMirror)"]
@@ -370,7 +370,9 @@ sequenceDiagram
     participant B as Browser
     participant FE as MMM-Webuntis.js
     participant NH as node_helper.js
+    participant Client as webuntisClient
     participant Orch as dataFetchOrchestrator
+    participant Mapper as mmmPayloadMapper
     participant Auth as authService
     participant HTTP as httpClient
     participant API as webuntisApiService
@@ -431,7 +433,8 @@ sequenceDiagram
 
     Note over NH,REST: ✨ Timetable-First + Parallel Fetching (prevents silent token failures)
     loop for each student
-        NH->>Orch: orchestrateFetch() L25
+        NH->>Client: fetchStudentData()
+        Client->>Orch: orchestrateFetch() L25
 
         Note over Orch: Step 0: If timetable disabled, run a minimal timetable call as auth canary
 
@@ -469,16 +472,19 @@ sequenceDiagram
             API-->>Orch: normalized messages
         end
 
-        Orch-->>NH: { timetable, exams, homeworks, absences, messagesOfDay }
+        Orch-->>Client: { timetable, exams, homeworks, absences, messagesOfDay }
     end
 
     Note over NH: Error Handling & Payload Building
-    NH->>PayBuild: buildGotDataPayload() L30
+    Client->>Mapper: mapBundleToMmmPayload()
+    Mapper->>PayBuild: buildGotDataPayload() L30
     PayBuild->>PayBuild: Compact arrays via schemas
     PayBuild->>PayBuild: Attach data.holidays.ranges + data.holidays.current
     PayBuild->>PayBuild: Collect & dedupe warnings
     PayBuild->>PayBuild: Generate debug dumps (optional)
-    PayBuild-->>NH: Complete GOT_DATA payload
+    PayBuild-->>Mapper: Complete GOT_DATA payload
+    Mapper-->>Client: GOT_DATA payload
+    Client-->>NH: GOT_DATA payload
 
     NH->>FE: sendSocketNotification('GOT_DATA', payload)
 
@@ -587,56 +593,70 @@ sequenceDiagram
     participant REST as WebUntis REST API
     participant ErrUtils as errorUtils<br/>wrapAsync()
 
-    Note over Orch: Parallel Fetch Orchestration (NEW)
-    Orch->>Orch: Build Promise.all() array<br/>for enabled data types
+    Note over Orch: Timetable-first orchestration (NEW)
 
-    par Timetable Fetch
-        Orch->>ErrUtils: wrapAsync(() => getTimetable())
-        ErrUtils->>API: getTimetable() L164
-        API->>Auth: getAuth() [checks cache first]
-
-        alt Token in cache & valid (< 14min)
-            Auth-->>API: return cached { token, cookies, tenantId }
-        else Token expired or missing
-            Auth->>REST: POST /jsonrpc.do (authenticate)
-            REST-->>Auth: sessionId, cookies (Set-Cookie)
-            Auth->>REST: GET /api/token/new
-            REST-->>Auth: bearer token (JWT)
-            Auth->>REST: GET /app/data (fetchClient)
-            REST-->>Auth: tenantId, schoolYearId, appData
-            Auth->>Auth: cacheManager.set() - 14min TTL
-            Auth-->>API: return { token, cookies, tenantId }
-        end
-
+    alt Timetable disabled but other APIs enabled
+        Orch->>ErrUtils: wrapAsync(() => auth canary via getTimetable())
+        ErrUtils->>API: getTimetable() minimal range
+        API->>Auth: getAuth() [cache-aware]
         API->>RC: callRestAPI('/timetable/entries', auth)
         RC->>REST: GET /WebUntis/api/rest/view/v1/timetable/entries
-        Note over REST: headers:<br/>Authorization: Bearer {token}<br/>Cookie: {session_cookies}<br/>Tenant-Id: {tenantId}<br/>X-Webuntis-Api-School-Year-Id: {schoolYearId}
-
-        alt Success
-            REST-->>RC: JSON response { data: [...] }
-            RC-->>API: return data[]
-            API->>API: dataTransformer.transformTimeTableData()
-            API-->>ErrUtils: return normalized timetable[]
-            ErrUtils-->>Orch: timetable[] (success)
-        else Error
-            REST-->>RC: HTTP error (4xx/5xx)
-            RC-->>API: throw error
-            API-->>ErrUtils: throw error
-            ErrUtils->>ErrUtils: Log error + convert to warning
-            ErrUtils->>ErrUtils: Add warning to warnings Set
-            ErrUtils-->>Orch: [] (fallback to empty array)
-        end
-    and Exams Fetch
-        Note over Orch,REST: Similar flow for exams endpoint
-    and Homework Fetch
-        Note over Orch,REST: Similar flow for homework endpoint
-    and Absences Fetch
-        Note over Orch,REST: Similar flow for absences endpoint
-    and Messages Fetch
-        Note over Orch,REST: Similar flow for messages endpoint
+        REST-->>RC: 2xx or 401/4xx/5xx
+        RC-->>API: { data, status } or error
+        API-->>ErrUtils: result or throw
+        ErrUtils-->>Orch: continue (warning on failure)
     end
 
-    Note over Orch: Promise.all() resolves with all results
+    Orch->>ErrUtils: wrapAsync(() => getTimetable())
+    ErrUtils->>API: getTimetable() L306
+    API->>Auth: getAuth() [checks cache first]
+
+    alt Token in cache and >= 5 minutes remaining
+        Auth-->>API: return cached { token, cookies, tenantId, schoolYearId }
+    else Token expired/missing/near expiry
+        Auth->>REST: POST /jsonrpc.do (authenticate)
+        REST-->>Auth: sessionId, cookies
+        Auth->>REST: GET /api/token/new
+        REST-->>Auth: bearer token (JWT)
+        Auth->>REST: GET /app/data (fetchClient)
+        REST-->>Auth: tenantId, schoolYearId, appData
+        Auth->>Auth: cacheManager.set() - 14min TTL
+        Auth-->>API: return fresh auth context
+    end
+
+    API->>RC: callRestAPI('/timetable/entries', auth)
+    RC->>REST: GET /WebUntis/api/rest/view/v1/timetable/entries
+    Note over REST: headers:<br/>Authorization: Bearer {token}<br/>Tenant-Id: {tenantId}<br/>X-Webuntis-Api-School-Year-Id: {schoolYearId}
+
+    alt Timetable returns 401 during fetch
+        API-->>Orch: auth error
+        Orch->>Auth: onAuthError() -> invalidate cache
+        Orch->>Orch: retry orchestrateFetch() once with fresh auth
+    else Timetable success or non-auth error handled
+        API-->>ErrUtils: timetable[] or throw
+        ErrUtils-->>Orch: timetable[] (or [] with warning)
+    end
+
+    Note over Orch: Remaining enabled data types fetched in parallel
+    par Exams
+        Orch->>ErrUtils: wrapAsync(() => getExams())
+        ErrUtils->>API: getExams() L417
+        API->>RC: callRestAPI('/exams', auth)
+    and Homework
+        Orch->>ErrUtils: wrapAsync(() => getHomework())
+        ErrUtils->>API: getHomework() L476
+        API->>RC: callRestAPI('/homeworks/lessons', auth)
+    and Absences
+        Orch->>ErrUtils: wrapAsync(() => getAbsences())
+        ErrUtils->>API: getAbsences() L563
+        API->>RC: callRestAPI('/absences/students', auth)
+    and Messages
+        Orch->>ErrUtils: wrapAsync(() => getMessagesOfDay())
+        ErrUtils->>API: getMessagesOfDay() L611
+        API->>RC: callRestAPI('/public/news/newsWidgetData', auth)
+    end
+
+    Note over Orch: Promise.all() resolves for exams/homework/absences/messages
     Orch-->>Orch: Return { timetable, exams, homeworks, absences, messagesOfDay }
 ```
 
@@ -659,9 +679,11 @@ graph TB
     end
 
     Request["Incoming fetch cycle<br/>(INIT_MODULE auto-fetch or FETCH_DATA)"]:::input
-    --> Check1{"Auth cache<br/>valid?<br/>(< 14min)"}
-    Check1 -->|Yes| Use1["Use cached token<br/>✅ Fast path"]:::success
+    --> Check1{"Auth cache entry exists?"}
     Check1 -->|No| Fetch1["Fetch new token<br/>🔄 Slow path<br/>(~500ms)"]:::slow
+    Check1 -->|Yes| Check2{"Token has >= 5min remaining<br/>and not forceReauth?"}
+    Check2 -->|Yes| Use1["Use cached token<br/>✅ Fast path"]:::success
+    Check2 -->|No| Fetch1
 
     Use1 --> APICall["Perform REST request<br/>(timetable/exams/etc)"]:::api
     Fetch1 --> APICall
@@ -1102,15 +1124,20 @@ graph LR
         S5 --> Total1["Total: ~5000ms"]
     end
 
-    subgraph After["✅ Parallel Fetching (NEW)"]
-        P1["Timetable<br/>~1000ms"]
+    subgraph After["✅ Timetable-first + Parallel Remainder (NEW)"]
+        P1["Timetable first<br/>~1000ms"]
         P2["Exams<br/>~800ms"]
         P3["Homework<br/>~900ms"]
         P4["Absences<br/>~700ms"]
         P5["Messages<br/>~600ms"]
 
-        P1 -.->|Promise.all| Total2["Total: ~2000ms<br/>(2.7x faster)"]
-        P2 -.->|Promise.all| Total2
+        P1 --> FanOut{"then Promise.all()"}
+        FanOut --> P2
+        FanOut --> P3
+        FanOut --> P4
+        FanOut --> P5
+
+        P2 -.-> Total2["Total: ~2000ms<br/>(2.7x faster)"]
         P3 -.->|Promise.all| Total2
         P4 -.->|Promise.all| Total2
         P5 -.->|Promise.all| Total2
@@ -1128,7 +1155,7 @@ graph LR
    - **Error Handling**: Per-fetch error isolation via `wrapAsync()`
 
 2. **Auth Token Caching** (✅ IMPLEMENTED)
-   - **TTL**: 14 minutes (with 1-minute safety buffer)
+    - **TTL**: 14 minutes (with 5-minute safety buffer)
    - **Hit Rate**: ~95%
    - **Savings**: ~500ms per request
 
@@ -1225,8 +1252,8 @@ graph TB
         CID["Class ID Cache<br/>Session-based<br/>98% hit rate"]
     end
 
-    subgraph Fetch["Data Fetching (Parallel)"]
-        Orch["dataFetchOrchestrator<br/>Promise.all()"]
+    subgraph Fetch["Data Fetching (Timetable-first)"]
+        Orch["dataFetchOrchestrator<br/>Step 1: timetable<br/>Step 2: Promise.all(remaining)"]
         API1["Timetable"]
         API2["Exams"]
         API3["Homework"]
@@ -1234,10 +1261,10 @@ graph TB
         API5["Messages"]
 
         Orch --> API1
-        Orch --> API2
-        Orch --> API3
-        Orch --> API4
-        Orch --> API5
+        API1 --> API2
+        API1 --> API3
+        API1 --> API4
+        API1 --> API5
     end
 
     subgraph Process["Data Processing"]
