@@ -55,13 +55,13 @@
 
   /**
    * Format YYYYMMDD integer to dd.MM.yyyy string
-   * Convenience wrapper around formatDate with default format
+   * Convenience wrapper around formatDisplayDate with default format
    *
    * @param {number|string} ymd - Date as YYYYMMDD integer (e.g., 20260130)
    * @returns {string} Formatted date string (e.g., "30.01.2026")
    */
   function formatYmd(ymd) {
-    return formatDate(ymd, 'dd.MM.yyyy');
+    return formatDisplayDate(ymd, 'dd.MM.yyyy');
   }
 
   /**
@@ -85,7 +85,7 @@
    * @param {string} format - Format pattern (default: 'dd.MM.yyyy')
    * @returns {string} Formatted date string or empty string if invalid
    */
-  function formatDate(ymd, format = 'dd.MM.yyyy') {
+  function formatDisplayDate(ymd, format = 'dd.MM.yyyy') {
     if (ymd === null || ymd === undefined || ymd === '') return '';
 
     // Support numeric ymd (20251214) or ISO date strings (2025-12-14 / 2025-12-14T00:00:00Z)
@@ -162,7 +162,7 @@
    * @param {string|number} v - Time value (HHMM integer or "HH:MM" string)
    * @returns {string} Formatted time string "HH:MM" or empty string if invalid
    */
-  function formatTime(v) {
+  function formatDisplayTime(v) {
     if (v === null || v === undefined) return '';
     const s = String(v).trim();
     if (s.includes(':')) return s;
@@ -180,7 +180,7 @@
    * @param {string|number} t - Time value to convert
    * @returns {number} Minutes since midnight (0-1439) or NaN if invalid
    */
-  function toMinutes(t) {
+  function toMinutesSinceMidnight(t) {
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();
     if (s.includes(':')) {
@@ -312,7 +312,7 @@
     return container;
   }
 
-  // NOTE: `formatDate` now accepts Date objects directly. No separate
+  // NOTE: `formatDisplayDate` accepts Date objects directly. No separate
   // `formatDayHeader`/`formatDayLabel` helpers are required.
 
   /**
@@ -356,6 +356,54 @@
   }
 
   /**
+   * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
+   * Accepts either a lesson object or a status string.
+   *
+   * @param {Object|string} lessonOrStatus - Lesson object or REST API status code string
+   * @returns {boolean} True if status represents irregular lesson
+   */
+  function isIrregularStatus(lessonOrStatus) {
+    if (typeof lessonOrStatus === 'string') {
+      return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(String(lessonOrStatus || '').toUpperCase());
+    }
+    if (lessonOrStatus && typeof lessonOrStatus === 'object') {
+      const status = String(lessonOrStatus.status || '').toUpperCase();
+      const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
+      if (['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(status)) return true;
+      if (['ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'].includes(activityType)) return true;
+      return false;
+    }
+    return false;
+  }
+
+  /**
+   * Build a Set of field keys that changed in a lesson entry.
+   * Considers changedFields array and presence of *Old arrays (suOld, teOld, roOld).
+   *
+   * @param {Object} entry - Lesson entry object
+   * @returns {Set<string>} Set of changed field keys ('su', 'te', 'ro', ...)
+   */
+  function getChangedFieldSet(entry) {
+    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
+    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
+    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
+    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
+    return changed;
+  }
+
+  /**
+   * Return the display name of the first element in a field array (e.g. su, te, ro).
+   *
+   * @param {Array} entries - Array of field objects with name/longname properties
+   * @returns {string} Trimmed display name or empty string
+   */
+  function getFirstFieldName(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return '';
+    const first = entries[0] || {};
+    return String(first.name || first.longname || '').trim();
+  }
+
+  /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
    * Provides safe fallbacks if any utility is missing
@@ -363,15 +411,15 @@
    * @param {Object} widgetRoot - The MMMWebuntisWidgets root object
    * @returns {Object} Object containing util and dom helper functions
    */
-  function initWidget(widgetRoot) {
+  function resolveWidgetHelpers(widgetRoot) {
     const util = widgetRoot.util || {};
     const dom = widgetRoot.dom || {};
     return {
       log: typeof util.log === 'function' ? util.log : () => {},
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
-      formatDate: typeof util.formatDate === 'function' ? util.formatDate : () => '',
-      formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
-      toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
+      formatDisplayDate: typeof util.formatDisplayDate === 'function' ? util.formatDisplayDate : () => '',
+      formatDisplayTime: typeof util.formatDisplayTime === 'function' ? util.formatDisplayTime : () => '',
+      toMinutesSinceMidnight: typeof util.toMinutesSinceMidnight === 'function' ? util.toMinutesSinceMidnight : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
       getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
       addRow: typeof dom.addRow === 'function' ? dom.addRow : () => {},
@@ -391,6 +439,10 @@
       getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
       getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
       getInfo: typeof util.getInfo === 'function' ? util.getInfo : () => '',
+      // Lesson status / change helpers
+      isIrregularStatus,
+      getChangedFieldSet,
+      getFirstFieldName,
     };
   }
 
@@ -598,21 +650,20 @@
   // Export all utilities
   root.util = {
     formatYmd,
-    formatTime,
-    toMinutes,
-    formatDate,
-    // backward compatibility: keep alias name for callers that may still use it
-    formatHolidayDate: function (dateInput, format) {
-      return formatDate(dateInput, format);
-    },
+    formatDisplayTime,
+    toMinutesSinceMidnight,
+    formatDisplayDate,
     escapeHtml,
     log,
-    _log: log, // backward compatibility alias
     getWidgetConfig,
-    initWidget,
+    resolveWidgetHelpers,
     getWidgetConfigResolved,
     createWidgetContext,
     buildWidgetHeaderTitle,
+    // Lesson status / change helpers
+    isIrregularStatus,
+    getChangedFieldSet,
+    getFirstFieldName,
     // New dynamic field utilities
     getFieldValue,
     getTeachers,

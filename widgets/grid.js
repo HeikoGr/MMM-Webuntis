@@ -44,9 +44,9 @@ function getModuleRootElement(ctx) {
     escapeHtml,
     addHeader,
     getWidgetConfigResolved,
-    formatDate,
-    formatTime,
-    toMinutes,
+    formatDisplayDate,
+    formatDisplayTime,
+    toMinutesSinceMidnight,
     createWidgetContext,
     getTeachers,
     getSubject,
@@ -55,7 +55,10 @@ function getModuleRootElement(ctx) {
     getStudentGroup,
     getInfo,
     buildWidgetHeaderTitle,
-  } = root.util?.initWidget?.(root) || {};
+    isIrregularStatus,
+    getChangedFieldSet,
+    getFirstFieldName,
+  } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   // ============================================================================
   // Grid-specific helper functions (moved from util.js)
@@ -142,38 +145,6 @@ function getModuleRootElement(ctx) {
     };
   }
 
-  /**
-   * Check if lesson status is "irregular" (substitution/replacement/additional)
-   * Based on REST API status values mapping to legacy codes
-   *
-   * @param {string} status - REST API status code
-   * @returns {boolean} True if status represents irregular lesson
-   *
-   * Irregular statuses:
-   * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
-   */
-
-  function isIrregularStatus(status) {
-    const upperStatus = String(status || '').toUpperCase();
-    return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
-  }
-
-  function getChangedFieldSet(lesson) {
-    const changed = new Set(Array.isArray(lesson?.changedFields) ? lesson.changedFields : []);
-
-    if (Array.isArray(lesson?.suOld) && lesson.suOld.length > 0) changed.add('su');
-    if (Array.isArray(lesson?.teOld) && lesson.teOld.length > 0) changed.add('te');
-    if (Array.isArray(lesson?.roOld) && lesson.roOld.length > 0) changed.add('ro');
-
-    return changed;
-  }
-
-  function getFirstChangedName(entries) {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
-    const first = entries[0];
-    if (!first || typeof first !== 'object') return '';
-    return first.name || first.longname || '';
-  }
   /**
    * Get field value based on flexible configuration
    * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
@@ -570,10 +541,10 @@ function getModuleRootElement(ctx) {
    * @param {number} startOffset - Day offset from base date
    * @param {string} gridDateFormat - Date format for day labels
    * @param {Object} ctx - Main module context
-   * @param {Object} util - Utility object with formatDate function
+   * @param {Object} util - Utility object with formatDisplayDate function
    * @returns {Object} Object with header element and gridTemplateColumns string
    */
-  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDate }) {
+  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDisplayDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
 
@@ -593,8 +564,8 @@ function getModuleRootElement(ctx) {
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
 
-      const dayLabelText = formatDate
-        ? formatDate(dayDate, gridDateFormat)
+      const dayLabelText = formatDisplayDate
+        ? formatDisplayDate(dayDate, gridDateFormat)
         : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
 
       dayLabel.innerText = dayLabelText;
@@ -787,23 +758,22 @@ function getModuleRootElement(ctx) {
    * @param {string} studentTitle - Student name (for logging)
    * @param {string} dateStr - Date string (YYYYMMDD)
    * @param {Object} ctx - Main module context
-   * @param {number|null} allEnd - End time cutoff in minutes
+   * @param {number} allEnd - End time cutoff in minutes
    * @returns {Array} Filtered lesson objects
    */
-  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
+  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd) {
+    if (allEnd === undefined || allEnd === null) {
+      allEnd = Infinity;
+    }
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
-      // If no maxGridLessons limit, still filter by allEnd cutoff if provided
-      if (allEnd !== null && allEnd !== undefined) {
-        return dayLessons.filter((lesson) => {
-          // Always keep cancelled and irregular lessons
-          if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
-            return true;
-          }
-          const s = lesson.startMin;
-          return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
-        });
-      }
-      return dayLessons;
+      return dayLessons.filter((lesson) => {
+        // Always keep cancelled and irregular lessons
+        if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
+          return true;
+        }
+        const s = lesson.startMin;
+        return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+      });
     }
 
     const filtered = dayLessons.filter((lesson) => {
@@ -848,8 +818,8 @@ function getModuleRootElement(ctx) {
         return matchedIndex !== -1 && matchedIndex < maxGridLessons;
       }
 
-      // Otherwise (no maxGridLessons limit), use allEnd cutoff if provided
-      if (allEnd !== null && allEnd !== undefined && s >= allEnd) {
+      // Otherwise (no maxGridLessons limit), use allEnd cutoff
+      if (s >= allEnd) {
         return false;
       }
 
@@ -1127,7 +1097,7 @@ function getModuleRootElement(ctx) {
         let primaryHtml;
         if (changedFields.has('su')) {
           const newSubject = lesson.su?.[0]?.name || '';
-          const oldSubject = getFirstChangedName(lesson.suOld);
+          const oldSubject = getFirstFieldName(lesson.suOld);
           if (newSubject) {
             primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
           } else if (oldSubject) {
@@ -1144,7 +1114,7 @@ function getModuleRootElement(ctx) {
         let secondaryHtml;
         if (changedFields.has('te')) {
           const newTeacher = lesson.te?.[0]?.name || '';
-          const oldTeacher = getFirstChangedName(lesson.teOld);
+          const oldTeacher = getFirstFieldName(lesson.teOld);
           if (newTeacher) {
             secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
           } else if (oldTeacher) {
@@ -1160,7 +1130,7 @@ function getModuleRootElement(ctx) {
         let additionalHtml = '';
         if (changedFields.has('ro')) {
           const newRoom = lesson.ro?.[0]?.name || '';
-          const oldRoom = getFirstChangedName(lesson.roOld);
+          const oldRoom = getFirstFieldName(lesson.roOld);
           if (newRoom) {
             additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
           } else if (oldRoom) {
@@ -2047,14 +2017,15 @@ function getModuleRootElement(ctx) {
    * @param { Array } dayAbsences - Array of absence objects for this day
    * @param { number } allStart - Start time in minutes
    * @param { number } allEnd - End time in minutes
-   * @param { number } totalMinutes - Total minutes span
    * @param { number } totalHeight - Total height in pixels
    * @param { Object } ctx - Main module context
    */
-  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
+  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx) {
     if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
       return;
     }
+
+    const totalMinutes = Math.max(1, allEnd - allStart);
 
     try {
       for (const absence of dayAbsences) {
@@ -2162,7 +2133,7 @@ function getModuleRootElement(ctx) {
       config.startOffset,
       config.gridDateFormat,
       ctx,
-      { formatDate, formatTime, toMinutes }
+      { formatDisplayDate, formatDisplayTime, toMinutesSinceMidnight }
     );
 
     wrapper.appendChild(header);
@@ -2256,7 +2227,7 @@ function getModuleRootElement(ctx) {
       if (Array.isArray(absences) && absences.length > 0) {
         const dayAbsences = absences.filter((ab) => String(ab?.date) === dateStr);
         if (dayAbsences.length > 0) {
-          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx);
+          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
         }
       }
     }

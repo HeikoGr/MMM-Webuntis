@@ -59,15 +59,20 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Core Principle**: Deterministic transformations based on data source. No compatibility layers needed since frontend and backend always update synchronously.
 
-- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `payloadBuilder.js`
+**No Legacy Compatibility Code**:
+- Do **not** add compatibility wrappers, alias exports, or fallback naming layers.
+- Use canonical function and field names only.
+- Frontend and backend are deployed synchronously, so compatibility shims are unnecessary and should be removed instead of extended.
+
+- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `webuntis-client/payloadBuilder.js`
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
 - HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
 - Never send raw API objects to frontend - run through `compactArray()` with schema
 
 **Time Transformation** (simple, no validation layer needed):
 - REST API sends HHMM integers (e.g., 1350 = 13:50) → pass through directly
-- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseTimegridTimeString(v)`
-- Frontend receives HHMM integers; widgets format via `formatTime(hhmm)` → "13:50"
+- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseHHMMStringToInteger(v)`
+- Frontend receives HHMM integers; widgets format via `formatDisplayTime(hhmm)` → "13:50"
 
 **Important**: Data format is always deterministic - always know and specify the source format. No guessing.
 
@@ -81,10 +86,9 @@ This was NOT always the case. Previously it whitelisted explicit field names, ca
 ```
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → payloadCompactor.js#schemas.lesson        – declares field for compaction
-    → payloadBuilder.js#compactArray()        – compacts lessons
+    → webuntis-client/payloadBuilder.js#compactArray() – compacts lessons
       → socket GOT_DATA payload               – field present in data.lessons[]
-        → MMM-Webuntis.js#_filterTimetableRange()  – passes through unchanged
-          → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
+        → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
 ```
 
@@ -123,12 +127,12 @@ console.warn('[feature] Warning:', error);
 - `lib/fetchClient.js` - HTTP fetch abstraction
 - `lib/httpClient.js` - JSON-RPC client (auth only)
 - `lib/cacheManager.js` - TTL cache
-- `lib/payloadCompactor.js` - Schema-driven payload optimization + time/HTML transformations (explicit `normalizeRestApiTime()`, `normalizeTimegridTime()`)
+- `lib/payloadCompactor.js` - Schema-driven payload optimization + time/HTML transformations (`sanitizeHtml()`)
 - `lib/errorHandler.js` - Error mapping + warnings
-- `lib/dateTimeUtils.js` - Frontend date/time utilities (formatTime, toMinutes, etc.)
+- `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
 - `lib/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
-- `lib/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps
+- `lib/webuntis-client/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps (MMM adapter layer)
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
@@ -356,7 +360,7 @@ Migration guidance:
 - If a dedicated capture script is introduced, it should be registered in `package.json` and documented here.
 
 Security note:
-- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/payloadBuilder.js`).
+- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/webuntis-client/payloadBuilder.js`).
 
 ### Testing Changes
 

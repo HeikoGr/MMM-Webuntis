@@ -11,8 +11,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, formatTime, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDisplayDate, formatDisplayTime, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -31,13 +31,13 @@
 
     // Determine mode and handle header using helper
     const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
-    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
     if (widgetCtx.isVerbose && studentCellTitle !== '') {
       addHeader(container, buildWidgetHeaderTitle(ctx, 'absences', widgetCtx, studentCellTitle));
     }
 
     if (!Array.isArray(absences) || absences.length === 0) {
-      addRow(container, 'absenceRowEmpty', studentCell, ctx.translate('no_absences'));
+      addRow(container, 'absenceRowEmpty', studentLabelText, ctx.translate('no_absences'));
       return 1;
     }
 
@@ -46,8 +46,8 @@
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
     const showReason = Boolean(widgetCtx.getConfig('showReason'));
-    const now = new Date();
-    const nowYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    const nowLocal = new Date();
+    const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
 
     // Absence range options
     const rangeStart = widgetCtx.getConfig('pastDays');
@@ -90,9 +90,9 @@
       if (maxItems > 0 && visibleCount >= maxItems) break;
 
       const dateRaw = ab?.date;
-      const dateStr = dateRaw ? (formatDate ? formatDate(dateRaw, dateFormat) : '') : '';
-      const st = formatTime(ab?.startTime);
-      const et = formatTime(ab?.endTime);
+      const dateStr = dateRaw ? (formatDisplayDate ? formatDisplayDate(dateRaw, dateFormat) : '') : '';
+      const st = formatDisplayTime(ab?.startTime);
+      const et = formatDisplayTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
       const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';
@@ -134,7 +134,7 @@
 
       const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
 
-      addRow(container, 'absenceRow', studentCell, meta || ctx.translate('absences'), data);
+      addRow(container, 'absenceRow', studentLabelText, meta || ctx.translate('absences'), data);
       addedRows++;
       visibleCount++;
     }
