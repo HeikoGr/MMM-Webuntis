@@ -771,13 +771,37 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Build widget/fetch flags from displayMode using the canonical client logic.
+   * Build widget/fetch flags from displayMode.
+   *
+   * This is intentionally kept in node_helper (MMM adapter layer) so
+   * lib/webuntis stays free of UI/displayMode concepts.
    *
    * @param {string} displayMode - Effective display mode
    * @returns {Object} Widget and fetch flags
    */
   _buildFetchFlags(displayMode) {
-    return WebUntisClient.buildFetchFlags(this._wantsWidget.bind(this), displayMode);
+    const wants = (name) => this._wantsWidget(name, displayMode);
+    const wantsGridWidget = wants('grid');
+    const wantsLessonsWidget = wants('lessons');
+    const wantsExamsWidget = wants('exams');
+    const wantsHomeworkWidget = wants('homework');
+    const wantsAbsencesWidget = wants('absences');
+    const wantsMessagesOfDayWidget = wants('messagesofday');
+
+    return {
+      wantsGridWidget,
+      wantsLessonsWidget,
+      wantsExamsWidget,
+      wantsHomeworkWidget,
+      wantsAbsencesWidget,
+      wantsMessagesOfDayWidget,
+      fetchTimegrid: Boolean(wantsGridWidget || wantsLessonsWidget),
+      fetchTimetable: Boolean(wantsGridWidget || wantsLessonsWidget),
+      fetchExams: Boolean(wantsGridWidget || wantsExamsWidget),
+      fetchHomeworks: Boolean(wantsGridWidget || wantsHomeworkWidget),
+      fetchAbsences: Boolean(wantsGridWidget || wantsAbsencesWidget),
+      fetchMessagesOfDay: Boolean(wantsMessagesOfDayWidget),
+    };
   },
 
   /**
@@ -1587,20 +1611,22 @@ module.exports = NodeHelper.create({
       credKey,
       compactHolidays,
       config,
-      authService: config._authService,
-      fetchFlags: {
-        fetchTimegrid: Boolean(fetchFlags.fetchTimegrid),
-        fetchTimetable: Boolean(fetchFlags.fetchTimetable),
-        fetchExams: Boolean(fetchFlags.fetchExams),
-        fetchHomeworks: Boolean(fetchFlags.fetchHomeworks),
-        fetchAbsences: Boolean(fetchFlags.fetchAbsences),
-        fetchMessagesOfDay: Boolean(fetchFlags.fetchMessagesOfDay),
-      },
-      baseNow,
-      dateRanges,
-      flagsCtx: {
-        debugApi: Boolean(config.debugApi),
-        dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
+      plan: {
+        authService: config._authService,
+        fetchFlags: {
+          fetchTimegrid: Boolean(fetchFlags.fetchTimegrid),
+          fetchTimetable: Boolean(fetchFlags.fetchTimetable),
+          fetchExams: Boolean(fetchFlags.fetchExams),
+          fetchHomeworks: Boolean(fetchFlags.fetchHomeworks),
+          fetchAbsences: Boolean(fetchFlags.fetchAbsences),
+          fetchMessagesOfDay: Boolean(fetchFlags.fetchMessagesOfDay),
+        },
+        baseNow,
+        dateRanges,
+        flagsCtx: {
+          debugApi: Boolean(config.debugApi),
+          dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
+        },
       },
       sessionKey,
       currentFetchWarnings: this._currentFetchWarnings,

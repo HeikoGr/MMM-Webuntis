@@ -324,7 +324,7 @@ Relevant REST payload parts are normalized before frontend consumption.
 ### Date Normalization
 - **Input:** `20260125` (YYYYMMDD integer) or `"2026-01-25"` (ISO string)
 - **Output:** `20260125` (YYYYMMDD integer)
-- **Function:** `normalizeDateToInteger(date)` in [dataOrchestration.js](../lib/dataOrchestration.js)
+- **Function:** `normalizeDateToInteger(date)` in [dataOrchestration.js](../lib/webuntis/dataOrchestration.js)
 
 ### Time Normalization
 
@@ -335,6 +335,42 @@ Relevant REST payload parts are normalized before frontend consumption.
 **Timegrid Source Data:** HH:MM strings (e.g., `"13:50"`)
 - **Transformation:** `parseHHMMStringToInteger("13:50")` → `1350`
 - **Location:** [dataOrchestration.js](../lib/webuntis/dataOrchestration.js)
+
+### Fetch Range Calculation
+
+- **Function:** `calculateFetchRanges(input)` in [dataOrchestration.js](../lib/webuntis/dataOrchestration.js)
+- **Purpose:** Calculate date ranges without coupling to MMM-specific config shapes
+
+**Generic input shape:**
+```javascript
+{
+  baseNow: Date,
+  fetchPlan: {
+    wantsGridWidget: boolean,
+    wantsLessonsWidget: boolean,
+    fetchExams: boolean,
+    fetchAbsences: boolean,
+  },
+  days: {
+    globalPastDays?: number,
+    globalNextDays?: number,
+    gridPastDays?: number,
+    gridNextDays?: number,
+    lessonsPastDays?: number,
+    lessonsNextDays?: number,
+    examsPastDays?: number,
+    examsNextDays?: number,
+    absencesPastDays?: number,
+    absencesNextDays?: number,
+    homeworkPastDays?: number,
+    homeworkNextDays?: number,
+  },
+  options: {
+    gridWeekView?: boolean,
+    debugDateEnabled?: boolean,
+  },
+}
+```
 
 ### HTML Sanitization
 
