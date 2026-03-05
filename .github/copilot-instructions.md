@@ -64,7 +64,7 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 - Use canonical function and field names only.
 - Frontend and backend are deployed synchronously, so compatibility shims are unnecessary and should be removed instead of extended.
 
-- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `payloadBuilder.js`
+- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `webuntis-client/payloadBuilder.js`
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
 - HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
 - Never send raw API objects to frontend - run through `compactArray()` with schema
@@ -86,7 +86,7 @@ This was NOT always the case. Previously it whitelisted explicit field names, ca
 ```
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → payloadCompactor.js#schemas.lesson        – declares field for compaction
-    → payloadBuilder.js#compactArray()        – compacts lessons
+    → webuntis-client/payloadBuilder.js#compactArray() – compacts lessons
       → socket GOT_DATA payload               – field present in data.lessons[]
         → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
@@ -132,7 +132,7 @@ console.warn('[feature] Warning:', error);
 - `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
 - `lib/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
-- `lib/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps
+- `lib/webuntis-client/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps (MMM adapter layer)
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
@@ -360,7 +360,7 @@ Migration guidance:
 - If a dedicated capture script is introduced, it should be registered in `package.json` and documented here.
 
 Security note:
-- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/payloadBuilder.js`).
+- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/webuntis-client/payloadBuilder.js`).
 
 ### Testing Changes
 

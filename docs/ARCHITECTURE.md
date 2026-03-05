@@ -1,6 +1,6 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2026-01-30
+**Last Updated**: 2026-03-05
 **Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures)
 
 ## Executive Summary
@@ -28,12 +28,17 @@ graph TB
     end
 
     subgraph Backend["⚙️ Backend (Node.js)"]
-        NH["node_helper.js<br/>(Coordinator, ~2058 LOC)"]
+        NH["node_helper.js<br/>(MagicMirror Adapter, ~2058 LOC)"]
 
-        subgraph Core["🔑 Core Services"]
+        subgraph Core["🔑 WebUntis Core (lib/webuntis)"]
+            WebClient["webuntisClient.js<br/>(Core Fetch Pipeline)"]
             Auth["authService.js<br/>(Auth & Token Cache)"]
             API["webuntisApiService.js<br/>(Unified API Client)"]
             Orch["dataFetchOrchestrator.js<br/>(Parallel Fetch via Promise.all)"]
+        end
+
+        subgraph AdapterBuild["🔌 Adapter Build Layer (lib/webuntis-client)"]
+            Mapper["mmmPayloadMapper.js<br/>(Core → MMM mapping)"]
             PayBuild["payloadBuilder.js<br/>(GOT_DATA Construction)"]
         end
 
@@ -75,11 +80,13 @@ graph TB
 
     NH --> ConfigVal
     NH --> WidgetVal
-    NH --> Orch
-    NH --> PayBuild
+    NH --> WebClient
     NH --> Cache
 
+    WebClient --> Orch
+    WebClient --> Mapper
     Orch --> API
+    Mapper --> PayBuild
     PayBuild --> Compact
     PayBuild --> ErrHandler
 
@@ -110,35 +117,44 @@ graph TB
     classDef new fill:#c8e6c9
 
     class NH critical
-    class API,Auth,Orch high
+    class API,Auth,Orch,WebClient high
     class ErrUtils,PayBuild,DataOrch new
     class HttpClient,FetchC,RestClient,Compact service
 ```
 
 ## Modular Architecture (lib/)
 
-The module uses a **service-oriented architecture** with specialized modules in the `lib/` directory:
+The module uses a **service-oriented architecture** split into adapter and core responsibilities:
+
+- Adapter boundary: `node_helper.js` and `lib/webuntis-client/*`
+- Core boundary: `lib/webuntis/*`
+- Contract direction: core returns neutral data; adapter maps to MagicMirror `GOT_DATA`
 
 ### Service Dependency Graph
 
 ```mermaid
 graph TB
-    subgraph Core["🔑 Core Layer (Auth & API)"]
+    subgraph Core["🔑 Core Layer (lib/webuntis)"]
         Auth["authService.js<br/>(Token Cache)"]
         HTTP["httpClient.js<br/>(JSON-RPC)"]
         Fetch["fetchClient.js<br/>(HTTP Wrapper)"]
         Rest["restClient.js<br/>(REST Client)"]
         API["webuntisApiService.js<br/>(API Endpoints)"]
+        Client["webuntisClient.js<br/>(Core Fetch Pipeline)"]
     end
 
-    subgraph Orch["🎯 Orchestration Layer (NEW)"]
+    subgraph Orch["🎯 Orchestration Layer (lib/webuntis)"]
         DataOrch["dataOrchestration.js<br/>(Transform & Ranges)"]
         FetchOrch["dataFetchOrchestrator.js<br/>(Parallel Fetch)"]
+    end
+
+    subgraph Adapter["🔌 Adapter Layer (MagicMirror)"]
+        NodeHelper["node_helper.js<br/>(Socket + Session Adapter)"]
+        Mapper["mmmPayloadMapper.js<br/>(Core → MMM mapping)"]
         PayBuild["payloadBuilder.js<br/>(GOT_DATA Builder)"]
     end
 
     subgraph Data["📊 Data Processing"]
-        Trans["dataTransformer.js<br/>(LEGACY)"]
         Compact["payloadCompactor.js<br/>(Schemas & HTML)"]
         Cache["cacheManager.js<br/>(TTL Cache)"]
     end
@@ -163,13 +179,16 @@ graph TB
     HTTP --> Cookie
     API --> Rest
     API --> Auth
-    API --> Trans
     Rest --> Fetch
     Rest --> ErrUtils
 
     %% Orchestration dependencies
+    Client --> FetchOrch
+    Client --> Mapper
+    NodeHelper --> Client
     FetchOrch --> API
     FetchOrch --> ErrUtils
+    Mapper --> PayBuild
     PayBuild --> Compact
     PayBuild --> ErrUtils
     DataOrch --> DateTime
@@ -177,7 +196,7 @@ graph TB
     %% Error utilities
     ErrUtils --> ErrHandler
 
-    %% Dotted: optional/legacy dependencies
+    %% Dotted: optional/utility dependencies
     API -.-> DataOrch
 
     classDef core fill:#e3f2fd
@@ -186,50 +205,51 @@ graph TB
     classDef config fill:#e8f5e9
     classDef utils fill:#fce4ec
 
-    class Auth,HTTP,Fetch,Rest,API core
+    class Auth,HTTP,Fetch,Rest,API,Client core
     class DataOrch,FetchOrch,PayBuild orch
-    class Trans,Compact,Cache data
+    class Compact,Cache data
     class ConfigVal,WidgetVal config
-    class ErrUtils,ErrHandler,DateTime,Logger,Cookie utils
+    class ErrUtils,ErrHandler,DateTime,Logger,Cookie,NodeHelper,Mapper utils
 ```
 
 ### Core Services
 
-**[node_helper.js](../node_helper.js)** - Main backend coordinator (1,803 LOC)
+**[node_helper.js](../node_helper.js)** - MagicMirror adapter/coordinator (1,803 LOC)
 - [`_shouldSkipApi()`](../node_helper.js#L106) - API status tracking: Skip permanent errors (403, 404, 410), retry temporary errors (5xx)
 - `_apiStatusBySession` Map - Tracks HTTP status codes per session/endpoint
 - Prevents repeated API calls to endpoints with permanent permission errors
 - Does NOT skip temporary errors (503, 500, 429) - retries on next fetch
-- **Dependencies**: All lib/ services
+- **Responsibility**: Session handling, config validation, and adapter mapping to frontend contract
+- **Dependencies**: `lib/webuntis/*` core + `lib/webuntis-client/*` adapter build layer
 
-**[authService.js](../lib/authService.js)** - Authentication and token caching
-- [`class AuthService`](../lib/authService.js#L29) - Main service class
-- [`getAuth()`](../lib/authService.js#L121) - Main auth entry point (with caching)
+**[authService.js](../lib/webuntis/authService.js)** - Authentication and token caching
+- [`class AuthService`](../lib/webuntis/authService.js#L29) - Main service class
+- [`getAuth()`](../lib/webuntis/authService.js#L121) - Main auth entry point (with caching)
 - Token caching: 14-minute TTL, **5-minute safety buffer** (prevents silent API failures from expired tokens)
 - QR code auth flow, parent account support
 - School/server resolution from QR codes
 - Race condition protection: `_forceReauth` flag cleanup after use, `_pendingAuth` Map for parallel request coordination
 - **Dependencies**: httpClient.js, fetchClient.js, cacheManager.js
 
-**[httpClient.js](../lib/httpClient.js)** - JSON-RPC client for WebUntis authentication
-- [`class HttpClient`](../lib/httpClient.js#L28) - Main class
-- [`authenticateWithCredentials()`](../lib/httpClient.js#L89) - Username/password auth
-- [`authenticateWithQRCode()`](../lib/httpClient.js#L183) - QR code + OTP auth
-- [`getBearerToken()`](../lib/httpClient.js#L244) - Fetch JWT bearer token
-- Session cookie management via [cookieJar.js](../lib/cookieJar.js)
+**[httpClient.js](../lib/webuntis/httpClient.js)** - JSON-RPC client for WebUntis authentication
+- [`class HttpClient`](../lib/webuntis/httpClient.js#L28) - Main class
+- [`authenticateWithCredentials()`](../lib/webuntis/httpClient.js#L89) - Username/password auth
+- [`authenticateWithQRCode()`](../lib/webuntis/httpClient.js#L183) - QR code + OTP auth
+- [`getBearerToken()`](../lib/webuntis/httpClient.js#L244) - Fetch JWT bearer token
+- Session cookie management via [cookieJar.js](../lib/webuntis/cookieJar.js)
 - **Dependencies**: cookieJar.js
 
-**[webuntisApiService.js](../lib/webuntisApiService.js)** - Unified REST API client
-- [`callWebUntisAPI()`](../lib/webuntisApiService.js#L85) - Generic API caller
-- [`getTimetable()`](../lib/webuntisApiService.js#L164) - Fetch timetable data
-- [`getExams()`](../lib/webuntisApiService.js#L199) - Fetch exams
-- [`getHomework()`](../lib/webuntisApiService.js#L234) - Fetch homework
-- [`getAbsences()`](../lib/webuntisApiService.js#L269) - Fetch absences
-- [`getMessagesOfDay()`](../lib/webuntisApiService.js#L304) - Fetch messages
-- **Dependencies**: restClient.js, authService.js, dataTransformer.js (legacy)
+**[webuntisApiService.js](../lib/webuntis/webuntisApiService.js)** - Unified REST API client
+- [`callWebUntisAPI()`](../lib/webuntis/webuntisApiService.js#L85) - Generic API caller
+- [`getTimetable()`](../lib/webuntis/webuntisApiService.js#L164) - Fetch timetable data
+- [`getExams()`](../lib/webuntis/webuntisApiService.js#L199) - Fetch exams
+- [`getHomework()`](../lib/webuntis/webuntisApiService.js#L234) - Fetch homework
+- [`getAbsences()`](../lib/webuntis/webuntisApiService.js#L269) - Fetch absences
+- [`getMessagesOfDay()`](../lib/webuntis/webuntisApiService.js#L304) - Fetch messages
+- **Dependencies**: restClient.js, authService.js
 
-**[restClient.js](../lib/restClient.js)** - REST API wrapper
-- [`callRestAPI()`](../lib/restClient.js#L27) - Generic REST caller
+**[restClient.js](../lib/webuntis/restClient.js)** - REST API wrapper
+- [`callRestAPI()`](../lib/webuntis/restClient.js#L27) - Generic REST caller
 - Bearer token authentication
 - Tenant ID header management (`Tenant-Id`)
 - Response parsing and error handling
@@ -243,8 +263,8 @@ graph TB
 
 ### Orchestration & Building
 
-**[dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
-- [`orchestrateFetch()`](../lib/dataFetchOrchestrator.js#L25) - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
+**[dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
+- [`orchestrateFetch()`](../lib/webuntis/dataFetchOrchestrator.js#L25) - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
 - **Strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
 - **Auth canary**: If timetable is not requested, a minimal timetable call is used as a token canary before other APIs
 - **Performance**: Fast (~100ms overhead for sequential timetable, prevents wasted parallel calls)
@@ -252,8 +272,8 @@ graph TB
 - Per-data-type error handling with fallback to empty arrays
 - **Dependencies**: errorUtils.js
 
-**[payloadBuilder.js](../lib/payloadBuilder.js)** - GOT_DATA payload construction (NEW)
-- [`buildGotDataPayload()`](../lib/payloadBuilder.js#L30) - Build complete payload for frontend
+**[payloadBuilder.js](../lib/webuntis-client/payloadBuilder.js)** - Adapter-side GOT_DATA payload construction (NEW)
+- [`buildGotDataPayload()`](../lib/webuntis-client/payloadBuilder.js#L30) - Build complete payload for frontend
 - Attach compact holiday ranges (`data.holidays.ranges`) and active holiday (`data.holidays.current`)
 - Warning collection and deduplication
 - Debug dump generation (non-blocking)
@@ -261,35 +281,29 @@ graph TB
 
 ### Data Processing
 
-**[dataOrchestration.js](../lib/dataOrchestration.js)** - Data transformation and orchestration (NEW)
-- [`mapRestStatusToLegacyCode()`](../lib/dataOrchestration.js#L22) - Map REST status → frontend codes
-- [`stripAllHtml()`](../lib/dataOrchestration.js#L56) - Strip all HTML tags (line break preservation optional)
-- [`normalizeDateToInteger()`](../lib/dataOrchestration.js#L100) - Dates → YYYYMMDD integers
-- [`normalizeTimeToHHMM()`](../lib/dataOrchestration.js#L128) - Times → HHMM integers
-- [`calculateFetchRanges()`](../lib/dataOrchestration.js#L210) - Calculate date ranges for all data types
-- [`compactHolidays()`](../lib/dataOrchestration.js#L162) - Remove unnecessary holiday fields
+**[dataOrchestration.js](../lib/webuntis/dataOrchestration.js)** - Data transformation and orchestration (NEW)
+- [`mapRestStatusToLegacyCode()`](../lib/webuntis/dataOrchestration.js#L22) - Map REST status → frontend codes
+- [`stripAllHtml()`](../lib/webuntis/dataOrchestration.js#L56) - Strip all HTML tags (line break preservation optional)
+- [`normalizeDateToInteger()`](../lib/webuntis/dataOrchestration.js#L100) - Dates → YYYYMMDD integers
+- [`normalizeTimeToHHMM()`](../lib/webuntis/dataOrchestration.js#L128) - Times → HHMM integers
+- [`calculateFetchRanges()`](../lib/webuntis/dataOrchestration.js#L210) - Calculate date ranges for all data types
+- [`compactHolidays()`](../lib/webuntis/dataOrchestration.js#L162) - Remove unnecessary holiday fields
 - **Dependencies**: None (pure functions)
 
-**[dataTransformer.js](../lib/dataTransformer.js)** - Legacy data transformation (DEPRECATED)
-- ⚠️ **Status**: Being migrated to dataOrchestration.js
-- Still used by webuntisApiService for backward compatibility
-- [`transformTimeTableData()`](../lib/dataTransformer.js#L25) - Normalize timetable entries
-- [`transformExamData()`](../lib/dataTransformer.js#L98) - Normalize exam data
-- [`transformAbsencesData()`](../lib/dataTransformer.js#L137) - Normalize absences
-- **Dependencies**: None (pure functions)
+`dataTransformer.js` was removed from the active backend path; transformations are documented via `dataOrchestration.js`, `webuntisApiService.js`, and `payloadCompactor.js`.
 
-**[payloadCompactor.js](../lib/payloadCompactor.js)** - Payload optimization and sanitization
-- [`compactArray()`](../lib/payloadCompactor.js#L43) - Reduce array size with schemas
-- [`sanitizeHtml()`](../lib/payloadCompactor.js#L236) - Whitelist-based HTML sanitization (b, strong, i, em, u, br, p)
+**[payloadCompactor.js](../lib/webuntis/payloadCompactor.js)** - Payload optimization and sanitization
+- [`compactArray()`](../lib/webuntis/payloadCompactor.js#L43) - Reduce array size with schemas
+- [`sanitizeHtml()`](../lib/webuntis/payloadCompactor.js#L236) - Whitelist-based HTML sanitization (b, strong, i, em, u, br, p)
 - Line break conversion (`<br>` → `\n`)
 - HTML entity decoding
 - Schema definitions for lessons, exams, homework, absences, messages
 - **Dependencies**: None (pure functions)
 
-**[cacheManager.js](../lib/cacheManager.js)** - TTL-based caching
-- [`class CacheManager`](../lib/cacheManager.js#L9) - Main cache class
-- [`set()`](../lib/cacheManager.js#L27) - Store with TTL
-- [`get()`](../lib/cacheManager.js#L45) - Retrieve (auto-expire)
+**[cacheManager.js](../lib/webuntis/cacheManager.js)** - TTL-based caching
+- [`class CacheManager`](../lib/webuntis/cacheManager.js#L9) - Main cache class
+- [`set()`](../lib/webuntis/cacheManager.js#L27) - Store with TTL
+- [`get()`](../lib/webuntis/cacheManager.js#L45) - Retrieve (auto-expire)
 - Class ID caching, generic key-value cache
 - **Dependencies**: None
 
@@ -320,17 +334,17 @@ graph TB
 
 ### Error Handling & Logging
 
-**[errorUtils.js](../lib/errorUtils.js)** - Lightweight error handling utilities (NEW)
-- [`wrapAsync()`](../lib/errorUtils.js#L48) - Wrap async calls with error handling + warning collection
-- [`tryOrDefault()`](../lib/errorUtils.js#L87) - Sync call with fallback to default value
-- [`tryOrThrow()`](../lib/errorUtils.js#L104) - Sync call with fail-fast error propagation
-- [`tryOrNull()`](../lib/errorUtils.js#L122) - Sync call with null fallback (silent)
+**[errorUtils.js](../lib/webuntis/errorUtils.js)** - Lightweight error handling utilities (NEW)
+- [`wrapAsync()`](../lib/webuntis/errorUtils.js#L48) - Wrap async calls with error handling + warning collection
+- [`tryOrDefault()`](../lib/webuntis/errorUtils.js#L87) - Sync call with fallback to default value
+- [`tryOrThrow()`](../lib/webuntis/errorUtils.js#L104) - Sync call with fail-fast error propagation
+- [`tryOrNull()`](../lib/webuntis/errorUtils.js#L122) - Sync call with null fallback (silent)
 - **Dependencies**: errorHandler.js
 
-**[errorHandler.js](../lib/errorHandler.js)** - Centralized error handling
-- [`convertRestErrorToWarning()`](../lib/errorHandler.js#L24) - Convert API errors to user-friendly warnings
-- [`checkEmptyDataWarning()`](../lib/errorHandler.js#L79) - Generate warnings for empty datasets
-- [`extractRetryAfter()`](../lib/errorHandler.js#L139) - Parse Retry-After header
+**[errorHandler.js](../lib/webuntis/errorHandler.js)** - Centralized error handling
+- [`convertRestErrorToWarning()`](../lib/webuntis/errorHandler.js#L24) - Convert API errors to user-friendly warnings
+- [`checkEmptyDataWarning()`](../lib/webuntis/errorHandler.js#L79) - Generate warnings for empty datasets
+- [`extractRetryAfter()`](../lib/webuntis/errorHandler.js#L139) - Parse Retry-After header
 - Error severity classification (critical/warning/info)
 - **Dependencies**: None
 
@@ -348,8 +362,8 @@ graph TB
 **Key Files**:
 - Frontend: [MMM-Webuntis.js#start()](../MMM-Webuntis.js#L528)
 - Backend: [node_helper.js#socketNotificationReceived()](../node_helper.js#L1201)
-- Orchestration: [dataFetchOrchestrator.js#orchestrateFetch()](../lib/dataFetchOrchestrator.js#L25)
-- Payload Building: [payloadBuilder.js#buildGotDataPayload()](../lib/payloadBuilder.js#L30)
+- Orchestration: [dataFetchOrchestrator.js#orchestrateFetch()](../lib/webuntis/dataFetchOrchestrator.js#L25)
+- Payload Building: [payloadBuilder.js#buildGotDataPayload()](../lib/webuntis-client/payloadBuilder.js#L30)
 
 ```mermaid
 sequenceDiagram
@@ -558,11 +572,11 @@ graph TD
 ### 4. **REST API Request Flow** (per data type)
 
 **Key Functions**:
-- [dataFetchOrchestrator.js#orchestrateFetch()](../lib/dataFetchOrchestrator.js#L25) - Parallel orchestration (NEW)
-- [webuntisApiService.js#callWebUntisAPI()](../lib/webuntisApiService.js#L85) - Generic API caller
-- [authService.js#getAuth()](../lib/authService.js#L121) - Auth with caching
-- [restClient.js#callRestAPI()](../lib/restClient.js#L27) - REST wrapper
-- [errorUtils.js#wrapAsync()](../lib/errorUtils.js#L48) - Error handling wrapper (NEW)
+- [dataFetchOrchestrator.js#orchestrateFetch()](../lib/webuntis/dataFetchOrchestrator.js#L25) - Parallel orchestration (NEW)
+- [webuntisApiService.js#callWebUntisAPI()](../lib/webuntis/webuntisApiService.js#L85) - Generic API caller
+- [authService.js#getAuth()](../lib/webuntis/authService.js#L121) - Auth with caching
+- [restClient.js#callRestAPI()](../lib/webuntis/restClient.js#L27) - REST wrapper
+- [errorUtils.js#wrapAsync()](../lib/webuntis/errorUtils.js#L48) - Error handling wrapper (NEW)
 
 ```mermaid
 sequenceDiagram
@@ -630,7 +644,7 @@ sequenceDiagram
 
 ### 5. **Caching Strategy**
 
-**Implementation**: [`lib/cacheManager.js`](../lib/cacheManager.js), [`lib/authService.js#L47-L56`](../lib/authService.js#L47-L56)
+**Implementation**: [`lib/webuntis/cacheManager.js`](../lib/webuntis/cacheManager.js), [`lib/webuntis/authService.js#L47-L56`](../lib/webuntis/authService.js#L47-L56)
 
 ```mermaid
 graph TB
@@ -788,11 +802,11 @@ Runtime warnings now live in a per-student map and disappear automatically once 
 
 | Service | Function | Purpose | Dependencies |
 |---------|----------|---------|--------------|
-| [dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js) | `orchestrateFetch()` | Parallel fetch all data types via Promise.all | errorUtils, webuntisApiService |
-| [payloadBuilder.js](../lib/payloadBuilder.js) | `buildGotDataPayload()` | Build complete GOT_DATA payload | payloadCompactor, errorUtils |
-| [dataOrchestration.js](../lib/dataOrchestration.js) | `calculateFetchRanges()` | Calculate date ranges for fetches | dateTimeUtils |
-| [dataOrchestration.js](../lib/dataOrchestration.js) | `mapRestStatusToLegacyCode()` | Map REST status → frontend codes | — |
-| [errorUtils.js](../lib/errorUtils.js) | `wrapAsync()` | Async error handling with warnings | errorHandler |
+| [dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js) | `orchestrateFetch()` | Parallel fetch all data types via Promise.all | errorUtils, webuntisApiService |
+| [payloadBuilder.js](../lib/webuntis-client/payloadBuilder.js) | `buildGotDataPayload()` | Build complete GOT_DATA payload | payloadCompactor, errorUtils |
+| [dataOrchestration.js](../lib/webuntis/dataOrchestration.js) | `calculateFetchRanges()` | Calculate date ranges for fetches | dateTimeUtils |
+| [dataOrchestration.js](../lib/webuntis/dataOrchestration.js) | `mapRestStatusToLegacyCode()` | Map REST status → frontend codes | — |
+| [errorUtils.js](../lib/webuntis/errorUtils.js) | `wrapAsync()` | Async error handling with warnings | errorHandler |
 
 ## Data Structures
 
@@ -952,7 +966,7 @@ Runtime warnings now live in a per-student map and disappear automatically once 
 
 ### Error Handling Flow (NEW)
 
-The module uses a unified error handling strategy via [errorUtils.js](../lib/errorUtils.js):
+The module uses a unified error handling strategy via [errorUtils.js](../lib/webuntis/errorUtils.js):
 
 ```mermaid
 graph TB
@@ -1110,7 +1124,7 @@ graph LR
 
 1. **Parallel Data Fetching** (✅ IMPLEMENTED)
    - **Impact**: 2.7x faster data loading (5s → 2s)
-   - **Implementation**: [dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js) via `Promise.all()`
+   - **Implementation**: [dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js) via `Promise.all()`
    - **Error Handling**: Per-fetch error isolation via `wrapAsync()`
 
 2. **Auth Token Caching** (✅ IMPLEMENTED)
@@ -1124,7 +1138,7 @@ graph LR
    - **Savings**: Eliminates repeated API lookups
 
 4. **Payload Compaction** (✅ IMPLEMENTED)
-   - **Method**: Schema-based field removal via [payloadCompactor.js](../lib/payloadCompactor.js)
+   - **Method**: Schema-based field removal via [payloadCompactor.js](../lib/webuntis/payloadCompactor.js)
    - **Reduction**: ~40% payload size
    - **Impact**: Faster socket transmission
 
@@ -1177,9 +1191,9 @@ dumpBackendPayloads: true   # Write GOT_DATA to debug_dumps/
 | node_helper.js | 1,803 | processGroup() (~200 LOC) | Medium | ✅ Improved (was 2,048 LOC) |
 | widgets/grid.js | 1,300+ | renderGridForStudent() | ⚠️ High | Needs refactor |
 | MMM-Webuntis.js | 901 | _renderStudentWidgets() (125 LOC) | Medium | OK |
-| lib/authService.js | 500+ | getAuth() | Medium | OK |
-| lib/dataFetchOrchestrator.js | 274 | orchestrateFetch() | Low-Medium | ✅ NEW (extracted logic) |
-| lib/payloadBuilder.js | 170 | buildGotDataPayload() | Low-Medium | ✅ NEW (extracted logic) |
+| lib/webuntis/authService.js | 500+ | getAuth() | Medium | OK |
+| lib/webuntis/dataFetchOrchestrator.js | 274 | orchestrateFetch() | Low-Medium | ✅ NEW (extracted logic) |
+| lib/webuntis-client/payloadBuilder.js | 170 | buildGotDataPayload() | Low-Medium | ✅ NEW (extracted logic) |
 
 ### Modularity Score
 
@@ -1292,22 +1306,22 @@ graph TB
 ### ✅ Completed (2026-01-14)
 
 1. **CRIT-1: Parallel Data Fetching** ✅
-   - Implemented via [dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)
+   - Implemented via [dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js)
    - Performance improvement: 2.7x faster (5s → 2s)
    - Error handling: Per-fetch isolation via errorUtils.wrapAsync()
 
 2. **Unified Error Handling** ✅
-   - Implemented [errorUtils.js](../lib/errorUtils.js) with 4 patterns
+   - Implemented [errorUtils.js](../lib/webuntis/errorUtils.js) with 4 patterns
    - Consistent error handling across all API calls
    - Automatic warning collection for user feedback
 
 3. **Modular Payload Building** ✅
-   - Extracted [payloadBuilder.js](../lib/payloadBuilder.js)
+   - Extracted [payloadBuilder.js](../lib/webuntis-client/payloadBuilder.js)
    - Reduced complexity in node_helper.js
    - Non-blocking debug dumps via tryOrNull()
 
 4. **Data Orchestration Refactor** ✅
-   - Created [dataOrchestration.js](../lib/dataOrchestration.js)
+   - Created [dataOrchestration.js](../lib/webuntis/dataOrchestration.js)
    - Consolidates status mapping, date/time normalization
    - Pure functions for easier testing
 

@@ -1613,6 +1613,10 @@ module.exports = NodeHelper.create({
       config,
       plan: {
         authService: config._authService,
+        homeworkFilter: {
+          pastDays: student.homework?.pastDays,
+          nextDays: student.homework?.nextDays,
+        },
         fetchFlags: {
           fetchTimegrid: Boolean(fetchFlags.fetchTimegrid),
           fetchTimetable: Boolean(fetchFlags.fetchTimetable),
