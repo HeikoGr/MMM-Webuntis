@@ -8,7 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
+  const { log, escapeHtml, addRow, addHeader, formatDisplayDate, createWidgetContext, buildWidgetHeaderTitle } =
     root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
@@ -66,7 +66,7 @@
           const examDateFormat = widgetCtx.getConfig('dateFormat');
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
-          const formattedDate = formatDate ? formatDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
+          const formattedDate = formatDisplayDate ? formatDisplayDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
           const dateTimeCell = formattedDate ? `${formattedDate}` : '';
 
           let nameCell = escapeHtml(exam.name);

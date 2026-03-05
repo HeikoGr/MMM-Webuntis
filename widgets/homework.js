@@ -8,7 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
+  const { escapeHtml, addRow, addHeader, formatDisplayDate, createWidgetContext, buildWidgetHeaderTitle } =
     root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
@@ -50,7 +50,7 @@
       );
 
     for (const hw of sorted) {
-      const due = hw?.dueDate ? formatDate(hw.dueDate, dateFormat) : '';
+      const due = hw?.dueDate ? formatDisplayDate(hw.dueDate, dateFormat) : '';
       const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
       const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 

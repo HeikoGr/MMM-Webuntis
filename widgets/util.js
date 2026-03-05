@@ -55,7 +55,7 @@
 
   /**
    * Format YYYYMMDD integer to dd.MM.yyyy string
-   * Convenience wrapper around formatDate with default format
+   * Convenience wrapper around formatDisplayDate with default format
    *
    * @param {number|string} ymd - Date as YYYYMMDD integer (e.g., 20260130)
    * @returns {string} Formatted date string (e.g., "30.01.2026")
@@ -312,7 +312,7 @@
     return container;
   }
 
-  // NOTE: `formatDate` now accepts Date objects directly. No separate
+  // NOTE: `formatDisplayDate` accepts Date objects directly. No separate
   // `formatDayHeader`/`formatDayLabel` helpers are required.
 
   /**
@@ -417,9 +417,9 @@
     return {
       log: typeof util.log === 'function' ? util.log : () => {},
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
-      formatDate: typeof util.formatDate === 'function' ? util.formatDate : () => '',
-      formatTime: typeof util.formatTime === 'function' ? util.formatTime : () => '',
-      toMinutes: typeof util.toMinutes === 'function' ? util.toMinutes : () => NaN,
+      formatDisplayDate: typeof util.formatDisplayDate === 'function' ? util.formatDisplayDate : () => '',
+      formatDisplayTime: typeof util.formatDisplayTime === 'function' ? util.formatDisplayTime : () => '',
+      toMinutesSinceMidnight: typeof util.toMinutesSinceMidnight === 'function' ? util.toMinutesSinceMidnight : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
       getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
       addRow: typeof dom.addRow === 'function' ? dom.addRow : () => {},
@@ -653,16 +653,10 @@
     formatDisplayTime,
     toMinutesSinceMidnight,
     formatDisplayDate,
-    // Backward-compatible aliases used by widgets
-    formatTime: formatDisplayTime,
-    toMinutes: toMinutesSinceMidnight,
-    formatDate: formatDisplayDate,
     escapeHtml,
     log,
-    _log: log, // backward compatibility alias
     getWidgetConfig,
     resolveWidgetHelpers,
-    initWidget: resolveWidgetHelpers, // backward-compat alias
     getWidgetConfigResolved,
     createWidgetContext,
     buildWidgetHeaderTitle,

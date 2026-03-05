@@ -59,6 +59,11 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Core Principle**: Deterministic transformations based on data source. No compatibility layers needed since frontend and backend always update synchronously.
 
+**No Legacy Compatibility Code**:
+- Do **not** add compatibility wrappers, alias exports, or fallback naming layers.
+- Use canonical function and field names only.
+- Frontend and backend are deployed synchronously, so compatibility shims are unnecessary and should be removed instead of extended.
+
 - Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `payloadBuilder.js`
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
 - HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
@@ -66,8 +71,8 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 **Time Transformation** (simple, no validation layer needed):
 - REST API sends HHMM integers (e.g., 1350 = 13:50) → pass through directly
-- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseTimegridTimeString(v)`
-- Frontend receives HHMM integers; widgets format via `formatTime(hhmm)` → "13:50"
+- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseHHMMStringToInteger(v)`
+- Frontend receives HHMM integers; widgets format via `formatDisplayTime(hhmm)` → "13:50"
 
 **Important**: Data format is always deterministic - always know and specify the source format. No guessing.
 
@@ -122,9 +127,9 @@ console.warn('[feature] Warning:', error);
 - `lib/fetchClient.js` - HTTP fetch abstraction
 - `lib/httpClient.js` - JSON-RPC client (auth only)
 - `lib/cacheManager.js` - TTL cache
-- `lib/payloadCompactor.js` - Schema-driven payload optimization + time/HTML transformations (explicit `normalizeRestApiTime()`, `normalizeTimegridTime()`)
+- `lib/payloadCompactor.js` - Schema-driven payload optimization + time/HTML transformations (`sanitizeHtml()`)
 - `lib/errorHandler.js` - Error mapping + warnings
-- `lib/dateTimeUtils.js` - Frontend date/time utilities (formatTime, toMinutes, etc.)
+- `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
 - `lib/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
 - `lib/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps

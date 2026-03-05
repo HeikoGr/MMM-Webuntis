@@ -820,8 +820,8 @@ Module.register('MMM-Webuntis', {
   _toMinutes(t) {
     // Convert time string or integer (e.g. "13:50" or 1350) to minutes since midnight
     const util = this._getWidgetApi()?.util;
-    if (util && typeof util.toMinutes === 'function') {
-      return util.toMinutes(t);
+    if (util && typeof util.toMinutesSinceMidnight === 'function') {
+      return util.toMinutesSinceMidnight(t);
     }
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();

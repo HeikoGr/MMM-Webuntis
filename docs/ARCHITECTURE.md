@@ -235,6 +235,12 @@ graph TB
 - Response parsing and error handling
 - **Dependencies**: fetchClient.js, errorHandler.js, logger.js, errorUtils.js
 
+**[webuntisClient.js](../lib/webuntis/webuntisClient.js)** - Endpoint execution orchestration
+- [`_extractRestRequestContext()`](../lib/webuntis/webuntisClient.js#L90) - Build per-request context once
+- [`_buildRestAuthHandlers()`](../lib/webuntis/webuntisClient.js#L112) - Centralized `getAuth` / `onAuthError` handlers
+- [`_executeRestEndpoint()`](../lib/webuntis/webuntisClient.js#L133) - Shared skip/error/status tracking wrapper for all REST endpoints
+- Individual `_get*ViaRest` methods only provide endpoint-specific request parameters
+
 ### Orchestration & Building
 
 **[dataFetchOrchestrator.js](../lib/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
@@ -289,9 +295,9 @@ graph TB
 
 **[dateTimeUtils.js](../lib/dateTimeUtils.js)** - Date and time utilities
 - [`addDays()`](../lib/dateTimeUtils.js#L80) - Date arithmetic
-- [`toMinutes()`](../lib/dateTimeUtils.js#L23) - Time string to minutes
-- [`formatTime()`](../lib/dateTimeUtils.js#L56) - Format time strings
-- [`formatDateISO()`](../lib/dateTimeUtils.js#L95) - Date to YYYY-MM-DD string
+- [`toMinutesSinceMidnight()`](../lib/dateTimeUtils.js#L23) - Time string to minutes
+- [`formatHHMMTime()`](../lib/dateTimeUtils.js#L56) - Format time strings
+- [`formatDateToISO()`](../lib/dateTimeUtils.js#L95) - Date to YYYY-MM-DD string
 - **Dependencies**: None (pure functions)
 
 ### Configuration & Validation

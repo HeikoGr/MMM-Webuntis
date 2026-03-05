@@ -11,7 +11,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, formatTime, createWidgetContext, buildWidgetHeaderTitle } =
+  const { escapeHtml, addRow, addHeader, formatDisplayDate, formatDisplayTime, createWidgetContext, buildWidgetHeaderTitle } =
     root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
@@ -90,9 +90,9 @@
       if (maxItems > 0 && visibleCount >= maxItems) break;
 
       const dateRaw = ab?.date;
-      const dateStr = dateRaw ? (formatDate ? formatDate(dateRaw, dateFormat) : '') : '';
-      const st = formatTime(ab?.startTime);
-      const et = formatTime(ab?.endTime);
+      const dateStr = dateRaw ? (formatDisplayDate ? formatDisplayDate(dateRaw, dateFormat) : '') : '';
+      const st = formatDisplayTime(ab?.startTime);
+      const et = formatDisplayTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
       const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';

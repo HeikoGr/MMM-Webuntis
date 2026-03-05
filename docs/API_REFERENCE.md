@@ -330,11 +330,11 @@ Relevant REST payload parts are normalized before frontend consumption.
 
 **REST API:** HHMM integers (e.g., `1350` = 13:50)
 - **Pass-through:** No transformation needed
-- **Frontend:** `formatTime(1350)` → `"13:50"`
+- **Frontend:** `formatDisplayTime(1350)` → `"13:50"`
 
 **Timegrid Source Data:** HH:MM strings (e.g., `"13:50"`)
-- **Transformation:** `parseTimegridTimeString("13:50")` → `1350`
-- **Location:** [payloadCompactor.js](../lib/payloadCompactor.js)
+- **Transformation:** `parseHHMMStringToInteger("13:50")` → `1350`
+- **Location:** [dataOrchestration.js](../lib/webuntis/dataOrchestration.js)
 
 ### HTML Sanitization
 

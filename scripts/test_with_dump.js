@@ -102,7 +102,7 @@ const html = `<!DOCTYPE html>
         };
         return de[key] || key;
       },
-      _toMinutes: window.MMMWebuntisWidgets.util.toMinutes,
+      _toMinutes: window.MMMWebuntisWidgets.util.toMinutesSinceMidnight,
       _hasWidget: (name) => name === 'grid',
       _getWidgetApi: () => window.MMMWebuntisWidgets,
     };
@@ -120,8 +120,8 @@ const html = `<!DOCTYPE html>
       const rawTimeUnits = window.TEST_DUMP_DATA.timeUnits || [];
       const timeUnits = rawTimeUnits.map(tu => ({
         ...tu,
-        startMin: window.MMMWebuntisWidgets.util.toMinutes(tu.startTime),
-        endMin: window.MMMWebuntisWidgets.util.toMinutes(tu.endTime)
+        startMin: window.MMMWebuntisWidgets.util.toMinutesSinceMidnight(tu.startTime),
+        endMin: window.MMMWebuntisWidgets.util.toMinutesSinceMidnight(tu.endTime)
       }));
 
       const gridElement = window.MMMWebuntisWidgets.grid.renderGridForStudent(

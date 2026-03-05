@@ -44,9 +44,9 @@ function getModuleRootElement(ctx) {
     escapeHtml,
     addHeader,
     getWidgetConfigResolved,
-    formatDate,
-    formatTime,
-    toMinutes,
+    formatDisplayDate,
+    formatDisplayTime,
+    toMinutesSinceMidnight,
     createWidgetContext,
     getTeachers,
     getSubject,
@@ -541,10 +541,10 @@ function getModuleRootElement(ctx) {
    * @param {number} startOffset - Day offset from base date
    * @param {string} gridDateFormat - Date format for day labels
    * @param {Object} ctx - Main module context
-   * @param {Object} util - Utility object with formatDate function
+   * @param {Object} util - Utility object with formatDisplayDate function
    * @returns {Object} Object with header element and gridTemplateColumns string
    */
-  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDate }) {
+  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDisplayDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
 
@@ -564,8 +564,8 @@ function getModuleRootElement(ctx) {
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
 
-      const dayLabelText = formatDate
-        ? formatDate(dayDate, gridDateFormat)
+      const dayLabelText = formatDisplayDate
+        ? formatDisplayDate(dayDate, gridDateFormat)
         : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
 
       dayLabel.innerText = dayLabelText;
@@ -2133,7 +2133,7 @@ function getModuleRootElement(ctx) {
       config.startOffset,
       config.gridDateFormat,
       ctx,
-      { formatDate, formatTime, toMinutes }
+      { formatDisplayDate, formatDisplayTime, toMinutesSinceMidnight }
     );
 
     wrapper.appendChild(header);

@@ -14,7 +14,7 @@
     escapeHtml,
     addRow,
     addHeader,
-    formatDate,
+    formatDisplayDate,
     createWidgetContext,
     buildWidgetHeaderTitle,
     isIrregularStatus,
@@ -179,7 +179,7 @@
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
-          const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
+          const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
           addRow(
             container,
             'lessonRow holiday-notice',
@@ -227,7 +227,7 @@
         addedRows++;
         renderedForDate++;
 
-        const dateLabel = formatDate(timeForDay, lessonsDateFormat);
+        const dateLabel = formatDisplayDate(timeForDay, lessonsDateFormat);
         let timeStr = `${dateLabel}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
@@ -342,7 +342,7 @@
         const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
-          const holidayDateStr = formatDate(dayDate, lessonsDateFormat);
+          const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
           addRow(
             container,
             'lessonRow holiday-notice',
