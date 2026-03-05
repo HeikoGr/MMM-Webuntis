@@ -61,7 +61,7 @@
    * @returns {string} Formatted date string (e.g., "30.01.2026")
    */
   function formatYmd(ymd) {
-    return formatDate(ymd, 'dd.MM.yyyy');
+    return formatDisplayDate(ymd, 'dd.MM.yyyy');
   }
 
   /**
@@ -85,7 +85,7 @@
    * @param {string} format - Format pattern (default: 'dd.MM.yyyy')
    * @returns {string} Formatted date string or empty string if invalid
    */
-  function formatDate(ymd, format = 'dd.MM.yyyy') {
+  function formatDisplayDate(ymd, format = 'dd.MM.yyyy') {
     if (ymd === null || ymd === undefined || ymd === '') return '';
 
     // Support numeric ymd (20251214) or ISO date strings (2025-12-14 / 2025-12-14T00:00:00Z)
@@ -162,7 +162,7 @@
    * @param {string|number} v - Time value (HHMM integer or "HH:MM" string)
    * @returns {string} Formatted time string "HH:MM" or empty string if invalid
    */
-  function formatTime(v) {
+  function formatDisplayTime(v) {
     if (v === null || v === undefined) return '';
     const s = String(v).trim();
     if (s.includes(':')) return s;
@@ -180,7 +180,7 @@
    * @param {string|number} t - Time value to convert
    * @returns {number} Minutes since midnight (0-1439) or NaN if invalid
    */
-  function toMinutes(t) {
+  function toMinutesSinceMidnight(t) {
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();
     if (s.includes(':')) {
@@ -650,9 +650,13 @@
   // Export all utilities
   root.util = {
     formatYmd,
-    formatTime,
-    toMinutes,
-    formatDate,
+    formatDisplayTime,
+    toMinutesSinceMidnight,
+    formatDisplayDate,
+    // Backward-compatible aliases used by widgets
+    formatTime: formatDisplayTime,
+    toMinutes: toMinutesSinceMidnight,
+    formatDate: formatDisplayDate,
     escapeHtml,
     log,
     _log: log, // backward compatibility alias

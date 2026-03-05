@@ -290,6 +290,55 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Merge module-level defaults into student configurations.
+   * Applies legacy mappings and normalizes widget sub-configs consistently.
+   *
+   * @param {Object} moduleConfig - Module configuration object
+   * @param {Array} students - Student configuration array
+   * @param {Object} options - Merge options
+   * @param {boolean} options.markAutoDiscovered - Mark each student as auto-discovered
+   * @returns {Array} Normalized student configurations
+   */
+  _mergeModuleDefaultsIntoStudents(moduleConfig, students, options = {}) {
+    const { markAutoDiscovered = false } = options;
+    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+
+    const defNoStudents = { ...(moduleConfig || {}) };
+    delete defNoStudents.students;
+    // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
+    delete defNoStudents.username;
+    delete defNoStudents.password;
+    delete defNoStudents.school;
+    delete defNoStudents.server;
+
+    const sourceStudents = Array.isArray(students) ? students : [];
+    return sourceStudents.map((student) => {
+      const inputStudent = markAutoDiscovered ? { ...(student || {}), _autoDiscovered: true } : student || {};
+      const { normalizedConfig: normalizedStudent } = applyLegacyMappings(inputStudent, {
+        warnCallback: (msg) => this._mmLog('warn', null, msg),
+      });
+
+      const merged = {
+        ...defNoStudents,
+        ...normalizedStudent,
+      };
+
+      widgetKeys.forEach((widget) => {
+        merged[widget] = {
+          ...(defNoStudents[widget] || {}),
+          ...(normalizedStudent[widget] || {}),
+        };
+      });
+
+      if (typeof merged.displayMode === 'string') {
+        merged.displayMode = merged.displayMode.toLowerCase();
+      }
+
+      return merged;
+    });
+  },
+
+  /**
    * Auto-discover students from parent account (app/data endpoint)
    * This function handles three scenarios:
    *   1. No students configured -> auto-discover all students from parent account
@@ -425,39 +474,8 @@ module.exports = NodeHelper.create({
         // This ensures every student has all config fields (displayMode, nextDays, etc.)
         // so fetchData() doesn't need to fall back to module-level config
         if (!moduleConfig._moduleDefaultsMerged) {
-          const defNoStudents = { ...(moduleConfig || {}) };
-          delete defNoStudents.students;
-          // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
-          delete defNoStudents.username;
-          delete defNoStudents.password;
-          delete defNoStudents.school;
-          delete defNoStudents.server;
-
           const allStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-          const mergedStudents = allStudents.map((s) => {
-            // Apply legacy mappings to student config (converts old keys to new structure)
-            const { normalizedConfig: normalizedStudent } = applyLegacyMappings(s || {}, {
-              warnCallback: (msg) => this._mmLog('warn', null, msg),
-            });
-            const merged = {
-              ...defNoStudents,
-              ...normalizedStudent,
-            };
-
-            const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-            widgetKeys.forEach((widget) => {
-              merged[widget] = {
-                ...(defNoStudents[widget] || {}),
-                ...(normalizedStudent[widget] || {}),
-              };
-            });
-
-            // Ensure displayMode is lowercase
-            if (typeof merged.displayMode === 'string') {
-              merged.displayMode = merged.displayMode.toLowerCase();
-            }
-            return merged;
-          });
+          const mergedStudents = this._mergeModuleDefaultsIntoStudents(moduleConfig, allStudents);
 
           moduleConfig.students = mergedStudents;
           moduleConfig._moduleDefaultsMerged = true;
@@ -487,39 +505,8 @@ module.exports = NodeHelper.create({
       // during periodic fetches which can lead to duplicate or inconsistent
       // entries being appended to the runtime config.
       if (!moduleConfig._autoStudentsAssigned) {
-        const defNoStudents = { ...(moduleConfig || {}) };
-        delete defNoStudents.students;
-        // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
-        delete defNoStudents.username;
-        delete defNoStudents.password;
-        delete defNoStudents.school;
-        delete defNoStudents.server;
-        const normalizedAutoStudents = autoStudents.map((s) => {
-          // Apply legacy mappings to auto-discovered student (if any legacy keys present)
-          const { normalizedConfig: normalizedStudent } = applyLegacyMappings(
-            { ...s, _autoDiscovered: true },
-            {
-              warnCallback: (msg) => this._mmLog('warn', null, msg),
-            }
-          );
-          const merged = {
-            ...defNoStudents,
-            ...normalizedStudent,
-          };
-
-          const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
-          widgetKeys.forEach((widget) => {
-            merged[widget] = {
-              ...(defNoStudents[widget] || {}),
-              ...(normalizedStudent[widget] || {}),
-            };
-          });
-
-          // Ensure displayMode is lowercase
-          if (typeof merged.displayMode === 'string') {
-            merged.displayMode = merged.displayMode.toLowerCase();
-          }
-          return merged;
+        const normalizedAutoStudents = this._mergeModuleDefaultsIntoStudents(moduleConfig, autoStudents, {
+          markAutoDiscovered: true,
         });
 
         moduleConfig.students = normalizedAutoStudents;
