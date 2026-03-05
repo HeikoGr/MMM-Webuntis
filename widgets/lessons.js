@@ -9,63 +9,18 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.initWidget?.(root) || {};
-
-  /**
-   * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
-   *
-   * @param {Object|string} lessonOrStatus - Lesson object (with status/activityType) or REST API status code string.
-   * @returns {boolean} True if the lesson is considered irregular.
-   *
-   * Irregular indicators:
-   * - Status: 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'
-   * - Activity type: 'ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'
-   */
-
-  function isIrregularStatus(lessonOrStatus) {
-    // Accept either a lesson object or just the status string
-    if (typeof lessonOrStatus === 'string') {
-      const upperStatus = String(lessonOrStatus || '').toUpperCase();
-      return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
-    }
-
-    // Lesson object passed instead of status string
-    if (lessonOrStatus && typeof lessonOrStatus === 'object') {
-      const status = String(lessonOrStatus.status || '').toUpperCase();
-      const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
-
-      // Check status field
-      if (['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(status)) {
-        return true;
-      }
-
-      // Fallback: check if activityType indicates an irregular lesson
-      if (['ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'].includes(activityType)) {
-        return true;
-      }
-
-      return false;
-    }
-
-    return false;
-  }
-
-  function getChangedFieldSet(entry) {
-    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
-
-    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
-    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
-    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
-
-    return changed;
-  }
-
-  function getPrimaryFieldName(fieldArray) {
-    if (!Array.isArray(fieldArray) || fieldArray.length === 0) return '';
-    const first = fieldArray[0] || {};
-    return String(first.name || first.longname || '').trim();
-  }
+  const {
+    log,
+    escapeHtml,
+    addRow,
+    addHeader,
+    formatDate,
+    createWidgetContext,
+    buildWidgetHeaderTitle,
+    isIrregularStatus,
+    getChangedFieldSet,
+    getFirstFieldName,
+  } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   function hasEffectiveFieldChange(entry, fieldKey) {
     const changed = getChangedFieldSet(entry);
@@ -83,8 +38,8 @@
       ro: entry?.roOld,
     };
 
-    const currentName = getPrimaryFieldName(currentMap[fieldKey]);
-    const oldName = getPrimaryFieldName(oldMap[fieldKey]);
+    const currentName = getFirstFieldName(currentMap[fieldKey]);
+    const oldName = getFirstFieldName(oldMap[fieldKey]);
 
     if (currentName === '' && oldName === '') return true;
     if (currentName === '' || oldName === '') return true;
@@ -174,7 +129,7 @@
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
     if (widgetCtx.isVerbose && studentCellTitle !== '') {
       addHeader(container, buildWidgetHeaderTitle(ctx, 'lessons', widgetCtx, studentCellTitle));
     }
@@ -228,7 +183,7 @@
           addRow(
             container,
             'lessonRow holiday-notice',
-            studentCell,
+            studentLabelText,
             holidayDateStr,
             `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
           );
@@ -380,7 +335,7 @@
           }
         }
 
-        addRow(container, 'lessonRow', studentCell, timeStr, subjectStr, addClass);
+        addRow(container, 'lessonRow', studentLabelText, timeStr, subjectStr, addClass);
       }
 
       if (renderedForDate === 0) {
@@ -391,7 +346,7 @@
           addRow(
             container,
             'lessonRow holiday-notice',
-            studentCell,
+            studentLabelText,
             holidayDateStr,
             `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
           );
@@ -402,7 +357,7 @@
 
     if (addedRows === 0) {
       log('debug', `[lessons] no entries to display`);
-      addRow(container, 'lessonRowEmpty', studentCell, ctx.translate('nothing'));
+      addRow(container, 'lessonRowEmpty', studentLabelText, ctx.translate('nothing'));
       return 1;
     }
 

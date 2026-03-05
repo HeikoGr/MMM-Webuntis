@@ -9,7 +9,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addFullRow, addHeader, createWidgetContext, buildWidgetHeaderTitle } = root.util?.initWidget?.(root) || {};
+  const { log, escapeHtml, addFullRow, addHeader, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render messages of day widget for a single student

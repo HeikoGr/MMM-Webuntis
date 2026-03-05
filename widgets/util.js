@@ -356,6 +356,54 @@
   }
 
   /**
+   * Check if a lesson or status represents an "irregular" lesson (substitution/replacement/additional).
+   * Accepts either a lesson object or a status string.
+   *
+   * @param {Object|string} lessonOrStatus - Lesson object or REST API status code string
+   * @returns {boolean} True if status represents irregular lesson
+   */
+  function isIrregularStatus(lessonOrStatus) {
+    if (typeof lessonOrStatus === 'string') {
+      return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(String(lessonOrStatus || '').toUpperCase());
+    }
+    if (lessonOrStatus && typeof lessonOrStatus === 'object') {
+      const status = String(lessonOrStatus.status || '').toUpperCase();
+      const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
+      if (['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(status)) return true;
+      if (['ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'].includes(activityType)) return true;
+      return false;
+    }
+    return false;
+  }
+
+  /**
+   * Build a Set of field keys that changed in a lesson entry.
+   * Considers changedFields array and presence of *Old arrays (suOld, teOld, roOld).
+   *
+   * @param {Object} entry - Lesson entry object
+   * @returns {Set<string>} Set of changed field keys ('su', 'te', 'ro', ...)
+   */
+  function getChangedFieldSet(entry) {
+    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
+    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
+    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
+    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
+    return changed;
+  }
+
+  /**
+   * Return the display name of the first element in a field array (e.g. su, te, ro).
+   *
+   * @param {Array} entries - Array of field objects with name/longname properties
+   * @returns {string} Trimmed display name or empty string
+   */
+  function getFirstFieldName(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return '';
+    const first = entries[0] || {};
+    return String(first.name || first.longname || '').trim();
+  }
+
+  /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
    * Provides safe fallbacks if any utility is missing
@@ -363,7 +411,7 @@
    * @param {Object} widgetRoot - The MMMWebuntisWidgets root object
    * @returns {Object} Object containing util and dom helper functions
    */
-  function initWidget(widgetRoot) {
+  function resolveWidgetHelpers(widgetRoot) {
     const util = widgetRoot.util || {};
     const dom = widgetRoot.dom || {};
     return {
@@ -391,6 +439,10 @@
       getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
       getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
       getInfo: typeof util.getInfo === 'function' ? util.getInfo : () => '',
+      // Lesson status / change helpers
+      isIrregularStatus,
+      getChangedFieldSet,
+      getFirstFieldName,
     };
   }
 
@@ -601,18 +653,19 @@
     formatTime,
     toMinutes,
     formatDate,
-    // backward compatibility: keep alias name for callers that may still use it
-    formatHolidayDate: function (dateInput, format) {
-      return formatDate(dateInput, format);
-    },
     escapeHtml,
     log,
     _log: log, // backward compatibility alias
     getWidgetConfig,
-    initWidget,
+    resolveWidgetHelpers,
+    initWidget: resolveWidgetHelpers, // backward-compat alias
     getWidgetConfigResolved,
     createWidgetContext,
     buildWidgetHeaderTitle,
+    // Lesson status / change helpers
+    isIrregularStatus,
+    getChangedFieldSet,
+    getFirstFieldName,
     // New dynamic field utilities
     getFieldValue,
     getTeachers,

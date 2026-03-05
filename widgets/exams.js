@@ -9,7 +9,7 @@
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
   const { log, escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.initWidget?.(root) || {};
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -36,7 +36,7 @@
 
       // Use widget context helper to reduce config duplication
       const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {}, ctx);
-      const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+      const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
       // Header is already added by main module if studentCellTitle is empty
       if (widgetCtx.isVerbose && studentCellTitle !== '') {
         addHeader(container, buildWidgetHeaderTitle(ctx, 'exams', widgetCtx, studentCellTitle));
@@ -83,11 +83,11 @@
             nameCell += `<br/><span class="exam-description">${escapeHtml(exam.text)}</span>`;
           }
 
-          addRow(container, 'examRow', studentCell, dateTimeCell, nameCell);
+          addRow(container, 'examRow', studentLabelText, dateTimeCell, nameCell);
         });
 
       if (addedRows === 0) {
-        addRow(container, 'examRowEmpty', studentCell, ctx.translate('no_exams'));
+        addRow(container, 'examRowEmpty', studentLabelText, ctx.translate('no_exams'));
       }
 
       return addedRows;

@@ -257,9 +257,9 @@ graph TB
 
 **[dataOrchestration.js](../lib/dataOrchestration.js)** - Data transformation and orchestration (NEW)
 - [`mapRestStatusToLegacyCode()`](../lib/dataOrchestration.js#L22) - Map REST status → frontend codes
-- [`sanitizeHtmlText()`](../lib/dataOrchestration.js#L56) - HTML sanitization with line break preservation
+- [`stripAllHtml()`](../lib/dataOrchestration.js#L56) - Strip all HTML tags (line break preservation optional)
 - [`normalizeDateToInteger()`](../lib/dataOrchestration.js#L100) - Dates → YYYYMMDD integers
-- [`normalizeTimeToMinutes()`](../lib/dataOrchestration.js#L128) - Times → HHMM integers
+- [`normalizeTimeToHHMM()`](../lib/dataOrchestration.js#L128) - Times → HHMM integers
 - [`calculateFetchRanges()`](../lib/dataOrchestration.js#L210) - Calculate date ranges for all data types
 - [`compactHolidays()`](../lib/dataOrchestration.js#L162) - Remove unnecessary holiday fields
 - **Dependencies**: None (pure functions)
@@ -291,7 +291,7 @@ graph TB
 - [`addDays()`](../lib/dateTimeUtils.js#L80) - Date arithmetic
 - [`toMinutes()`](../lib/dateTimeUtils.js#L23) - Time string to minutes
 - [`formatTime()`](../lib/dateTimeUtils.js#L56) - Format time strings
-- [`formatDateYYYYMMDD()`](../lib/dateTimeUtils.js#L95) - Date to YYYYMMDD integer
+- [`formatDateISO()`](../lib/dateTimeUtils.js#L95) - Date to YYYY-MM-DD string
 - **Dependencies**: None (pure functions)
 
 ### Configuration & Validation

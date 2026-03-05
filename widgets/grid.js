@@ -55,7 +55,10 @@ function getModuleRootElement(ctx) {
     getStudentGroup,
     getInfo,
     buildWidgetHeaderTitle,
-  } = root.util?.initWidget?.(root) || {};
+    isIrregularStatus,
+    getChangedFieldSet,
+    getFirstFieldName,
+  } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   // ============================================================================
   // Grid-specific helper functions (moved from util.js)
@@ -142,38 +145,6 @@ function getModuleRootElement(ctx) {
     };
   }
 
-  /**
-   * Check if lesson status is "irregular" (substitution/replacement/additional)
-   * Based on REST API status values mapping to legacy codes
-   *
-   * @param {string} status - REST API status code
-   * @returns {boolean} True if status represents irregular lesson
-   *
-   * Irregular statuses:
-   * - 'ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE' → replacement/additional lesson
-   */
-
-  function isIrregularStatus(status) {
-    const upperStatus = String(status || '').toUpperCase();
-    return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(upperStatus);
-  }
-
-  function getChangedFieldSet(lesson) {
-    const changed = new Set(Array.isArray(lesson?.changedFields) ? lesson.changedFields : []);
-
-    if (Array.isArray(lesson?.suOld) && lesson.suOld.length > 0) changed.add('su');
-    if (Array.isArray(lesson?.teOld) && lesson.teOld.length > 0) changed.add('te');
-    if (Array.isArray(lesson?.roOld) && lesson.roOld.length > 0) changed.add('ro');
-
-    return changed;
-  }
-
-  function getFirstChangedName(entries) {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
-    const first = entries[0];
-    if (!first || typeof first !== 'object') return '';
-    return first.name || first.longname || '';
-  }
   /**
    * Get field value based on flexible configuration
    * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
@@ -1127,7 +1098,7 @@ function getModuleRootElement(ctx) {
         let primaryHtml;
         if (changedFields.has('su')) {
           const newSubject = lesson.su?.[0]?.name || '';
-          const oldSubject = getFirstChangedName(lesson.suOld);
+          const oldSubject = getFirstFieldName(lesson.suOld);
           if (newSubject) {
             primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
           } else if (oldSubject) {
@@ -1144,7 +1115,7 @@ function getModuleRootElement(ctx) {
         let secondaryHtml;
         if (changedFields.has('te')) {
           const newTeacher = lesson.te?.[0]?.name || '';
-          const oldTeacher = getFirstChangedName(lesson.teOld);
+          const oldTeacher = getFirstFieldName(lesson.teOld);
           if (newTeacher) {
             secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
           } else if (oldTeacher) {
@@ -1160,7 +1131,7 @@ function getModuleRootElement(ctx) {
         let additionalHtml = '';
         if (changedFields.has('ro')) {
           const newRoom = lesson.ro?.[0]?.name || '';
-          const oldRoom = getFirstChangedName(lesson.roOld);
+          const oldRoom = getFirstFieldName(lesson.roOld);
           if (newRoom) {
             additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
           } else if (oldRoom) {

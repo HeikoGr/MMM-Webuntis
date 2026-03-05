@@ -8,7 +8,8 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } = root.util?.initWidget?.(root) || {};
+  const { escapeHtml, addRow, addHeader, formatDate, createWidgetContext, buildWidgetHeaderTitle } =
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render homework widget for a single student
@@ -27,14 +28,14 @@
 
     // Use widget context helper to reduce config duplication
     const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
-    const studentCell = widgetCtx.isVerbose ? '' : studentCellTitle;
+    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
     // Header is already added by main module if studentCellTitle is empty
     if (widgetCtx.isVerbose && studentCellTitle !== '') {
       addHeader(container, buildWidgetHeaderTitle(ctx, 'homework', widgetCtx, studentCellTitle));
     }
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
-      addRow(container, 'homeworkRowEmpty', studentCell, ctx.translate('no_homework'));
+      addRow(container, 'homeworkRowEmpty', studentLabelText, ctx.translate('no_homework'));
       return 1;
     }
 
@@ -59,7 +60,7 @@
       if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
       const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
 
-      addRow(container, 'homeworkRow', studentCell, left, right);
+      addRow(container, 'homeworkRow', studentLabelText, left, right);
       addedRows++;
     }
 
