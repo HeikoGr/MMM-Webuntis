@@ -107,20 +107,29 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Normalize legacy configuration keys to modern format
-   * Applies 25+ legacy config key mappings from configValidator module
-   * Also generates deprecation warnings for outdated keys
+   * Normalize legacy configuration keys to modern format.
+   * Applies mappings once for module-level config and once for each student entry.
    *
    * @param {Object} cfg - Raw configuration object (may contain legacy keys)
-   * @returns {Object} Normalized config with modern keys
+   * @returns {Object} { normalizedConfig, legacyUsed }
    */
   _normalizeLegacyConfig(cfg) {
-    if (!cfg || typeof cfg !== 'object') return cfg;
+    if (!cfg || typeof cfg !== 'object') return { normalizedConfig: cfg, legacyUsed: [] };
 
-    // Use centralized legacy mapping from configValidator
-    const { normalizedConfig, legacyUsed } = applyLegacyMappings(cfg, {
-      warnCallback: (msg) => this._mmLog('warn', null, msg),
-    });
+    const { normalizedConfig } = applyLegacyMappings(cfg);
+    const legacyUsed = Array.isArray(normalizedConfig.__legacyUsed) ? [...normalizedConfig.__legacyUsed] : [];
+
+    // Normalize each student once at init, so fetch flow can treat students as canonical.
+    if (Array.isArray(normalizedConfig.students)) {
+      normalizedConfig.students = normalizedConfig.students.map((student) => {
+        const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
+        const studentLegacy = Array.isArray(normalizedStudent.__legacyUsed) ? normalizedStudent.__legacyUsed : [];
+        studentLegacy.forEach((key) => {
+          if (!legacyUsed.includes(key)) legacyUsed.push(key);
+        });
+        return normalizedStudent;
+      });
+    }
 
     // Ensure displayMode is lowercase
     if (typeof normalizedConfig.displayMode === 'string') {
@@ -162,7 +171,7 @@ module.exports = NodeHelper.create({
       }
     }
 
-    return normalizedConfig;
+    return { normalizedConfig, legacyUsed };
   },
 
   // ---------------------------------------------------------------------------
@@ -314,19 +323,16 @@ module.exports = NodeHelper.create({
     const sourceStudents = Array.isArray(students) ? students : [];
     return sourceStudents.map((student) => {
       const inputStudent = markAutoDiscovered ? { ...(student || {}), _autoDiscovered: true } : student || {};
-      const { normalizedConfig: normalizedStudent } = applyLegacyMappings(inputStudent, {
-        warnCallback: (msg) => this._mmLog('warn', null, msg),
-      });
 
       const merged = {
         ...defNoStudents,
-        ...normalizedStudent,
+        ...inputStudent,
       };
 
       widgetKeys.forEach((widget) => {
         merged[widget] = {
           ...(defNoStudents[widget] || {}),
-          ...(normalizedStudent[widget] || {}),
+          ...(inputStudent[widget] || {}),
         };
       });
 
@@ -749,6 +755,57 @@ module.exports = NodeHelper.create({
       });
   },
 
+  /**
+   * Parse compound session key format `identifier:sessionId`.
+   *
+   * @param {string} sessionKey - Session key
+   * @returns {{identifier: string, sessionId: string}} Parsed parts
+   */
+  _parseSessionKey(sessionKey) {
+    const raw = String(sessionKey || 'default:unknown');
+    const idx = raw.indexOf(':');
+    if (idx === -1) {
+      return {
+        identifier: raw || 'default',
+        sessionId: 'unknown',
+      };
+    }
+    return {
+      identifier: raw.slice(0, idx) || 'default',
+      sessionId: raw.slice(idx + 1) || 'unknown',
+    };
+  },
+
+  /**
+   * Build widget/fetch flags from displayMode using the canonical client logic.
+   *
+   * @param {string} displayMode - Effective display mode
+   * @returns {Object} Widget and fetch flags
+   */
+  _buildFetchFlags(displayMode) {
+    return WebUntisClient.buildFetchFlags(this._wantsWidget.bind(this), displayMode);
+  },
+
+  /**
+   * Get session config from cache or create it from identifier-level config.
+   *
+   * @param {string} sessionKey - Compound session key
+   * @param {string} identifier - Module identifier
+   * @returns {Object|null} Session config object
+   */
+  _getOrCreateSessionConfig(sessionKey, identifier) {
+    if (this._configsBySession.has(sessionKey)) {
+      return this._configsBySession.get(sessionKey);
+    }
+
+    const baseConfig = this._configsByIdentifier.get(identifier);
+    if (!baseConfig) return null;
+
+    const sessionConfig = { ...baseConfig };
+    this._configsBySession.set(sessionKey, sessionConfig);
+    return sessionConfig;
+  },
+
   // ===== Warning Validation =====
 
   /**
@@ -845,7 +902,7 @@ module.exports = NodeHelper.create({
         // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
         // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
         // Prevents cascading failures from expired/corrupted auth state
-        const authService = this._getAuthServiceForIdentifier(identifier);
+        const authService = config?._authService || this._getAuthServiceForIdentifier(identifier);
         if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
           authService.invalidateAllCachesForSession(sessionKey);
           this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
@@ -857,30 +914,18 @@ module.exports = NodeHelper.create({
           this._currentFetchWarnings.add(msg);
         }
         // Send error payload to frontend with warnings
+        const { sessionId } = this._parseSessionKey(sessionKey);
         for (const student of students) {
           const effectiveDisplayMode = student.displayMode || config.displayMode;
-          const wantsGridWidget = this._wantsWidget('grid', effectiveDisplayMode);
-          const wantsLessonsWidget = this._wantsWidget('lessons', effectiveDisplayMode);
-          const wantsExamsWidget = this._wantsWidget('exams', effectiveDisplayMode);
-          const wantsHomeworkWidget = this._wantsWidget('homework', effectiveDisplayMode);
-          const wantsAbsencesWidget = this._wantsWidget('absences', effectiveDisplayMode);
-          const wantsMessagesOfDayWidget = this._wantsWidget('messagesofday', effectiveDisplayMode);
-          const fetchFlags = {
-            fetchTimegrid: Boolean(wantsGridWidget || wantsLessonsWidget),
-            fetchTimetable: Boolean(wantsGridWidget || wantsLessonsWidget),
-            fetchExams: Boolean(wantsGridWidget || wantsExamsWidget),
-            fetchHomeworks: Boolean(wantsGridWidget || wantsHomeworkWidget),
-            fetchAbsences: Boolean(wantsGridWidget || wantsAbsencesWidget),
-            fetchMessagesOfDay: Boolean(wantsMessagesOfDayWidget),
-          };
+          const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
           // Sending error to frontend silently
           this.sendSocketNotification('GOT_DATA', {
             contractVersion: 2,
             id: identifier,
-            sessionId: sessionKey.split(':')[1], // Extract sessionId from "identifier:sessionId"
+            sessionId,
             meta: {
               moduleId: identifier,
-              sessionId: sessionKey.split(':')[1],
+              sessionId,
               generatedAt: new Date().toISOString(),
             },
             context: {
@@ -943,9 +988,7 @@ module.exports = NodeHelper.create({
       // Holidays are shared across all students in the same school/group.
       // Extract and compact them once before processing students to avoid redundant work.
       // Holidays come from appData (no separate API call needed)
-      const wantsGridWidget = this._wantsWidget('grid', config?.displayMode);
-      const wantsLessonsWidget = this._wantsWidget('lessons', config?.displayMode);
-      const shouldFetchHolidays = Boolean(wantsGridWidget || wantsLessonsWidget);
+      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config?.displayMode);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
       if (shouldFetchHolidays) {
         // this._mmLog(
@@ -1013,12 +1056,13 @@ module.exports = NodeHelper.create({
       }
 
       // Send all collected payloads at once to minimize DOM redraws
+      const { sessionId } = this._parseSessionKey(sessionKey);
       for (const payload of studentPayloads) {
         // Send to ALL module instances, but include both id and sessionId for filtering
         // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
         // This allows multiple browser windows with same module identifier to get separate data
         payload.id = identifier;
-        payload.sessionId = sessionKey.split(':')[1]; // Extract sessionId from "identifier:sessionId"
+        payload.sessionId = sessionId;
         // Sending data to frontend silently
         this.sendSocketNotification('GOT_DATA', payload);
       }
@@ -1121,9 +1165,7 @@ module.exports = NodeHelper.create({
 
       // Apply legacy mappings to convert old keys to new structure
       // This ensures backwards compatibility with 25+ deprecated config keys
-      const result = applyLegacyMappings(payloadCopy, {
-        warnCallback: (msg) => this._mmLog('warn', null, msg),
-      });
+      const result = this._normalizeLegacyConfig(payloadCopy);
       normalizedConfig = result.normalizedConfig;
       const legacyUsed = result.legacyUsed;
 
@@ -1249,11 +1291,9 @@ module.exports = NodeHelper.create({
     const fetchTimestamp = Date.now();
     this._lastFetchTimestamp = fetchTimestamp;
 
-    // Verify module is initialized (per session preferred, fall back to identifier)
-    // Session-specific config takes precedence over identifier-level config
-    const hasSessionConfig = this._configsBySession.has(sessionKey);
-    const baseConfig = this._configsByIdentifier.get(identifier);
-    if (!hasSessionConfig && !baseConfig) {
+    // Verify module is initialized and ensure session-specific config exists.
+    let normalizedConfig = this._getOrCreateSessionConfig(sessionKey, identifier);
+    if (!normalizedConfig) {
       // Self-healing: if module not initialized but FETCH_DATA received, re-run initialization
       // This handles cases where backend restarted but frontend still thinks it's initialized
       this._mmLog(
@@ -1265,12 +1305,6 @@ module.exports = NodeHelper.create({
       // This covers cases where the backend restarted but the frontend still thinks it is initialized.
       await this._handleInitModule(payload);
       return;
-    }
-
-    // Start from session-specific config; if missing, clone identifier config for this session
-    let normalizedConfig = hasSessionConfig ? this._configsBySession.get(sessionKey) : { ...baseConfig };
-    if (!this._configsBySession.has(sessionKey) && normalizedConfig) {
-      this._configsBySession.set(sessionKey, normalizedConfig);
     }
 
     // Update session-specific config if provided (e.g., debugDate changes for testing)
@@ -1301,15 +1335,12 @@ module.exports = NodeHelper.create({
    * @returns {Promise<void>}
    */
   async _executeFetchForSession(sessionKey) {
-    if (!this._configsBySession.has(sessionKey)) {
+    const { identifier: sessionIdentifier } = this._parseSessionKey(sessionKey);
+    const config = this._getOrCreateSessionConfig(sessionKey, sessionIdentifier);
+    if (!config) {
       this._mmLog('warn', null, `Session ${sessionKey} not found, skipping fetch`);
       return;
     }
-
-    const config = this._configsBySession.get(sessionKey);
-
-    // Extract identifier from sessionKey (format: identifier:sessionId)
-    const sessionIdentifier = sessionKey.split(':')[0];
 
     // Get AuthService reference (already initialized during INIT_MODULE)
     config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
@@ -1330,14 +1361,12 @@ module.exports = NodeHelper.create({
       // Students with the same credentials share a single auth session (reduces API calls)
       const groups = new Map();
 
-      // Group students by credential. Normalize each student config for legacy key compatibility.
+      // Group students by credential. Student configs are already normalized during INIT_MODULE.
       const studentsList = Array.isArray(config.students) ? config.students : [];
       for (const student of studentsList) {
-        // Apply legacy config mapping to student-level config
-        const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-        const credKey = this._getCredentialKey(normalizedStudent, config, sessionKey);
+        const credKey = this._getCredentialKey(student, config, sessionKey);
         if (!groups.has(credKey)) groups.set(credKey, []);
-        groups.get(credKey).push(normalizedStudent);
+        groups.get(credKey).push(student);
       }
 
       // Process each credential group for this session
@@ -1357,7 +1386,6 @@ module.exports = NodeHelper.create({
         try {
           // Process this session's data
           // authService.getAuth() will use its internal cache for subsequent calls with same cacheKey
-          const sessionIdentifier = sessionKey.split(':')[0];
           await this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);
         } finally {
           // Remove from pending after completion
