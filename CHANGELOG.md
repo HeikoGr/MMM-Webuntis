@@ -4,6 +4,43 @@
 
 - Nothing yet. 🚧
 
+## 0.7.4
+
+### 🧱 Architecture & Data Flow
+
+- Backend fetching was further modularized and cleaned up: orchestration now flows more clearly through `webuntisClient`, mapper, and payload builder layers, with better separation of responsibilities.
+- Initialization was improved: backend init is triggered more deliberately (deferred initialization), session state is handled more robustly, and fetch cycles are more stable.
+- The API v2 contract and payload structure were unified consistently and documented throughout (including refreshed reference docs).
+
+### ⚠️ Warnings, Errors & Auth
+
+- Runtime warnings were normalized and extended with metadata; warnings are now processed and displayed more consistently per student.
+- Empty-data warnings now factor in timetable API status more accurately to reduce false positives.
+- Error handling and auth handling were improved across multiple services, especially for re-auth and API error scenarios.
+
+### 🧼 Security & Sanitization
+
+- Several code-scanning findings were addressed (including sanitization/unescaping, randomness, and path-handling topics).
+- `sanitizeHtmlText` was fixed so decoded entities are preserved and `preserveLineBreaks` is handled correctly.
+
+### 🖼️ UI & Widget Improvements
+
+- Lessons/Grid now support placeholders for changed fields, making field changes clearer in the UI.
+- Widget headers were enhanced with dynamic titles.
+- Optional legacy color-scheme documentation and CSS overrides were added (for the previous multi-color look).
+
+### 📦 Packaging
+
+- Package metadata and exports were revised (including README in package contents), plus minor maintenance updates to install scripts.
+- Version bumped to `0.7.4`.
+
+## 0.7.1
+
+### 🔧 Maintenance
+
+- Dependency update: `minimatch` was updated.
+- Version bumped to `0.7.1`.
+
 ## 0.7.0
 
 ### ✨ Widgets & UI
