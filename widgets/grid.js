@@ -762,6 +762,9 @@ function getModuleRootElement(ctx) {
    * @returns {Array} Filtered lesson objects
    */
   function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd) {
+    if (allEnd === undefined || allEnd === null) {
+      allEnd = Infinity;
+    }
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
       return dayLessons.filter((lesson) => {
         // Always keep cancelled and irregular lessons

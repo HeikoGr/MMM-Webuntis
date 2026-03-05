@@ -179,7 +179,7 @@
       });
 
       if (!entries || entries.length === 0) {
-        const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
+        const holiday = (ctx.holidayMapByStudent?.[effectiveStudentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
@@ -342,7 +342,7 @@
       }
 
       if (renderedForDate === 0) {
-        const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[dateYmd] || null;
+        const holiday = (ctx.holidayMapByStudent?.[effectiveStudentTitle] || {})[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
           const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
