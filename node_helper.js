@@ -8,6 +8,7 @@ const path = require('path');
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
 const { WebUntisClient } = require('./lib/webuntis/webuntisClient');
+const { calculateFetchRanges } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
 module.exports = NodeHelper.create({
   /**
@@ -668,18 +669,8 @@ module.exports = NodeHelper.create({
     if (!Array.isArray(rawHolidays)) return [];
     return rawHolidays.map((h) => {
       // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-      let startDate = h.startDate;
-      let endDate = h.endDate;
-
-      // Convert ISO timestamp to YYYYMMDD if needed
-      if (h.start && !h.startDate) {
-        const startDateObj = new Date(h.start);
-        startDate = startDateObj.getFullYear() * 10000 + (startDateObj.getMonth() + 1) * 100 + startDateObj.getDate();
-      }
-      if (h.end && !h.endDate) {
-        const endDateObj = new Date(h.end);
-        endDate = endDateObj.getFullYear() * 10000 + (endDateObj.getMonth() + 1) * 100 + endDateObj.getDate();
-      }
+      const startDate = h.startDate ?? WebUntisClient.normalizeDateToInteger(h.start);
+      const endDate = h.endDate ?? WebUntisClient.normalizeDateToInteger(h.end);
 
       return {
         id: h.id ?? null,
@@ -736,23 +727,26 @@ module.exports = NodeHelper.create({
    */
   _wantsWidget(widgetName, displayMode) {
     const w = String(widgetName || '').toLowerCase();
-    const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase();
+    const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase().trim();
     if (!w) return false;
-    if (dm === w) return true;
-    // Backwards compatible values
-    if (w === 'grid' && dm.trim() === 'grid') return true;
-    if ((w === 'lessons' || w === 'exams') && dm.trim() === 'list') return true;
+
+    const aliasMap = {
+      homework: ['homework', 'homeworks'],
+      absences: ['absence', 'absences'],
+      messagesofday: ['messagesofday', 'messages'],
+      lessons: ['lessons', 'list'],
+      exams: ['exams', 'list'],
+      grid: ['grid'],
+    };
+
+    const acceptedTokens = aliasMap[w] || [w];
+    if (acceptedTokens.includes(dm)) return true;
+
     return dm
       .split(',')
       .map((p) => p.trim())
       .filter(Boolean)
-      .some((p) => {
-        if (p === w) return true;
-        if (w === 'homework' && (p === 'homeworks' || p === 'homework')) return true;
-        if (w === 'absences' && (p === 'absence' || p === 'absences')) return true;
-        if (w === 'messagesofday' && (p === 'messagesofday' || p === 'messages')) return true;
-        return false;
-      });
+      .some((p) => acceptedTokens.includes(p));
   },
 
   /**
@@ -784,6 +778,30 @@ module.exports = NodeHelper.create({
    */
   _buildFetchFlags(displayMode) {
     return WebUntisClient.buildFetchFlags(this._wantsWidget.bind(this), displayMode);
+  },
+
+  /**
+   * Calculate current base date in configured timezone and optional debug override.
+   *
+   * @param {Object} config - Module config
+   * @returns {Date} Timezone-aware base date
+   */
+  _calculateBaseNow(config) {
+    try {
+      const dbg = (typeof config?.debugDate === 'string' && config.debugDate) || null;
+      if (dbg) {
+        const s = String(dbg).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`);
+        if (/^\d{8}$/.test(s)) {
+          return new Date(`${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}T00:00:00`);
+        }
+      }
+    } catch {
+      void 0;
+    }
+
+    const now = new Date(Date.now());
+    return new Date(now.toLocaleString('en-US', { timeZone: config.timezone || 'Europe/Berlin' }));
   },
 
   /**
@@ -1451,10 +1469,10 @@ module.exports = NodeHelper.create({
 
     if (startTimes.size === 0) return [];
 
-    // Sort unique start times chronologically (convert HH:MM to integer for comparison)
+    // Sort unique start times chronologically using shared HHMM normalization
     const sortedStarts = Array.from(startTimes).sort((a, b) => {
-      const timeA = parseInt(a.replace(':', ''), 10);
-      const timeB = parseInt(b.replace(':', ''), 10);
+      const timeA = WebUntisClient.normalizeTimeToHHMM(a) || 0;
+      const timeB = WebUntisClient.normalizeTimeToHHMM(b) || 0;
       return timeA - timeB;
     });
 
@@ -1499,10 +1517,19 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
    */
   async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey) {
+    const effectiveDisplayMode = student.displayMode || config.displayMode;
+    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const baseNow = this._calculateBaseNow(config);
+    const dateRanges = calculateFetchRanges(student, config, baseNow, {
+      wantsGridWidget: Boolean(fetchFlags.wantsGridWidget),
+      wantsLessonsWidget: Boolean(fetchFlags.wantsLessonsWidget),
+      fetchExams: Boolean(fetchFlags.fetchExams),
+      fetchAbsences: Boolean(fetchFlags.fetchAbsences),
+    });
+
     const client = new WebUntisClient({
       mmLog: this._mmLog.bind(this),
       formatErr: this._formatErr.bind(this),
-      wantsWidget: this._wantsWidget.bind(this),
       extractTimegridFromTimetable: this._extractTimegridFromTimetable.bind(this),
       compactTimegrid: this._compactTimegrid.bind(this),
       cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
@@ -1524,6 +1551,21 @@ module.exports = NodeHelper.create({
       credKey,
       compactHolidays,
       config,
+      authService: config._authService,
+      fetchFlags: {
+        fetchTimegrid: Boolean(fetchFlags.fetchTimegrid),
+        fetchTimetable: Boolean(fetchFlags.fetchTimetable),
+        fetchExams: Boolean(fetchFlags.fetchExams),
+        fetchHomeworks: Boolean(fetchFlags.fetchHomeworks),
+        fetchAbsences: Boolean(fetchFlags.fetchAbsences),
+        fetchMessagesOfDay: Boolean(fetchFlags.fetchMessagesOfDay),
+      },
+      baseNow,
+      dateRanges,
+      flagsCtx: {
+        debugApi: Boolean(config.debugApi),
+        dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
+      },
       sessionKey,
       currentFetchWarnings: this._currentFetchWarnings,
     });

@@ -77,7 +77,8 @@
    * @returns {number} Number of rows added to container (0 = widget disabled)
    */
   function renderLessonsForStudent(ctx, container, studentCellTitle, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
-    log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${studentTitle}`);
+    const effectiveStudentTitle = String(studentTitle || studentConfig?.title || studentCellTitle || '');
+    log('debug', `[LESSONS-DEBUG] renderLessonsForStudent called for ${effectiveStudentTitle}`);
     let addedRows = 0;
 
     const widgetCtx = createWidgetContext('lessons', studentConfig, root.util || {}, ctx);
@@ -85,24 +86,26 @@
     const getLessonsConfig = (key, optionsOrFallback) => widgetCtx.getConfig(key, optionsOrFallback);
 
     const configuredNext = getLessonsConfig('nextDays');
-    log('debug', `[LESSONS-DEBUG] ${studentTitle}: configuredNext=${configuredNext}`);
+    log('debug', `[LESSONS-DEBUG] ${effectiveStudentTitle}: configuredNext=${configuredNext}`);
     if (!configuredNext || Number(configuredNext) <= 0) {
-      log('debug', `[LESSONS-DEBUG] ${studentTitle}: skipped - nextDays not configured`);
-      log('debug', `[lessons] skipped: nextDays not configured for "${studentTitle}"`);
+      log('debug', `[LESSONS-DEBUG] ${effectiveStudentTitle}: skipped - nextDays not configured`);
+      log('debug', `[lessons] skipped: nextDays not configured for "${effectiveStudentTitle}"`);
       return 0;
     }
 
     const timetableLength = Array.isArray(timetable) ? timetable.length : 0;
     const holidaysLength = Array.isArray(holidays) ? holidays.length : 0;
-    const holidayMapLength = ctx.holidayMapByStudent?.[studentTitle] ? Object.keys(ctx.holidayMapByStudent[studentTitle]).length : 0;
+    const holidayMapLength = ctx.holidayMapByStudent?.[effectiveStudentTitle]
+      ? Object.keys(ctx.holidayMapByStudent[effectiveStudentTitle]).length
+      : 0;
     log(
       'debug',
-      `[LESSONS-DEBUG] ${studentTitle}: timetable=${timetableLength}, holidays=${holidaysLength}, holidayMap=${holidayMapLength}`
+      `[LESSONS-DEBUG] ${effectiveStudentTitle}: timetable=${timetableLength}, holidays=${holidaysLength}, holidayMap=${holidayMapLength}`
     );
     log(
       ctx,
       'debug',
-      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength}`
+      `[lessons] render start | student: "${effectiveStudentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength}`
     );
 
     // Use module's computed today value when available (supports debugDate), else local now

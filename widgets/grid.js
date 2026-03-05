@@ -758,23 +758,19 @@ function getModuleRootElement(ctx) {
    * @param {string} studentTitle - Student name (for logging)
    * @param {string} dateStr - Date string (YYYYMMDD)
    * @param {Object} ctx - Main module context
-   * @param {number|null} allEnd - End time cutoff in minutes
+   * @param {number} allEnd - End time cutoff in minutes
    * @returns {Array} Filtered lesson objects
    */
-  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd = null) {
+  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd) {
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
-      // If no maxGridLessons limit, still filter by allEnd cutoff if provided
-      if (allEnd !== null && allEnd !== undefined) {
-        return dayLessons.filter((lesson) => {
-          // Always keep cancelled and irregular lessons
-          if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
-            return true;
-          }
-          const s = lesson.startMin;
-          return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
-        });
-      }
-      return dayLessons;
+      return dayLessons.filter((lesson) => {
+        // Always keep cancelled and irregular lessons
+        if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
+          return true;
+        }
+        const s = lesson.startMin;
+        return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+      });
     }
 
     const filtered = dayLessons.filter((lesson) => {
@@ -819,8 +815,8 @@ function getModuleRootElement(ctx) {
         return matchedIndex !== -1 && matchedIndex < maxGridLessons;
       }
 
-      // Otherwise (no maxGridLessons limit), use allEnd cutoff if provided
-      if (allEnd !== null && allEnd !== undefined && s >= allEnd) {
+      // Otherwise (no maxGridLessons limit), use allEnd cutoff
+      if (s >= allEnd) {
         return false;
       }
 
@@ -2018,14 +2014,15 @@ function getModuleRootElement(ctx) {
    * @param { Array } dayAbsences - Array of absence objects for this day
    * @param { number } allStart - Start time in minutes
    * @param { number } allEnd - End time in minutes
-   * @param { number } totalMinutes - Total minutes span
    * @param { number } totalHeight - Total height in pixels
    * @param { Object } ctx - Main module context
    */
-  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx) {
+  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx) {
     if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
       return;
     }
+
+    const totalMinutes = Math.max(1, allEnd - allStart);
 
     try {
       for (const absence of dayAbsences) {
@@ -2227,7 +2224,7 @@ function getModuleRootElement(ctx) {
       if (Array.isArray(absences) && absences.length > 0) {
         const dayAbsences = absences.filter((ab) => String(ab?.date) === dateStr);
         if (dayAbsences.length > 0) {
-          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalMinutes, totalHeight, ctx);
+          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
         }
       }
     }
