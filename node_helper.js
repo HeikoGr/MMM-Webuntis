@@ -1035,7 +1035,15 @@ module.exports = NodeHelper.create({
           }
 
           // Fetch fresh data for this student
-          const payload = await this.fetchData(authSession, student, identifier, credKey, sharedCompactHolidays, config, sessionKey);
+          const payload = await this.fetchData({
+            authSession,
+            student,
+            identifier,
+            credKey,
+            compactHolidays: sharedCompactHolidays,
+            config,
+            sessionKey,
+          });
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           } else {
@@ -1507,24 +1515,52 @@ module.exports = NodeHelper.create({
    * Main data fetch orchestrator for a single student
    * Delegates orchestrating, API calls, and payload creation to WebUntisClient.
    *
-   * @param {Object} authSession - Authenticated session with server, school, cookies, token
-   * @param {Object} student - Student config object
-   * @param {string} identifier - Module instance identifier
-   * @param {string} credKey - Credential grouping key
-   * @param {Array} compactHolidays - Pre-extracted and compacted holidays (shared across students in group)
-   * @param {Object} config - Module configuration
-   * @param {string} sessionKey - Session key for API status tracking
+   * @param {Object} params - Fetch parameters
+   * @param {Object} params.authSession - Authenticated session with server, school, cookies, token
+   * @param {Object} params.student - Student config object
+   * @param {string} params.identifier - Module instance identifier
+   * @param {string} params.credKey - Credential grouping key
+   * @param {Array} [params.compactHolidays] - Pre-extracted and compacted holidays (shared across students in group)
+   * @param {Object} params.config - Module configuration
+   * @param {string} params.sessionKey - Session key for API status tracking
    * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
    */
-  async fetchData(authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey) {
+  async fetchData(params) {
+    const { authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey } = params || {};
+
+    if (!authSession || !student || !identifier || !credKey || !config || !sessionKey) {
+      throw new Error('fetchData requires authSession, student, identifier, credKey, config, and sessionKey');
+    }
+
     const effectiveDisplayMode = student.displayMode || config.displayMode;
     const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
     const baseNow = this._calculateBaseNow(config);
-    const dateRanges = calculateFetchRanges(student, config, baseNow, {
-      wantsGridWidget: Boolean(fetchFlags.wantsGridWidget),
-      wantsLessonsWidget: Boolean(fetchFlags.wantsLessonsWidget),
-      fetchExams: Boolean(fetchFlags.fetchExams),
-      fetchAbsences: Boolean(fetchFlags.fetchAbsences),
+    const dateRanges = calculateFetchRanges({
+      baseNow,
+      fetchPlan: {
+        wantsGridWidget: Boolean(fetchFlags.wantsGridWidget),
+        wantsLessonsWidget: Boolean(fetchFlags.wantsLessonsWidget),
+        fetchExams: Boolean(fetchFlags.fetchExams),
+        fetchAbsences: Boolean(fetchFlags.fetchAbsences),
+      },
+      days: {
+        globalPastDays: student.pastDays,
+        globalNextDays: student.nextDays,
+        gridPastDays: student.grid?.pastDays,
+        gridNextDays: student.grid?.nextDays,
+        lessonsPastDays: student.lessons?.pastDays,
+        lessonsNextDays: student.lessons?.nextDays,
+        examsPastDays: student.exams?.pastDays ?? student.pastDays,
+        examsNextDays: student.exams?.nextDays,
+        absencesPastDays: student.absences?.pastDays,
+        absencesNextDays: student.absences?.nextDays,
+        homeworkPastDays: student.homework?.pastDays,
+        homeworkNextDays: student.homework?.nextDays,
+      },
+      options: {
+        gridWeekView: student.grid?.weekView,
+        debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
+      },
     });
 
     const client = new WebUntisClient({
