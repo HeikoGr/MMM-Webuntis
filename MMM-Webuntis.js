@@ -1663,6 +1663,14 @@ Module.register('MMM-Webuntis', {
         this._log('warn', 'Please update your config.js to use the new configuration format.');
         this._log('warn', 'See the module documentation for migration details.');
       }
+
+      // Trigger backend initialization now that DOM is ready and sockets are connected.
+      // MagicMirror does NOT call resume() on modules at startup (only after hide→show),
+      // so we must trigger init here instead of deferring to resume().
+      if (!this._isDemoModeEnabled() && !this._initialized && !this._initRequested) {
+        this._initRequested = true;
+        this._sendInit('dom-objects-created');
+      }
     }
   },
 
