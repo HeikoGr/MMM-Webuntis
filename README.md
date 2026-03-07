@@ -314,6 +314,7 @@ For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
 | `updateInterval` | `5 * 60 * 1000` | Update frequency (milliseconds) |
 | `grid.weekView` | `false` | Enable Mon-Fri week view |
 | `grid.maxLessons` | `0` | Limit grid height (0 = all) |
+| `grid.fields.primary` | `'subject'` | Main grid field (e.g., subject/teacher/room). See detailed options in [docs/CONFIG.md](docs/CONFIG.md#grid-field-display-options). |
 | `grid.naText` | `'N/A'` | Placeholder text for changed fields without current value in grid |
 | `lessons.naText` | `'N/A'` | Placeholder text for changed fields without current value in lessons |
 | `lessons.showRoom` | `false` | Show room in lessons rows (enables visible room-change highlighting) |

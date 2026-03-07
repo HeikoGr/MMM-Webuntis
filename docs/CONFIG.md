@@ -134,6 +134,47 @@ grid: {
 }
 ```
 
+### Grid Field Display Options
+
+Use `grid.fields` to control which lesson properties are shown as primary/secondary text and additional badges in each grid lesson cell.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `grid.fields.primary` | string | `'subject'` | Primary line in the grid lesson cell. |
+| `grid.fields.secondary` | string | `'teacher'` | Secondary line in the grid lesson cell. |
+| `grid.fields.additional` | string[] | `['room']` | Additional fields shown as badges/parentheses in the lesson cell. |
+| `grid.fields.format.subject` | string | `'long'` | Display format for subject: `'short'` or `'long'`. |
+| `grid.fields.format.teacher` | string | `'long'` | Display format for teacher: `'short'` or `'long'`. |
+| `grid.fields.format.class` | string | `'short'` | Display format for class: `'short'` or `'long'`. |
+| `grid.fields.format.room` | string | `'short'` | Display format for room: `'short'` or `'long'`. |
+| `grid.fields.format.studentGroup` | string | `'short'` | Display format for student group: `'short'` or `'long'`. |
+
+Valid field names for `primary`, `secondary`, and entries in `additional`:
+
+- `subject`
+- `teacher`
+- `room`
+- `class`
+- `studentGroup`
+
+**Example (default behavior):**
+```javascript
+grid: {
+  fields: {
+    primary: 'subject',
+    secondary: 'teacher',
+    additional: ['room'],
+    format: {
+      subject: 'long',
+      teacher: 'long',
+      class: 'short',
+      room: 'short',
+      studentGroup: 'short',
+    },
+  },
+}
+```
+
 ---
 
 ### Exams Widget Options
