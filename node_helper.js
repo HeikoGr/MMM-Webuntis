@@ -74,7 +74,7 @@ module.exports = NodeHelper.create({
 
     // Retry after 24 hours in case the school adds a new module/license
     const RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
-    if (recordedAt && (Date.now() - recordedAt) > RETRY_AFTER_MS) {
+    if (recordedAt && Date.now() - recordedAt > RETRY_AFTER_MS) {
       // Expired — clear status and allow retry
       delete this._apiStatusBySession.get(sessionKey)[endpoint];
       return false;
@@ -1252,7 +1252,7 @@ module.exports = NodeHelper.create({
       }
 
       // Validate configuration
-      const validatorLogger = { log: () => { } }; // Silent logger - only errors are sent to frontend
+      const validatorLogger = { log: () => {} }; // Silent logger - only errors are sent to frontend
       const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
 
       // Generate detailed deprecation warnings

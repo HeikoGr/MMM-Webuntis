@@ -1104,7 +1104,8 @@ Module.register('MMM-Webuntis', {
    *   2. Initialize data storage structures (timetableByStudent, examsByStudent, etc.)
    *   3. Generate unique session ID for browser window isolation
    *   4. Parse and set debugDate if configured (frozen date for testing)
-   *   5. Defer INIT_MODULE until first visible resume() (avoids hidden-start fetches)
+   *   5. Request INIT_MODULE once DOM is ready (DOM_OBJECTS_CREATED),
+   *      with resume() and startup fallback as safety nets
    *
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
@@ -1187,10 +1188,7 @@ Module.register('MMM-Webuntis', {
     this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
     this._initialized = false; // Track initialization status
     this._initRequested = false; // Track whether INIT_MODULE was already sent
-
-    // Track if module has been resumed at least once (MagicMirror calls resume() on all modules at startup)
-    // We want to skip the initial resume() call to avoid duplicate FETCH_DATA with post-init
-    this._hasBeenResumedOnce = false;
+    this._initFallbackTimer = null; // Startup fallback in case lifecycle notification is missed
 
     // Track when data was last received to optimize resume() behavior
     // (prevents unnecessary API calls during rapid carousel page switches)
@@ -1216,8 +1214,14 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    // Defer backend initialization until module is actually visible (resume)
-    // to avoid unnecessary initial fetches on hidden carousel slides.
+    // Startup fallback: if DOM_OBJECTS_CREATED was missed for any reason,
+    // ensure INIT_MODULE is still sent once shortly after start.
+    this._initFallbackTimer = setTimeout(() => {
+      this._initFallbackTimer = null;
+      this._requestInitIfNeeded('start-fallback');
+    }, 2500);
+
+    // Regular startup path initializes via notificationReceived(DOM_OBJECTS_CREATED).
 
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
@@ -1314,6 +1318,19 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Request backend initialization exactly once when needed.
+   * Safe to call from multiple lifecycle hooks.
+   *
+   * @param {string} reason - Why init is requested
+   */
+  _requestInitIfNeeded(reason = 'manual') {
+    if (this._isDemoModeEnabled()) return;
+    if (this._initialized || this._initRequested) return;
+    this._initRequested = true;
+    this._sendInit(reason);
+  },
+
+  /**
    * Send FETCH_DATA notification to backend for data refresh
    * Only sends if module is initialized (prevents fetch before init)
    * Stores pending resume request if called during initialization
@@ -1338,7 +1355,7 @@ Module.register('MMM-Webuntis', {
 
     if (!this._initialized) {
       // Store pending resume request to execute after initialization
-      if (reason === 'resume') {
+      if (String(reason).startsWith('resume')) {
         this._pendingResumeRequest = true;
       }
       return;
@@ -1424,22 +1441,21 @@ Module.register('MMM-Webuntis', {
 
     // 4. Initialization: Sent only once upon first visible resume
     if (!this._initialized && !this._initRequested) {
-      this._initRequested = true;
-      this._sendInit('first-visible-resume');
+      this._requestInitIfNeeded('first-visible-resume');
       return; // Backend auto-triggers the first FETCH_DATA internally upon init success
     }
 
-    // 5. Initial MagicMirror boot cycle skip (MagicMirror aggressively calls resume() on all modules at boot)
-    if (!this._hasBeenResumedOnce) {
-      this._hasBeenResumedOnce = true;
-      return;
-    }
-
-    // 6. Carousel Optimization: Only trigger a fetch if data is actually stale
-    const dataAge = this._lastDataReceivedAt ? Date.now() - this._lastDataReceivedAt : Infinity;
+    // 5. Resume fetch strategy:
+    // - if no data was ever received in this session, fetch immediately
+    // - otherwise fetch only when existing data is stale
+    const hasReceivedData = Number.isFinite(this._lastDataReceivedAt);
+    const dataAge = hasReceivedData ? Date.now() - this._lastDataReceivedAt : Infinity;
     const interval = this.config?.updateInterval || 5 * 60 * 1000; // Default: 5 minutes
 
-    if (dataAge >= interval) {
+    if (!hasReceivedData) {
+      this._log('debug', '[resume] No data received yet in this session, sending FETCH_DATA...');
+      this._sendFetchData('resume-no-data');
+    } else if (dataAge >= interval) {
       this._log('debug', `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s), sending FETCH_DATA...`);
       this._sendFetchData('resume-stale-data');
     } else {
@@ -1667,10 +1683,7 @@ Module.register('MMM-Webuntis', {
       // Trigger backend initialization now that DOM is ready and sockets are connected.
       // MagicMirror does NOT call resume() on modules at startup (only after hide→show),
       // so we must trigger init here instead of deferring to resume().
-      if (!this._isDemoModeEnabled() && !this._initialized && !this._initRequested) {
-        this._initRequested = true;
-        this._sendInit('dom-objects-created');
-      }
+      this._requestInitIfNeeded('dom-objects-created');
     }
   },
 
@@ -1722,6 +1735,11 @@ Module.register('MMM-Webuntis', {
     this._initialized = true;
     this._initializedAt = Date.now();
 
+    if (this._initFallbackTimer) {
+      clearTimeout(this._initFallbackTimer);
+      this._initFallbackTimer = null;
+    }
+
     if (this._pendingResumeRequest) {
       this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
       this._pendingResumeRequest = false;
@@ -1750,6 +1768,7 @@ Module.register('MMM-Webuntis', {
       payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
     }
     this._initialized = false;
+    this._initRequested = false;
     this.updateDom();
   },
 
