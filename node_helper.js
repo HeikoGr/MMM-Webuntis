@@ -57,20 +57,30 @@ module.exports = NodeHelper.create({
    */
   _shouldSkipApi(sessionKey, endpoint) {
     if (!this._apiStatusBySession.has(sessionKey)) return false;
-    const status = this._apiStatusBySession.get(sessionKey)[endpoint];
-    if (!status) return false;
+    const record = this._apiStatusBySession.get(sessionKey)[endpoint];
+    if (!record) return false;
+
+    // Support both old format (plain number) and new format ({ status, recordedAt })
+    const status = typeof record === 'object' ? record.status : record;
+    const recordedAt = typeof record === 'object' ? record.recordedAt : 0;
 
     // Permanent errors - skip API calls for these
-    // 403 Forbidden - user has no permission for this endpoint
+    // 403 Forbidden - user has no permission for this endpoint (school licensing)
     // 404 Not Found - endpoint doesn't exist
     // 410 Gone - resource permanently removed
     const permanentErrors = [403, 404, 410];
 
-    // Do NOT skip on temporary errors:
-    // - 5xx errors (500, 502, 503, 504) are temporary server errors
-    // - 401 is handled by auth refresh mechanism
-    // - 429 rate limiting is temporary
-    return permanentErrors.includes(status);
+    if (!permanentErrors.includes(status)) return false;
+
+    // Retry after 24 hours in case the school adds a new module/license
+    const RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+    if (recordedAt && (Date.now() - recordedAt) > RETRY_AFTER_MS) {
+      // Expired — clear status and allow retry
+      delete this._apiStatusBySession.get(sessionKey)[endpoint];
+      return false;
+    }
+
+    return true;
   },
 
   /**
@@ -90,7 +100,7 @@ module.exports = NodeHelper.create({
     if (!this._apiStatusBySession.has(sessionKey)) {
       this._apiStatusBySession.set(sessionKey, {});
     }
-    this._apiStatusBySession.get(sessionKey)[endpoint] = status;
+    this._apiStatusBySession.get(sessionKey)[endpoint] = { status, recordedAt: Date.now() };
   },
 
   /**
@@ -1242,7 +1252,7 @@ module.exports = NodeHelper.create({
       }
 
       // Validate configuration
-      const validatorLogger = { log: () => {} }; // Silent logger - only errors are sent to frontend
+      const validatorLogger = { log: () => { } }; // Silent logger - only errors are sent to frontend
       const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
 
       // Generate detailed deprecation warnings
@@ -1593,14 +1603,22 @@ module.exports = NodeHelper.create({
       extractTimegridFromTimetable: this._extractTimegridFromTimetable.bind(this),
       compactTimegrid: this._compactTimegrid.bind(this),
       cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
-      getApiStatus: (key) => this._apiStatusBySession.get(key) || {},
+      getApiStatus: (key) => {
+        const raw = this._apiStatusBySession.get(key) || {};
+        // Normalize to plain status numbers for frontend consumption
+        const result = {};
+        for (const [ep, record] of Object.entries(raw)) {
+          result[ep] = typeof record === 'object' ? record.status : record;
+        }
+        return result;
+      },
       shouldSkipApi: this._shouldSkipApi.bind(this),
       recordApiStatusFromError: this._recordApiStatusFromError.bind(this),
       setApiStatus: (key, endpoint, status) => {
         if (!this._apiStatusBySession.has(key)) {
           this._apiStatusBySession.set(key, {});
         }
-        this._apiStatusBySession.get(key)[endpoint] = status;
+        this._apiStatusBySession.get(key)[endpoint] = { status, recordedAt: Date.now() };
       },
     });
 
