@@ -1573,6 +1573,23 @@ Module.register('MMM-Webuntis', {
 
     const sortedStudentTitles = this._getSortedStudentTitles();
 
+    const appendWidgetError = (widgetLabel, error) => {
+      this._log('error', `Failed to render ${widgetLabel.toLowerCase()} widget: ${error.message}`);
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'widget-error dimmed';
+      withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: widgetLabel }));
+      wrapper.appendChild(errorDiv);
+    };
+
+    const renderTableWidget = (widgetLabel, renderRows) => {
+      try {
+        const container = this._renderWidgetTableRows(sortedStudentTitles, renderRows);
+        if (container) wrapper.appendChild(container);
+      } catch (error) {
+        appendWidgetError(widgetLabel, error);
+      }
+    };
+
     // Render any module-level warnings once, above all widgets
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
       const warnContainer = document.createDocumentFragment();
@@ -1633,11 +1650,7 @@ Module.register('MMM-Webuntis', {
                 wrapper.appendChild(gridElem);
               }
             } catch (error) {
-              this._log('error', `Failed to render grid widget for ${studentTitle}: ${error.message}`);
-              const errorDiv = document.createElement('div');
-              errorDiv.className = 'widget-error dimmed';
-              withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Grid' }));
-              wrapper.appendChild(errorDiv);
+              appendWidgetError('Grid', error);
             }
           }
         }
@@ -1645,67 +1658,29 @@ Module.register('MMM-Webuntis', {
       }
 
       if (widget === 'lessons') {
-        try {
-          const lessonsContainer = this._renderWidgetTableRows(
-            sortedStudentTitles,
-            (studentTitle, studentLabel, studentConfig, container) => {
-              const timetable = this.timetableByStudent[studentTitle] || [];
-              const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
-              const holidays = this.holidaysByStudent?.[studentTitle] || [];
-              return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
-            }
-          );
-          if (lessonsContainer) {
-            wrapper.appendChild(lessonsContainer);
-          }
-        } catch (error) {
-          this._log('error', `Failed to render lessons widget: ${error.message}`);
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'widget-error dimmed';
-          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Lessons' }));
-          wrapper.appendChild(errorDiv);
-        }
+        renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
+          const timetable = this.timetableByStudent[studentTitle] || [];
+          const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
+          const holidays = this.holidaysByStudent?.[studentTitle] || [];
+          return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
+        });
         continue;
       }
 
       if (widget === 'exams') {
-        try {
-          const examsContainer = this._renderWidgetTableRows(
-            sortedStudentTitles,
-            (studentTitle, studentLabel, studentConfig, container) => {
-              const exams = this.examsByStudent?.[studentTitle] || [];
-              if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
-              return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
-            }
-          );
-          if (examsContainer) wrapper.appendChild(examsContainer);
-        } catch (error) {
-          this._log('error', `Failed to render exams widget: ${error.message}`);
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'widget-error dimmed';
-          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Exams' }));
-          wrapper.appendChild(errorDiv);
-        }
+        renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
+          const exams = this.examsByStudent?.[studentTitle] || [];
+          if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
+          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
+        });
         continue;
       }
 
       if (widget === 'homework') {
-        try {
-          const homeworkContainer = this._renderWidgetTableRows(
-            sortedStudentTitles,
-            (studentTitle, studentLabel, studentConfig, container) => {
-              const homeworks = this.homeworksByStudent?.[studentTitle] || [];
-              return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
-            }
-          );
-          if (homeworkContainer) wrapper.appendChild(homeworkContainer);
-        } catch (error) {
-          this._log('error', `Failed to render homework widget: ${error.message}`);
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'widget-error dimmed';
-          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Homework' }));
-          wrapper.appendChild(errorDiv);
-        }
+        renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
+          const homeworks = this.homeworksByStudent?.[studentTitle] || [];
+          return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
+        });
         continue;
       }
 
@@ -1719,42 +1694,18 @@ Module.register('MMM-Webuntis', {
           wrapper.appendChild(infoDiv);
         }
 
-        try {
-          const absencesContainer = this._renderWidgetTableRows(
-            sortedStudentTitles,
-            (studentTitle, studentLabel, studentConfig, container) => {
-              const absences = this.absencesByStudent?.[studentTitle] || [];
-              return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
-            }
-          );
-          if (absencesContainer) wrapper.appendChild(absencesContainer);
-        } catch (error) {
-          this._log('error', `Failed to render absences widget: ${error.message}`);
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'widget-error dimmed';
-          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Absences' }));
-          wrapper.appendChild(errorDiv);
-        }
+        renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
+          const absences = this.absencesByStudent?.[studentTitle] || [];
+          return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
+        });
         continue;
       }
 
       if (widget === 'messagesofday') {
-        try {
-          const messagesContainer = this._renderWidgetTableRows(
-            sortedStudentTitles,
-            (studentTitle, studentLabel, studentConfig, container) => {
-              const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
-              return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
-            }
-          );
-          if (messagesContainer) wrapper.appendChild(messagesContainer);
-        } catch (error) {
-          this._log('error', `Failed to render messagesofday widget: ${error.message}`);
-          const errorDiv = document.createElement('div');
-          errorDiv.className = 'widget-error dimmed';
-          withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: 'Messages of Day' }));
-          wrapper.appendChild(errorDiv);
-        }
+        renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
+          const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
+          return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
+        });
         continue;
       }
     }

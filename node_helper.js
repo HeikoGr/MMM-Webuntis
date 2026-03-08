@@ -1012,6 +1012,232 @@ module.exports = NodeHelper.create({
     return this._collectValidationWarnings(warnings, widgetConfigValidator.validateAllWidgets(config));
   },
 
+  _deriveFallbackStudentTitle(student) {
+    return (
+      student?.title ||
+      student?.name ||
+      (student?.studentId !== undefined && student?.studentId !== null ? `Student ${student.studentId}` : 'Student')
+    );
+  },
+
+  _buildPayloadDisplayWidgets(student, config) {
+    return String(student?.displayMode || config?.displayMode || 'lessons,exams')
+      .toLowerCase()
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  },
+
+  _buildBaseStudentPayload({ identifier, sessionId, student, config, fetchFlags }) {
+    return {
+      contractVersion: 2,
+      id: identifier,
+      sessionId,
+      meta: {
+        moduleId: identifier,
+        sessionId,
+        generatedAt: new Date().toISOString(),
+      },
+      context: {
+        student: {
+          id: student?.studentId ?? null,
+          title: this._deriveFallbackStudentTitle(student),
+        },
+        config: student,
+        timezone: config?.timezone || 'Europe/Berlin',
+        todayYmd: null,
+        range: {
+          startYmd: null,
+          endYmd: null,
+        },
+        display: {
+          mode: student?.mode || config?.mode || 'verbose',
+          widgets: this._buildPayloadDisplayWidgets(student, config),
+        },
+      },
+      data: {
+        timeUnits: [],
+        lessons: [],
+        exams: [],
+        homework: [],
+        absences: [],
+        messages: [],
+        holidays: {
+          ranges: [],
+          current: null,
+        },
+      },
+      state: {
+        fetch: {
+          timegrid: fetchFlags.fetchTimegrid,
+          timetable: fetchFlags.fetchTimetable,
+          exams: fetchFlags.fetchExams,
+          homework: fetchFlags.fetchHomeworks,
+          absences: fetchFlags.fetchAbsences,
+          messages: fetchFlags.fetchMessagesOfDay,
+        },
+      },
+    };
+  },
+
+  _buildApiStatusSnapshot(sessionKey) {
+    const rawApiStatus = this._apiStatusBySession.get(sessionKey) || {};
+    const apiStatus = {
+      timetable: null,
+      exams: null,
+      homework: null,
+      absences: null,
+      messages: null,
+    };
+
+    Object.entries(rawApiStatus).forEach(([endpoint, record]) => {
+      const status = typeof record === 'object' ? record?.status : record;
+      if (!Number.isFinite(Number(status))) return;
+      if (endpoint === 'messagesofday') {
+        apiStatus.messages = Number(status);
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(apiStatus, endpoint)) {
+        apiStatus[endpoint] = Number(status);
+      }
+    });
+
+    return apiStatus;
+  },
+
+  _buildWarningMetaFromMessages(messages, groupWarningMetaByMessage, fallbackMeta) {
+    return messages.map(
+      (message) =>
+        groupWarningMetaByMessage.get(message) || {
+          message,
+          ...(fallbackMeta || { kind: 'generic', severity: 'warning' }),
+        }
+    );
+  },
+
+  _mergeGroupWarningsIntoPayload(payload, identifier, groupWarnings, groupWarningMetaByMessage) {
+    const uniqWarnings = Array.from(new Set(groupWarnings));
+    const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
+
+    const mergedWarningMetaByMessage = new Map();
+    (Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []).forEach((entry) => {
+      if (!entry?.message) return;
+      mergedWarningMetaByMessage.set(String(entry.message), { ...entry });
+    });
+
+    uniqWarnings.forEach((message) => {
+      const existing = mergedWarningMetaByMessage.get(message) || null;
+      const groupMeta = groupWarningMetaByMessage.get(message) || null;
+      if (!existing || (existing.kind === 'generic' && groupMeta)) {
+        mergedWarningMetaByMessage.set(message, {
+          message,
+          ...(groupMeta || { kind: 'generic', severity: 'warning' }),
+        });
+      }
+    });
+
+    return {
+      ...payload,
+      id: identifier,
+      state: {
+        ...(payload.state || {}),
+        warnings: mergedWarnings,
+        warningMeta: mergedWarnings.map(
+          (message) =>
+            mergedWarningMetaByMessage.get(message) || {
+              message,
+              kind: 'generic',
+              severity: 'warning',
+            }
+        ),
+      },
+    };
+  },
+
+  _buildStudentErrorPayload({
+    identifier,
+    sessionId,
+    sessionKey,
+    student,
+    config,
+    warnings,
+    groupWarningMetaByMessage,
+    warningFallbackMeta,
+    includeApiSnapshot,
+  }) {
+    const effectiveDisplayMode = student?.displayMode || config?.displayMode;
+    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const basePayload = this._buildBaseStudentPayload({
+      identifier,
+      sessionId,
+      student,
+      config,
+      fetchFlags,
+    });
+
+    return {
+      ...basePayload,
+      state: {
+        ...basePayload.state,
+        api: includeApiSnapshot
+          ? this._buildApiStatusSnapshot(sessionKey)
+          : {
+              timetable: null,
+              exams: null,
+              homework: null,
+              absences: null,
+              messages: null,
+            },
+        warnings,
+        warningMeta: this._buildWarningMetaFromMessages(warnings, groupWarningMetaByMessage, warningFallbackMeta),
+      },
+    };
+  },
+
+  _emitStudentAuthFailurePayloads({ identifier, sessionId, sessionKey, students, config, warnings, groupWarningMetaByMessage }) {
+    students.forEach((student) => {
+      this._emitGotData(
+        this._buildStudentErrorPayload({
+          identifier,
+          sessionId,
+          sessionKey,
+          student,
+          config,
+          warnings,
+          groupWarningMetaByMessage,
+          warningFallbackMeta: { kind: 'generic', severity: 'warning' },
+          includeApiSnapshot: false,
+        })
+      );
+    });
+  },
+
+  _buildStudentFetchErrorPayload({
+    identifier,
+    sessionId,
+    sessionKey,
+    student,
+    config,
+    groupWarnings,
+    warningMsg,
+    groupWarningMetaByMessage,
+    warningMetaBase,
+  }) {
+    const mergedWarnings = Array.from(new Set([...(groupWarnings || []), ...(warningMsg ? [warningMsg] : [])]));
+
+    return this._buildStudentErrorPayload({
+      identifier,
+      sessionId,
+      sessionKey,
+      student,
+      config,
+      warnings: mergedWarnings,
+      groupWarningMetaByMessage,
+      warningFallbackMeta: warningMetaBase,
+      includeApiSnapshot: true,
+    });
+  },
+
   // Backend performs API calls only; no data normalization here.
 
   /**
@@ -1057,6 +1283,8 @@ module.exports = NodeHelper.create({
     };
 
     try {
+      const { sessionId } = this._parseSessionKey(sessionKey);
+
       try {
         // Create/get authSession - authService handles caching internally
         // If credentials were recently used, authService will return cached result
@@ -1082,82 +1310,15 @@ module.exports = NodeHelper.create({
 
         // Record and mark this warning for the current fetch cycle
         addGroupWarning(msg, this._classifyWarningMetaFromError(err, { kind: isNetworkError ? 'network' : 'auth' }));
-        // Send error payload to frontend with warnings
-        const { sessionId } = this._parseSessionKey(sessionKey);
-        for (const student of students) {
-          const fallbackTitle =
-            student.title ||
-            student.name ||
-            (student.studentId !== undefined && student.studentId !== null ? `Student ${student.studentId}` : 'Student');
-          const effectiveDisplayMode = student.displayMode || config.displayMode;
-          const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
-          // Sending error to frontend silently
-          this._emitGotData({
-            contractVersion: 2,
-            id: identifier,
-            sessionId,
-            meta: {
-              moduleId: identifier,
-              sessionId,
-              generatedAt: new Date().toISOString(),
-            },
-            context: {
-              student: {
-                id: student.studentId ?? null,
-                title: fallbackTitle,
-              },
-              config: student,
-              timezone: config?.timezone || 'Europe/Berlin',
-              todayYmd: null,
-              range: {
-                startYmd: null,
-                endYmd: null,
-              },
-              display: {
-                mode: student.mode || config?.mode || 'verbose',
-                widgets: String(student.displayMode || config?.displayMode || 'lessons,exams')
-                  .toLowerCase()
-                  .split(',')
-                  .map((entry) => entry.trim())
-                  .filter(Boolean),
-              },
-            },
-            data: {
-              timeUnits: [],
-              lessons: [],
-              exams: [],
-              homework: [],
-              absences: [],
-              messages: [],
-              holidays: {
-                ranges: [],
-                current: null,
-              },
-            },
-            state: {
-              fetch: {
-                timegrid: fetchFlags.fetchTimegrid,
-                timetable: fetchFlags.fetchTimetable,
-                exams: fetchFlags.fetchExams,
-                homework: fetchFlags.fetchHomeworks,
-                absences: fetchFlags.fetchAbsences,
-                messages: fetchFlags.fetchMessagesOfDay,
-              },
-              api: {
-                timetable: null,
-                exams: null,
-                homework: null,
-                absences: null,
-                messages: null,
-              },
-              warnings: groupWarnings,
-              warningMeta: groupWarnings.map((message) => ({
-                message,
-                ...(groupWarningMetaByMessage.get(message) || { kind: 'generic', severity: 'warning' }),
-              })),
-            },
-          });
-        }
+        this._emitStudentAuthFailurePayloads({
+          identifier,
+          sessionId,
+          sessionKey,
+          students,
+          config,
+          warnings: groupWarnings,
+          groupWarningMetaByMessage,
+        });
         return;
       }
 
@@ -1204,43 +1365,7 @@ module.exports = NodeHelper.create({
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
           } else {
-            // Add warnings to payload
-            const uniqWarnings = Array.from(new Set(groupWarnings));
-            const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
-
-            const mergedWarningMetaByMessage = new Map();
-            (Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []).forEach((entry) => {
-              if (!entry?.message) return;
-              mergedWarningMetaByMessage.set(String(entry.message), { ...entry });
-            });
-
-            uniqWarnings.forEach((message) => {
-              const existing = mergedWarningMetaByMessage.get(message) || null;
-              const groupMeta = groupWarningMetaByMessage.get(message) || null;
-              if (!existing || (existing.kind === 'generic' && groupMeta)) {
-                mergedWarningMetaByMessage.set(message, {
-                  message,
-                  ...(groupMeta || { kind: 'generic', severity: 'warning' }),
-                });
-              }
-            });
-
-            const nextPayload = {
-              ...payload,
-              id: identifier,
-              state: {
-                ...(payload.state || {}),
-                warnings: mergedWarnings,
-                warningMeta: mergedWarnings.map(
-                  (message) =>
-                    mergedWarningMetaByMessage.get(message) || {
-                      message,
-                      kind: 'generic',
-                      severity: 'warning',
-                    }
-                ),
-              },
-            };
+            const nextPayload = this._mergeGroupWarningsIntoPayload(payload, identifier, groupWarnings, groupWarningMetaByMessage);
             studentPayloads.push(nextPayload);
           }
         } catch (err) {
@@ -1258,112 +1383,25 @@ module.exports = NodeHelper.create({
             addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
             this._mmLog('warn', student, warningMsg);
           }
-
-          const fallbackTitle =
-            student.title ||
-            student.name ||
-            (student.studentId !== undefined && student.studentId !== null ? `Student ${student.studentId}` : 'Student');
-          const effectiveDisplayMode = student.displayMode || config?.displayMode;
-          const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
           const warningMetaBase = this._classifyWarningMetaFromError(err);
 
-          const mergedWarnings = Array.from(new Set([...(groupWarnings || []), ...(warningMsg ? [warningMsg] : [])]));
-          const mergedWarningMetaByMessage = new Map();
-          mergedWarnings.forEach((message) => {
-            const groupMeta = groupWarningMetaByMessage.get(message) || null;
-            mergedWarningMetaByMessage.set(message, {
-              message,
-              ...(groupMeta || warningMetaBase || { kind: 'generic', severity: 'warning' }),
-            });
-          });
-
-          const rawApiStatus = this._apiStatusBySession.get(sessionKey) || {};
-          const apiStatus = {
-            timetable: null,
-            exams: null,
-            homework: null,
-            absences: null,
-            messages: null,
-          };
-          Object.entries(rawApiStatus).forEach(([endpoint, record]) => {
-            const status = typeof record === 'object' ? record?.status : record;
-            if (!Number.isFinite(Number(status))) return;
-            if (endpoint === 'messagesofday') {
-              apiStatus.messages = Number(status);
-              return;
-            }
-            if (Object.prototype.hasOwnProperty.call(apiStatus, endpoint)) {
-              apiStatus[endpoint] = Number(status);
-            }
-          });
-
-          studentPayloads.push({
-            contractVersion: 2,
-            id: identifier,
-            meta: {
-              moduleId: identifier,
-              sessionId: this._parseSessionKey(sessionKey).sessionId,
-              generatedAt: new Date().toISOString(),
-            },
-            context: {
-              student: {
-                id: student.studentId ?? null,
-                title: fallbackTitle,
-              },
-              config: student,
-              timezone: config?.timezone || 'Europe/Berlin',
-              todayYmd: null,
-              range: {
-                startYmd: null,
-                endYmd: null,
-              },
-              display: {
-                mode: student.mode || config?.mode || 'verbose',
-                widgets: String(student.displayMode || config?.displayMode || 'lessons,exams')
-                  .toLowerCase()
-                  .split(',')
-                  .map((entry) => entry.trim())
-                  .filter(Boolean),
-              },
-            },
-            data: {
-              timeUnits: [],
-              lessons: [],
-              exams: [],
-              homework: [],
-              absences: [],
-              messages: [],
-              holidays: {
-                ranges: [],
-                current: null,
-              },
-            },
-            state: {
-              fetch: {
-                timegrid: fetchFlags.fetchTimegrid,
-                timetable: fetchFlags.fetchTimetable,
-                exams: fetchFlags.fetchExams,
-                homework: fetchFlags.fetchHomeworks,
-                absences: fetchFlags.fetchAbsences,
-                messages: fetchFlags.fetchMessagesOfDay,
-              },
-              api: apiStatus,
-              warnings: mergedWarnings,
-              warningMeta: mergedWarnings.map(
-                (message) =>
-                  mergedWarningMetaByMessage.get(message) || {
-                    message,
-                    kind: 'generic',
-                    severity: 'warning',
-                  }
-              ),
-            },
-          });
+          studentPayloads.push(
+            this._buildStudentFetchErrorPayload({
+              identifier,
+              sessionId,
+              sessionKey,
+              student,
+              config,
+              groupWarnings,
+              warningMsg,
+              groupWarningMetaByMessage,
+              warningMetaBase,
+            })
+          );
         }
       }
 
       // Send all collected payloads at once to minimize DOM redraws
-      const { sessionId } = this._parseSessionKey(sessionKey);
       for (const payload of studentPayloads) {
         this._emitGotData(payload, {
           identifier,

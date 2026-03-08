@@ -1727,47 +1727,43 @@ function getModuleRootElement(ctx) {
       bothInner.appendChild(cell);
     };
 
-    for (const [, lessons] of timeSlotGroups.entries()) {
-      if (!lessons || lessons.length === 0) continue;
+    const hasStudentGroupOrClassHint = (lesson) => {
+      const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
+      const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
+      const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+      const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+      return hasStudentGroup || hasClass;
+    };
 
-      // ── Classify lessons in this group ───────────────────────────────────────
+    const hasParallelOverlap = (plannedParallelCandidates) => {
+      if (plannedParallelCandidates.length < 2) return false;
+      for (let i = 0; i < plannedParallelCandidates.length; i++) {
+        for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
+          const first = plannedParallelCandidates[i];
+          const second = plannedParallelCandidates[j];
+          if (first.startMin < second.endMin && first.endMin > second.startMin) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    const classifyGroup = (lessons) => {
       const cancelledLessons = lessons.filter((l) => l.status === 'CANCELLED');
-      const addedLessons = lessons.filter((l) => l.status === 'ADDITIONAL'); // ADDITIONAL_PERIOD
+      const addedLessons = lessons.filter((l) => l.status === 'ADDITIONAL');
       const substLessons = lessons.filter((l) => l.status === 'SUBSTITUTION');
-      // School events (excursion, field trips, class trips, …) that replace cancelled regular lessons.
-      // activityType=EVENT with status=CHANGED means a scheduled event overrides this slot.
       const eventLessons = lessons.filter((l) => l.activityType === 'EVENT');
-      // Ticker candidates: ALL scheduled parallel courses (NORMAL_TEACHING_PERIOD).
-      // Include CANCELLED lessons - they were originally scheduled in parallel and should
-      // appear in the ticker (displayed as crossed-out via applyLessonClasses).
       const tickerCandidates = lessons.filter((l) => l.activityType === 'NORMAL_TEACHING_PERIOD');
       const plannedParallelCandidates = tickerCandidates.filter((l) => {
         const status = String(l.status || '').toUpperCase();
         return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
       });
 
-      // ── Strategy decision ─────────────────────────────────────────────────────
-      //
-      // SPLIT VIEW: cancelled lesson(s) + a replacement in the same slot.
-      //   ADDITIONAL always triggers split (a replacement was explicitly scheduled).
-      //   SUBSTITUTION triggers split only when no studentGroup/class hint exists
-      //   (full-class heuristic). With studentGroup/class hint, treat as parallel
-      //   sibling course and keep ticker/parallel rendering.
-      //   EVENT (school trips, class excursions, …) alongside CANCELLED → split.
-      const hasStudentGroupOrClassHint = (lesson) => {
-        const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
-        const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
-        const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
-        const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
-        return hasStudentGroup || hasClass;
-      };
       const substitutionTriggersSplit = substLessons.some((lesson) => !hasStudentGroupOrClassHint(lesson));
       const isSplitView =
         cancelledLessons.length >= 1 && (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
 
-      // SPAN SPLIT: one ticker candidate spans the entire group range while at least
-      // one other covers only a sub-period. The spanning lesson goes left; sub-period
-      // lessons go right, each at their natural position (preserving break gaps).
       const tcGroupStart = tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((l) => l.startMin)) : Infinity;
       const tcGroupEnd = tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((l) => l.endMin)) : -Infinity;
       const spanningLessons = tickerCandidates.filter((l) => l.startMin <= tcGroupStart && l.endMin >= tcGroupEnd);
@@ -1779,134 +1775,167 @@ function getModuleRootElement(ctx) {
         spanningLessons.length >= 1 &&
         subPeriodLessons.length >= 1;
 
-      // TICKER: activated from PLANNED parallel timetable structure.
-      // It must be true parallelism: at least two planned NORMAL_TEACHING_PERIOD
-      // entries overlap in time. Sequential lessons replaced by one excursion must
-      // NOT activate ticker.
-      const hasPlannedParallelOverlap = (() => {
-        if (plannedParallelCandidates.length < 2) return false;
-        for (let i = 0; i < plannedParallelCandidates.length; i++) {
-          for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
-            const first = plannedParallelCandidates[i];
-            const second = plannedParallelCandidates[j];
-            if (first.startMin < second.endMin && first.endMin > second.startMin) {
-              return true;
-            }
-          }
-        }
-        return false;
-      })();
-      const isTickerGroup = hasPlannedParallelOverlap;
+      const isTickerGroup = hasParallelOverlap(plannedParallelCandidates);
 
-      // SPLIT VIEW: activated when there are cancelled+replacement lessons,
-      // but ONLY if Ticker is NOT active. If Ticker is active, cancelled+replacement
-      // are rendered within the ticker animation as split-view items.
-      const shouldUseSplitView = isSplitView && !isTickerGroup;
+      return {
+        cancelledLessons,
+        addedLessons,
+        substLessons,
+        eventLessons,
+        tickerCandidates,
+        tcGroupEnd,
+        spanningLessons,
+        subPeriodLessons,
+        isSplitView,
+        isTickerGroup,
+        shouldUseSplitView: isSplitView && !isTickerGroup,
+        isSpanSplitLayout,
+      };
+    };
+
+    const renderTickerGroup = (lessons, group) => {
+      const { cancelledLessons, addedLessons, substLessons, eventLessons, tickerCandidates, isSplitView } = group;
+      const tYmd = Number(tickerCandidates[0].dateStr) || 0;
+      const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
+      const isPast = calcIsPast(tYmd, tEMin);
+
+      const tickerData = {
+        cancelledLessons,
+        replacements: [...addedLessons, ...substLessons, ...eventLessons],
+        hasSplitView: isSplitView,
+      };
+
+      const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
+      const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
+
+      if (tickerEnd > tickerStart) {
+        const tickerTop = Math.round(((tickerStart - allStart) / totalMinutes) * totalHeight);
+        const tickerHeight = Math.max(12, Math.round(((tickerEnd - tickerStart) / totalMinutes) * totalHeight));
+        createTickerAnimation(
+          tickerCandidates,
+          tickerTop,
+          tickerHeight,
+          bothInner,
+          ctx,
+          escapeHtml,
+          isPast,
+          homeworks,
+          nowYmd,
+          nowMin,
+          tickerData,
+          lessonConfig
+        );
+      }
+
+      for (const lesson of lessons) {
+        if (tickerCandidates.includes(lesson)) continue;
+        if (cancelledLessons.includes(lesson)) continue;
+        const isReplacement = tickerData.replacements.includes(lesson);
+        const overlapsCancelled = cancelledLessons.some((c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin);
+        if (isReplacement && overlapsCancelled) continue;
+        renderSingleLesson(lesson);
+      }
+    };
+
+    const renderSplitGroup = (lessons, group) => {
+      const { cancelledLessons, addedLessons, substLessons, eventLessons } = group;
+      const replacements = [...addedLessons, ...substLessons, ...eventLessons];
+      const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
+      const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
+      const isPast = calcIsPast(allLessonsYmd, groupEMin);
+
+      for (const repl of replacements) {
+        const rS = Math.max(repl.startMin, allStart);
+        const rE = Math.min(repl.endMin, allEnd);
+        if (rE <= rS) continue;
+        const rTop = Math.round(((rS - allStart) / totalMinutes) * totalHeight);
+        const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
+        const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
+        applyLessonClasses(cell, repl, { hasExam: lessonHasExam(repl), isPast, additionalClasses: ['split-left'] });
+        cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
+        if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
+        bothInner.appendChild(cell);
+      }
+
+      for (const cancelled of cancelledLessons) {
+        const cS = Math.max(cancelled.startMin, allStart);
+        const cE = Math.min(cancelled.endMin, allEnd);
+        if (cE <= cS) continue;
+        const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
+        const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
+        const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
+        applyLessonClasses(cell, cancelled, {
+          hasExam: lessonHasExam(cancelled),
+          isPast,
+          additionalClasses: ['split-right'],
+        });
+        cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
+        if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
+        bothInner.appendChild(cell);
+      }
+
+      for (const lesson of lessons) {
+        if (cancelledLessons.includes(lesson) || replacements.includes(lesson)) continue;
+        renderSingleLesson(lesson);
+      }
+    };
+
+    const renderSpanSplitGroup = (lessons, group) => {
+      const { spanningLessons, subPeriodLessons, tcGroupEnd, tickerCandidates } = group;
+      const tYmd = Number(spanningLessons[0].dateStr) || 0;
+      const tEMin = Math.min(tcGroupEnd, allEnd);
+      const isPast = calcIsPast(tYmd, tEMin);
+
+      for (const spanning of spanningLessons) {
+        const sS = Math.max(spanning.startMin, allStart);
+        const sE = Math.min(spanning.endMin, allEnd);
+        if (sE <= sS) continue;
+        const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
+        const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
+        const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
+        applyLessonClasses(cell, spanning, { hasExam: lessonHasExam(spanning), isPast, additionalClasses: ['split-left'] });
+        cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
+        if (checkHomeworkMatch(spanning, homeworks)) addHomeworkIcon(cell);
+        bothInner.appendChild(cell);
+      }
+
+      for (const sub of subPeriodLessons) {
+        const sS = Math.max(sub.startMin, allStart);
+        const sE = Math.min(sub.endMin, allEnd);
+        if (sE <= sS) continue;
+        const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
+        const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
+        const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
+        applyLessonClasses(cell, sub, { hasExam: lessonHasExam(sub), isPast, additionalClasses: ['split-right'] });
+        cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
+        if (checkHomeworkMatch(sub, homeworks)) addHomeworkIcon(cell);
+        bothInner.appendChild(cell);
+      }
+
+      for (const lesson of lessons) {
+        if (tickerCandidates.includes(lesson)) continue;
+        renderSingleLesson(lesson);
+      }
+    };
+
+    for (const [, lessons] of timeSlotGroups.entries()) {
+      if (!lessons || lessons.length === 0) continue;
+      const group = classifyGroup(lessons);
 
       // ── TICKER rendering ──────────────────────────────────────────────────────
       // HIGHEST PRIORITY: Checked first for parallel lessons.
       // If cancelled+replacement exists alongside parallel lessons, they are
       // rendered as split-view within ticker items, not as separate split view.
-      if (isTickerGroup) {
-        const tYmd = Number(tickerCandidates[0].dateStr) || 0;
-        const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-        const isPast = calcIsPast(tYmd, tEMin);
-
-        // Pass cancelled lessons and replacements to ticker for split-view rendering
-        const tickerData = {
-          cancelledLessons,
-          replacements: [...addedLessons, ...substLessons, ...eventLessons],
-          hasSplitView: isSplitView,
-        };
-
-        const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
-        const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-
-        if (tickerEnd > tickerStart) {
-          const tickerTop = Math.round(((tickerStart - allStart) / totalMinutes) * totalHeight);
-          const tickerHeight = Math.max(12, Math.round(((tickerEnd - tickerStart) / totalMinutes) * totalHeight));
-          createTickerAnimation(
-            tickerCandidates,
-            tickerTop,
-            tickerHeight,
-            bothInner,
-            ctx,
-            escapeHtml,
-            isPast,
-            homeworks,
-            nowYmd,
-            nowMin,
-            tickerData,
-            lessonConfig
-          );
-        }
-
-        // Render any non-ticker-candidate lessons (events, break supervisions) individually
-        for (const lesson of lessons) {
-          if (tickerCandidates.includes(lesson)) continue;
-          // Cancelled lessons are represented in the ticker.
-          if (cancelledLessons.includes(lesson)) continue;
-
-          // Replacements that overlap cancelled lessons are represented as
-          // split-view items inside the ticker and must not be duplicated here.
-          const isReplacement = tickerData.replacements.includes(lesson);
-          const overlapsCancelled = cancelledLessons.some((c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin);
-          if (isReplacement && overlapsCancelled) continue;
-
-          renderSingleLesson(lesson);
-        }
-
+      if (group.isTickerGroup) {
+        renderTickerGroup(lessons, group);
         continue;
       }
 
       // ── SPLIT VIEW rendering ──────────────────────────────────────────────────
       // Only used when there are NO parallel lessons (< 2 ticker candidates).
       // Shows replacement lessons on left, cancelled lessons on right.
-      if (shouldUseSplitView) {
-        const replacements = [...addedLessons, ...substLessons, ...eventLessons];
-        const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
-        const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
-        const isPast = calcIsPast(allLessonsYmd, groupEMin);
-
-        // Left side: replacement lesson(s) — each at its own time slot
-        for (const repl of replacements) {
-          const rS = Math.max(repl.startMin, allStart);
-          const rE = Math.min(repl.endMin, allEnd);
-          if (rE <= rS) continue;
-          const rTop = Math.round(((rS - allStart) / totalMinutes) * totalHeight);
-          const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
-          const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
-          applyLessonClasses(cell, repl, { hasExam: lessonHasExam(repl), isPast, additionalClasses: ['split-left'] });
-          cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
-          bothInner.appendChild(cell);
-        }
-
-        // Right side: each cancelled lesson at its own time slot
-        for (const cancelled of cancelledLessons) {
-          const cS = Math.max(cancelled.startMin, allStart);
-          const cE = Math.min(cancelled.endMin, allEnd);
-          if (cE <= cS) continue;
-          const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
-          const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
-          const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
-          applyLessonClasses(cell, cancelled, {
-            hasExam: lessonHasExam(cancelled),
-            isPast,
-            additionalClasses: ['split-right'],
-          });
-          cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
-          bothInner.appendChild(cell);
-        }
-
-        // Any remaining lessons in the group that are neither cancelled nor replacements
-        // (rare edge case) are rendered as individual cells.
-        for (const lesson of lessons) {
-          if (cancelledLessons.includes(lesson) || replacements.includes(lesson)) continue;
-          renderSingleLesson(lesson);
-        }
-
+      if (group.shouldUseSplitView) {
+        renderSplitGroup(lessons, group);
         continue;
       }
 
@@ -1915,46 +1944,8 @@ function getModuleRootElement(ctx) {
       // Spanning lesson(s) → full-height on the left.
       // Sub-period lessons → individually on the right at their natural positions.
       // Break gaps between sub-period slots remain empty and visible.
-      if (isSpanSplitLayout) {
-        const tYmd = Number(spanningLessons[0].dateStr) || 0;
-        const tEMin = Math.min(tcGroupEnd, allEnd);
-        const isPast = calcIsPast(tYmd, tEMin);
-
-        // Left: spanning lesson(s) at their full natural height
-        for (const spanning of spanningLessons) {
-          const sS = Math.max(spanning.startMin, allStart);
-          const sE = Math.min(spanning.endMin, allEnd);
-          if (sE <= sS) continue;
-          const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
-          const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
-          const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
-          applyLessonClasses(cell, spanning, { hasExam: lessonHasExam(spanning), isPast, additionalClasses: ['split-left'] });
-          cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(spanning, homeworks)) addHomeworkIcon(cell);
-          bothInner.appendChild(cell);
-        }
-
-        // Right: sub-period lessons individually, each at their natural position.
-        // Gaps between them (class-period breaks) remain empty.
-        for (const sub of subPeriodLessons) {
-          const sS = Math.max(sub.startMin, allStart);
-          const sE = Math.min(sub.endMin, allEnd);
-          if (sE <= sS) continue;
-          const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
-          const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
-          const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
-          applyLessonClasses(cell, sub, { hasExam: lessonHasExam(sub), isPast, additionalClasses: ['split-right'] });
-          cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(sub, homeworks)) addHomeworkIcon(cell);
-          bothInner.appendChild(cell);
-        }
-
-        // Any non-ticker-candidate lessons in this group are rendered individually.
-        for (const lesson of lessons) {
-          if (tickerCandidates.includes(lesson)) continue;
-          renderSingleLesson(lesson);
-        }
-
+      if (group.isSpanSplitLayout) {
+        renderSpanSplitGroup(lessons, group);
         continue;
       }
 
