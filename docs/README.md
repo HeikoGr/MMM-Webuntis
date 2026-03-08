@@ -7,6 +7,7 @@ This directory contains comprehensive documentation for the MMM-Webuntis module.
 ### Core Documentation
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, data flow diagrams, and module structure
 - **[API_REFERENCE.md](API_REFERENCE.md)** - REST and JSON-RPC endpoints, authentication, data normalization
+- **[API_V2_MANIFEST.md](API_V2_MANIFEST.md)** - Canonical socket payload contract (`GOT_DATA` v2)
 - **[CONFIG.md](CONFIG.md)** - Complete configuration reference
 - **[CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)** - Styling guide, CSS variables, and accessibility options
 - **[LEGACY_COLOR_SCHEME.md](LEGACY_COLOR_SCHEME.md)** - Recreate the previous multi-color look via CSS overrides

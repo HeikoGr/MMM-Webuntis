@@ -173,14 +173,25 @@ Rules:
     "absences": 200,
     "messages": 200
   },
-  "warnings": []
+  "warnings": [],
+  "warningMeta": [
+    {
+      "message": "Cannot reach WebUntis server for ...",
+      "kind": "network",
+      "severity": "critical",
+      "status": 0,
+      "code": "NETWORK_ERROR"
+    }
+  ]
 }
 ```
 
 Important:
 - `warnings` is allowed **only** in `state.warnings`.
+- `warningMeta` carries deterministic classification (`kind`, `severity`, optional `status`/`code`) for warning handling in frontend.
 - `_warnings` is fully removed.
 - `absencesUnavailable` is replaced by `state.api.absences` + `warnings`.
+- On per-student fetch exceptions, backend still emits a valid `GOT_DATA` fallback payload (empty `data.*`, populated `state.warnings`/`state.warningMeta`) so frontend can always show and clear runtime warnings deterministically.
 
 ---
 
@@ -320,6 +331,8 @@ Note:
 
 - Minimal, stable, render-oriented.
 - No internal backend objects.
+- Includes deterministic warning classification via `state.warningMeta`.
+- Guarantees warning transport even on per-student fetch exceptions (fallback `GOT_DATA` envelope).
 
 Note:
 - Full config remains mandatory in the **request contract** (`INIT_MODULE`/`FETCH_DATA`).

@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-- Nothing yet. 🚧
+### ⚠️ Warning Lifecycle & Recovery
+
+- Fixed a runtime edge case where per-student fetch exceptions could log backend errors without always delivering a warning payload to frontend.
+- Backend now emits a valid fallback `GOT_DATA` envelope (with empty `data.*` and populated `state.warnings` / `state.warningMeta`) for student-level fetch exceptions.
+- Fixed stale runtime warning persistence after connectivity recovery by clearing module-scoped transient warning state on healthy student payloads.
+
+### 📚 Documentation
+
+- Updated architecture and API docs to reflect current warning transport, warning metadata, recovery behavior, and frontend warning debounce lifecycle.
 
 ## 0.7.4
 

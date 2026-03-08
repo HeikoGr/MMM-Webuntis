@@ -420,7 +420,14 @@ Errors are mapped to user-friendly warnings in [errorHandler.js](../lib/errorHan
 }
 ```
 
-**Frontend Display:** Warnings shown in widget header, data section hidden
+**Frontend Display:** Runtime warnings are shown above widgets and are cleared automatically on subsequent healthy fetches; persistent config warnings remain visible until config is fixed.
+
+### Warning Lifecycle
+
+- Backend emits warnings via `state.warnings` with deterministic metadata in `state.warningMeta`.
+- Frontend treats critical warnings (`severity=critical` or critical API status) as immediate.
+- Non-critical runtime warnings are debounced to avoid single-fetch flicker.
+- If a per-student fetch throws, backend still emits fallback `GOT_DATA` so warning state stays observable and recoverable.
 
 ---
 

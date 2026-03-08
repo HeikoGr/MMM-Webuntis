@@ -771,6 +771,10 @@ graph TD
     --> ErrConv["errorHandler.convertRestErrorToWarning()"]
     ErrConv --> A3["Add to warnings Set"]
 
+    FErr["fetchData exception\n(per-student)"]
+    --> FB["Create fallback GOT_DATA\n(empty data + state.warnings + warningMeta)"]
+    FB --> P
+
     A1 --> C["Collect all warnings<br/>into Set (per-fetch)"]
     A2 --> C
     A3 --> C
@@ -789,6 +793,11 @@ graph TD
 ```
 
 Runtime warnings now live in a per-student map and disappear automatically once a subsequent fetch has no warnings. Persistent configuration or dependency issues still flow through `moduleWarningsSet`, so those messages remain visible until the user fixes the root cause.
+
+Additional runtime behavior:
+- Runtime warnings are displayed with warning-level debounce (critical warnings are shown immediately).
+- A stale module-scoped runtime warning bucket (`__module__`) is cleared automatically when the next student-scoped payload is healthy again.
+- Config warnings remain persistent (`moduleWarningsSet`), runtime fetch warnings are transient (`runtimeWarningsByStudent`).
 
 ## Key Function Relationships
 
@@ -1166,9 +1175,9 @@ graph LR
    - **Reduction**: ~40% payload size
    - **Impact**: Faster socket transmission
 
-5. **Debounced DOM Updates** (✅ IMPLEMENTED)
-   - **Method**: Coalesce multiple GOT_DATA events
-   - **Impact**: Reduces browser reflows
+5. **Immediate DOM Updates + Warning Debounce** (✅ IMPLEMENTED)
+    - **Method**: Each `GOT_DATA` triggers immediate `updateDom()`; warning visibility is debounced in warning state handling.
+    - **Impact**: Fresh data is rendered immediately while transient warning flicker is reduced.
 
 6. **Modular Services** (✅ IMPLEMENTED)
    - **Benefit**: Enable isolated testing and optimization
