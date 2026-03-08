@@ -9,6 +9,9 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+  const LESSON_ACTIVITY_TYPE = Object.freeze({
+    EXAM: 'EXAM',
+  });
   const {
     log,
     escapeHtml,
@@ -63,7 +66,7 @@
    * Displays lessons grouped by date, sorted by time, with visual indicators for:
    * - Cancelled lessons (code='cancelled' or status='CANCELLED')
    * - Substitutions (code='irregular' or status='SUBSTITUTION')
-   * - Exam lessons (type='EXAM' or lstext contains exam keywords)
+   * - Exam lessons (activityType='EXAM')
    * - Holiday notices when no lessons
    *
    * @param {Object} ctx - Main module context (provides translate, config, debug support)
@@ -327,15 +330,10 @@
         }
 
         let addClass = '';
-        if (entry.activityType && String(entry.activityType).toUpperCase() === 'EXAM') {
+        if (String(entry.activityType || '').toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM) {
           addClass = 'exam';
-        } else {
-          const entryText = String(entry.lstext || '').toLowerCase();
-          if (entryText.includes('klassenarbeit') || entryText.includes('klausur') || entryText.includes('arbeit')) {
-            addClass = 'exam';
-          } else if (entry.status === 'CANCELLED') {
-            addClass = 'cancelled';
-          }
+        } else if (entry.status === 'CANCELLED') {
+          addClass = 'cancelled';
         }
 
         addRow(container, 'lessonRow', studentLabelText, timeStr, subjectStr, addClass);

@@ -752,10 +752,8 @@ Module.register('MMM-Webuntis', {
 
     // Warn for each unique warning
     warnings.forEach((warning) => {
-      if (!this.moduleWarningsSet.has(warning)) {
-        this.moduleWarningsSet.add(warning);
-        this._log('warn', warning);
-      }
+      this._upsertModuleWarnings([warning], [], { kind: 'config', severity: 'warning' });
+      this._log('warn', warning);
     });
   },
 
@@ -838,21 +836,115 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Check if warnings array contains critical errors
-   * Critical errors include:
-   *   - Authentication failures
-   *   - Connection errors (timeout, cannot connect)
-   *   - HTTP error status codes (4xx, 5xx)
-   *   - Rate limiting
+   * Merge module-level warnings with metadata.
+   *
+   * @param {string[]} warnings - Warning messages
+   * @param {Object[]} warningMeta - Optional warning metadata entries
+   * @param {Object} [fallbackMeta] - Meta used when no entry exists for a message
+   */
+  _upsertModuleWarnings(warnings = [], warningMeta = [], fallbackMeta = { kind: 'config', severity: 'warning' }) {
+    this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+    this.moduleWarningMetaByMessage = this.moduleWarningMetaByMessage || new Map();
+
+    const metaByMessage = new Map();
+    if (Array.isArray(warningMeta)) {
+      warningMeta.forEach((entry) => {
+        if (!entry?.message) return;
+        metaByMessage.set(String(entry.message), entry);
+      });
+    }
+
+    (Array.isArray(warnings) ? warnings : []).forEach((warning) => {
+      const message = String(warning || '').trim();
+      if (!message) return;
+      this.moduleWarningsSet.add(message);
+
+      const nextMeta = metaByMessage.get(message) || { message, ...fallbackMeta };
+      const prevMeta = this.moduleWarningMetaByMessage.get(message);
+      if (!prevMeta || prevMeta.kind === 'generic') {
+        this.moduleWarningMetaByMessage.set(message, { message, ...nextMeta });
+      }
+    });
+  },
+
+  _isCriticalModuleWarning(message) {
+    const meta = this.moduleWarningMetaByMessage?.get(String(message));
+    return meta?.severity === 'critical' || meta?.level === 'error';
+  },
+
+  /**
+   * Return true when warning metadata marks at least one warning as critical.
+   *
+   * @param {string[]} warnings - Warning messages
+   * @param {Object[]} warningMeta - Warning metadata from payload
+   * @returns {boolean} True if any warning is marked critical by metadata
+   */
+  _hasCriticalWarningMeta(warnings = [], warningMeta = []) {
+    if (!Array.isArray(warnings) || warnings.length === 0) return false;
+    const criticalKinds = new Set(['network', 'auth', 'server']);
+    const metaByMessage = new Map();
+    if (Array.isArray(warningMeta)) {
+      warningMeta.forEach((entry) => {
+        if (!entry?.message) return;
+        metaByMessage.set(String(entry.message), entry);
+      });
+    }
+
+    return warnings.some((warning) => {
+      const meta = metaByMessage.get(String(warning));
+      if (!meta) return false;
+      return meta.severity === 'critical' || meta.level === 'error' || criticalKinds.has(String(meta.kind || ''));
+    });
+  },
+
+  /**
+   * Detect critical API failures deterministically from API status + fetch flags.
+   *
+   * @param {Object} apiStatus - payload.state.api
+   * @param {Object} fetchFlags - payload.state.fetch
+   * @returns {boolean} True if at least one fetched API reports a critical status
+   */
+  _hasCriticalApiStatus(apiStatus = {}, fetchFlags = {}) {
+    const checks = [
+      { enabled: fetchFlags.timetable, status: apiStatus.timetable },
+      { enabled: fetchFlags.exams, status: apiStatus.exams },
+      { enabled: fetchFlags.homework, status: apiStatus.homework },
+      { enabled: fetchFlags.absences, status: apiStatus.absences },
+      { enabled: fetchFlags.messages, status: apiStatus.messages },
+    ];
+
+    return checks.some(({ enabled, status }) => {
+      if (enabled !== true) return false;
+      const numericStatus = Number(status);
+      if (!Number.isFinite(numericStatus)) return false;
+      // Treat unknown/connectivity (0), auth, rate-limit, and 5xx as critical.
+      return numericStatus === 0 || numericStatus === 401 || numericStatus === 429 || numericStatus >= 500;
+    });
+  },
+
+  /**
+   * Network-only textual fallback for paths where the backend receives plain
+   * text network errors without structured metadata.
    *
    * @param {string[]} warnings - Array of warning messages
-   * @returns {boolean} True if any warning indicates a critical error
+   * @returns {boolean} True if any warning matches known network text variants
    */
-  _hasErrorWarnings(warnings = []) {
-    // Check if any warnings indicate a critical error (auth, connection, HTTP status)
+  _hasNetworkTextFallback(warnings = [], warningMeta = []) {
     if (!Array.isArray(warnings) || warnings.length === 0) return false;
-    const pattern = /(authentication failed|cannot connect|timeout|temporarily unavailable|rate limit|http\s*\d{3})/i;
-    return warnings.some((w) => pattern.test(String(w)));
+    const classifiedWarnings = new Set();
+    if (Array.isArray(warningMeta)) {
+      warningMeta.forEach((entry) => {
+        if (entry?.message) classifiedWarnings.add(String(entry.message));
+      });
+    }
+
+    const pattern = /(cannot connect|cannot reach|fetch failed|network error|timeout|econnrefused|enotfound|ehostunreach)/i;
+    // Fallback should only apply where no structured metadata exists for that warning.
+    return warnings.some((w) => {
+      const message = String(w);
+      if (classifiedWarnings.has(message)) return false;
+      return pattern.test(message);
+    });
   },
 
   /**
@@ -957,7 +1049,7 @@ Module.register('MMM-Webuntis', {
    * @param {string[]} warnings - Warning messages from fetch
    * @returns {boolean} True if previous data should be preserved
    */
-  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings) {
+  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings, warningMeta = []) {
     // Decide whether to keep previous data if new data is empty or fetch failed
     const nextIsArray = Array.isArray(nextData);
     const prevIsArray = Array.isArray(prevData);
@@ -972,9 +1064,10 @@ Module.register('MMM-Webuntis', {
 
     const numericStatus = Number(status);
     const isBadStatus = Number.isFinite(numericStatus) && (numericStatus === 0 || numericStatus >= 400);
-    const hasErrorWarning = this._hasErrorWarnings(warnings);
+    const hasCriticalMeta = this._hasCriticalWarningMeta(warnings, warningMeta);
+    const hasNetworkFallbackWarning = this._hasNetworkTextFallback(warnings, warningMeta);
 
-    return isBadStatus || hasErrorWarning;
+    return isBadStatus || hasCriticalMeta || hasNetworkFallbackWarning;
   },
 
   /**
@@ -1181,6 +1274,7 @@ Module.register('MMM-Webuntis', {
     this.preprocessedByStudent = {};
 
     this.moduleWarningsSet = new Set();
+    this.moduleWarningMetaByMessage = new Map();
     this.runtimeWarningsByStudent = {};
     this._runtimeWarningStreakByStudent = {};
     this._runtimeWarningsLogged = new Set();
@@ -1484,8 +1578,7 @@ Module.register('MMM-Webuntis', {
       const warnContainer = document.createDocumentFragment();
       for (const w of Array.from(this.moduleWarningsSet)) {
         const warnDiv = document.createElement('div');
-        // Add critical class for dependency-related warnings
-        const isCritical = w.includes('Dependency issues') || w.includes('npm install') || w.includes('node_modules');
+        const isCritical = this._isCriticalModuleWarning(w);
         warnDiv.className = isCritical ? 'mmm-webuntis-warning critical small bright' : 'mmm-webuntis-warning small bright';
         try {
           withWarningIcon(warnDiv, w);
@@ -1746,13 +1839,8 @@ Module.register('MMM-Webuntis', {
     }
 
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-      payload.warnings.forEach((w) => {
-        if (!this.moduleWarningsSet.has(w)) {
-          this.moduleWarningsSet.add(w);
-          this._log('warn', `Init warning: ${w}`);
-        }
-      });
+      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
+      payload.warnings.forEach((w) => this._log('warn', `Init warning: ${w}`));
     }
 
     this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
@@ -1774,15 +1862,9 @@ Module.register('MMM-Webuntis', {
 
   _handleConfigIssues(payload) {
     const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
-    this.moduleWarningsSet = this.moduleWarningsSet || new Set();
+    this._upsertModuleWarnings(warnList, payload?.warningMeta, { kind: 'config', severity: 'warning' });
     warnList.forEach((w) => {
-      if (!this.moduleWarningsSet.has(w)) {
-        this.moduleWarningsSet.add(w);
-        this._log('warn', `Config warning: ${w}`);
-        if (w.includes('Dependency issues') || w.includes('npm install')) {
-          this._log('error', `CRITICAL: ${w}`);
-        }
-      }
+      this._log('warn', `Config warning: ${w}`);
     });
     this.updateDom();
   },
@@ -1795,7 +1877,14 @@ Module.register('MMM-Webuntis', {
 
     const title = payload?.context?.student?.title;
     if (!title) {
-      this._log('warn', '[GOT_DATA] Missing context.student.title in payload');
+      this._log('warn', '[GOT_DATA] Missing context.student.title in payload, handling as module-level warning payload');
+      this._processGotDataWarnings('__module__', payload);
+
+      if (this._updateDomTimer) {
+        clearTimeout(this._updateDomTimer);
+        this._updateDomTimer = null;
+      }
+      this.updateDom();
       return;
     }
 
@@ -1833,6 +1922,7 @@ Module.register('MMM-Webuntis', {
     const apiStatus = payload?.state?.api || {};
     const fetchFlags = payload?.state?.fetch || {};
     const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
+    const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
 
     // --- 1. Time Units ---
     let timeUnits = [];
@@ -1856,7 +1946,8 @@ Module.register('MMM-Webuntis', {
         this.timeUnitsByStudent[title] || [],
         fetchFlags.timegrid ?? fetchFlags.timetable ?? true,
         apiStatus.timetable,
-        warningsList
+        warningsList,
+        warningMeta
       )
     ) {
       this.timeUnitsByStudent[title] = timeUnits;
@@ -1876,7 +1967,8 @@ Module.register('MMM-Webuntis', {
         this.timetableByStudent[title] || [],
         fetchFlags.timetable ?? true,
         apiStatus.timetable,
-        warningsList
+        warningsList,
+        warningMeta
       )
     ) {
       this.timetableByStudent[title] = rawLessons;
@@ -1921,7 +2013,7 @@ Module.register('MMM-Webuntis', {
 
     dataMaps.forEach(({ source, target, flag, status }) => {
       const parsedArray = Array.isArray(source) ? source : [];
-      if (!this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList)) {
+      if (!this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList, warningMeta)) {
         target[title] = parsedArray;
         if (target === this.absencesByStudent) {
           this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(status));
@@ -1961,16 +2053,31 @@ Module.register('MMM-Webuntis', {
     const debouncedWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind !== 'config');
 
     const hasAnyDebouncedWarningNow = debouncedWarnings.length > 0;
+    const hasCriticalDebouncedWarningNow =
+      this._hasCriticalWarningMeta(debouncedWarnings, warningMeta) ||
+      this._hasCriticalApiStatus(payload?.state?.api || {}, payload?.state?.fetch || {}) ||
+      this._hasNetworkTextFallback(debouncedWarnings, warningMeta);
     const prevRuntimeWarningStreak = Number(this._runtimeWarningStreakByStudent?.[title] || 0);
     const nextRuntimeWarningStreak = hasAnyDebouncedWarningNow ? prevRuntimeWarningStreak + 1 : 0;
     this._runtimeWarningStreakByStudent[title] = nextRuntimeWarningStreak;
 
-    const visibleWarnings = nextRuntimeWarningStreak >= 2 ? [...persistentWarnings, ...debouncedWarnings] : [...persistentWarnings];
-    if (hasAnyDebouncedWarningNow && nextRuntimeWarningStreak < 2) {
+    const shouldShowDebouncedNow = hasCriticalDebouncedWarningNow || nextRuntimeWarningStreak >= 2;
+    const visibleWarnings = shouldShowDebouncedNow ? [...persistentWarnings, ...debouncedWarnings] : [...persistentWarnings];
+    if (hasAnyDebouncedWarningNow && !shouldShowDebouncedNow) {
       this._log('debug', `[GOT_DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
     }
 
     this._updateRuntimeWarnings(title, visibleWarnings);
+
+    // Recovery cleanup: if we receive a clean student-scoped payload,
+    // drop stale module-scoped runtime warnings from earlier title-less payloads.
+    if (title !== '__module__' && visibleWarnings.length === 0) {
+      this._updateRuntimeWarnings('__module__', []);
+      if (this._runtimeWarningStreakByStudent) {
+        delete this._runtimeWarningStreakByStudent.__module__;
+      }
+    }
+
     this._logRuntimeWarnings(visibleWarnings);
   },
 });

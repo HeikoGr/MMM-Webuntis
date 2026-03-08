@@ -8,6 +8,19 @@
 
   const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
   const LOG_LEVEL_WEIGHTS = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+  const LESSON_STATUS = Object.freeze({
+    ADDITIONAL: 'ADDITIONAL',
+    CHANGED: 'CHANGED',
+    SUBSTITUTION: 'SUBSTITUTION',
+    SUBSTITUTE: 'SUBSTITUTE',
+  });
+  const LESSON_ACTIVITY_TYPE = Object.freeze({
+    ADDITIONAL_PERIOD: 'ADDITIONAL_PERIOD',
+    CHANGED_PERIOD: 'CHANGED_PERIOD',
+    SUBSTITUTION_PERIOD: 'SUBSTITUTION_PERIOD',
+  });
+  const IRREGULAR_STATUSES = new Set(Object.values(LESSON_STATUS));
+  const IRREGULAR_ACTIVITY_TYPES = new Set(Object.values(LESSON_ACTIVITY_TYPE));
 
   /**
    * Global log function for widgets
@@ -364,13 +377,13 @@
    */
   function isIrregularStatus(lessonOrStatus) {
     if (typeof lessonOrStatus === 'string') {
-      return ['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(String(lessonOrStatus || '').toUpperCase());
+      return IRREGULAR_STATUSES.has(String(lessonOrStatus || '').toUpperCase());
     }
     if (lessonOrStatus && typeof lessonOrStatus === 'object') {
       const status = String(lessonOrStatus.status || '').toUpperCase();
       const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
-      if (['ADDITIONAL', 'CHANGED', 'SUBSTITUTION', 'SUBSTITUTE'].includes(status)) return true;
-      if (['ADDITIONAL_PERIOD', 'CHANGED_PERIOD', 'SUBSTITUTION_PERIOD'].includes(activityType)) return true;
+      if (IRREGULAR_STATUSES.has(status)) return true;
+      if (IRREGULAR_ACTIVITY_TYPES.has(activityType)) return true;
       return false;
     }
     return false;

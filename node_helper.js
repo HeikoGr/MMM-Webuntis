@@ -91,16 +91,120 @@ module.exports = NodeHelper.create({
    */
   _recordApiStatusFromError(sessionKey, endpoint, err) {
     if (!sessionKey) return;
-    const rawStatus = err?.status || err?.response?.status;
-    const msg = typeof err?.message === 'string' ? err.message : '';
-    const match = msg.match(/\b(4\d\d|5\d\d)\b/);
-    const parsed = rawStatus || (match ? Number(match[1]) : null);
-    const status = Number.isFinite(Number(parsed)) ? Number(parsed) : 0;
+    const status = this._extractHttpStatus(err);
 
     if (!this._apiStatusBySession.has(sessionKey)) {
       this._apiStatusBySession.set(sessionKey, {});
     }
     this._apiStatusBySession.get(sessionKey)[endpoint] = { status, recordedAt: Date.now() };
+  },
+
+  /**
+   * Extract numeric HTTP status from a structured error object.
+   * Returns 0 when status is unavailable.
+   *
+   * @param {Error|Object} err - Error object
+   * @returns {number} HTTP status code or 0
+   */
+  _extractHttpStatus(err) {
+    const rawStatus = err?.status ?? err?.httpStatus ?? err?.response?.status ?? err?.cause?.status ?? err?.cause?.httpStatus;
+    const numericStatus = Number(rawStatus);
+    return Number.isFinite(numericStatus) ? numericStatus : 0;
+  },
+
+  /**
+   * Determine whether an error is a network connectivity failure.
+   * Uses structured error codes first; falls back to message parsing only for
+   * network wording variants that sometimes arrive as plain text.
+   *
+   * @param {Error|Object} err - Error object
+   * @returns {boolean} True if network-related
+   */
+  _isNetworkError(err) {
+    const code = String(err?.code || err?.cause?.code || '').toUpperCase();
+    const name = String(err?.name || err?.cause?.name || '').toUpperCase();
+    const networkCodes = new Set([
+      'ECONNREFUSED',
+      'ETIMEDOUT',
+      'ECONNRESET',
+      'EHOSTUNREACH',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'ERR_NETWORK',
+      'ERR_SOCKET_CONNECTION_TIMEOUT',
+      'ERR_CONNECTION_REFUSED',
+      'ABORT_ERR',
+    ]);
+    if (networkCodes.has(code)) return true;
+    if (name === 'ABORTERROR') return true;
+
+    // Allowed fallback: some lower-level fetch paths only surface text.
+    const msg = String(err?.message || err?.cause?.message || '').toLowerCase();
+    return (
+      msg.includes('fetch failed') ||
+      msg.includes('network error') ||
+      msg.includes('timeout') ||
+      msg.includes('econnrefused') ||
+      msg.includes('enotfound') ||
+      msg.includes('ehostunreach')
+    );
+  },
+
+  /**
+   * Build deterministic warning metadata from an error object.
+   *
+   * @param {Error|Object} err - Error object
+   * @param {Object} [extra={}] - Additional metadata fields
+   * @returns {Object} warning meta
+   */
+  _classifyWarningMetaFromError(err, extra = {}) {
+    const status = this._extractHttpStatus(err);
+    const code = String(err?.code || err?.cause?.code || '').toUpperCase() || null;
+
+    let kind = 'generic';
+    let severity = 'warning';
+
+    if (this._isNetworkError(err)) {
+      kind = 'network';
+      severity = 'critical';
+    } else if (status === 401 || code === 'AUTH_FAILED' || code === 'SESSION_EXPIRED' || code === 'TOKEN_INVALID') {
+      kind = 'auth';
+      severity = 'critical';
+    } else if (status === 429) {
+      kind = 'rate_limit';
+      severity = 'warning';
+    } else if (status >= 500) {
+      kind = 'server';
+      severity = 'critical';
+    } else if (status >= 400) {
+      kind = 'client';
+      severity = status === 403 ? 'warning' : 'critical';
+    }
+
+    return {
+      kind,
+      severity,
+      status: status || null,
+      code,
+      ...extra,
+    };
+  },
+
+  /**
+   * Build warning metadata entries for a list of warning messages.
+   *
+   * @param {string[]} warnings - Warning messages
+   * @param {Object} baseMeta - Metadata merged into each entry
+   * @returns {Object[]} warningMeta array
+   */
+  _buildWarningMetaEntries(warnings = [], baseMeta = {}) {
+    if (!Array.isArray(warnings)) return [];
+    return warnings
+      .filter((message) => Boolean(message))
+      .map((message) => ({
+        message: String(message),
+        ...baseMeta,
+      }));
   },
 
   /**
@@ -932,9 +1036,25 @@ module.exports = NodeHelper.create({
     let authSession;
     const sample = students[0];
     const groupWarnings = [];
-    // Per-fetch-cycle warning deduplication set. Ensures identical warnings
-    // are reported only once per processing run (prevents spam across students).
-    this._currentFetchWarnings = new Set();
+    const groupWarningMetaByMessage = new Map();
+    // Per-fetch-cycle warning deduplication set. Keep it local to avoid
+    // cross-group races when multiple module instances fetch in parallel.
+    const currentFetchWarnings = new Set();
+    const addGroupWarning = (message, meta = {}) => {
+      if (!message) return;
+      if (!currentFetchWarnings.has(message)) {
+        groupWarnings.push(message);
+        currentFetchWarnings.add(message);
+      }
+
+      if (!groupWarningMetaByMessage.has(message)) {
+        groupWarningMetaByMessage.set(message, {
+          kind: 'generic',
+          severity: 'warning',
+          ...meta,
+        });
+      }
+    };
 
     try {
       try {
@@ -945,7 +1065,7 @@ module.exports = NodeHelper.create({
       } catch (err) {
         const errorMsg = this._formatErr(err);
         // Differentiate between credential/config errors and network errors
-        const isNetworkError = errorMsg.includes('connect') || errorMsg.includes('timeout') || errorMsg.includes('network');
+        const isNetworkError = this._isNetworkError(err);
         const msg = isNetworkError
           ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
           : `Authentication failed for ${credKey}: ${errorMsg}`;
@@ -961,17 +1081,18 @@ module.exports = NodeHelper.create({
         }
 
         // Record and mark this warning for the current fetch cycle
-        if (!this._currentFetchWarnings.has(msg)) {
-          groupWarnings.push(msg);
-          this._currentFetchWarnings.add(msg);
-        }
+        addGroupWarning(msg, this._classifyWarningMetaFromError(err, { kind: isNetworkError ? 'network' : 'auth' }));
         // Send error payload to frontend with warnings
         const { sessionId } = this._parseSessionKey(sessionKey);
         for (const student of students) {
+          const fallbackTitle =
+            student.title ||
+            student.name ||
+            (student.studentId !== undefined && student.studentId !== null ? `Student ${student.studentId}` : 'Student');
           const effectiveDisplayMode = student.displayMode || config.displayMode;
           const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
           // Sending error to frontend silently
-          this.sendSocketNotification('GOT_DATA', {
+          this._emitGotData({
             contractVersion: 2,
             id: identifier,
             sessionId,
@@ -983,7 +1104,7 @@ module.exports = NodeHelper.create({
             context: {
               student: {
                 id: student.studentId ?? null,
-                title: student.title || '',
+                title: fallbackTitle,
               },
               config: student,
               timezone: config?.timezone || 'Europe/Berlin',
@@ -1030,6 +1151,10 @@ module.exports = NodeHelper.create({
                 messages: null,
               },
               warnings: groupWarnings,
+              warningMeta: groupWarnings.map((message) => ({
+                message,
+                ...(groupWarningMetaByMessage.get(message) || { kind: 'generic', severity: 'warning' }),
+              })),
             },
           });
         }
@@ -1061,10 +1186,7 @@ module.exports = NodeHelper.create({
           if (studentValidationWarnings.length > 0) {
             studentValidationWarnings.forEach((w) => {
               this._mmLog('warn', student, w);
-              if (!this._currentFetchWarnings.has(w)) {
-                groupWarnings.push(w);
-                this._currentFetchWarnings.add(w);
-              }
+              addGroupWarning(w, { kind: 'config', severity: 'warning' });
             });
           }
 
@@ -1077,6 +1199,7 @@ module.exports = NodeHelper.create({
             compactHolidays: sharedCompactHolidays,
             config,
             sessionKey,
+            currentFetchWarnings,
           });
           if (!payload) {
             this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
@@ -1084,12 +1207,38 @@ module.exports = NodeHelper.create({
             // Add warnings to payload
             const uniqWarnings = Array.from(new Set(groupWarnings));
             const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
+
+            const mergedWarningMetaByMessage = new Map();
+            (Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []).forEach((entry) => {
+              if (!entry?.message) return;
+              mergedWarningMetaByMessage.set(String(entry.message), { ...entry });
+            });
+
+            uniqWarnings.forEach((message) => {
+              const existing = mergedWarningMetaByMessage.get(message) || null;
+              const groupMeta = groupWarningMetaByMessage.get(message) || null;
+              if (!existing || (existing.kind === 'generic' && groupMeta)) {
+                mergedWarningMetaByMessage.set(message, {
+                  message,
+                  ...(groupMeta || { kind: 'generic', severity: 'warning' }),
+                });
+              }
+            });
+
             const nextPayload = {
               ...payload,
               id: identifier,
               state: {
                 ...(payload.state || {}),
                 warnings: mergedWarnings,
+                warningMeta: mergedWarnings.map(
+                  (message) =>
+                    mergedWarningMetaByMessage.get(message) || {
+                      message,
+                      kind: 'generic',
+                      severity: 'warning',
+                    }
+                ),
               },
             };
             studentPayloads.push(nextPayload);
@@ -1106,37 +1255,127 @@ module.exports = NodeHelper.create({
           });
           if (warningMsg) {
             // Only record each distinct warning once per fetch cycle
-            if (!this._currentFetchWarnings.has(warningMsg)) {
-              groupWarnings.push(warningMsg);
-              this._currentFetchWarnings.add(warningMsg);
-            }
+            addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
             this._mmLog('warn', student, warningMsg);
           }
+
+          const fallbackTitle =
+            student.title ||
+            student.name ||
+            (student.studentId !== undefined && student.studentId !== null ? `Student ${student.studentId}` : 'Student');
+          const effectiveDisplayMode = student.displayMode || config?.displayMode;
+          const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+          const warningMetaBase = this._classifyWarningMetaFromError(err);
+
+          const mergedWarnings = Array.from(new Set([...(groupWarnings || []), ...(warningMsg ? [warningMsg] : [])]));
+          const mergedWarningMetaByMessage = new Map();
+          mergedWarnings.forEach((message) => {
+            const groupMeta = groupWarningMetaByMessage.get(message) || null;
+            mergedWarningMetaByMessage.set(message, {
+              message,
+              ...(groupMeta || warningMetaBase || { kind: 'generic', severity: 'warning' }),
+            });
+          });
+
+          const rawApiStatus = this._apiStatusBySession.get(sessionKey) || {};
+          const apiStatus = {
+            timetable: null,
+            exams: null,
+            homework: null,
+            absences: null,
+            messages: null,
+          };
+          Object.entries(rawApiStatus).forEach(([endpoint, record]) => {
+            const status = typeof record === 'object' ? record?.status : record;
+            if (!Number.isFinite(Number(status))) return;
+            if (endpoint === 'messagesofday') {
+              apiStatus.messages = Number(status);
+              return;
+            }
+            if (Object.prototype.hasOwnProperty.call(apiStatus, endpoint)) {
+              apiStatus[endpoint] = Number(status);
+            }
+          });
+
+          studentPayloads.push({
+            contractVersion: 2,
+            id: identifier,
+            meta: {
+              moduleId: identifier,
+              sessionId: this._parseSessionKey(sessionKey).sessionId,
+              generatedAt: new Date().toISOString(),
+            },
+            context: {
+              student: {
+                id: student.studentId ?? null,
+                title: fallbackTitle,
+              },
+              config: student,
+              timezone: config?.timezone || 'Europe/Berlin',
+              todayYmd: null,
+              range: {
+                startYmd: null,
+                endYmd: null,
+              },
+              display: {
+                mode: student.mode || config?.mode || 'verbose',
+                widgets: String(student.displayMode || config?.displayMode || 'lessons,exams')
+                  .toLowerCase()
+                  .split(',')
+                  .map((entry) => entry.trim())
+                  .filter(Boolean),
+              },
+            },
+            data: {
+              timeUnits: [],
+              lessons: [],
+              exams: [],
+              homework: [],
+              absences: [],
+              messages: [],
+              holidays: {
+                ranges: [],
+                current: null,
+              },
+            },
+            state: {
+              fetch: {
+                timegrid: fetchFlags.fetchTimegrid,
+                timetable: fetchFlags.fetchTimetable,
+                exams: fetchFlags.fetchExams,
+                homework: fetchFlags.fetchHomeworks,
+                absences: fetchFlags.fetchAbsences,
+                messages: fetchFlags.fetchMessagesOfDay,
+              },
+              api: apiStatus,
+              warnings: mergedWarnings,
+              warningMeta: mergedWarnings.map(
+                (message) =>
+                  mergedWarningMetaByMessage.get(message) || {
+                    message,
+                    kind: 'generic',
+                    severity: 'warning',
+                  }
+              ),
+            },
+          });
         }
       }
 
       // Send all collected payloads at once to minimize DOM redraws
       const { sessionId } = this._parseSessionKey(sessionKey);
       for (const payload of studentPayloads) {
-        // Send to ALL module instances, but include both id and sessionId for filtering
-        // Frontend filters by sessionId (preferred) or id (fallback) to ensure correct routing
-        // This allows multiple browser windows with same module identifier to get separate data
-        payload.id = identifier;
-        payload.sessionId = sessionId;
-        // Sending data to frontend silently
-        this.sendSocketNotification('GOT_DATA', payload);
+        this._emitGotData(payload, {
+          identifier,
+          sessionId,
+        });
       }
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
       const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
-      if (!this._currentFetchWarnings.has(authMsg)) {
-        groupWarnings.push(authMsg);
-        this._currentFetchWarnings.add(authMsg);
-      }
+      addGroupWarning(authMsg, this._classifyWarningMetaFromError(error, { kind: 'auth' }));
     } finally {
-      // Cleanup not needed - session managed by authService cache
-      // Clear per-fetch warning dedupe set now that processing for this group finished
-      this._currentFetchWarnings = undefined;
+      // Cleanup not needed - session managed by authService cache.
     }
   },
 
@@ -1157,21 +1396,70 @@ module.exports = NodeHelper.create({
    */
   async socketNotificationReceived(notification, payload) {
     // Processing socket notifications silently (no logging for cleaner output)
+    const handlers = {
+      INIT_MODULE: async () => this._handleInitModule(payload),
+      FETCH_DATA: async () => this._handleFetchData(payload),
+      SESSION_STATE: async () => this._handleSessionState(payload),
+    };
 
-    if (notification === 'INIT_MODULE') {
-      await this._handleInitModule(payload);
-      return;
-    }
+    const handler = handlers[notification];
+    if (!handler) return;
+    await handler();
+  },
 
-    if (notification === 'FETCH_DATA') {
-      await this._handleFetchData(payload);
-      return;
-    }
+  /**
+   * Send GOT_DATA payload with consistent id/session routing metadata.
+   *
+   * @param {Object} payload - GOT_DATA payload
+   * @param {Object} [route] - Optional route metadata override
+   * @param {string} [route.identifier] - Module identifier
+   * @param {string} [route.sessionId] - Session ID
+   */
+  _emitGotData(payload, route = {}) {
+    if (!payload || typeof payload !== 'object') return;
 
-    if (notification === 'SESSION_STATE') {
-      this._handleSessionState(payload);
-      return;
-    }
+    const nextPayload = { ...payload };
+    if (route.identifier) nextPayload.id = route.identifier;
+    if (route.sessionId) nextPayload.sessionId = route.sessionId;
+
+    // Send to all module instances; frontend filters by sessionId (preferred) or id (fallback).
+    this.sendSocketNotification('GOT_DATA', nextPayload);
+  },
+
+  /**
+   * Send INIT_ERROR with consistent routing metadata.
+   *
+   * @param {Object} payload - INIT_ERROR payload
+   * @param {Object} [route] - Optional route metadata override
+   * @param {string} [route.identifier] - Module identifier
+   * @param {string} [route.sessionId] - Session ID
+   */
+  _emitInitError(payload, route = {}) {
+    if (!payload || typeof payload !== 'object') return;
+
+    const nextPayload = { ...payload };
+    if (route.identifier && !nextPayload.id) nextPayload.id = route.identifier;
+    if (route.sessionId && !nextPayload.sessionId) nextPayload.sessionId = route.sessionId;
+
+    this.sendSocketNotification('INIT_ERROR', nextPayload);
+  },
+
+  /**
+   * Send MODULE_INITIALIZED with consistent routing metadata.
+   *
+   * @param {Object} payload - MODULE_INITIALIZED payload
+   * @param {Object} [route] - Optional route metadata override
+   * @param {string} [route.identifier] - Module identifier
+   * @param {string} [route.sessionId] - Session ID
+   */
+  _emitModuleInitialized(payload, route = {}) {
+    if (!payload || typeof payload !== 'object') return;
+
+    const nextPayload = { ...payload };
+    if (route.identifier && !nextPayload.id) nextPayload.id = route.identifier;
+    if (route.sessionId && !nextPayload.sessionId) nextPayload.sessionId = route.sessionId;
+
+    this.sendSocketNotification('MODULE_INITIALIZED', nextPayload);
   },
 
   // ===== Session State =====
@@ -1261,14 +1549,19 @@ module.exports = NodeHelper.create({
 
       if (!valid) {
         this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
-        this.sendSocketNotification('INIT_ERROR', {
-          id: identifier,
-          sessionId: payload.sessionId,
-          errors,
-          warnings: combinedWarnings,
-          severity: 'ERROR',
-          message: 'Configuration validation failed',
-        });
+        this._emitInitError(
+          {
+            errors,
+            warnings: combinedWarnings,
+            warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+            severity: 'ERROR',
+            message: 'Configuration validation failed',
+          },
+          {
+            identifier,
+            sessionId: payload.sessionId,
+          }
+        );
         return;
       }
 
@@ -1290,13 +1583,18 @@ module.exports = NodeHelper.create({
       // Module initialized successfully (no log needed)
 
       // Send success notification to frontend
-      this.sendSocketNotification('MODULE_INITIALIZED', {
-        id: identifier,
-        sessionId: payload.sessionId,
-        config: normalizedConfig,
-        warnings: combinedWarnings,
-        students: normalizedConfig.students || [],
-      });
+      this._emitModuleInitialized(
+        {
+          config: normalizedConfig,
+          warnings: combinedWarnings,
+          warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+          students: normalizedConfig.students || [],
+        },
+        {
+          identifier,
+          sessionId: payload.sessionId,
+        }
+      );
 
       // Automatically trigger initial data fetch after successful initialization
       // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
@@ -1309,14 +1607,18 @@ module.exports = NodeHelper.create({
       });
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
-      this.sendSocketNotification('INIT_ERROR', {
-        id: identifier || 'unknown',
-        sessionId: payload?.sessionId,
-        errors: [error.message || 'Unknown initialization error'],
-        warnings: [],
-        severity: 'ERROR',
-        message: 'Module initialization failed',
-      });
+      this._emitInitError(
+        {
+          errors: [error.message || 'Unknown initialization error'],
+          warnings: [],
+          severity: 'ERROR',
+          message: 'Module initialization failed',
+        },
+        {
+          identifier: identifier || 'unknown',
+          sessionId: payload?.sessionId,
+        }
+      );
     }
   },
 
@@ -1560,7 +1862,7 @@ module.exports = NodeHelper.create({
    * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
    */
   async fetchData(params) {
-    const { authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey } = params || {};
+    const { authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey, currentFetchWarnings } = params || {};
 
     if (!authSession || !student || !identifier || !credKey || !config || !sessionKey) {
       throw new Error('fetchData requires authSession, student, identifier, credKey, config, and sessionKey');
@@ -1651,7 +1953,7 @@ module.exports = NodeHelper.create({
         },
       },
       sessionKey,
-      currentFetchWarnings: this._currentFetchWarnings,
+      currentFetchWarnings,
     });
   },
 });
