@@ -8,8 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDisplayDate, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render homework widget for a single student
@@ -26,17 +25,15 @@
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 
-    const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'homework', widgetCtx, studentCellTitle));
-    }
+    // Initialize widget context and add header if needed
+    const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('homework', ctx, container, studentCellTitle, studentConfig);
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
       addRow(container, 'homeworkRowEmpty', studentLabelText, ctx.translate('no_homework'));
       return 1;
     }
 
+    const { formatDisplayDate } = root.util || {};
     const dateFormat = widgetCtx.getConfig('dateFormat');
     const showSubject = Boolean(widgetCtx.getConfig('showSubject'));
     const showText = Boolean(widgetCtx.getConfig('showText'));

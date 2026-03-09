@@ -9,8 +9,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addFullRow, addHeader, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addFullRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render messages of day widget for a single student
@@ -27,11 +26,10 @@
   function renderMessagesOfDayForStudent(ctx, container, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;
 
-    const widgetCtx = createWidgetContext('messagesofday', studentConfig, root.util || {}, ctx);
-
-    // Add widget header with active filter/range context
-    const headerTitle = buildWidgetHeaderTitle(ctx, 'messagesofday', widgetCtx, studentCellTitle);
-    addHeader(container, headerTitle);
+    // Initialize widget context and always add header (forceHeader: true)
+    initializeWidgetContextAndHeader('messagesofday', ctx, container, studentCellTitle, studentConfig, {
+      forceHeader: true,
+    });
 
     const messagesContainer = document.createElement('div');
     messagesContainer.className = 'messages-grid';

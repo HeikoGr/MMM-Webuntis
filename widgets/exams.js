@@ -8,8 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, addHeader, formatDisplayDate, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -34,14 +33,10 @@
       const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
       const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
 
-      // Use widget context helper to reduce config duplication
-      const widgetCtx = createWidgetContext('exams', studentConfig, root.util || {}, ctx);
-      const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-      // Header is already added by main module if studentCellTitle is empty
-      if (widgetCtx.isVerbose && studentCellTitle !== '') {
-        addHeader(container, buildWidgetHeaderTitle(ctx, 'exams', widgetCtx, studentCellTitle));
-      }
+      // Initialize widget context and add header if needed
+      const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('exams', ctx, container, studentCellTitle, studentConfig);
 
+      const { formatDisplayDate } = root.util || {};
       const showSubject = Boolean(widgetCtx.getConfig('showSubject', false));
       const showTeacher = Boolean(widgetCtx.getConfig('showTeacher', false));
 

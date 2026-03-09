@@ -5,20 +5,23 @@ Status: offen
 
 ## Prioritaet Hoch
 
-- [ ] Magic Numbers fuer Auth-Timing zentralisieren
+- [x] Magic Numbers fuer Auth-Timing zentralisieren
   - Dateien: lib/webuntis/authService.js
   - Aufgabe: TOKEN_TTL_MS und TOKEN_BUFFER_MS als Konstanten definieren und alle direkten Werte (300000, 5*60*1000, 14*60*1000) ersetzen.
   - Akzeptanz: Keine direkten Timing-Literale mehr in Auth-Flows.
+  - Erledigt: 2026-03-09 - Konstanten TOKEN_TTL_MS (14 Minuten) und TOKEN_BUFFER_MS (5 Minuten) eingefuehrt
 
-- [ ] API-Timeouts zentralisieren
+- [x] API-Timeouts zentralisieren
   - Dateien: lib/webuntis/webuntisApiService.js, lib/webuntis/authService.js, lib/webuntis/httpClient.js, lib/webuntis/restClient.js
   - Aufgabe: Gemeinsame API_TIMEOUT_MS-Konstante einfuehren und alle 15000-Werte ersetzen.
   - Akzeptanz: Genau eine zentrale Timeout-Definition.
+  - Erledigt: 2026-03-09 - API_TIMEOUT_MS (15 Sekunden) Konstante in allen 4 Dateien eingefuehrt
 
-- [ ] Widget-Initialisierung entduplizieren (DRY)
+- [x] Widget-Initialisierung entduplizieren (DRY)
   - Dateien: widgets/lessons.js, widgets/exams.js, widgets/homework.js, widgets/absences.js, widgets/messagesofday.js, widgets/grid.js, widgets/util.js
   - Aufgabe: Gemeinsamen Helper fuer createWidgetContext/Header/Label einfuehren.
   - Akzeptanz: Wiederholte Initialisierungsbloecke in Widgets entfernt.
+  - Erledigt: 2026-03-09 - initializeWidgetContextAndHeader() Helper in util.js eingefuehrt und in 5 Widgets verwendet (exams, homework, absences, messagesofday, lessons; grid behaelt spezielle Struktur)
 
 - [ ] Doppelte Debug-Dump-Logik in Auth-Service extrahieren
   - Dateien: lib/webuntis/authService.js

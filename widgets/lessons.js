@@ -16,10 +16,9 @@
     log,
     escapeHtml,
     addRow,
-    addHeader,
+    initializeWidgetContextAndHeader,
     formatDisplayDate,
     createWidgetContext,
-    buildWidgetHeaderTitle,
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
@@ -135,10 +134,8 @@
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'lessons', widgetCtx, studentCellTitle));
-    }
+    // Add header after validation passes
+    const studentLabelText = initializeWidgetContextAndHeader('lessons', ctx, container, studentCellTitle, studentConfig).studentLabelText;
 
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));

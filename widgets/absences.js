@@ -11,8 +11,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDisplayDate, formatDisplayTime, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -29,17 +28,15 @@
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 
-    const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'absences', widgetCtx, studentCellTitle));
-    }
+    // Initialize widget context and add header if needed
+    const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('absences', ctx, container, studentCellTitle, studentConfig);
 
     if (!Array.isArray(absences) || absences.length === 0) {
       addRow(container, 'absenceRowEmpty', studentLabelText, ctx.translate('no_absences'));
       return 1;
     }
 
+    const { formatDisplayDate, formatDisplayTime } = root.util || {};
     const maxItems = widgetCtx.getConfig('maxItems');
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));

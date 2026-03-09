@@ -440,6 +440,8 @@
         typeof util.createWidgetContext === 'function'
           ? util.createWidgetContext
           : () => ({ isVerbose: false, getConfig: () => undefined }),
+      initializeWidgetContextAndHeader:
+        typeof util.initializeWidgetContextAndHeader === 'function' ? util.initializeWidgetContextAndHeader : () => ({}),
       buildWidgetHeaderTitle: typeof util.buildWidgetHeaderTitle === 'function' ? util.buildWidgetHeaderTitle : () => '',
       // Flexible field configuration functions
       getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => [],
@@ -483,6 +485,31 @@
       },
       log: (level, msg) => util?.log?.(level, msg),
     };
+  }
+
+  /**
+   * Initialize widget context and optionally add header for verbose mode
+   * Consolidates common initialization pattern used by all widgets
+   *
+   * @param {string} widgetName - Widget identifier (e.g., 'exams', 'homework')
+   * @param {Object} ctx - Main module context
+   * @param {HTMLElement} container - DOM element for widget content
+   * @param {string} studentCellTitle - Student name for display
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Object} options - Additional options
+   * @param {boolean} options.forceHeader - Always add header regardless of verbose mode (default: false)
+   * @returns {Object} { widgetCtx, studentLabelText } - Context and label for compact mode
+   */
+  function initializeWidgetContextAndHeader(widgetName, ctx, container, studentCellTitle, studentConfig, options = {}) {
+    const widgetCtx = createWidgetContext(widgetName, studentConfig, root.util || {}, ctx);
+    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
+
+    // Add header in verbose mode, or if forceHeader is true
+    if (options.forceHeader || (widgetCtx.isVerbose && studentCellTitle !== '')) {
+      addHeader(container, buildWidgetHeaderTitle(ctx, widgetName, widgetCtx, studentCellTitle));
+    }
+
+    return { widgetCtx, studentLabelText };
   }
 
   function normalizeDays(value, fallback = 0) {
@@ -656,6 +683,7 @@
     resolveWidgetHelpers,
     getWidgetConfigResolved,
     createWidgetContext,
+    initializeWidgetContextAndHeader,
     buildWidgetHeaderTitle,
     isIrregularStatus,
     getChangedFieldSet,
