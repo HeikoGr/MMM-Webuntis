@@ -1,5 +1,4 @@
 Module.register('MMM-Webuntis', {
-  // Increment this value to ensure browser reloads updated scripts/styles
   _cacheVersion: '2.0.2',
 
   /**
@@ -11,28 +10,24 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Logger object with log(level, msg) method
    */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
-    // Create a logger object for frontend widgets, respecting configured log level
     const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
     const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     return {
       log(level, msg) {
         try {
-          // Use global logLevel if set, otherwise default to 'info'
           const configured = window.MMMWebuntisLogLevel || 'info';
           const configuredLevel = levels[configured] !== undefined ? configured : 'info';
           const msgLevel = levels[level] !== undefined ? level : 'info';
 
-          // Only log if message level is within configured threshold
           if (levels[msgLevel] > levels[configuredLevel]) {
             return;
           }
 
           const method = METHODS[level] || 'warn';
-          // Output to browser console
           // eslint-disable-next-line no-console
           console[method](`${moduleName}: ${msg}`);
         } catch {
-          // Ignore logging errors
+          return undefined;
         }
       },
     };
@@ -49,7 +44,6 @@ Module.register('MMM-Webuntis', {
   _generateSessionId(length = 9) {
     const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
 
-    // Prefer cryptographically secure random values when available
     const cryptoObj =
       (typeof window !== 'undefined' && window.crypto) ||
       (typeof self !== 'undefined' && self.crypto) ||
@@ -61,14 +55,12 @@ Module.register('MMM-Webuntis', {
       const array = new Uint8Array(length);
       cryptoObj.getRandomValues(array);
       for (let i = 0; i < length; i += 1) {
-        // Map each random byte to a character in the alphabet
         const idx = array[i] % alphabet.length;
         result += alphabet.charAt(idx);
       }
       return result;
     }
 
-    // Fallback to Math.random() only if crypto is not available
     for (let i = 0; i < length; i += 1) {
       const idx = Math.floor(Math.random() * alphabet.length);
       result += alphabet.charAt(idx);
@@ -185,7 +177,6 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of CSS file paths
    */
   getStyles() {
-    // Return array of CSS files to load for this module
     return [this.file('MMM-Webuntis.css')];
   },
 
@@ -196,13 +187,10 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of JavaScript file paths
    */
   getScripts() {
-    // Store logLevel globally so widgets can access it during initialization
     window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
 
-    // Always load util.js for widget helpers
     const scripts = [this.file('widgets/util.js')];
 
-    // Map widget keys to their script files
     const widgetScriptMap = {
       lessons: 'widgets/lessons.js',
       exams: 'widgets/exams.js',
@@ -212,7 +200,6 @@ Module.register('MMM-Webuntis', {
       messagesofday: 'widgets/messagesofday.js',
     };
 
-    // Load only scripts for widgets that are enabled in config
     const widgets = Array.from(new Set(this._getDisplayWidgets()));
     for (const widget of widgets) {
       const scriptPath = widgetScriptMap[widget];
@@ -230,7 +217,6 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Map of language codes to translation file paths
    */
   getTranslations() {
-    // Provide translation files for supported languages
     return {
       en: 'translations/en.json',
       de: 'translations/de.json',
@@ -245,7 +231,6 @@ Module.register('MMM-Webuntis', {
    * @returns {Object|null} Widget API object or null if not available
    */
   _getWidgetApi() {
-    // Return global widget API object if available
     try {
       return window.MMMWebuntisWidgets || null;
     } catch {
@@ -253,11 +238,21 @@ Module.register('MMM-Webuntis', {
     }
   },
 
+  /**
+   * Check whether frontend demo mode is enabled.
+   *
+   * @returns {boolean} True when a demo fixture path is configured.
+   */
   _isDemoModeEnabled() {
     const raw = this.config?.demoDataFile;
     return typeof raw === 'string' && raw.trim() !== '';
   },
 
+  /**
+   * Resolve the configured demo fixture path to a module-local URL.
+   *
+   * @returns {string|null} Fixture URL or null when demo mode is disabled.
+   */
   _getDemoDataUrl() {
     const raw = String(this.config?.demoDataFile || '')
       .trim()
@@ -266,6 +261,12 @@ Module.register('MMM-Webuntis', {
     return this.file(raw);
   },
 
+  /**
+   * Normalize demo fixture content to the payload array shape used by the runtime.
+   *
+   * @param {Object|Object[]} rawData - Parsed demo fixture JSON.
+   * @returns {Object[]} Normalized payload entries.
+   */
   _normalizeDemoPayloads(rawData) {
     if (!rawData) return [];
     if (Array.isArray(rawData)) return rawData;
@@ -273,6 +274,11 @@ Module.register('MMM-Webuntis', {
     return [rawData];
   },
 
+  /**
+   * Load and cache demo payloads from the configured fixture.
+   *
+   * @returns {Promise<Object[]>} Demo payload entries.
+   */
   async _loadDemoPayloads() {
     const demoUrl = this._getDemoDataUrl();
     if (!demoUrl) return [];
@@ -298,6 +304,12 @@ Module.register('MMM-Webuntis', {
     return payloads;
   },
 
+  /**
+   * Emit one or more demo payloads through the normal GOT_DATA handler path.
+   *
+   * @param {string} [reason='manual'] - Trigger reason for logging/debugging context.
+   * @returns {Promise<void>}
+   */
   async _emitDemoPayload(reason = 'manual') {
     try {
       const payloads = await this._loadDemoPayloads();
@@ -349,7 +361,6 @@ Module.register('MMM-Webuntis', {
    * @returns {boolean} True if widget is enabled
    */
   _hasWidget(name) {
-    // Check if a widget is enabled in the current displayMode
     return this._getDisplayWidgets().includes(String(name).toLowerCase());
   },
 
@@ -365,24 +376,18 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of enabled widget names (lowercase, canonical form)
    */
   _getDisplayWidgets() {
-    // Extract displayMode from config (e.g. "lessons, exams, grid")
     const raw = this?.config?.displayMode;
-    // Normalize to string and lowercase for consistent matching
     const s = raw === undefined || raw === null ? '' : String(raw);
     const lower = s.toLowerCase().trim();
 
-    // Special case: if displayMode is exactly "grid", only show grid widget
     if (lower === 'grid') return ['grid'];
-    // Special case: if displayMode is exactly "list", show lessons and exams widgets
     if (lower === 'list') return ['lessons', 'exams'];
 
-    // Split comma-separated list into individual widget names
     const parts = lower
       .split(',')
-      .map((p) => p.trim()) // Remove extra whitespace
-      .filter(Boolean); // Remove empty strings
+      .map((p) => p.trim())
+      .filter(Boolean);
 
-    // Map various aliases and singular/plural forms to canonical widget keys
     const map = {
       grid: 'grid',
       list: 'list',
@@ -398,22 +403,18 @@ Module.register('MMM-Webuntis', {
       messages: 'messagesofday',
     };
 
-    // Build output list of widgets to display, avoiding duplicates
     const out = [];
     for (const p of parts) {
-      const w = map[p]; // Translate alias to canonical widget name
-      if (!w) continue; // Skip unknown entries
-      // If "list" is present, add both lessons and exams widgets
+      const w = map[p];
+      if (!w) continue;
       if (w === 'list') {
         if (!out.includes('lessons')) out.push('lessons');
         if (!out.includes('exams')) out.push('exams');
         continue;
       }
-      // Add widget if not already included
       if (!out.includes(w)) out.push(w);
     }
 
-    // Fallback: if no valid widgets found, default to lessons and exams
     return out.length > 0 ? out : ['lessons', 'exams'];
   },
 
@@ -426,8 +427,6 @@ Module.register('MMM-Webuntis', {
    * @param {...any} args - Arguments to log (strings, objects, etc.)
    */
   _log(level, ...args) {
-    // Log messages to frontend logger or browser console, respecting log level
-    // If a frontend logger is available, delegate to it. Otherwise fallback to console.
     try {
       const frontendFactory = this._createFrontendLogger;
       if (frontendFactory && !this.frontendLogger) {
@@ -439,7 +438,7 @@ Module.register('MMM-Webuntis', {
         return;
       }
     } catch {
-      // ignore and fallback to legacy console behavior
+      void 0;
     }
 
     const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
@@ -453,20 +452,12 @@ Module.register('MMM-Webuntis', {
         else if (msgLevel === 'info') console.warn('[MMM-Webuntis]', ...args);
         else console.warn('[MMM-Webuntis]', ...args);
       } catch {
-        // ignore any console errors
+        void 0;
       }
     }
   },
 
-  /**
-   * Get DOM helper from widget API
-   * The DOM helper provides utility functions for creating widget containers
-   * and headers (defined in widgets/util.js)
-   *
-   * @returns {Object|null} DOM helper object or null if unavailable
-   */
   _getDomHelper() {
-    // Get DOM helper from widget API, log warning if unavailable
     const helper = this._getWidgetApi()?.dom || null;
     if (!helper) {
       this._log('warn', 'MMM-Webuntis dom helper not available, widget container helpers will be skipped.');
@@ -474,14 +465,7 @@ Module.register('MMM-Webuntis', {
     return helper;
   },
 
-  /**
-   * Create a container element for a widget
-   * Uses DOM helper if available, otherwise creates a basic div
-   *
-   * @returns {HTMLElement} Container element with wu-widget-container class
-   */
   _createWidgetContainer() {
-    // Create a container element for a widget, using helper if available
     const helper = this._getDomHelper();
     if (helper && typeof helper.createContainer === 'function') {
       return helper.createContainer();
@@ -491,31 +475,12 @@ Module.register('MMM-Webuntis', {
     return container;
   },
 
-  /**
-   * Determine if a student header should be rendered
-   * Headers are shown in verbose mode when multiple students are configured
-   *
-   * @param {Object} studentConfig - Student configuration object
-   * @returns {boolean} True if header should be rendered
-   */
   _shouldRenderStudentHeader(studentConfig) {
-    // Determine if a student header should be rendered (for verbose mode and multiple students)
     const mode = studentConfig?.mode ?? this.config.mode;
     return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
   },
 
-  /**
-   * Prepare student label for widget rendering
-   * In verbose mode with multiple students, adds header to container and returns empty string
-   * Otherwise returns student title as label string
-   *
-   * @param {HTMLElement} container - Container element to add header to
-   * @param {string} studentTitle - Student name/title
-   * @param {Object} studentConfig - Student configuration object
-   * @returns {string} Label string (empty if header was added to container)
-   */
   _prepareStudentLabel(container, studentTitle, studentConfig) {
-    // Add student header to container if needed, otherwise return label string
     if (this._shouldRenderStudentHeader(studentConfig)) {
       const helper = this._getDomHelper();
       if (helper && typeof helper.addHeader === 'function') {
@@ -526,29 +491,12 @@ Module.register('MMM-Webuntis', {
     return studentTitle;
   },
 
-  /**
-   * Get sorted list of student titles for widget rendering
-   * Sorts alphabetically for consistent display order
-   *
-   * @returns {string[]} Sorted array of student titles
-   */
   _getSortedStudentTitles() {
-    // Return sorted list of student titles for rendering widgets
     if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
     return Object.keys(this.timetableByStudent).sort();
   },
 
-  /**
-   * Invoke a widget renderer function from the widget API
-   * Safely calls widget methods with error handling
-   *
-   * @param {string} widgetKey - Widget name (e.g., 'lessons', 'exams')
-   * @param {string} methodName - Method name to call (e.g., 'renderLessonsForStudent')
-   * @param {...any} args - Arguments to pass to the widget renderer
-   * @returns {any} Result from widget renderer (typically row count)
-   */
   _invokeWidgetRenderer(widgetKey, methodName, ...args) {
-    // Call a widget renderer function from the widget API, log warning if missing
     const api = this._getWidgetApi();
     const fn = api?.[widgetKey]?.[methodName];
     if (typeof fn !== 'function') {
@@ -558,18 +506,7 @@ Module.register('MMM-Webuntis', {
     return fn(this, ...args);
   },
 
-  /**
-   * Render widget rows for multiple students
-   * Creates a document fragment containing one container per student
-   * Only includes containers that actually have content (count > 0)
-   *
-   * @param {string[]} studentTitles - Array of student titles to render
-   * @param {Function} renderRow - Renderer function: (studentTitle, studentLabel, studentConfig, container) => count
-   * @returns {DocumentFragment|null} Fragment with widget containers or null if no content
-   */
   _renderWidgetTableRows(studentTitles, renderRow) {
-    // Render a table of widgets for each student, using the provided row renderer
-    // Create a fragment that will contain one container per student (if they have rows).
     const frag = document.createDocumentFragment();
 
     for (const studentTitle of studentTitles) {
@@ -589,31 +526,13 @@ Module.register('MMM-Webuntis', {
     return frag.hasChildNodes() ? frag : null;
   },
 
-  /**
-   * Compute today's date as YYYYMMDD integer
-   * Uses cached value if available (set during start() or resume())
-   * Supports debugDate for testing (frozen date simulation)
-   *
-   * @returns {number} Date as YYYYMMDD integer (e.g., 20260130)
-   */
   _computeTodayYmdValue() {
-    // Compute today's date as YYYYMMDD integer, using debugDate if set
-    // If debugDate is set, always use it instead of current date
     if (this._currentTodayYmd) return this._currentTodayYmd;
     const now = new Date();
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
   },
 
-  /**
-   * Shift a YYYYMMDD date integer by deltaDays
-   * Handles month/year boundaries correctly
-   *
-   * @param {number} baseYmd - Base date as YYYYMMDD integer (e.g., 20260130)
-   * @param {number} deltaDays - Number of days to shift (positive or negative)
-   * @returns {number|null} Shifted date as YYYYMMDD integer or null if invalid
-   */
   _shiftYmd(baseYmd, deltaDays = 0) {
-    // Shift a YYYYMMDD date integer by deltaDays, return new YYYYMMDD integer
     const num = Number(baseYmd);
     if (!Number.isFinite(num)) return null;
     const year = Math.floor(num / 10000);
@@ -670,21 +589,15 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Config object with session metadata for backend processing
    */
   _buildSendConfig() {
-    // Build config object to send to backend.
-    // Central normalization/default handling lives in node_helper.js.
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
 
     const sendConfig = {
       ...this.config,
       students: rawStudents,
       id: this.identifier,
-      sessionId: this._sessionId, // Include session ID for config isolation
+      sessionId: this._sessionId,
     };
 
-    // Note: legacy config normalization is performed server-side in node_helper.js.
-    // Keep client-side bundle minimal and rely on backend normalization for compatibility.
-
-    // ===== VALIDATE MODULE CONFIG =====
     this._validateAndWarnConfig(sendConfig);
 
     return sendConfig;
@@ -703,10 +616,8 @@ Module.register('MMM-Webuntis', {
    * @param {Object} config - Configuration object to validate
    */
   _validateAndWarnConfig(config) {
-    // Validate config and collect warnings for displayMode, logLevel, numeric ranges, and student setup
     const warnings = [];
 
-    // Validate displayMode
     const validWidgets = ['list', 'grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
     if (config.displayMode && typeof config.displayMode === 'string') {
       const widgets = config.displayMode
@@ -720,13 +631,11 @@ Module.register('MMM-Webuntis', {
       }
     }
 
-    // Validate logLevel
     const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
     if (config.logLevel && !validLogLevels.includes(String(config.logLevel).toLowerCase())) {
       warnings.push(`Invalid logLevel "${config.logLevel}". Use one of: ${validLogLevels.join(', ')}`);
     }
 
-    // Validate numeric ranges
     if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
       warnings.push(`nextDays cannot be negative. Value: ${config.nextDays}`);
     }
@@ -737,7 +646,6 @@ Module.register('MMM-Webuntis', {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
     }
 
-    // Check if no students configured AND no parent credentials for auto-discovery
     const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
     if (!Array.isArray(config.students) || config.students.length === 0) {
       if (!hasParentCreds) {
@@ -745,12 +653,10 @@ Module.register('MMM-Webuntis', {
           'No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.'
         );
       } else {
-        // Auto-discovery will happen in backend - don't show warning in frontend yet
         this._log('info', 'Empty students[] with parent credentials: waiting for auto-discovery from backend...');
       }
     }
 
-    // Warn for each unique warning
     warnings.forEach((warning) => {
       this._upsertModuleWarnings([warning], [], { kind: 'config', severity: 'warning' });
       this._log('warn', warning);
@@ -816,7 +722,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Minutes since midnight (NaN if invalid)
    */
   _toMinutes(t) {
-    // Convert time string or integer (e.g. "13:50" or 1350) to minutes since midnight
     const util = this._getWidgetApi()?.util;
     if (util && typeof util.toMinutesSinceMidnight === 'function') {
       return util.toMinutesSinceMidnight(t);
@@ -1050,7 +955,6 @@ Module.register('MMM-Webuntis', {
    * @returns {boolean} True if previous data should be preserved
    */
   _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings, warningMeta = []) {
-    // Decide whether to keep previous data if new data is empty or fetch failed
     const nextIsArray = Array.isArray(nextData);
     const prevIsArray = Array.isArray(prevData);
     const nextEmpty = nextIsArray && nextData.length === 0;
@@ -1059,7 +963,6 @@ Module.register('MMM-Webuntis', {
     if (!prevHasData) return false;
     if (!nextEmpty) return false;
 
-    // If this data type wasn't fetched, keep previous data
     if (fetchFlag === false) return true;
 
     const numericStatus = Number(status);
@@ -1084,7 +987,6 @@ Module.register('MMM-Webuntis', {
    * @returns {HTMLElement|null} Grid DOM element or null if widget not loaded
    */
   _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
-    // Render grid widget for a student using widget API
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
@@ -1108,7 +1010,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Number of rendered rows
    */
   _renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
-    // Render lessons list widget for a student using widget API
     return this._invokeWidgetRenderer(
       'lessons',
       'renderLessonsForStudent',
@@ -1133,7 +1034,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Number of rendered rows
    */
   _renderExamsForStudent(container, studentLabel, studentConfig, exams) {
-    // Render exams widget for a student using widget API
     return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', container, studentLabel, studentConfig, exams);
   },
 
@@ -1148,7 +1048,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Number of rendered rows
    */
   _renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks) {
-    // Render homework widget for a student using widget API
     return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', container, studentLabel, studentConfig, homeworks);
   },
 
@@ -1163,7 +1062,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Number of rendered rows
    */
   _renderAbsencesForStudent(container, studentLabel, studentConfig, absences) {
-    // Render absences widget for a student using widget API
     return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', container, studentLabel, studentConfig, absences);
   },
 
@@ -1178,7 +1076,6 @@ Module.register('MMM-Webuntis', {
    * @returns {number} Number of rendered rows
    */
   _renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay) {
-    // Render messages of day widget for a student using widget API
     return this._invokeWidgetRenderer(
       'messagesofday',
       'renderMessagesOfDayForStudent',
@@ -1187,6 +1084,120 @@ Module.register('MMM-Webuntis', {
       studentConfig,
       messagesOfDay
     );
+  },
+
+  /**
+   * Collect all widget-relevant student data in one normalized object.
+   *
+   * @param {string} studentTitle - Student key/title.
+   * @returns {Object} Aggregated widget data for the student.
+   */
+  _getStudentWidgetData(studentTitle) {
+    return {
+      studentConfig: this.configByStudent?.[studentTitle] || this.config,
+      timetable: this.timetableByStudent?.[studentTitle] || [],
+      timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
+      homeworks: this.homeworksByStudent?.[studentTitle] || [],
+      exams: this.examsByStudent?.[studentTitle] || [],
+      absences: this.absencesByStudent?.[studentTitle] || [],
+      holidays: this.holidaysByStudent?.[studentTitle] || [],
+      messagesOfDay: this.messagesOfDayByStudent?.[studentTitle] || [],
+      startTimesMap: this.periodNamesByStudent?.[studentTitle] || {},
+    };
+  },
+
+  /**
+   * Render all grid widgets for the current student set.
+   *
+   * @param {HTMLElement} wrapper - Module wrapper element.
+   * @param {string[]} studentTitles - Sorted student titles.
+   * @param {Function} appendWidgetError - Shared widget error renderer.
+   */
+  _renderGridWidgets(wrapper, studentTitles, appendWidgetError) {
+    for (const studentTitle of studentTitles) {
+      const { studentConfig, timetable, timeUnits, homeworks, exams, absences, holidays } = this._getStudentWidgetData(studentTitle);
+      if (timeUnits.length === 0 && holidays.length === 0) {
+        continue;
+      }
+
+      try {
+        const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
+        if (gridElem) {
+          wrapper.appendChild(gridElem);
+        }
+      } catch (error) {
+        appendWidgetError('Grid', error);
+      }
+    }
+  },
+
+  /**
+   * Render the parent-account limitation notice for absences when needed.
+   *
+   * @param {HTMLElement} wrapper - Module wrapper element.
+   * @param {string[]} studentTitles - Sorted student titles.
+   * @param {Function} withWarningIcon - Warning icon helper.
+   */
+  _appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon) {
+    const hasUnavailableAbsences = studentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
+    if (!hasUnavailableAbsences) {
+      return;
+    }
+
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'dimmed small absences-unavailable-info';
+    withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
+    wrapper.appendChild(infoDiv);
+  },
+
+  /**
+   * Build the widget renderer map used by getDom().
+   *
+   * @param {HTMLElement} wrapper - Module wrapper element.
+   * @param {string[]} studentTitles - Sorted student titles.
+   * @param {Function} renderTableWidget - Shared table widget renderer.
+   * @param {Function} appendWidgetError - Shared widget error renderer.
+   * @param {Function} withWarningIcon - Warning icon helper.
+   * @returns {Object<string, Function>} Widget render functions by display key.
+   */
+  _createWidgetRenderers(wrapper, studentTitles, renderTableWidget, appendWidgetError, withWarningIcon) {
+    return {
+      grid: () => {
+        this._renderGridWidgets(wrapper, studentTitles, appendWidgetError);
+      },
+      lessons: () => {
+        renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
+          const { timetable, startTimesMap, holidays } = this._getStudentWidgetData(studentTitle);
+          return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
+        });
+      },
+      exams: () => {
+        renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
+          const { exams } = this._getStudentWidgetData(studentTitle);
+          if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
+          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
+        });
+      },
+      homework: () => {
+        renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
+          const { homeworks } = this._getStudentWidgetData(studentTitle);
+          return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
+        });
+      },
+      absences: () => {
+        this._appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon);
+        renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
+          const { absences } = this._getStudentWidgetData(studentTitle);
+          return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
+        });
+      },
+      messagesofday: () => {
+        renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
+          const { messagesOfDay } = this._getStudentWidgetData(studentTitle);
+          return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
+        });
+      },
+    };
   },
 
   /**
@@ -1203,9 +1214,6 @@ Module.register('MMM-Webuntis', {
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
   start() {
-    // --- 1. Session Context & Identifiers ---
-    // Generate unique session ID for this browser window/tab instance
-    // IMPORTANT: Memory-only - each browser window must have its own unique sessionId for proper isolation
     this._sessionId = this._generateSessionId(9);
 
     // Multi-instance support via explicit identifiers.
@@ -1219,25 +1227,19 @@ Module.register('MMM-Webuntis', {
     }
     this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
 
-    // --- 2. Global Config & Environment ---
-    // Store logLevel in global config so widgets can access it independently
     if (typeof window !== 'undefined') {
       window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
       window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
     }
 
-    // Ensure we always have a locale string for widgets.
     try {
       if (!this.config.language && typeof config !== 'undefined' && config && config.language) {
         this.config.language = config.language;
       }
     } catch {
-      // ignore
+      void 0;
     }
 
-    // Initialize module-level today value. If `debugDate` is configured, use it
-    // (accepts 'YYYY-MM-DD' or 'YYYYMMDD'), otherwise use the real current date.
-    // NOTE: debugDate is never persisted across fetch cycles - always read from config
     if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
       const s = String(this.config.debugDate).trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
@@ -1259,7 +1261,6 @@ Module.register('MMM-Webuntis', {
       this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
     }
 
-    // --- 3. Initial State & Data Objects ---
     this.timetableByStudent = {};
     this.examsByStudent = {};
     this.configByStudent = {};
@@ -1279,16 +1280,13 @@ Module.register('MMM-Webuntis', {
     this._runtimeWarningStreakByStudent = {};
     this._runtimeWarningsLogged = new Set();
 
-    this._updateDomTimer = null; // Timer for batching multiple GOT_DATA updates
-    this._initialized = false; // Track initialization status
-    this._initRequested = false; // Track whether INIT_MODULE was already sent
-    this._initFallbackTimer = null; // Startup fallback in case lifecycle notification is missed
+    this._updateDomTimer = null;
+    this._initialized = false;
+    this._initRequested = false;
+    this._initFallbackTimer = null;
 
-    // Track when data was last received to optimize resume() behavior
-    // (prevents unnecessary API calls during rapid carousel page switches)
     this._lastDataReceivedAt = null;
 
-    // --- 4. Visibility & Timers ---
     this._paused = this._isModuleSuspended();
     if (this._paused) {
       this._log('debug', '[start] Module starts hidden/suspended, deferring timers until resume()');
@@ -1297,8 +1295,6 @@ Module.register('MMM-Webuntis', {
     }
     this._sendSessionState(this._paused ? 'paused' : 'active', 'start');
 
-    // --- 5. Special Modes (Demo) ---
-    // Optional demo mode: load local fixture payload in frontend and skip backend/API entirely.
     if (this._isDemoModeEnabled()) {
       this._initialized = true;
       this._initializedAt = Date.now();
@@ -1308,19 +1304,13 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    // Startup fallback: if DOM_OBJECTS_CREATED was missed for any reason,
-    // ensure INIT_MODULE is still sent once shortly after start.
     this._initFallbackTimer = setTimeout(() => {
       this._initFallbackTimer = null;
       this._requestInitIfNeeded('start-fallback');
     }, 2500);
 
-    // Regular startup path initializes via notificationReceived(DOM_OBJECTS_CREATED).
-
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
-
-  // ===== Visibility & Timer State =====
 
   /**
    * Start the now line updater for grid view
@@ -1328,7 +1318,6 @@ Module.register('MMM-Webuntis', {
    * Only starts if showNowLine config is not explicitly disabled
    */
   _startNowLineUpdater() {
-    // Start the now line updater for grid view if enabled
     if (this.config?.grid?.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
     if (typeof fn === 'function') fn(this);
@@ -1339,7 +1328,6 @@ Module.register('MMM-Webuntis', {
    * Called during suspend() to stop unnecessary timer updates
    */
   _stopNowLineUpdater() {
-    // Stop the now line updater for grid view
     const fn = this._getWidgetApi()?.grid?.stopNowLineUpdater;
     if (typeof fn === 'function') fn(this);
   },
@@ -1359,7 +1347,6 @@ Module.register('MMM-Webuntis', {
    * Timer is skipped if module is paused or interval is invalid
    */
   _startFetchTimer() {
-    // Start periodic data fetch timer based on updateInterval
     if (this._isModuleSuspended()) {
       this._paused = true;
       return;
@@ -1377,8 +1364,6 @@ Module.register('MMM-Webuntis', {
       this._sendFetchData('periodic');
     }, interval);
   },
-
-  // ===== Socket Notifications =====
 
   /**
    * Notify backend about current session visibility state
@@ -1403,7 +1388,6 @@ Module.register('MMM-Webuntis', {
    * @param {string} reason - Reason for initialization trigger
    */
   _sendInit(reason = 'manual') {
-    // Send INIT_MODULE notification to backend with config
     this._log('debug', `[INIT] Sending INIT_MODULE to backend (reason=${reason})`);
     this.sendSocketNotification('INIT_MODULE', {
       ...this._buildSendConfig(),
@@ -1432,8 +1416,6 @@ Module.register('MMM-Webuntis', {
    * @param {string} reason - Reason for fetch ('manual', 'periodic', 'resume')
    */
   _sendFetchData(reason = 'manual') {
-    // Send FETCH_DATA notification to backend, unless not initialized
-    // Prevent fetch before initialization is complete
     if (this._isDemoModeEnabled()) {
       this._emitDemoPayload(reason);
       return;
@@ -1448,7 +1430,6 @@ Module.register('MMM-Webuntis', {
     }
 
     if (!this._initialized) {
-      // Store pending resume request to execute after initialization
       if (String(reason).startsWith('resume')) {
         this._pendingResumeRequest = true;
       }
@@ -1466,14 +1447,11 @@ Module.register('MMM-Webuntis', {
    * Called during suspend() to stop unnecessary fetch attempts
    */
   _stopFetchTimer() {
-    // Stop periodic data fetch timer
     if (this._fetchTimer) {
       clearInterval(this._fetchTimer);
       this._fetchTimer = null;
     }
   },
-
-  // ===== Lifecycle Hooks =====
 
   /**
    * Suspend module - called by MagicMirror when module becomes hidden
@@ -1488,7 +1466,6 @@ Module.register('MMM-Webuntis', {
     this._stopNowLineUpdater();
     this._stopFetchTimer();
 
-    // Clear update dom timer batching
     if (this._updateDomTimer) {
       clearTimeout(this._updateDomTimer);
       this._updateDomTimer = null;
@@ -1509,7 +1486,6 @@ Module.register('MMM-Webuntis', {
   resume() {
     this._log('debug', `[resume] Module resumed (hidden=${this.hidden}, config.debugDate=${this.config?.debugDate})`);
 
-    // 1. Guard against startup race: MagicMirror may call resume() while module is still hidden
     if (this.hidden === true || this.data?.hidden === true) {
       this._paused = true;
       this._sendSessionState('paused', 'resume-while-hidden');
@@ -1519,11 +1495,9 @@ Module.register('MMM-Webuntis', {
     this._paused = false;
     this._sendSessionState('active', 'resume');
 
-    // 2. Start recurrent visual/fetch timers now that module is visible
     this._startFetchTimer();
     this._startNowLineUpdater();
 
-    // 3. Handle midnight / date rollover (only if not using a fixed debug test date)
     if (!this.config?.debugDate) {
       const now = new Date();
       const realTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
@@ -1533,18 +1507,14 @@ Module.register('MMM-Webuntis', {
       }
     }
 
-    // 4. Initialization: Sent only once upon first visible resume
     if (!this._initialized && !this._initRequested) {
       this._requestInitIfNeeded('first-visible-resume');
-      return; // Backend auto-triggers the first FETCH_DATA internally upon init success
+      return;
     }
 
-    // 5. Resume fetch strategy:
-    // - if no data was ever received in this session, fetch immediately
-    // - otherwise fetch only when existing data is stale
     const hasReceivedData = Number.isFinite(this._lastDataReceivedAt);
     const dataAge = hasReceivedData ? Date.now() - this._lastDataReceivedAt : Infinity;
-    const interval = this.config?.updateInterval || 5 * 60 * 1000; // Default: 5 minutes
+    const interval = this.config?.updateInterval || 5 * 60 * 1000;
 
     if (!hasReceivedData) {
       this._log('debug', '[resume] No data received yet in this session, sending FETCH_DATA...');
@@ -1561,7 +1531,6 @@ Module.register('MMM-Webuntis', {
   },
 
   getDom() {
-    // Build and return DOM for module, rendering widgets and warnings
     const wrapper = document.createElement('div');
     const widgets = this._getDisplayWidgets();
     const withWarningIcon = (element, text) => {
@@ -1590,7 +1559,6 @@ Module.register('MMM-Webuntis', {
       }
     };
 
-    // Render any module-level warnings once, above all widgets
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
       const warnContainer = document.createDocumentFragment();
       for (const w of Array.from(this.moduleWarningsSet)) {
@@ -1627,96 +1595,28 @@ Module.register('MMM-Webuntis', {
       return wrapper;
     }
 
-    // demo transformations are applied when data arrives per-student to avoid interfering with live updates
+    const widgetRenderers = this._createWidgetRenderers(
+      wrapper,
+      sortedStudentTitles,
+      renderTableWidget,
+      appendWidgetError,
+      withWarningIcon
+    );
 
     for (const widget of widgets) {
-      if (widget === 'grid') {
-        for (const studentTitle of sortedStudentTitles) {
-          const timetable = this.timetableByStudent[studentTitle] || [];
-          const studentConfig = this.configByStudent[studentTitle] || this.config;
-          const timeUnits = this.timeUnitsByStudent[studentTitle] || [];
-          const homeworks = this.homeworksByStudent?.[studentTitle] || [];
-          const exams = this.examsByStudent?.[studentTitle] || [];
-          const holidays = this.holidaysByStudent?.[studentTitle] || [];
-
-          // Render grid if we have timeUnits OR holidays
-          // This ensures the grid is shown even during holidays when there are no lessons/timeUnits
-          const hasHolidays = holidays.length > 0;
-          if (timeUnits.length > 0 || hasHolidays) {
-            try {
-              const absences = this.absencesByStudent?.[studentTitle] || [];
-              const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
-              if (gridElem) {
-                wrapper.appendChild(gridElem);
-              }
-            } catch (error) {
-              appendWidgetError('Grid', error);
-            }
-          }
-        }
+      const renderWidget = widgetRenderers[widget];
+      if (typeof renderWidget !== 'function') {
+        this._log('warn', `Unknown widget type: ${widget}`);
         continue;
       }
-
-      if (widget === 'lessons') {
-        renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
-          const timetable = this.timetableByStudent[studentTitle] || [];
-          const startTimesMap = this.periodNamesByStudent?.[studentTitle] || {};
-          const holidays = this.holidaysByStudent?.[studentTitle] || [];
-          return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
-        });
-        continue;
-      }
-
-      if (widget === 'exams') {
-        renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
-          const exams = this.examsByStudent?.[studentTitle] || [];
-          if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
-          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
-        });
-        continue;
-      }
-
-      if (widget === 'homework') {
-        renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
-          const homeworks = this.homeworksByStudent?.[studentTitle] || [];
-          return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
-        });
-        continue;
-      }
-
-      if (widget === 'absences') {
-        // Check if absences are unavailable due to parent account limitation
-        const hasUnavailableAbsences = sortedStudentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
-        if (hasUnavailableAbsences) {
-          const infoDiv = document.createElement('div');
-          infoDiv.className = 'dimmed small absences-unavailable-info';
-          withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
-          wrapper.appendChild(infoDiv);
-        }
-
-        renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
-          const absences = this.absencesByStudent?.[studentTitle] || [];
-          return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
-        });
-        continue;
-      }
-
-      if (widget === 'messagesofday') {
-        renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
-          const messagesOfDay = this.messagesOfDayByStudent?.[studentTitle] || [];
-          return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
-        });
-        continue;
-      }
+      renderWidget();
     }
 
     return wrapper;
   },
 
   notificationReceived(notification) {
-    // Handle MagicMirror notifications (e.g. DOM_OBJECTS_CREATED for legacy config warnings)
     if (notification === 'DOM_OBJECTS_CREATED') {
-      // Display deprecation warnings if legacy config keys are detected
       if (this.config.__legacyUsed && this.config.__legacyUsed.length > 0) {
         this._log('warn', `⚠️ DEPRECATED CONFIG DETECTED: ${this.config.__legacyUsed.join(', ')}`);
         this._log('warn', 'Your configuration uses deprecated keys that will be removed in future versions.');
@@ -1724,14 +1624,9 @@ Module.register('MMM-Webuntis', {
         this._log('warn', 'See the module documentation for migration details.');
       }
 
-      // Trigger backend initialization now that DOM is ready and sockets are connected.
-      // MagicMirror does NOT call resume() on modules at startup (only after hide→show),
-      // so we must trigger init here instead of deferring to resume().
       this._requestInitIfNeeded('dom-objects-created');
     }
   },
-
-  // ===== Socket Notification Handlers =====
 
   socketNotificationReceived(notification, payload) {
     if (!this._isValidTargetInstance(payload)) return;
@@ -1755,7 +1650,6 @@ Module.register('MMM-Webuntis', {
         break;
 
       default:
-        // Ignore unknown notifications
         break;
     }
   },
@@ -1847,7 +1741,6 @@ Module.register('MMM-Webuntis', {
     this._processPayloadData(title, payload);
     this._processGotDataWarnings(title, payload);
 
-    // Update DOM immediately
     if (this._updateDomTimer) {
       clearTimeout(this._updateDomTimer);
       this._updateDomTimer = null;
@@ -1875,7 +1768,6 @@ Module.register('MMM-Webuntis', {
     const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
     const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
 
-    // --- 1. Time Units ---
     let timeUnits = [];
     try {
       if (Array.isArray(payload?.data?.timeUnits)) {
@@ -1910,7 +1802,6 @@ Module.register('MMM-Webuntis', {
     });
     this.periodNamesByStudent[title] = periodMap;
 
-    // --- 2. Timetable ---
     const rawLessons = Array.isArray(payload?.data?.lessons) ? payload.data.lessons : [];
     if (
       !this._shouldPreserveData(
@@ -1936,7 +1827,6 @@ Module.register('MMM-Webuntis', {
     Object.keys(groupedRaw).forEach((k) => groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0)));
     this.preprocessedByStudent[title] = { ...(this.preprocessedByStudent[title] || {}), rawGroupedByDate: groupedRaw };
 
-    // --- 3. Exams, Homeworks, Absences, Messages ---
     const dataMaps = [
       { key: 'exams', source: payload?.data?.exams, target: this.examsByStudent, flag: fetchFlags.exams, status: apiStatus.exams },
       {
@@ -1972,7 +1862,6 @@ Module.register('MMM-Webuntis', {
       }
     });
 
-    // --- 4. Holidays ---
     const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
     this.holidaysByStudent[title] = holidays;
     this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);

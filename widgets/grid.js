@@ -60,10 +60,6 @@ function getModuleRootElement(ctx) {
     getFirstFieldName,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
 
-  // ============================================================================
-  // Grid-specific helper functions (moved from util.js)
-  // ============================================================================
-
   /**
    * Determine lesson display mode based on available fields
    * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
@@ -213,10 +209,6 @@ function getModuleRootElement(ctx) {
     return parts;
   }
 
-  // ============================================================================
-  // Now line updater
-  // ============================================================================
-
   /**
    * Start the now-line updater (runs every minute)
    * Updates now-line position and refreshes past lesson masks
@@ -233,27 +225,24 @@ function getModuleRootElement(ctx) {
     const tick = () => {
       try {
         const nowLocal = new Date();
-        // Calculate real date (not affected by debugDate)
         const realNowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        // Only refresh data if debugDate is NOT set (i.e., using real time) and the day has changed
         const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
         if (!isDebugMode) {
           if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = realNowYmd;
           if (realNowYmd !== ctx._currentTodayYmd) {
             try {
-              // Use the debounced _sendFetchData if available, otherwise direct socket call
               if (typeof ctx._sendFetchData === 'function') {
                 ctx._sendFetchData('date-change');
               } else {
                 ctx.sendSocketNotification('FETCH_DATA', ctx.config);
               }
             } catch {
-              // ignore
+              return;
             }
             try {
               ctx.updateDom();
             } catch {
-              // ignore
+              return;
             }
             ctx._currentTodayYmd = realNowYmd;
           }
@@ -304,10 +293,6 @@ function getModuleRootElement(ctx) {
     }
   }
 
-  // ============================================================================
-  // CONFIGURATION & VALIDATION
-  // ============================================================================
-
   /**
    * Validate and extract grid configuration
    * Supports two modes:
@@ -344,8 +329,6 @@ function getModuleRootElement(ctx) {
     let daysToShow, pastDays, startOffset, totalDisplayDays;
 
     if (weekView) {
-      // Calendar week view (Monday-Friday)
-      // Use debugDate if configured, otherwise current date
       let baseDate;
       if (ctx._currentTodayYmd && typeof ctx._currentTodayYmd === 'number') {
         const s = String(ctx._currentTodayYmd);
@@ -357,32 +340,26 @@ function getModuleRootElement(ctx) {
         baseDate = new Date();
       }
 
-      const dayOfWeek = baseDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+      const dayOfWeek = baseDate.getDay();
       const currentHour = new Date().getHours();
       const currentMinute = new Date().getMinutes();
 
-      // Determine if we should show current week or next week
       let weekOffset = 0;
       if (dayOfWeek === 5) {
-        // Friday - only advance to next week if in real-time mode (no debugDate) and after 16:00
         const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
         if (!isDebugMode && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
-          weekOffset = 1; // Show next week
+          weekOffset = 1;
         }
-        // In debug mode on Friday, show current week (Mon-Fri including Friday)
       } else if (dayOfWeek === 6 || dayOfWeek === 0) {
-        // Saturday or Sunday - show next week
         weekOffset = 1;
       }
 
-      // Calculate offset to Monday of target week
-      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Sunday needs special handling
+      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
       startOffset = daysToMonday + weekOffset * 7;
-      totalDisplayDays = 5; // Monday to Friday
-      daysToShow = totalDisplayDays - 1; // Used for some calculations
+      totalDisplayDays = 5;
+      daysToShow = totalDisplayDays - 1;
       pastDays = 0;
     } else {
-      // Standard view with configurable nextDays/pastDays
       daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 0;
       pastDays = Math.max(0, parseInt(configuredPast, 10));
       startOffset = -pastDays;
@@ -400,10 +377,6 @@ function getModuleRootElement(ctx) {
       weekView,
     };
   }
-
-  // ============================================================================
-  // TIME AXIS CALCULATION
-  // ============================================================================
 
   /**
    * Calculate time range for grid (vertical axis)
@@ -423,21 +396,16 @@ function getModuleRootElement(ctx) {
     let allEnd = -Infinity;
 
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-      // Calculate range from timeUnits first
       timeUnits.forEach((u) => {
         if (u.startMin !== undefined && u.startMin !== null) allStart = Math.min(allStart, u.startMin);
         if (u.endMin !== undefined && u.endMin !== null) allEnd = Math.max(allEnd, u.endMin);
       });
 
-      // Also check timetable entries that fall outside timeUnits range
-      // (e.g., early morning supervision before first period, late activities after last period)
       (Array.isArray(timetable) ? timetable : []).forEach((el) => {
         const s = ctx._toMinutes(el.startTime);
         const e = el.endTime ? ctx._toMinutes(el.endTime) : null;
         if (s !== null && s !== undefined && e !== null && e !== undefined) {
-          // Only expand range for entries outside current bounds (prevents excessive expansion)
           if (s < allStart || e > allEnd) {
-            // Sanity check: ignore unreasonably long entries (>12 hours)
             if (e - s < 12 * 60) {
               allStart = Math.min(allStart, s);
               allEnd = Math.max(allEnd, e);
@@ -491,7 +459,6 @@ function getModuleRootElement(ctx) {
         }
       }
 
-      // Make sure cutoff includes the full timeUnit (go to the next unit's start if available)
       if (
         cutoff !== undefined &&
         cutoff !== null &&
@@ -527,10 +494,6 @@ function getModuleRootElement(ctx) {
 
     return { startMin, lineMin };
   }
-
-  // ============================================================================
-  // DOM CREATION - HEADER & TIME AXIS
-  // ============================================================================
 
   /**
    * Create grid header with day labels
@@ -656,10 +619,6 @@ function getModuleRootElement(ctx) {
     return timeAxis;
   }
 
-  // ============================================================================
-  // LESSON PROCESSING & FILTERING
-  // ============================================================================
-
   /**
    * Extract and normalize lessons for a single day
    * Converts backend lesson objects to grid-specific format with:
@@ -674,7 +633,6 @@ function getModuleRootElement(ctx) {
    */
   function extractDayLessons(sourceForDay, ctx) {
     return sourceForDay.map((el) => {
-      // Use dynamic field extraction for flexible display
       const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
 
       // IMPORTANT: Spread `el` first so ALL payload fields are forwarded automatically.
@@ -688,7 +646,6 @@ function getModuleRootElement(ctx) {
         endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
         startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
         endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        // Flexible field extraction (derived from el.su/te/ro/cl/sg/info)
         subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
         subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
         teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
@@ -701,10 +658,8 @@ function getModuleRootElement(ctx) {
         studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
         infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
         infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
-        // Display mode information
         isTeacherView: displayMode.isTeacherView,
         isStudentView: displayMode.isStudentView,
-        // Normalize legacy/mapped fields
         code: el.code || '',
         substText: el.substText || '',
         text: el.lstext || '',
@@ -767,7 +722,6 @@ function getModuleRootElement(ctx) {
     }
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
       return dayLessons.filter((lesson) => {
-        // Always keep cancelled and irregular lessons
         if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
           return true;
         }
@@ -787,9 +741,7 @@ function getModuleRootElement(ctx) {
         return true;
       }
 
-      // If maxGridLessons is set, filter ALL lessons (including cancelled/irregular) by period
       if (maxGridLessons >= 1) {
-        // Check if the lesson's period index is within maxGridLessons
         let matchedIndex = -1;
         for (let ui = 0; ui < timeUnits.length; ui++) {
           const u = timeUnits[ui];
@@ -814,11 +766,9 @@ function getModuleRootElement(ctx) {
           matchedIndex = timeUnits.length - 1;
         }
 
-        // Only keep lessons in the first maxGridLessons periods
         return matchedIndex !== -1 && matchedIndex < maxGridLessons;
       }
 
-      // Otherwise (no maxGridLessons limit), use allEnd cutoff
       if (s >= allEnd) {
         return false;
       }
@@ -851,15 +801,10 @@ function getModuleRootElement(ctx) {
    * @returns {boolean} True if lesson is an exam
    */
   function lessonHasExam(lesson) {
-    // Primary check: REST API activityType field (mapped from raw API's 'type' field)
     if (lesson?.activityType && String(lesson.activityType).toUpperCase() === 'EXAM') return true;
 
     return false;
   }
-
-  // ============================================================================
-  // DOM CREATION - DAY COLUMNS
-  // ============================================================================
 
   /**
    * Add horizontal grid lines to day column
@@ -933,7 +878,6 @@ function getModuleRootElement(ctx) {
    * @param {string} iconSize - Icon font size (default: '1.5em')
    */
   function addDayNotice(inner, totalHeight, noticeType, text, iconSize = '1.5em') {
-    // Unified function for both holiday and no-lessons notices
     const notice = document.createElement('div');
     notice.className = 'grid-lesson lesson lesson-content no-lesson';
     notice.style.height = `${totalHeight}px`;
@@ -969,10 +913,6 @@ function getModuleRootElement(ctx) {
     inner.appendChild(moreBadge);
   }
 
-  // ============================================================================
-  // LESSON CELL RENDERING
-  // ============================================================================
-
   /**
    * Apply CSS classes to lesson element
    * Centralized function for consistent class assignment across all lesson rendering modes
@@ -989,7 +929,6 @@ function getModuleRootElement(ctx) {
   function applyLessonClasses(element, lesson, options = {}) {
     const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
 
-    // Apply lesson type classes
     if (lesson.activityType === 'BREAK_SUPERVISION') {
       element.classList.add('lesson-break-supervision');
     } else if (lesson.status === 'CANCELLED') {
@@ -1007,15 +946,12 @@ function getModuleRootElement(ctx) {
       element.classList.add('lesson-regular');
     }
 
-    // Apply additional classes (e.g., split-left, split-right)
     if (additionalClasses.length > 0) {
       element.classList.add(...additionalClasses);
     }
 
-    // Calculate isPast (either from parameter or calculate individually)
     let lessonIsPast = isPast;
     if (nowYmd !== null && nowMin !== null) {
-      // Individual calculation for ticker items
       const lessonYmd = Number(lesson.dateStr) || 0;
       lessonIsPast = false;
       if (lessonYmd < nowYmd) {
@@ -1025,7 +961,6 @@ function getModuleRootElement(ctx) {
       }
     }
 
-    // Apply state classes
     if (lessonIsPast) element.classList.add('past');
     if (hasExam) element.classList.add('has-exam');
   }
@@ -1064,7 +999,6 @@ function getModuleRootElement(ctx) {
    * @returns {string} HTML content for lesson cell
    */
   function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
-    // Special handling for BREAK_SUPERVISION (must run first, before flexible display)
     if (lesson.activityType === 'BREAK_SUPERVISION') {
       const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
       const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
@@ -1079,7 +1013,6 @@ function getModuleRootElement(ctx) {
     const changedFields = getChangedFieldSet(lesson);
     const hasUnknownChangedDetails = lesson.status === 'CHANGED' && changedFields.size === 0;
 
-    // MOVED indicator (lesson was shifted to a different time slot)
     const hasMovedBadge = lesson.statusDetail === 'MOVED';
     const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : '';
     const changedBadge = hasUnknownChangedDetails ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>` : '';
@@ -1088,12 +1021,10 @@ function getModuleRootElement(ctx) {
 
     const naText = String(lessonConfig?.grid?.naText ?? ctx?.defaults?.grid?.naText ?? 'N/A');
 
-    // Use flexible field configuration
     if (ctx) {
       try {
         const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
-        // Primary: show subject, highlight in changed colour when subject was swapped
         let primaryHtml;
         if (changedFields.has('su')) {
           const newSubject = lesson.su?.[0]?.name || '';
@@ -1109,8 +1040,6 @@ function getModuleRootElement(ctx) {
           primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : '';
         }
 
-        // Secondary: show current teacher; highlight when changed
-        // Always use displayParts so teacher + room from field config are respected.
         let secondaryHtml;
         if (changedFields.has('te')) {
           const newTeacher = lesson.te?.[0]?.name || '';
@@ -1126,7 +1055,6 @@ function getModuleRootElement(ctx) {
           secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
         }
 
-        // Additional (e.g. room): show current room; highlight when changed
         let additionalHtml = '';
         if (changedFields.has('ro')) {
           const newRoom = lesson.ro?.[0]?.name || '';
@@ -1152,7 +1080,6 @@ function getModuleRootElement(ctx) {
           additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
         }
 
-        // Build the display
         const subst = lesson.substText
           ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
           : '';
@@ -1163,11 +1090,10 @@ function getModuleRootElement(ctx) {
 
         return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
       } catch {
-        // Silently fall through to legacy behavior on error
+        void 0;
       }
     }
 
-    // Fallback to legacy behavior
     const subject = escapeHtml(lesson.subjectShort || lesson.subject);
     let secondaryInfo = '';
     if (lesson.isTeacherView && lesson.class) {
@@ -1249,7 +1175,6 @@ function getModuleRootElement(ctx) {
    * @returns {Map} Map of group key → lesson array
    */
   function groupLessonsByTimeSlot(lessonsToRender) {
-    // Group lessons by date first
     const byDate = new Map();
     for (const lesson of lessonsToRender) {
       if (!byDate.has(lesson.dateStr)) {
@@ -1258,13 +1183,10 @@ function getModuleRootElement(ctx) {
       byDate.get(lesson.dateStr).push(lesson);
     }
 
-    // For each date, find overlapping time slots
     const groups = new Map();
     let groupId = 0;
 
     for (const [dateStr, lessons] of byDate.entries()) {
-      // Separate break supervisions from regular lessons
-      // Break supervisions should be positioned freely, not grouped with overlapping lessons
       const regularLessons = [];
       const breakSupervisions = [];
 
@@ -1276,10 +1198,8 @@ function getModuleRootElement(ctx) {
         }
       }
 
-      // Sort regular lessons by start time for efficient overlap detection
       const sorted = regularLessons.slice().sort((a, b) => a.startMin - b.startMin);
 
-      // Track which lessons have been assigned to a group
       const assigned = new Set();
 
       for (let i = 0; i < sorted.length; i++) {
@@ -1289,7 +1209,6 @@ function getModuleRootElement(ctx) {
         const overlappingGroup = [lesson];
         assigned.add(i);
 
-        // Find all lessons that overlap with any lesson in this group
         let foundNew = true;
         while (foundNew) {
           foundNew = false;
@@ -1297,7 +1216,6 @@ function getModuleRootElement(ctx) {
             if (assigned.has(j)) continue;
 
             const candidate = sorted[j];
-            // Check if candidate overlaps with any lesson in the current group
             const hasOverlap = overlappingGroup.some(
               (groupLesson) => candidate.startMin < groupLesson.endMin && candidate.endMin > groupLesson.startMin
             );
@@ -1310,13 +1228,10 @@ function getModuleRootElement(ctx) {
           }
         }
 
-        // Create unique key for this group
         const key = `${dateStr}_group_${groupId++}`;
         groups.set(key, overlappingGroup);
       }
 
-      // Add break supervisions as individual groups (no overlap checking)
-      // This allows them to be positioned freely, even if they overlap with regular lessons
       for (const supervision of breakSupervisions) {
         const key = `${dateStr}_supervision_${groupId++}`;
         groups.set(key, [supervision]);
@@ -1356,9 +1271,6 @@ function getModuleRootElement(ctx) {
     tickerData,
     lessonConfig
   ) {
-    // Group lessons by subject + studentGroup/class for parallel classes.
-    // Teacher changes inside one subject/group should remain stacked in one item.
-    // Special handling: If a lesson is CANCELLED and has a replacement, they are shown as split-view within the same ticker item
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
         return lesson.su[0].name || lesson.su[0].longname;
@@ -1399,14 +1311,10 @@ function getModuleRootElement(ctx) {
       groupLessons.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
     }
 
-    // Identify cancelled+replacement pairs for split-view rendering within ticker.
-    // Multiple cancelled lessons that share the same replacement set are merged
-    // into ONE split ticker item (left side stacked), e.g. Deutsch/Bio/KT -> Excursion.
     const splitViewPairs = [];
     if (tickerData && tickerData.hasSplitView && tickerData.cancelledLessons.length > 0) {
       const pairMap = new Map();
       for (const cancelled of tickerData.cancelledLessons) {
-        // Find replacements that temporally overlap with this cancelled lesson
         const matchingReplacements = tickerData.replacements.filter((r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin);
 
         if (matchingReplacements.length > 0) {
@@ -1431,7 +1339,6 @@ function getModuleRootElement(ctx) {
         splitViewPairs.push(pair);
       }
 
-      // Remove split-pair lessons from subject groups (they're handled in split ticker items)
       const pairedLessons = new Set();
       for (const pair of splitViewPairs) {
         for (const cancelled of pair.cancelledLessons) pairedLessons.add(cancelled);
@@ -1448,55 +1355,45 @@ function getModuleRootElement(ctx) {
       }
     }
 
-    // Create ticker wrapper - minimal container without lesson styling
     const tickerWrapper = document.createElement('div');
     tickerWrapper.className = 'lesson-ticker-wrapper';
     tickerWrapper.style.top = `${topPx}px`;
     tickerWrapper.style.height = `${heightPx}px`;
     tickerWrapper.style.position = 'absolute';
-    tickerWrapper.style.left = '0.15rem'; // Match grid-lesson left offset
-    tickerWrapper.style.right = '0.15rem'; // Match grid-lesson right offset
-    tickerWrapper.style.zIndex = '10'; // Ensure ticker appears above cancelled lessons
+    tickerWrapper.style.left = '0.15rem';
+    tickerWrapper.style.right = '0.15rem';
+    tickerWrapper.style.zIndex = '10';
     tickerWrapper.setAttribute('data-date', lessons[0].dateStr);
     tickerWrapper.setAttribute('data-end-min', String(Math.max(...lessons.map((l) => l.endMin))));
 
-    // Create ticker track (will contain 2 copies for seamless loop)
     const tickerTrack = document.createElement('div');
     tickerTrack.className = 'ticker-track';
 
-    // Each subject group + split-view pairs are ticker units
     const itemCount = subjectGroups.size + splitViewPairs.length;
-    const itemWidthPercent = 100; // Each item should be 100% of wrapper width
+    const itemWidthPercent = 100;
 
-    // Track width is: number of items * 2 (for 2 copies) * item width
     const trackWidth = itemCount * 2 * itemWidthPercent;
     tickerTrack.style.width = `${trackWidth}%`;
 
-    // Add subject groups twice for seamless loop
     for (let copy = 0; copy < 2; copy++) {
-      // Regular subject groups
       for (const [, subjectLessons] of subjectGroups.entries()) {
         const tickerItem = document.createElement('div');
         tickerItem.className = 'ticker-item';
         const groupHasExam = subjectLessons.some((lesson) => lessonHasExam(lesson));
         if (groupHasExam) tickerItem.classList.add('has-exam');
 
-        // Set item width as percentage of track
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
         tickerItem.style.position = 'relative';
         tickerItem.style.height = '100%';
 
-        // Calculate overall time range for this subject group
         const groupStartMin = Math.min(...subjectLessons.map((l) => l.startMin));
         const groupEndMin = Math.max(...subjectLessons.map((l) => l.endMin));
         const totalGroupMinutes = groupEndMin - groupStartMin;
 
-        // Create a sub-element for each lesson in this subject group (positioned absolutely)
         for (const lesson of subjectLessons) {
           const lessonDiv = document.createElement('div');
           lessonDiv.className = 'lesson-content';
 
-          // Calculate absolute position and height within the group's time range
           const lessonStartOffset = lesson.startMin - groupStartMin;
           const lessonDuration = lesson.endMin - lesson.startMin;
 
@@ -1504,8 +1401,6 @@ function getModuleRootElement(ctx) {
           let heightPercent;
 
           if (totalGroupMinutes === 0) {
-            // Degenerate case: no time span in this group (e.g. zero-length lesson).
-            // Render the lesson as occupying the full height.
             topPercent = 0;
             heightPercent = 100;
           } else {
@@ -1519,7 +1414,6 @@ function getModuleRootElement(ctx) {
           lessonDiv.style.left = '0';
           lessonDiv.style.right = '0';
 
-          // Apply lesson classes (type, past, exam)
           applyLessonClasses(lessonDiv, lesson, {
             hasExam: lessonHasExam(lesson),
             nowYmd,
@@ -1538,19 +1432,16 @@ function getModuleRootElement(ctx) {
         tickerTrack.appendChild(tickerItem);
       }
 
-      // Cancelled+replacement pairs as split-view ticker items
       for (const pair of splitViewPairs) {
         const tickerItem = document.createElement('div');
         tickerItem.className = 'ticker-item ticker-item-split';
         const pairHasExam = [...pair.replacements, ...pair.cancelledLessons].some((lesson) => lessonHasExam(lesson));
         if (pairHasExam) tickerItem.classList.add('has-exam');
 
-        // Set item width as percentage of track
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
         tickerItem.style.position = 'relative';
         tickerItem.style.height = '100%';
 
-        // Create split-view container within ticker item
         const splitContainer = document.createElement('div');
         splitContainer.className = 'lesson-both-inner';
         splitContainer.style.position = 'absolute';
@@ -1572,7 +1463,6 @@ function getModuleRootElement(ctx) {
           };
         };
 
-        // Left side: replacement lesson(s)
         for (const replacement of pair.replacements) {
           const replacementDiv = document.createElement('div');
           replacementDiv.className = 'lesson-content split-left';
@@ -1598,7 +1488,6 @@ function getModuleRootElement(ctx) {
           splitContainer.appendChild(replacementDiv);
         }
 
-        // Right side: cancelled lesson(s), stacked at natural positions
         for (const cancelled of pair.cancelledLessons) {
           const cancelledDiv = document.createElement('div');
           cancelledDiv.className = 'lesson-content split-right';
@@ -1631,53 +1520,332 @@ function getModuleRootElement(ctx) {
 
     tickerWrapper.appendChild(tickerTrack);
 
-    // Calculate animation duration based on number of subject groups (longer for more items)
-    const duration = Math.max(10, itemCount * 3); // 3s per subject group, min 10s
+    const duration = Math.max(10, itemCount * 3);
     tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
 
     container.appendChild(tickerWrapper);
   }
 
   /**
+   * Check whether a rendered lesson block has already ended.
+   *
+   * @param {number} ymd - Lesson date as YYYYMMDD.
+   * @param {number} endMin - Lesson end time in minutes since midnight.
+   * @param {number} nowYmd - Current date as YYYYMMDD.
+   * @param {number} nowMin - Current time in minutes since midnight.
+   * @returns {boolean} True when the lesson is in the past.
+   */
+  function calcIsPast(ymd, endMin, nowYmd, nowMin) {
+    if (ymd < nowYmd) return true;
+    if (ymd === nowYmd && typeof endMin === 'number' && !Number.isNaN(endMin) && endMin <= nowMin) return true;
+    return false;
+  }
+
+  /**
+   * Detect whether a lesson carries class or student-group hints.
+   *
+   * @param {Object} lesson - Normalized lesson object.
+   * @returns {boolean} True when class/student-group metadata is present.
+   */
+  function lessonHasStudentGroupOrClassHint(lesson) {
+    const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
+    const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
+    const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+    const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+    return hasStudentGroup || hasClass;
+  }
+
+  function hasParallelOverlap(plannedParallelCandidates) {
+    if (plannedParallelCandidates.length < 2) return false;
+
+    for (let i = 0; i < plannedParallelCandidates.length; i++) {
+      for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
+        const first = plannedParallelCandidates[i];
+        const second = plannedParallelCandidates[j];
+        if (first.startMin < second.endMin && first.endMin > second.startMin) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Classify an overlap group into the rendering mode used by the grid.
+   *
+   * @param {Array} lessons - Overlapping normalized lessons.
+   * @returns {Object} Rendering classification metadata.
+   */
+  function classifyLessonRenderGroup(lessons) {
+    const cancelledLessons = lessons.filter((lesson) => lesson.status === 'CANCELLED');
+    const addedLessons = lessons.filter((lesson) => lesson.status === 'ADDITIONAL');
+    const substLessons = lessons.filter((lesson) => lesson.status === 'SUBSTITUTION');
+    const eventLessons = lessons.filter((lesson) => lesson.activityType === 'EVENT');
+    const tickerCandidates = lessons.filter((lesson) => lesson.activityType === 'NORMAL_TEACHING_PERIOD');
+    const plannedParallelCandidates = tickerCandidates.filter((lesson) => {
+      const status = String(lesson.status || '').toUpperCase();
+      return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
+    });
+
+    const substitutionTriggersSplit = substLessons.some((lesson) => !lessonHasStudentGroupOrClassHint(lesson));
+    const isSplitView = cancelledLessons.length >= 1 && (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
+
+    const tcGroupStart = tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((lesson) => lesson.startMin)) : Infinity;
+    const tcGroupEnd = tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((lesson) => lesson.endMin)) : -Infinity;
+    const spanningLessons = tickerCandidates.filter((lesson) => lesson.startMin <= tcGroupStart && lesson.endMin >= tcGroupEnd);
+    const subPeriodLessons = tickerCandidates.filter((lesson) => !spanningLessons.includes(lesson));
+    const isSpanSplitLayout =
+      !isSplitView &&
+      cancelledLessons.length === 0 &&
+      addedLessons.length === 0 &&
+      spanningLessons.length >= 1 &&
+      subPeriodLessons.length >= 1;
+
+    const isTickerGroup = hasParallelOverlap(plannedParallelCandidates);
+
+    return {
+      cancelledLessons,
+      addedLessons,
+      substLessons,
+      eventLessons,
+      tickerCandidates,
+      tcGroupEnd,
+      spanningLessons,
+      subPeriodLessons,
+      isSplitView,
+      isTickerGroup,
+      shouldUseSplitView: isSplitView && !isTickerGroup,
+      isSpanSplitLayout,
+    };
+  }
+
+  /**
+   * Convert the current YYYYMMDD marker into a Date instance.
+   *
+   * @param {number|string} currentTodayYmd - Current date marker.
+   * @returns {Date} Base date for grid rendering.
+   */
+  function getBaseDateFromYmd(currentTodayYmd) {
+    if (!currentTodayYmd) {
+      return new Date();
+    }
+
+    const raw = String(currentTodayYmd);
+    const year = parseInt(raw.substring(0, 4), 10);
+    const month = parseInt(raw.substring(4, 6), 10) - 1;
+    const day = parseInt(raw.substring(6, 8), 10);
+    return new Date(year, month, day);
+  }
+
+  /**
+   * Format a Date into the YYYYMMDD key used throughout the grid.
+   *
+   * @param {Date} date - Date to format.
+   * @returns {string} YYYYMMDD key.
+   */
+  function formatDateKey(date) {
+    return `${date.getFullYear()}${('0' + (date.getMonth() + 1)).slice(-2)}${('0' + date.getDate()).slice(-2)}`;
+  }
+
+  function getSourceLessonsForDay(ctx, studentTitle, timetable, dateStr) {
+    const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
+    if (groupedRaw?.[dateStr]) {
+      return groupedRaw[dateStr];
+    }
+
+    return (Array.isArray(timetable) ? timetable : [])
+      .filter((entry) => String(entry.date) === dateStr)
+      .sort((left, right) => (left.startTime || 0) - (right.startTime || 0));
+  }
+
+  /**
+   * Create the DOM shell for a single grid day column.
+   *
+   * @param {number} col - CSS grid column number.
+   * @param {number} totalHeight - Column height in pixels.
+   * @param {boolean} isToday - Whether the column represents today.
+   * @returns {{bothWrap: HTMLElement, bothInner: HTMLElement}} Day column elements.
+   */
+  function createDayColumnWrapper(col, totalHeight, isToday) {
+    const bothWrap = document.createElement('div');
+    bothWrap.style.gridColumn = `${col}`;
+    bothWrap.style.gridRow = '1';
+
+    const bothInner = document.createElement('div');
+    bothInner.className = 'day-column-inner';
+    bothInner.style.height = `${totalHeight}px`;
+    bothInner.style.position = 'relative';
+    if (isToday) bothInner.classList.add('is-today');
+
+    bothWrap.appendChild(bothInner);
+    return { bothWrap, bothInner };
+  }
+
+  /**
+   * Render either lesson cells or the empty-day fallback notice.
+   *
+   * @param {Object} options - Render context.
+   */
+  function renderDayLessonsOrNotice({
+    lessonsToRender,
+    holiday,
+    bothInner,
+    totalHeight,
+    allStart,
+    allEnd,
+    totalMinutes,
+    homeworks,
+    ctx,
+    studentConfig,
+  }) {
+    if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
+      if (!holiday) {
+        addDayNotice(bothInner, totalHeight, 'no-lessons', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
+      }
+      return;
+    }
+
+    renderLessonCells(
+      lessonsToRender,
+      { bothInner },
+      allStart,
+      allEnd,
+      totalMinutes,
+      totalHeight,
+      homeworks,
+      ctx,
+      escapeHtml,
+      studentConfig
+    );
+  }
+
+  /**
+   * Render absence overlays for one rendered day column.
+   *
+   * @param {Array} absences - All absences for the current student.
+   * @param {string} dateStr - YYYYMMDD key for the column.
+   * @param {HTMLElement} bothInner - Day column inner element.
+   * @param {number} allStart - Visible start minute.
+   * @param {number} allEnd - Visible end minute.
+   * @param {number} totalHeight - Column height in pixels.
+   * @param {Object} ctx - Module context.
+   */
+  function addDayAbsenceOverlays(absences, dateStr, bothInner, allStart, allEnd, totalHeight, ctx) {
+    if (!Array.isArray(absences) || absences.length === 0) {
+      return;
+    }
+
+    const dayAbsences = absences.filter((absence) => String(absence?.date) === dateStr);
+    if (dayAbsences.length === 0) {
+      return;
+    }
+
+    addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
+  }
+
+  /**
+   * Render one complete day column including notices, lessons, and absences.
+   *
+   * @param {Object} options - Day render context.
+   */
+  function renderGridDayColumn({
+    grid,
+    ctx,
+    studentTitle,
+    studentConfig,
+    timetable,
+    homeworks,
+    timeUnits,
+    absences,
+    baseDate,
+    todayDateStr,
+    config,
+    allStart,
+    allEnd,
+    totalMinutes,
+    totalHeight,
+    dayOffset,
+  }) {
+    const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
+    const dateStr = formatDateKey(targetDate);
+    const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dateStr);
+
+    let dayLessons = extractDayLessons(sourceForDay, ctx);
+    dayLessons = validateAndNormalizeLessons(dayLessons, log);
+
+    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
+    const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
+    const hiddenCount = dayLessons.length - lessonsToRender.length;
+    const col = 2 + dayOffset - config.startOffset;
+    const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dateStr === todayDateStr);
+
+    if (holiday) {
+      addDayNotice(bothInner, totalHeight, 'holiday', escapeHtml(holiday.longName || holiday.name), '2em');
+    }
+
+    grid.appendChild(bothWrap);
+    addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
+    addNowLineToColumn(bothInner, allStart, allEnd, totalHeight);
+
+    if (hiddenCount > 0) {
+      addMoreBadge(bothInner, hiddenCount, ctx);
+    }
+
+    renderDayLessonsOrNotice({
+      lessonsToRender,
+      holiday,
+      bothInner,
+      totalHeight,
+      allStart,
+      allEnd,
+      totalMinutes,
+      homeworks,
+      ctx,
+      studentConfig,
+    });
+
+    addDayAbsenceOverlays(absences, dateStr, bothInner, allStart, allEnd, totalHeight, ctx);
+  }
+
+  /**
+   * Schedule post-render now-line and past-mask updates for the rendered grid.
+   *
+   * @param {Object} ctx - Module context.
+   * @param {HTMLElement} wrapper - Rendered grid wrapper.
+   */
+  function scheduleGridPostRenderUpdates(ctx, wrapper) {
+    setTimeout(() => {
+      try {
+        const gridWidget = ctx?._getWidgetApi?.()?.grid;
+        if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
+          gridWidget.updateNowLinesAll(ctx, wrapper);
+        }
+        if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
+          gridWidget.refreshPastMasks(ctx, wrapper);
+        }
+      } catch (e) {
+        log('warn', 'initial now-line/past-mask update failed', e);
+      }
+    }, 0);
+  }
+
+  /**
    * Render all lesson cells for a day column.
    *
-   * Three rendering strategies (evaluated in order for each transitive overlap group):
+   * The overlap classifier selects split-view, span-split, ticker, or plain
+   * individual cells depending on overlap structure and substitution metadata.
    *
-   * SPLIT VIEW — when a lesson was cancelled and a replacement runs in its slot:
-   *   Triggered when the group contains CANCELLED + ADDITIONAL,
-   *   OR CANCELLED + SUBSTITUTION without studentGroup/class hint
-   *   (treated as a full-class replacement, not a parallel half-group course).
-   *   Left side: replacement lesson(s) at their own positions.
-   *   Right side: cancelled lessons at their own positions.
-   *
-   *   studentGroup/class hint for SUBSTITUTION:
-   *     substitution with studentGroup/class → likely parallel half-group → NOT split
-   *     substitution without studentGroup/class → likely full-class replacement → SPLIT
-   *
-   * SPAN SPLIT — one lesson spans the full group range while others cover sub-periods:
-   *   The spanning lesson appears full-height on the left; sub-period lessons are
-   *   stacked on the right at their natural positions, preserving break gaps.
-   *   Triggered when ≥ 1 ticker candidate spans [groupStart, groupEnd] and
-   *   ≥ 1 ticker candidate does not.
-   *
-   * TICKER — truly parallel courses that all run in the same time range:
-   *   Triggered when ≥ 2 NORMAL_TEACHING_PERIOD lessons exist in the group,
-   *   regardless of status (REGULAR, CHANGED, or CANCELLED).
-   *   Cancelled lessons appear in the ticker with strikethrough styling.
-   *   Uses sub-interval rendering with bridge-absorption to handle gaps between
-   *   partially-overlapping lessons.
-   *
-   * INDIVIDUAL CELLS — all other cases (single lessons, unmatched statuses, etc.)
-   *
-   * @param {Array}    lessonsToRender
-   * @param {Object}   containers      - { bothInner }
-   * @param {number}   allStart        - Grid start in minutes since midnight
-   * @param {number}   allEnd          - Grid end in minutes since midnight
-   * @param {number}   totalMinutes    - allEnd − allStart
-   * @param {number}   totalHeight     - Total column height in pixels
-   * @param {Array}    homeworks
-   * @param {Object}   ctx
-   * @param {Function} escapeHtml
+   * @param {Array} lessonsToRender - Normalized lessons for one day.
+   * @param {Object} containers - Day column containers.
+   * @param {number} allStart - Grid start in minutes since midnight.
+   * @param {number} allEnd - Grid end in minutes since midnight.
+   * @param {number} totalMinutes - Total visible duration in minutes.
+   * @param {number} totalHeight - Total column height in pixels.
+   * @param {Array} homeworks - Homework entries for icon matching.
+   * @param {Object} ctx - Module context.
+   * @param {Function} escapeHtml - HTML escaping helper.
+   * @param {Object} lessonConfig - Grid rendering configuration.
    */
   function renderLessonCells(
     lessonsToRender,
@@ -1703,13 +1871,6 @@ function getModuleRootElement(ctx) {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
-    /** Compute isPast for a lesson or group based on its end time. */
-    const calcIsPast = (ymd, endMin) => {
-      if (ymd < nowYmd) return true;
-      if (ymd === nowYmd && typeof endMin === 'number' && !Number.isNaN(endMin) && endMin <= nowMin) return true;
-      return false;
-    };
-
     /** Render a single lesson as a standalone full-width cell at its own time position. */
     const renderSingleLesson = (lesson) => {
       const lS = Math.max(lesson.startMin, allStart);
@@ -1721,83 +1882,17 @@ function getModuleRootElement(ctx) {
       const ymd = Number(lesson.dateStr) || 0;
 
       const cell = createLessonCell(topPx, heightPx, lesson.dateStr, lE);
-      applyLessonClasses(cell, lesson, { hasExam: lessonHasExam(lesson), isPast: calcIsPast(ymd, lE) });
+      applyLessonClasses(cell, lesson, { hasExam: lessonHasExam(lesson), isPast: calcIsPast(ymd, lE, nowYmd, nowMin) });
       cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
       if (checkHomeworkMatch(lesson, homeworks)) addHomeworkIcon(cell);
       bothInner.appendChild(cell);
-    };
-
-    const hasStudentGroupOrClassHint = (lesson) => {
-      const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
-      const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
-      const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
-      const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
-      return hasStudentGroup || hasClass;
-    };
-
-    const hasParallelOverlap = (plannedParallelCandidates) => {
-      if (plannedParallelCandidates.length < 2) return false;
-      for (let i = 0; i < plannedParallelCandidates.length; i++) {
-        for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
-          const first = plannedParallelCandidates[i];
-          const second = plannedParallelCandidates[j];
-          if (first.startMin < second.endMin && first.endMin > second.startMin) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    const classifyGroup = (lessons) => {
-      const cancelledLessons = lessons.filter((l) => l.status === 'CANCELLED');
-      const addedLessons = lessons.filter((l) => l.status === 'ADDITIONAL');
-      const substLessons = lessons.filter((l) => l.status === 'SUBSTITUTION');
-      const eventLessons = lessons.filter((l) => l.activityType === 'EVENT');
-      const tickerCandidates = lessons.filter((l) => l.activityType === 'NORMAL_TEACHING_PERIOD');
-      const plannedParallelCandidates = tickerCandidates.filter((l) => {
-        const status = String(l.status || '').toUpperCase();
-        return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
-      });
-
-      const substitutionTriggersSplit = substLessons.some((lesson) => !hasStudentGroupOrClassHint(lesson));
-      const isSplitView =
-        cancelledLessons.length >= 1 && (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
-
-      const tcGroupStart = tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((l) => l.startMin)) : Infinity;
-      const tcGroupEnd = tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((l) => l.endMin)) : -Infinity;
-      const spanningLessons = tickerCandidates.filter((l) => l.startMin <= tcGroupStart && l.endMin >= tcGroupEnd);
-      const subPeriodLessons = tickerCandidates.filter((l) => !spanningLessons.includes(l));
-      const isSpanSplitLayout =
-        !isSplitView &&
-        cancelledLessons.length === 0 &&
-        addedLessons.length === 0 &&
-        spanningLessons.length >= 1 &&
-        subPeriodLessons.length >= 1;
-
-      const isTickerGroup = hasParallelOverlap(plannedParallelCandidates);
-
-      return {
-        cancelledLessons,
-        addedLessons,
-        substLessons,
-        eventLessons,
-        tickerCandidates,
-        tcGroupEnd,
-        spanningLessons,
-        subPeriodLessons,
-        isSplitView,
-        isTickerGroup,
-        shouldUseSplitView: isSplitView && !isTickerGroup,
-        isSpanSplitLayout,
-      };
     };
 
     const renderTickerGroup = (lessons, group) => {
       const { cancelledLessons, addedLessons, substLessons, eventLessons, tickerCandidates, isSplitView } = group;
       const tYmd = Number(tickerCandidates[0].dateStr) || 0;
       const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-      const isPast = calcIsPast(tYmd, tEMin);
+      const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
 
       const tickerData = {
         cancelledLessons,
@@ -1842,7 +1937,7 @@ function getModuleRootElement(ctx) {
       const replacements = [...addedLessons, ...substLessons, ...eventLessons];
       const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
       const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
-      const isPast = calcIsPast(allLessonsYmd, groupEMin);
+      const isPast = calcIsPast(allLessonsYmd, groupEMin, nowYmd, nowMin);
 
       for (const repl of replacements) {
         const rS = Math.max(repl.startMin, allStart);
@@ -1884,7 +1979,7 @@ function getModuleRootElement(ctx) {
       const { spanningLessons, subPeriodLessons, tcGroupEnd, tickerCandidates } = group;
       const tYmd = Number(spanningLessons[0].dateStr) || 0;
       const tEMin = Math.min(tcGroupEnd, allEnd);
-      const isPast = calcIsPast(tYmd, tEMin);
+      const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
 
       for (const spanning of spanningLessons) {
         const sS = Math.max(spanning.startMin, allStart);
@@ -1920,45 +2015,28 @@ function getModuleRootElement(ctx) {
 
     for (const [, lessons] of timeSlotGroups.entries()) {
       if (!lessons || lessons.length === 0) continue;
-      const group = classifyGroup(lessons);
+      const group = classifyLessonRenderGroup(lessons);
 
-      // ── TICKER rendering ──────────────────────────────────────────────────────
-      // HIGHEST PRIORITY: Checked first for parallel lessons.
-      // If cancelled+replacement exists alongside parallel lessons, they are
-      // rendered as split-view within ticker items, not as separate split view.
       if (group.isTickerGroup) {
         renderTickerGroup(lessons, group);
         continue;
       }
 
-      // ── SPLIT VIEW rendering ──────────────────────────────────────────────────
-      // Only used when there are NO parallel lessons (< 2 ticker candidates).
-      // Shows replacement lessons on left, cancelled lessons on right.
       if (group.shouldUseSplitView) {
         renderSplitGroup(lessons, group);
         continue;
       }
 
-      // ── SPAN SPLIT rendering ──────────────────────────────────────────────────
-      //
-      // Spanning lesson(s) → full-height on the left.
-      // Sub-period lessons → individually on the right at their natural positions.
-      // Break gaps between sub-period slots remain empty and visible.
       if (group.isSpanSplitLayout) {
         renderSpanSplitGroup(lessons, group);
         continue;
       }
 
-      // ── INDIVIDUAL CELLS (fallback) ───────────────────────────────────────────
       for (const lesson of lessons) {
         renderSingleLesson(lesson);
       }
     }
   }
-
-  // ============================================================================
-  // ABSENCE OVERLAY RENDERING
-  // ============================================================================
 
   /**
    * Create absence overlay element
@@ -1984,7 +2062,6 @@ function getModuleRootElement(ctx) {
 
     overlay.setAttribute('title', `${absenceLabel}: ${reasonText} (${excusedLabel})`);
 
-    // Add icon and reason text
     const icon = document.createElement('span');
     icon.className = 'absence-icon';
     icon.setAttribute('aria-hidden', 'true');
@@ -2020,16 +2097,13 @@ function getModuleRootElement(ctx) {
 
     try {
       for (const absence of dayAbsences) {
-        // Convert HHMM (1330 = 13:30) to minutes (810 minutes)
         const startMin = ctx._toMinutes(absence?.startTime) || 0;
         const endMin = ctx._toMinutes(absence?.endTime) || 0;
 
         if (startMin >= allEnd || endMin <= allStart) {
-          // Absence is outside the visible time range
           continue;
         }
 
-        // Clamp to visible range
         const clampedStart = Math.max(startMin, allStart);
         const clampedEnd = Math.min(endMin, allEnd);
 
@@ -2048,10 +2122,6 @@ function getModuleRootElement(ctx) {
       log('debug', 'failed to render absence overlays', e);
     }
   }
-
-  // ============================================================================
-  // MAIN ORCHESTRATION FUNCTION
-  // ============================================================================
 
   /**
    * Render grid/calendar widget for a single student
@@ -2081,43 +2151,25 @@ function getModuleRootElement(ctx) {
    * @returns {HTMLElement} Grid widget wrapper element
    */
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, _exams, absences) {
-    // 1. Validate and extract configuration
     const config = validateAndExtractGridConfig(ctx, studentConfig);
-
-    // 2. Calculate time range
     const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
     allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
-
-    // 3. Determine base date
-    const baseDate = ctx._currentTodayYmd
-      ? (() => {
-          const s = String(ctx._currentTodayYmd);
-          const by = parseInt(s.substring(0, 4), 10);
-          const bm = parseInt(s.substring(4, 6), 10) - 1;
-          const bd = parseInt(s.substring(6, 8), 10);
-          return new Date(by, bm, bd);
-        })()
-      : new Date();
-    const todayDateStr = `${baseDate.getFullYear()}${('0' + (baseDate.getMonth() + 1)).slice(-2)}${('0' + baseDate.getDate()).slice(-2)}`;
-
-    // 4. Create wrapper and add student title header for verbose mode
+    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd);
+    const todayDateStr = formatDateKey(baseDate);
     const wrapper = document.createElement('div');
 
-    // Add student title header if in verbose mode using helper
     const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {}, ctx);
     if (widgetCtx.isVerbose && studentTitle && typeof addHeader === 'function') {
-      // Create a separate container for the header with the standard widget styling
       const headerContainer = document.createElement('div');
       headerContainer.className = 'wu-widget-container bright small light';
       addHeader(headerContainer, buildWidgetHeaderTitle(ctx, 'grid', widgetCtx, studentTitle));
       wrapper.appendChild(headerContainer);
     }
 
-    // 5. Create date header and grid container
     const { header, gridTemplateColumns } = createGridHeader(
       config.totalDisplayDays,
       baseDate,
@@ -2132,114 +2184,33 @@ function getModuleRootElement(ctx) {
     const grid = document.createElement('div');
     grid.className = 'grid-combined';
     grid.style.gridTemplateColumns = gridTemplateColumns;
-
-    // 5. Create time axis
     const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
 
-    // 6. Render each day column
     for (let d = 0; d < config.totalDisplayDays; d++) {
-      const dayIndex = config.startOffset + d;
-      const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
-      const dateStr = `${targetDate.getFullYear()}${('0' + (targetDate.getMonth() + 1)).slice(-2)}${('0' + targetDate.getDate()).slice(-2)}`;
-
-      const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
-      const sourceForDay =
-        groupedRaw?.[dateStr] ??
-        (Array.isArray(timetable) ? timetable : [])
-          .filter((el) => String(el.date) === dateStr)
-          .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
-
-      // Extract and normalize lessons
-      let dayLessons = extractDayLessons(sourceForDay, ctx);
-      dayLessons = validateAndNormalizeLessons(dayLessons, log);
-
-      // Filter by max periods and time cutoff
-      const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
-
-      // Create day column (single column per day)
-      const col = 2 + d;
-      const isToday = dateStr === todayDateStr;
-
-      const bothWrap = document.createElement('div');
-      bothWrap.style.gridColumn = `${col}`;
-      bothWrap.style.gridRow = '1';
-      const bothInner = document.createElement('div');
-      bothInner.className = 'day-column-inner';
-      bothInner.style.height = `${totalHeight}px`;
-      bothInner.style.position = 'relative';
-      if (isToday) bothInner.classList.add('is-today');
-      bothWrap.appendChild(bothInner);
-
-      // Add holiday notice if applicable - use totalHeight to respect maxLessons
-      const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
-      if (holiday) {
-        addDayNotice(bothInner, totalHeight, 'holiday', escapeHtml(holiday.longName || holiday.name), '2em');
-      }
-
-      // Add to grid
-      grid.appendChild(bothWrap);
-
-      // Add hour lines
-      addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
-
-      // Add now line
-      addNowLineToColumn(bothInner, allStart, allEnd, totalHeight);
-
-      // Add "more" badge if lessons were hidden
-      const hiddenCount = dayLessons.length - lessonsToRender.length;
-      if (hiddenCount > 0) {
-        addMoreBadge(bothInner, hiddenCount, ctx);
-      }
-
-      // Add "no lessons" notice if empty and not a holiday
-      if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-        // Don't show "no lessons" if there's a holiday notice
-        if (!holiday) {
-          addDayNotice(bothInner, totalHeight, 'no-lessons', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
-        }
-      } else {
-        // Render lesson cells
-        renderLessonCells(
-          lessonsToRender,
-          { bothInner },
-          allStart,
-          allEnd,
-          totalMinutes,
-          totalHeight,
-          homeworks,
-          ctx,
-          escapeHtml,
-          studentConfig
-        );
-      }
-
-      // Add absence overlays if any
-      if (Array.isArray(absences) && absences.length > 0) {
-        const dayAbsences = absences.filter((ab) => String(ab?.date) === dateStr);
-        if (dayAbsences.length > 0) {
-          addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
-        }
-      }
+      renderGridDayColumn({
+        grid,
+        ctx,
+        studentTitle,
+        studentConfig,
+        timetable,
+        homeworks,
+        timeUnits,
+        absences,
+        baseDate,
+        todayDateStr,
+        config,
+        allStart,
+        allEnd,
+        totalMinutes,
+        totalHeight,
+        dayOffset: config.startOffset + d,
+      });
     }
 
     wrapper.appendChild(grid);
 
-    // Draw nowLine and set past masks immediately on first render
-    // Use setTimeout to ensure DOM is fully updated before running
-    setTimeout(() => {
-      try {
-        const gridWidget = ctx?._getWidgetApi?.()?.grid;
-        if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
-          gridWidget.updateNowLinesAll(ctx, wrapper);
-        }
-        if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
-          gridWidget.refreshPastMasks(ctx, wrapper);
-        }
-      } catch (e) {
-        log('warn', 'initial now-line/past-mask update failed', e);
-      }
-    }, 0);
+    scheduleGridPostRenderUpdates(ctx, wrapper);
 
     return wrapper;
   }
@@ -2264,7 +2235,6 @@ function getModuleRootElement(ctx) {
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
 
-      // Update regular lesson cells (.grid-lesson)
       const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
       lessons.forEach((ln) => {
         const ds = ln.getAttribute('data-date');
@@ -2282,7 +2252,6 @@ function getModuleRootElement(ctx) {
         else ln.classList.remove('past');
       });
 
-      // Update ticker wrappers (for overlapping lessons)
       const tickers = scope.querySelectorAll('.grid-combined .lesson-ticker-wrapper');
       tickers.forEach((ticker) => {
         const ds = ticker.getAttribute('data-date');
@@ -2325,9 +2294,7 @@ function getModuleRootElement(ctx) {
     try {
       if (!ctx) return;
       const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, 'grid', 'showNowLine');
-      // Respect the showNowLine config option (from current displayed student config)
       if (showNowLine === false) {
-        // Hide all now lines if disabled
         const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
         const inners = scope.querySelectorAll('.day-column-inner');
         inners.forEach((inner) => {
@@ -2342,7 +2309,6 @@ function getModuleRootElement(ctx) {
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {
-        // Only show the now-line for the column explicitly marked as "is-today".
         if (!inner.classList || !inner.classList.contains('is-today')) {
           const nl = inner._nowLine;
           if (nl) nl.style.display = 'none';

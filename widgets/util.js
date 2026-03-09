@@ -304,7 +304,6 @@
     row.className = `wu-row ${type}`;
 
     const fullCol = createElement('div', 'wu-col wu-col-full-width', content);
-    // Apply additional classes to the full column
     if (addClass) {
       fullCol.className = `${fullCol.className} ${addClass}`.trim();
     }
@@ -324,9 +323,6 @@
     container.className = 'wu-widget-container bright small light';
     return container;
   }
-
-  // NOTE: `formatDisplayDate` accepts Date objects directly. No separate
-  // `formatDayHeader`/`formatDayLabel` helpers are required.
 
   /**
    * Get widget-specific configuration value from studentConfig
@@ -521,35 +517,25 @@
 
     if (!widgetCtx || typeof widgetCtx.getConfig !== 'function') return allLabel;
 
+    const buildRelativeDayWindowLabel = () => {
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    };
+
     if (widgetName === 'grid') {
       const weekView = Boolean(widgetCtx.getConfig('weekView'));
       if (weekView) return weekViewLabel;
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+      return buildRelativeDayWindowLabel();
     }
 
-    if (widgetName === 'lessons') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    if (widgetName === 'lessons' || widgetName === 'homework' || widgetName === 'absences') {
+      return buildRelativeDayWindowLabel();
     }
 
     if (widgetName === 'exams') {
       const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
       return `+${nextDays} ${daysLabel}`;
-    }
-
-    if (widgetName === 'homework') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
-    }
-
-    if (widgetName === 'absences') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
     }
 
     if (widgetName === 'messagesofday') {
@@ -586,7 +572,6 @@
     const item = field[0];
     if (!item) return '';
 
-    // Return short name or long name based on format preference
     return format === 'long' ? item.longname || item.name : item.name || item.longname;
   }
 
@@ -660,7 +645,6 @@
     return getFieldValue(lesson, 'info', format);
   }
 
-  // Export all utilities
   root.util = {
     formatYmd,
     formatDisplayTime,
@@ -673,11 +657,9 @@
     getWidgetConfigResolved,
     createWidgetContext,
     buildWidgetHeaderTitle,
-    // Lesson status / change helpers
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
-    // New dynamic field utilities
     getFieldValue,
     getTeachers,
     getSubject,

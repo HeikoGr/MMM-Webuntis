@@ -29,7 +29,6 @@
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 
-    // Determine mode and handle header using helper
     const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
     const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
     if (widgetCtx.isVerbose && studentCellTitle !== '') {
@@ -41,7 +40,6 @@
       return 1;
     }
 
-    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
     const maxItems = widgetCtx.getConfig('maxItems');
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
@@ -49,7 +47,6 @@
     const nowLocal = new Date();
     const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
 
-    // Absence range options
     const rangeStart = widgetCtx.getConfig('pastDays');
     const rangeEnd = widgetCtx.getConfig('nextDays');
     const dateFormat = widgetCtx.getConfig('dateFormat');
@@ -60,7 +57,6 @@
         const absenceYmd = Number(ab?.date) || 0;
         if (absenceYmd === 0) return false;
 
-        // Calculate days difference from YYYYMMDD format
         const absYear = Math.floor(absenceYmd / 10000);
         const absMonth = Math.floor((absenceYmd % 10000) / 100);
         const absDay = absenceYmd % 100;
@@ -72,9 +68,6 @@
         const nowUtcMs = Date.UTC(nowYear, nowMonth - 1, nowDay);
         const daysDiff = Math.floor((nowUtcMs - absUtcMs) / (1000 * 60 * 60 * 24));
 
-        // daysDiff > 0 = past, daysDiff < 0 = future
-        // rangeStart: show up to N days in the past
-        // rangeEnd: show up to N days in the future
         if (rangeStart !== null && daysDiff > rangeStart) {
           return false;
         }
@@ -100,10 +93,8 @@
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;
 
-      // Meta column: date (matches exams/homework layout)
       const meta = showDate && dateStr ? dateStr : '';
 
-      // Build status label (if any) and its class
       let statusLabel = '';
       let statusClass = '';
       if (showExcused) {
@@ -116,7 +107,6 @@
         }
       }
 
-      // Data column: time first, then subject (+status) and reason
       const dataParts = [];
       if (time) dataParts.push(`<b>${escapeHtml(time)}</b>`);
 

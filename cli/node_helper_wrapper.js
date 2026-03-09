@@ -9,10 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const process = require('process');
 
-// ============================================================================
-// Mock MagicMirror dependencies
-// ============================================================================
-
 const ANSI = {
   reset: '\x1b[0m',
   dim: '\x1b[2m',
@@ -24,7 +20,6 @@ const ANSI = {
 
 const stripModuleTag = (str) => {
   if (typeof str === 'string') {
-    // Remove all [MMM-Webuntis] tags (can appear multiple times)
     return str.replace(/\[MMM-Webuntis\]\s*/g, '');
   }
   return str;
@@ -36,21 +31,14 @@ const stripModuleTag = (str) => {
  */
 function getCallerInfo() {
   const stack = new Error().stack.split('\n');
-  // stack[0] = "Error"
-  // stack[1] = getCallerInfo
-  // stack[2] = Log.debug/info/warn/error
-  // stack[3+] = actual callers
   for (let i = 3; i < stack.length; i++) {
     const line = stack[i];
-    // Skip frames from wrapper itself
     if (line.includes('node_helper_wrapper.js')) continue;
 
-    // Extract file:line:column from "at functionName (file:line:column)"
     const match = line.match(/\(([^)]+?):(\d+):(\d+)\)/);
     if (match) {
       const filePath = match[1];
       const lineNum = match[2];
-      // Return filename only for brevity (e.g., "node_helper.js:123")
       const fileName = filePath.split('/').pop();
       return `${fileName}:${lineNum}`;
     }
@@ -83,26 +71,18 @@ const Log = {
 };
 
 function setLogLevel() {
-  // Log level is controlled by node_helper logger, not by this wrapper
-  // Keep function for API compatibility
+  void 0;
 }
 
-// ============================================================================
-// Load real node_helper with mocked dependencies
-// ============================================================================
-
-// Store payloads sent via sendSocketNotification for CLI consumption
 const capturedPayloads = new Map();
 
 const NodeHelper = {
   create: (moduleImpl) => ({
     ...moduleImpl,
     sendSocketNotification: (name, payload) => {
-      // Capture GOT_DATA payloads for CLI reporting
       if (name === 'GOT_DATA' && payload?.id) {
         capturedPayloads.set(payload.id, payload);
       }
-      // Stub: in CLI we don't have a frontend; just log
       Log.debug(`[sendSocketNotification] ${name} for ${payload?.id || 'unknown'}`);
     },
   }),
@@ -120,9 +100,7 @@ function loadNodeHelper() {
 
   const nodeHelper = require('../node_helper.js');
 
-  // Restore original require
   Module.prototype.require = originalRequire;
-  // Initialize node helper lifecycle
   if (typeof nodeHelper.start === 'function') {
     nodeHelper.start();
   }
@@ -130,10 +108,6 @@ function loadNodeHelper() {
 }
 
 const nodeHelper = loadNodeHelper();
-
-// ============================================================================
-// Arg parsing & config loading helpers
-// ============================================================================
 
 function loadConfig(configPath) {
   if (!configPath) {
@@ -177,14 +151,12 @@ async function cmdFetch(flags) {
   const configPath = flags.config || flags.c;
   const studentIndexFlag = flags.student || flags.s;
   const verbose = flags.verbose || flags.v;
-  // CLI summarizes from debug dumps; no separate dump flag used
   const debugApi = flags['debug-api'] || flags.x;
-  const allStudents = flags.all || flags.a_all; // Special flag to iterate all students
+  const allStudents = flags.all || flags.a_all;
 
   if (verbose) setLogLevel('debug');
 
   try {
-    // Clear all caches before fetch to ensure fresh data
     if (nodeHelper.cacheManager) {
       nodeHelper.cacheManager.clearAll();
       Log.wrapper_info('🔄 Cleared all caches for fresh data');
@@ -194,11 +166,9 @@ async function cmdFetch(flags) {
     const { config, filePath } = loadConfig(configPath);
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
-    // Get all MMM-Webuntis modules (enabled and disabled)
     const webuntisModules = getAllWebuntisModules(config);
     Log.wrapper_info(`\n📋 Found ${webuntisModules.length} MMM-Webuntis module(s) in config`);
 
-    // Process each module (skip disabled ones)
     let successCount = 0;
     let failureCount = 0;
     let disabledCount = 0;
@@ -207,7 +177,6 @@ async function cmdFetch(flags) {
       const moduleEntry = webuntisModules[moduleIdx];
       const header = moduleEntry.header || `Module ${moduleIdx}`;
 
-      // Check if module is disabled
       if (moduleEntry.disabled === true) {
         Log.wrapper_info(`\n⊘ [${header}] - DISABLED (skipped)`);
         disabledCount++;
@@ -217,7 +186,6 @@ async function cmdFetch(flags) {
       Log.wrapper_info(`\n📍 [${header}] Processing...`);
 
       try {
-        // Simulate INIT_MODULE: load and validate config (same as browser init)
         const cliIdentifier = `cli-wrapper-${moduleIdx}`;
         const cliSessionId = `cli-session-${moduleIdx}`;
         const initPayload = {
@@ -227,8 +195,6 @@ async function cmdFetch(flags) {
           debugApi: debugApi,
         };
 
-        // Call _handleInitModule to set up config properly (like browser does)
-        // This validates config, discovers students, sets up AuthService
         await nodeHelper._handleInitModule(initPayload);
 
         if (!nodeHelper._configsByIdentifier.has(cliIdentifier)) {
@@ -237,12 +203,9 @@ async function cmdFetch(flags) {
 
         const moduleConfig = nodeHelper._configsByIdentifier.get(cliIdentifier);
 
-        // Apply widget namespace defaults and per-student config merging
-        // (This is needed for CLI specifically to handle older config formats)
         const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
         if (Array.isArray(moduleConfig.students)) {
           moduleConfig.students.forEach((stu) => {
-            // Copy widget namespace configs from module to student if not already set
             widgetNamespaces.forEach((widget) => {
               if (!stu[widget] && moduleConfig[widget]) {
                 stu[widget] = { ...moduleConfig[widget] };
@@ -251,24 +214,19 @@ async function cmdFetch(flags) {
           });
         }
 
-        // Decide which students to iterate
         let studentIndices = [];
         if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== '') {
-          // Specific student requested
           const idx = parseInt(studentIndexFlag, 10);
           studentIndices = [idx];
         } else if (allStudents) {
-          // All students explicitly requested
           studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
         } else {
-          // Default: all students
           studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
         }
 
         Log.wrapper_info(`  📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
         Log.wrapper_info(`  Testing student(s): [${studentIndices.join(', ')}]`);
 
-        // Trigger data fetch for all students (simulates browser behavior)
         const fetchPayload = {
           ...moduleConfig,
           id: cliIdentifier,
@@ -276,13 +234,11 @@ async function cmdFetch(flags) {
         };
         await nodeHelper._handleFetchData(fetchPayload);
 
-        // Summarize results for each selected student from captured payloads
         for (const idx of studentIndices) {
           try {
             const stu = moduleConfig.students[idx] || {};
             const title = stu.title || `Student ${idx}`;
 
-            // Get payload from captured GOT_DATA notification
             const payload = capturedPayloads.get(cliIdentifier);
             if (!payload) {
               Log.warn(`  ⚠️ No payload captured for ${title}.`);
@@ -290,15 +246,11 @@ async function cmdFetch(flags) {
               continue;
             }
 
-            // The payload can be a single object or have a students array
-            // For multi-student configs, need to find the right student's data
             let studentData = payload;
 
-            // If payload has students array, find this student's data
             if (Array.isArray(payload.students)) {
               studentData = payload.students.find((s) => s.title === title || s.studentId === stu.studentId);
             } else if (payload.title !== title && moduleConfig.students.length > 1) {
-              // Skip if this is not the right student's payload
               continue;
             }
 
@@ -308,7 +260,6 @@ async function cmdFetch(flags) {
               continue;
             }
 
-            // If payload has data object (V2 format), use it
             const dataObj = studentData.data || studentData;
 
             const results = {
@@ -415,16 +366,7 @@ EXAMPLES:
 `);
 }
 
-// ============================================================================
-// CLI Commands
-// ============================================================================
-
-// ============================================================================
-// Main
-// ============================================================================
-
 async function main() {
-  // Inline argument parsing
   const args = process.argv;
   const flags = {};
   let command = null;
@@ -469,20 +411,17 @@ async function main() {
   }
 
   try {
-    // Handle help requests
     if (command === 'help' || command === '--help' || command === '-h' || flags.help) {
       showHelp();
       process.exit(0);
     }
 
-    // If command provided but looks like a path, treat as config
     if (command && !command.startsWith('-')) {
       if (!flags.config && !flags.c) {
         flags.config = command;
       }
     }
 
-    // Run unified fetch command
     await cmdFetch(flags);
     process.exit(0);
   } catch (err) {

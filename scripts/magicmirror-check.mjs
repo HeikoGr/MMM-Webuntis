@@ -10,10 +10,6 @@ import readline from 'node:readline';
 
 const UPSTREAM_REPO = 'https://github.com/MagicMirrorOrg/MagicMirror-3rd-Party-Modules.git';
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
 /**
  * Extract and replace markdown links with numbered references
  */
@@ -127,7 +123,7 @@ function findModulesDirectory(overridePath = null) {
           return modulesPath;
         }
       } catch {
-        // Continue searching
+        continue;
       }
     }
     checkPath = path.dirname(checkPath);
@@ -159,7 +155,7 @@ function normalizePackage(pkg, moduleName) {
     if (typeof repo !== 'string') repo = '';
     repo = repo.replace(/^git\+/, '').replace(/\.git$/, '');
   } catch {
-    // repo already initialized to ''
+    void 0;
   }
   out.repositoryUrl = repo;
   out.dependencies = pkg && typeof pkg.dependencies === 'object' && pkg.dependencies ? pkg.dependencies : {};
@@ -167,10 +163,6 @@ function normalizePackage(pkg, moduleName) {
   out.scripts = pkg && typeof pkg.scripts === 'object' && pkg.scripts ? pkg.scripts : {};
   return out;
 }
-
-// ============================================================================
-// CLI Functions
-// ============================================================================
 
 function printHelp() {
   console.log('\nUsage: node magicmirror-check.mjs [options]');
@@ -227,10 +219,6 @@ function parseCliArguments() {
   return config;
 }
 
-// ============================================================================
-// Checker Setup Functions
-// ============================================================================
-
 /**
  * Normalize and validate the checker repository path to avoid unsafe or
  * unexpected values being passed into child_process exec/spawn calls.
@@ -250,8 +238,6 @@ function normalizeAndValidateCheckerRepo(checkerRepo) {
 
   const normalized = path.resolve(trimmed);
 
-  // Disallow characters that are commonly meaningful to shells and could
-  // interfere with command strings, even when quoted.
   const disallowedPattern = /["'`$&|;<>]/;
   if (disallowedPattern.test(normalized)) {
     throw new Error('Invalid checker repository path: contains forbidden characters');
@@ -435,10 +421,6 @@ async function prepareCheckerFiles(checkerRepo, validModules) {
   return { checkerModulesDir, websiteDataDir };
 }
 
-// ============================================================================
-// Checker Execution Functions
-// ============================================================================
-
 async function runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validModules) {
   const checkText = validModules.length === 1 ? 'Running module check...' : `Running checks for ${validModules.length} modules...`;
   console.log(`\n🔎 ${checkText}`);
@@ -482,7 +464,7 @@ async function runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validM
         readline.cursorTo(process.stdout, 0);
         process.stdout.write(text);
       } catch {
-        // Ignore
+        return;
       }
       elapsed += tick;
     }, tick);
@@ -492,7 +474,7 @@ async function runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validM
         readline.clearLine(process.stdout, 0);
         readline.cursorTo(process.stdout, 0);
       } catch {
-        // Ignore
+        return;
       }
     };
 
@@ -545,10 +527,6 @@ async function runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validM
     });
   });
 }
-
-// ============================================================================
-// Results Processing Functions
-// ============================================================================
 
 async function parseCheckerResults(checkerRepo, validModules) {
   const websiteDataDir = path.join(checkerRepo, 'website', 'data');
@@ -737,10 +715,6 @@ async function writeResultsFile(resultsDir, modulesRoot, allResults, cleanModule
   return resultsPath;
 }
 
-// ============================================================================
-// Main Execution Flow
-// ============================================================================
-
 async function main() {
   try {
     const cliConfig = parseCliArguments();
@@ -855,5 +829,4 @@ async function main() {
   }
 }
 
-// Start execution
 main();

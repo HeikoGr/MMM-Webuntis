@@ -26,10 +26,8 @@
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 
-    // Use widget context helper to reduce config duplication
     const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
     const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    // Header is already added by main module if studentCellTitle is empty
     if (widgetCtx.isVerbose && studentCellTitle !== '') {
       addHeader(container, buildWidgetHeaderTitle(ctx, 'homework', widgetCtx, studentCellTitle));
     }

@@ -3,7 +3,7 @@
  * Renders daily messages/announcements from school
  * Supports:
  * - Subject and text display
- * - HTML-formatted text (safe tags only: b, i, u, br, p)
+ * - HTML-formatted text with sanitized inline formatting
  * - Expanded message display mode
  * - Localized "Messages of the Day" header
  */
@@ -15,7 +15,7 @@
   /**
    * Render messages of day widget for a single student
    * Displays messages in full-width rows with subject + text
-   * Text supports safe HTML formatting tags (backend sanitizes)
+   * Text supports the backend's sanitized inline formatting subset.
    *
    * @param {Object} ctx - Main module context (provides translate, config)
    * @param {HTMLElement} container - DOM element to append message rows
@@ -67,8 +67,7 @@
         rowClasses += ' message-expanded';
       }
 
-      // Text contains safe HTML formatting tags from backend (b, i, u, etc.)
-      // Don't escape - render as HTML via innerHTML. Backend sanitizes and only allows safe tags.
+      // Text is rendered as HTML because the backend sanitizes it down to a limited inline tag subset.
       addFullRow(messagesContainer, rowClasses, fullContent);
       addedRows++;
     }
