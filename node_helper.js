@@ -1749,7 +1749,8 @@ module.exports = NodeHelper.create({
         const pendingFetch = this._pendingFetchByCredKey.get(credKey);
         if (pendingFetch) {
           this._mmLog('debug', null, `Session ${sessionKey}: Another fetch is in progress for credKey=${credKey}, waiting...`);
-          await pendingFetch;
+          // Swallow errors from another session's in-flight fetch to avoid cascading failures
+          await pendingFetch.catch(() => {});
         }
 
         const inFlightFetch = this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);

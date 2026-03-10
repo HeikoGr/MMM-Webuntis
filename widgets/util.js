@@ -528,10 +528,11 @@
    * @param {Object} studentConfig - Student-specific configuration
    * @param {Object} options - Additional options
    * @param {boolean} options.forceHeader - Always add header regardless of verbose mode (default: false)
+   * @param {Object} [options.widgetCtx] - Optional existing widget context to reuse (avoids duplicate creation)
    * @returns {Object} { widgetCtx, studentLabelText } - Context and label for compact mode
    */
   function initializeWidgetContextAndHeader(widgetName, ctx, container, studentCellTitle, studentConfig, options = {}) {
-    const widgetCtx = createWidgetContext(widgetName, studentConfig, root.util || {}, ctx);
+    const widgetCtx = options.widgetCtx || createWidgetContext(widgetName, studentConfig, root.util || {}, ctx);
     const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
 
     // Add header in verbose mode, or if forceHeader is true
