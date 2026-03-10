@@ -1145,7 +1145,7 @@ Module.register('MMM-Webuntis', {
     }
 
     const infoDiv = document.createElement('div');
-    infoDiv.className = 'dimmed small absences-unavailable-info';
+    infoDiv.className = 'dimmed small wu-absence__unavailable-info absences-unavailable-info';
     withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
     wrapper.appendChild(infoDiv);
   },
@@ -1545,7 +1545,7 @@ Module.register('MMM-Webuntis', {
     const appendWidgetError = (widgetLabel, error) => {
       this._log('error', `Failed to render ${widgetLabel.toLowerCase()} widget: ${error.message}`);
       const errorDiv = document.createElement('div');
-      errorDiv.className = 'widget-error dimmed';
+      errorDiv.className = 'wu-widget__error widget-error dimmed';
       withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: widgetLabel }));
       wrapper.appendChild(errorDiv);
     };

@@ -57,20 +57,20 @@
           const fallbackDay = String(examYmd % 100).padStart(2, '0');
           const fallbackMonth = String(Math.floor(examYmd / 100) % 100).padStart(2, '0');
           const formattedDate = formatDisplayDate ? formatDisplayDate(examYmd, examDateFormat) : `${fallbackDay}.${fallbackMonth}.`;
-          const dateTimeCell = formattedDate ? `${formattedDate}` : '';
+          const dateTimeCell = formattedDate ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>` : '';
 
-          let nameCell = escapeHtml(exam.name);
+          let nameCell = `<span class="wu-exam__name">${escapeHtml(exam.name)}</span>`;
           if (showSubject) {
-            nameCell = `${escapeHtml(exam.subject)}: &nbsp;${escapeHtml(exam.name)}`;
+            nameCell = `<span class="wu-exam__subject">${escapeHtml(exam.subject)}</span>: &nbsp;<span class="wu-exam__name">${escapeHtml(exam.name)}</span>`;
           }
 
           if (showTeacher) {
             const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
-            if (teacher) nameCell += '&nbsp;' + `<span class="teacher-name">(${escapeHtml(teacher)})</span>`;
+            if (teacher) nameCell += '&nbsp;' + `<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
           }
 
           if (exam.text) {
-            nameCell += `<br/><span class="exam-description">${escapeHtml(exam.text)}</span>`;
+            nameCell += `<br/><span class="exam-description wu-exam__description">${escapeHtml(exam.text)}</span>`;
           }
 
           addRow(container, 'examRow', studentLabelText, dateTimeCell, nameCell);

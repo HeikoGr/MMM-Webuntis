@@ -215,8 +215,31 @@ Related card styling options:
 
 All text elements have dedicated CSS classes for precise styling:
 
+Naming convention for new hooks:
+- Widget-scoped hooks follow `wu-<widget>__<element>` (BEM-like).
+- Existing legacy classes (e.g. `.teacher-name`, `.exam-description`) remain supported for backward compatibility.
+
 | Class | Element | Example Use |
 |-------|---------|-------------|
+| `.wu-homework__date` | Homework due date in meta column | Date color/weight |
+| `.wu-homework__subject` | Homework subject text | Subject emphasis |
+| `.wu-homework__text` | Homework body text | Line-height, font-size |
+| `.wu-exam__date` | Exam date in meta column | Date-specific styling |
+| `.wu-exam__subject` | Exam subject prefix | Distinct subject color |
+| `.wu-exam__name` | Exam title | Typography per exam title |
+| `.wu-exam__teacher` | Exam teacher | Custom teacher rendering |
+| `.wu-exam__description` | Exam description | Description spacing/color |
+| `.wu-absence__date` | Absence date in meta column | Date formatting hooks |
+| `.wu-absence__time` | Absence time range | Monospace/time emphasis |
+| `.wu-absence__subject` | Absence subject | Subject-specific styling |
+| `.wu-absence__status` | Excused/unexcused label | Badge-like styling |
+| `.wu-absence__reason` | Absence reason text | Secondary text style |
+| `.wu-lesson__date` | Lessons row date part | Date typography |
+| `.wu-lesson__time` | Lessons row HH:MM time | Time-specific style |
+| `.wu-lesson__period` | Lessons row period number text | Period chip style |
+| `.wu-lesson__subject` | Lessons subject text | Subject styling |
+| `.wu-message__subject` | Message headline text | Headline emphasis |
+| `.wu-message__text` | Message body text | Readability tuning |
 | `.lesson-primary` | Primary field (Grid) - typically subject, but configurable via `grid.fields.primary` | Increase font size |
 | `.lesson-secondary` | Secondary field (Grid) - typically teacher, but configurable via `grid.fields.secondary` | Change color |
 | `.lesson-break-supervision` | Break supervision periods | Customize background/color |

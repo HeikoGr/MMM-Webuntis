@@ -232,7 +232,7 @@
         renderedForDate++;
 
         const dateLabel = formatDisplayDate(entryDate, lessonsDateFormat);
-        let timeStr = `${dateLabel}&nbsp;`;
+        let timeStr = `<span class="wu-lesson__date">${escapeHtml(dateLabel)}</span>&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
@@ -253,21 +253,21 @@
         }
 
         if (showStartTime) {
-          timeStr += formattedStart;
+          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
         } else if (startLabel !== undefined) {
           if (endPeriodLabel !== undefined && endPeriodLabel !== startLabel) {
-            timeStr += `${startLabel}.-${endPeriodLabel}.`;
+            timeStr += `<span class="wu-lesson__period">${startLabel}.-${endPeriodLabel}.</span>`;
           } else {
-            timeStr += `${startLabel}.`;
+            timeStr += `<span class="wu-lesson__period">${startLabel}.</span>`;
           }
         } else {
-          timeStr += formattedStart;
+          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
         }
 
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = escapeHtml(useShortSubject ? subjShort : subjLong);
+        let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(useShortSubject ? subjShort : subjLong)}</span>`;
         if (subjectChanged && !entry.su?.[0]) {
           subjectStr = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         } else if (subjectChanged) {

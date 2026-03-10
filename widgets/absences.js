@@ -90,7 +90,7 @@
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;
 
-      const meta = showDate && dateStr ? dateStr : '';
+      const meta = showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : '';
 
       let statusLabel = '';
       let statusClass = '';
@@ -105,23 +105,30 @@
       }
 
       const dataParts = [];
-      if (time) dataParts.push(`<b>${escapeHtml(time)}</b>`);
+      if (time) dataParts.push(`<b class="wu-absence__time">${escapeHtml(time)}</b>`);
 
       if (subj) {
         const subjEsc = escapeHtml(subj);
-        const note = statusLabel ? ` <span class='${statusClass} small dimmed'>(${escapeHtml(statusLabel)})</span>` : '';
-        dataParts.push(`${subjEsc}${note}`);
+        const note = statusLabel ? ` <span class='${statusClass} wu-absence__status small dimmed'>(${escapeHtml(statusLabel)})</span>` : '';
+        dataParts.push(`<span class="wu-absence__subject">${subjEsc}</span>${note}`);
       } else if (statusLabel) {
-        dataParts.push(`<span class='${statusClass} small dimmed'>${escapeHtml(statusLabel)}</span>`);
+        dataParts.push(`<span class='${statusClass} wu-absence__status small dimmed'>${escapeHtml(statusLabel)}</span>`);
       }
 
       if (showReason && reason) {
-        dataParts.push(`<br><span class='xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
+        dataParts.push(`<br><span class='wu-absence__reason xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
       }
 
-      const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
+      const data =
+        dataParts.length > 0 ? dataParts.join(' ') : `<span class="wu-absence__label">${escapeHtml(ctx.translate('absences'))}</span>`;
 
-      addRow(container, 'absenceRow', studentLabelText, meta || ctx.translate('absences'), data);
+      addRow(
+        container,
+        'absenceRow',
+        studentLabelText,
+        meta || `<span class="wu-absence__label">${escapeHtml(ctx.translate('absences'))}</span>`,
+        data
+      );
       addedRows++;
       visibleCount++;
     }

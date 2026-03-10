@@ -49,11 +49,14 @@
       const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
       const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
-      const left = due ? `${due}` : ctx.translate('homework');
+      const left = due
+        ? `<span class="wu-homework__date">${escapeHtml(due)}</span>`
+        : `<span class="wu-homework__label">${escapeHtml(ctx.translate('homework'))}</span>`;
       const rightParts = [];
-      if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);
-      if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
-      const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
+      if (subj) rightParts.push(`<b class="wu-homework__subject">${escapeHtml(subj)}</b>`);
+      if (text) rightParts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
+      const right =
+        rightParts.length > 0 ? rightParts.join(': ') : `<span class="wu-homework__label">${escapeHtml(ctx.translate('homework'))}</span>`;
 
       addRow(container, 'homeworkRow', studentLabelText, left, right);
       addedRows++;
