@@ -209,6 +209,17 @@
   }
 
   /**
+   * Get current time as HHMM integer.
+   *
+   * @param {Date} [date=new Date()] - Source date object
+   * @returns {number} HHMM value (e.g., 1345)
+   */
+  function currentTimeAsHHMM(date = new Date()) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 0;
+    return date.getHours() * 100 + date.getMinutes();
+  }
+
+  /**
    * Escape HTML special characters to prevent XSS
    * Converts: &, <, >, ", '
    *
@@ -413,6 +424,22 @@
   }
 
   /**
+   * Compare entries by date, then by start time (ascending).
+   *
+   * @param {Object} a - Left entry
+   * @param {Object} b - Right entry
+   * @param {Object} options - Key names for date/time fields
+   * @param {string} [options.dateKey='date'] - Date field key (YYYYMMDD)
+   * @param {string} [options.timeKey='startTime'] - Time field key (HHMM)
+   * @returns {number} Comparator result for Array.sort
+   */
+  function compareByDateAndStartTime(a, b, options = {}) {
+    const dateKey = options.dateKey || 'date';
+    const timeKey = options.timeKey || 'startTime';
+    return (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0) || (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
+  }
+
+  /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
    * Provides safe fallbacks if any utility is missing
@@ -428,6 +455,7 @@
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
       formatDisplayDate: typeof util.formatDisplayDate === 'function' ? util.formatDisplayDate : () => '',
       formatDisplayTime: typeof util.formatDisplayTime === 'function' ? util.formatDisplayTime : () => '',
+      currentTimeAsHHMM: typeof util.currentTimeAsHHMM === 'function' ? util.currentTimeAsHHMM : () => 0,
       toMinutesSinceMidnight: typeof util.toMinutesSinceMidnight === 'function' ? util.toMinutesSinceMidnight : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
       getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
@@ -454,6 +482,8 @@
       isIrregularStatus,
       getChangedFieldSet,
       getFirstFieldName,
+      compareByDateAndStartTime:
+        typeof util.compareByDateAndStartTime === 'function' ? util.compareByDateAndStartTime : compareByDateAndStartTime,
     };
   }
 
@@ -675,6 +705,7 @@
   root.util = {
     formatYmd,
     formatDisplayTime,
+    currentTimeAsHHMM,
     toMinutesSinceMidnight,
     formatDisplayDate,
     escapeHtml,
@@ -688,6 +719,7 @@
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
+    compareByDateAndStartTime,
     getFieldValue,
     getTeachers,
     getSubject,

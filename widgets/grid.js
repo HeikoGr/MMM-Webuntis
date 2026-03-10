@@ -1648,14 +1648,14 @@ function getModuleRootElement(ctx) {
     return `${date.getFullYear()}${('0' + (date.getMonth() + 1)).slice(-2)}${('0' + date.getDate()).slice(-2)}`;
   }
 
-  function getSourceLessonsForDay(ctx, studentTitle, timetable, dateStr) {
+  function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
     const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
-    if (groupedRaw?.[dateStr]) {
-      return groupedRaw[dateStr];
+    if (groupedRaw?.[dayYmdStr]) {
+      return groupedRaw[dayYmdStr];
     }
 
     return (Array.isArray(timetable) ? timetable : [])
-      .filter((entry) => String(entry.date) === dateStr)
+      .filter((entry) => String(entry.date) === dayYmdStr)
       .sort((left, right) => (left.startTime || 0) - (right.startTime || 0));
   }
 
@@ -1768,17 +1768,17 @@ function getModuleRootElement(ctx) {
     dayOffset,
   }) {
     const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
-    const dateStr = formatDateKey(targetDate);
-    const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dateStr);
+    const dayYmdStr = formatDateKey(targetDate);
+    const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr);
 
     let dayLessons = extractDayLessons(sourceForDay, ctx);
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd);
-    const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dateStr)] || null;
+    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
+    const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dayYmdStr)] || null;
     const hiddenCount = dayLessons.length - lessonsToRender.length;
     const col = 2 + dayOffset - config.startOffset;
-    const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dateStr === todayDateStr);
+    const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
 
     if (holiday) {
       addDayNotice(bothInner, totalHeight, 'holiday', escapeHtml(holiday.longName || holiday.name), '2em');
@@ -1805,7 +1805,7 @@ function getModuleRootElement(ctx) {
       studentConfig,
     });
 
-    addDayAbsenceOverlays(absences, dateStr, bothInner, allStart, allEnd, totalHeight, ctx);
+    addDayAbsenceOverlays(absences, dayYmdStr, bothInner, allStart, allEnd, totalHeight, ctx);
   }
 
   /**

@@ -36,7 +36,7 @@
       return 1;
     }
 
-    const { formatDisplayDate, formatDisplayTime } = root.util || {};
+    const { formatDisplayDate, formatDisplayTime, compareByDateAndStartTime } = root.util || {};
     const maxItems = widgetCtx.getConfig('maxItems');
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
@@ -73,7 +73,7 @@
         }
         return true;
       })
-      .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
+      .sort((a, b) => compareByDateAndStartTime(a, b, { dateKey: 'date', timeKey: 'startTime' }));
 
     let visibleCount = 0;
     for (const ab of sorted) {

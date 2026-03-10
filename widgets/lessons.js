@@ -18,6 +18,7 @@
     addRow,
     initializeWidgetContextAndHeader,
     formatDisplayDate,
+    currentTimeAsHHMM,
     createWidgetContext,
     isIrregularStatus,
     getChangedFieldSet,
@@ -113,7 +114,7 @@
     // Use module's computed today value when available (supports debugDate), else local now
     const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
     const nowLocal = new Date();
-    const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
+    const nowHm = currentTimeAsHHMM(nowLocal);
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
     // Group lessons by date for efficient day-by-day rendering
@@ -199,14 +200,14 @@
 
       let renderedForDate = 0;
       for (const entry of entries) {
-        const dateStr = String(entry.date);
-        const year = parseInt(dateStr.substring(0, 4), 10);
-        const month = parseInt(dateStr.substring(4, 6), 10);
-        const day = parseInt(dateStr.substring(6, 8), 10);
+        const entryYmdStr = String(entry.date);
+        const year = parseInt(entryYmdStr.substring(0, 4), 10);
+        const month = parseInt(entryYmdStr.substring(4, 6), 10);
+        const day = parseInt(entryYmdStr.substring(6, 8), 10);
         const stNum = Number(entry.startTime) || 0;
         const stHour = Math.floor(stNum / 100);
         const stMin = stNum % 100;
-        const timeForDay = new Date(year, month - 1, day);
+        const entryDate = new Date(year, month - 1, day);
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
@@ -230,7 +231,7 @@
         addedRows++;
         renderedForDate++;
 
-        const dateLabel = formatDisplayDate(timeForDay, lessonsDateFormat);
+        const dateLabel = formatDisplayDate(entryDate, lessonsDateFormat);
         let timeStr = `${dateLabel}&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');

@@ -8,7 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -31,18 +31,18 @@
 
       const nowLocal = new Date();
       const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-      const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
+      const nowHm = currentTimeAsHHMM(nowLocal);
 
       // Initialize widget context and add header if needed
       const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('exams', ctx, container, studentCellTitle, studentConfig);
 
-      const { formatDisplayDate } = root.util || {};
+      const { formatDisplayDate, compareByDateAndStartTime } = root.util || {};
       const showSubject = Boolean(widgetCtx.getConfig('showSubject', false));
       const showTeacher = Boolean(widgetCtx.getConfig('showTeacher', false));
 
       exams
         .slice()
-        .sort((a, b) => (Number(a.examDate) || 0) - (Number(b.examDate) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0))
+        .sort((a, b) => compareByDateAndStartTime(a, b, { dateKey: 'examDate', timeKey: 'startTime' }))
         .forEach((exam) => {
           const examYmd = Number(exam.examDate) || 0;
           const examHm = Number(exam.startTime) || 0;
@@ -50,11 +50,6 @@
           if (examInPast && ctx.config.logLevel !== 'debug') {
             return;
           }
-
-          // Check if exam is within range
-          // const daysDiff = Math.floor((examYmd - nowYmd) / 100) + ((examYmd % 100) - (nowYmd % 100));
-
-          // if (daysDiff > rangeEnd) return;
 
           addedRows++;
 

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+Current package version: 0.7.4
+
+### ♻️ Code Quality Refactoring (post-0.7.4)
+
+- Authentication debug-dump handling in `authService` was consolidated into a dedicated helper, removing duplicated directory/filename/write logic.
+- Backend date formatting was centralized via new `lib/webuntis/dateUtils.js`; `restClient`, `webuntisApiService`, and `dataOrchestration` now use shared formatting helpers.
+- Widget list sorting was standardized with a shared comparator (`compareByDateAndStartTime`) used by absences/exams.
+- HHMM “current time” calculation was unified with `currentTimeAsHHMM` in widget utilities and adopted by lessons/exams.
+- REST status text mapping was moved to module scope (`STATUS_TEXTS`) in `restClient`, avoiding per-request re-creation.
+- Logger signature handling in `errorUtils` was normalized by arity (3/2/1 argument logger forms), reducing signature-specific fallback paths.
+- Date variable naming was made more explicit across key paths (e.g., `entryYmdStr`, `dayYmdStr`, `entryDate`, `dateValue`) for clearer integer-vs-Date semantics.
+- `orchestrateFetch` was split into focused helper phases (validation, context construction, target helpers, auth canary, timetable phase, parallel plan assembly) while preserving timetable-first behavior.
+- `buildGotDataPayload` was modularized into dedicated helpers for compaction, base payload assembly, metadata enrichment, warning collection, redaction, dump ordering, and debug dump writing.
+- Obsolete commented-out code paths were removed from `widgets/exams.js` and cleanup comments in payload dump handling were streamlined.
+
 ### ⚠️ Warning Lifecycle & Recovery
 
 - Fixed a runtime edge case where per-student fetch exceptions could log backend errors without always delivering a warning payload to frontend.
