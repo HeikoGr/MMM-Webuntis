@@ -590,13 +590,22 @@ Module.register('MMM-Webuntis', {
    */
   _buildSendConfig() {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
+    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
 
     const sendConfig = {
+      ...this.defaults,
       ...this.config,
       students: rawStudents,
       id: this.identifier,
       sessionId: this._sessionId,
     };
+
+    widgetKeys.forEach((widget) => {
+      sendConfig[widget] = {
+        ...(this.defaults?.[widget] || {}),
+        ...(this.config?.[widget] || {}),
+      };
+    });
 
     this._validateAndWarnConfig(sendConfig);
 

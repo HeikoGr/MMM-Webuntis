@@ -109,14 +109,14 @@
 
       if (subj) {
         const subjEsc = escapeHtml(subj);
-        const note = statusLabel ? ` <span class='${statusClass} wu-absence__status small dimmed'>(${escapeHtml(statusLabel)})</span>` : '';
+        const note = statusLabel ? ` <span class='${statusClass} wu-absence__status'>(${escapeHtml(statusLabel)})</span>` : '';
         dataParts.push(`<span class="wu-absence__subject">${subjEsc}</span>${note}`);
       } else if (statusLabel) {
-        dataParts.push(`<span class='${statusClass} wu-absence__status small dimmed'>${escapeHtml(statusLabel)}</span>`);
+        dataParts.push(`<span class='${statusClass} wu-absence__status'>${escapeHtml(statusLabel)}</span>`);
       }
 
       if (showReason && reason) {
-        dataParts.push(`<br><span class='wu-absence__reason xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
+        dataParts.push(`<br><span class='wu-absence__reason'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
       }
 
       const data =

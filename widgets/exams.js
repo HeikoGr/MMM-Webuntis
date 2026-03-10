@@ -70,7 +70,7 @@
           }
 
           if (exam.text) {
-            nameCell += `<br/><span class="exam-description wu-exam__description">${escapeHtml(exam.text)}</span>`;
+            nameCell += `<br/><span class="wu-exam__description">${escapeHtml(exam.text)}</span>`;
           }
 
           addRow(container, 'examRow', studentLabelText, dateTimeCell, nameCell);
