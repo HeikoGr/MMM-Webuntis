@@ -78,6 +78,8 @@ Module.register('MMM-Webuntis', {
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
     debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
+    initRetryTimeout: 5000, // timeout for INIT_MODULE -> MODULE_INITIALIZED watchdog (milliseconds)
+    initRetryMaxAttempts: 4, // max INIT_MODULE attempts before reopening init gate
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
     dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
 
@@ -653,6 +655,18 @@ Module.register('MMM-Webuntis', {
     }
     if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
+    }
+    if (
+      config.initRetryTimeout !== undefined &&
+      (!Number.isFinite(Number(config.initRetryTimeout)) || Number(config.initRetryTimeout) < 1000)
+    ) {
+      warnings.push(`initRetryTimeout should be >= 1000ms. Value: ${config.initRetryTimeout}`);
+    }
+    if (
+      config.initRetryMaxAttempts !== undefined &&
+      (!Number.isFinite(Number(config.initRetryMaxAttempts)) || Number(config.initRetryMaxAttempts) < 1)
+    ) {
+      warnings.push(`initRetryMaxAttempts should be >= 1. Value: ${config.initRetryMaxAttempts}`);
     }
 
     const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
@@ -1293,6 +1307,10 @@ Module.register('MMM-Webuntis', {
     this._initialized = false;
     this._initRequested = false;
     this._initFallbackTimer = null;
+    this._initWatchdogTimer = null;
+    this._initAttemptCount = 0;
+    this._deferredInitRetryTimer = null;
+    this._deferredInitRetryCount = 0;
 
     this._lastDataReceivedAt = null;
 
@@ -1397,11 +1415,47 @@ Module.register('MMM-Webuntis', {
    * @param {string} reason - Reason for initialization trigger
    */
   _sendInit(reason = 'manual') {
+    this._initAttemptCount += 1;
     this._log('debug', `[INIT] Sending INIT_MODULE to backend (reason=${reason})`);
     this.sendSocketNotification('INIT_MODULE', {
       ...this._buildSendConfig(),
       reason,
     });
+    this._armInitWatchdog();
+  },
+
+  /**
+   * Arm a watchdog for the init handshake and retry when MODULE_INITIALIZED is missing.
+   */
+  _armInitWatchdog() {
+    const configuredTimeout = Number(this.config?.initRetryTimeout);
+    const timeoutMs = Number.isFinite(configuredTimeout) ? Math.max(1000, Math.floor(configuredTimeout)) : 5000;
+    const configuredMaxAttempts = Number(this.config?.initRetryMaxAttempts);
+    const maxAttempts = Number.isFinite(configuredMaxAttempts) ? Math.max(1, Math.floor(configuredMaxAttempts)) : 4;
+
+    if (this._initWatchdogTimer) {
+      clearTimeout(this._initWatchdogTimer);
+      this._initWatchdogTimer = null;
+    }
+
+    this._initWatchdogTimer = setTimeout(() => {
+      this._initWatchdogTimer = null;
+      if (this._initialized || !this._initRequested) return;
+
+      if (this._initAttemptCount >= maxAttempts) {
+        this._log(
+          'warn',
+          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_INITIALIZED; reopening init gate for next trigger`
+        );
+        this._initRequested = false;
+        this._initAttemptCount = 0;
+        return;
+      }
+
+      const nextAttempt = this._initAttemptCount + 1;
+      this._log('warn', `[INIT] No MODULE_INITIALIZED within ${timeoutMs}ms, retrying INIT_MODULE (attempt ${nextAttempt}/${maxAttempts})`);
+      this._sendInit(`retry-timeout-${nextAttempt}`);
+    }, timeoutMs);
   },
 
   /**
@@ -1414,7 +1468,48 @@ Module.register('MMM-Webuntis', {
     if (this._isDemoModeEnabled()) return;
     if (this._initialized || this._initRequested) return;
     this._initRequested = true;
+    this._initAttemptCount = 0;
     this._sendInit(reason);
+  },
+
+  /**
+   * Retry init after DOM_OBJECTS_CREATED when module starts hidden (e.g. MMM-Carousel).
+   * Retries only while still uninitialized and never sends init while suspended.
+   */
+  _scheduleDeferredInitRetry(reason = 'dom-objects-created-hidden') {
+    if (this._isDemoModeEnabled()) return;
+    if (this._initialized || this._initRequested) return;
+
+    const configuredTimeout = Number(this.config?.initRetryTimeout);
+    const intervalMs = Number.isFinite(configuredTimeout) ? Math.max(1000, Math.floor(configuredTimeout)) : 5000;
+    const configuredMaxAttempts = Number(this.config?.initRetryMaxAttempts);
+    const baseMaxAttempts = Number.isFinite(configuredMaxAttempts) ? Math.max(1, Math.floor(configuredMaxAttempts)) : 4;
+    const maxDeferredAttempts = Math.max(baseMaxAttempts * 6, 12);
+
+    if (this._deferredInitRetryTimer) {
+      clearTimeout(this._deferredInitRetryTimer);
+      this._deferredInitRetryTimer = null;
+    }
+
+    this._deferredInitRetryTimer = setTimeout(() => {
+      this._deferredInitRetryTimer = null;
+
+      if (this._initialized || this._initRequested) return;
+
+      this._deferredInitRetryCount += 1;
+      if (!this._isModuleSuspended()) {
+        this._log('info', `[INIT] Deferred init retry successful (attempt ${this._deferredInitRetryCount}/${maxDeferredAttempts})`);
+        this._requestInitIfNeeded(`${reason}-retry-${this._deferredInitRetryCount}`);
+        return;
+      }
+
+      if (this._deferredInitRetryCount >= maxDeferredAttempts) {
+        this._log('warn', `[INIT] Deferred init retries exhausted (${maxDeferredAttempts}) while hidden; waiting for resume()`);
+        return;
+      }
+
+      this._scheduleDeferredInitRetry(reason);
+    }, intervalMs);
   },
 
   /**
@@ -1633,6 +1728,13 @@ Module.register('MMM-Webuntis', {
         this._log('warn', 'See the module documentation for migration details.');
       }
 
+      if (this._isModuleSuspended()) {
+        this._log('debug', '[INIT] DOM_OBJECTS_CREATED received while hidden, deferring init with retry');
+        this._deferredInitRetryCount = 0;
+        this._scheduleDeferredInitRetry('dom-objects-created-hidden');
+        return;
+      }
+
       this._requestInitIfNeeded('dom-objects-created');
     }
   },
@@ -1680,12 +1782,23 @@ Module.register('MMM-Webuntis', {
 
     this._log('info', `Module initialized successfully, sessionId=${payload?.sessionId}`);
     this._initialized = true;
+    this._initRequested = false;
     this._initializedAt = Date.now();
 
     if (this._initFallbackTimer) {
       clearTimeout(this._initFallbackTimer);
       this._initFallbackTimer = null;
     }
+    if (this._initWatchdogTimer) {
+      clearTimeout(this._initWatchdogTimer);
+      this._initWatchdogTimer = null;
+    }
+    if (this._deferredInitRetryTimer) {
+      clearTimeout(this._deferredInitRetryTimer);
+      this._deferredInitRetryTimer = null;
+    }
+    this._initAttemptCount = 0;
+    this._deferredInitRetryCount = 0;
 
     if (this._pendingResumeRequest) {
       this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
@@ -1711,6 +1824,16 @@ Module.register('MMM-Webuntis', {
     }
     this._initialized = false;
     this._initRequested = false;
+    if (this._initWatchdogTimer) {
+      clearTimeout(this._initWatchdogTimer);
+      this._initWatchdogTimer = null;
+    }
+    if (this._deferredInitRetryTimer) {
+      clearTimeout(this._deferredInitRetryTimer);
+      this._deferredInitRetryTimer = null;
+    }
+    this._initAttemptCount = 0;
+    this._deferredInitRetryCount = 0;
     this.updateDom();
   },
 
