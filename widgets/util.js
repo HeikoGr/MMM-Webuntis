@@ -209,6 +209,17 @@
   }
 
   /**
+   * Get current time as HHMM integer.
+   *
+   * @param {Date} [date=new Date()] - Source date object
+   * @returns {number} HHMM value (e.g., 1345)
+   */
+  function currentTimeAsHHMM(date = new Date()) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 0;
+    return date.getHours() * 100 + date.getMinutes();
+  }
+
+  /**
    * Escape HTML special characters to prevent XSS
    * Converts: &, <, >, ", '
    *
@@ -304,7 +315,6 @@
     row.className = `wu-row ${type}`;
 
     const fullCol = createElement('div', 'wu-col wu-col-full-width', content);
-    // Apply additional classes to the full column
     if (addClass) {
       fullCol.className = `${fullCol.className} ${addClass}`.trim();
     }
@@ -324,9 +334,6 @@
     container.className = 'wu-widget-container bright small light';
     return container;
   }
-
-  // NOTE: `formatDisplayDate` accepts Date objects directly. No separate
-  // `formatDayHeader`/`formatDayLabel` helpers are required.
 
   /**
    * Get widget-specific configuration value from studentConfig
@@ -417,6 +424,22 @@
   }
 
   /**
+   * Compare entries by date, then by start time (ascending).
+   *
+   * @param {Object} a - Left entry
+   * @param {Object} b - Right entry
+   * @param {Object} options - Key names for date/time fields
+   * @param {string} [options.dateKey='date'] - Date field key (YYYYMMDD)
+   * @param {string} [options.timeKey='startTime'] - Time field key (HHMM)
+   * @returns {number} Comparator result for Array.sort
+   */
+  function compareByDateAndStartTime(a, b, options = {}) {
+    const dateKey = options.dateKey || 'date';
+    const timeKey = options.timeKey || 'startTime';
+    return (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0) || (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
+  }
+
+  /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
    * Provides safe fallbacks if any utility is missing
@@ -432,6 +455,7 @@
       escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
       formatDisplayDate: typeof util.formatDisplayDate === 'function' ? util.formatDisplayDate : () => '',
       formatDisplayTime: typeof util.formatDisplayTime === 'function' ? util.formatDisplayTime : () => '',
+      currentTimeAsHHMM: typeof util.currentTimeAsHHMM === 'function' ? util.currentTimeAsHHMM : () => 0,
       toMinutesSinceMidnight: typeof util.toMinutesSinceMidnight === 'function' ? util.toMinutesSinceMidnight : () => NaN,
       getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
       getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
@@ -444,6 +468,8 @@
         typeof util.createWidgetContext === 'function'
           ? util.createWidgetContext
           : () => ({ isVerbose: false, getConfig: () => undefined }),
+      initializeWidgetContextAndHeader:
+        typeof util.initializeWidgetContextAndHeader === 'function' ? util.initializeWidgetContextAndHeader : () => ({}),
       buildWidgetHeaderTitle: typeof util.buildWidgetHeaderTitle === 'function' ? util.buildWidgetHeaderTitle : () => '',
       // Flexible field configuration functions
       getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => [],
@@ -456,6 +482,8 @@
       isIrregularStatus,
       getChangedFieldSet,
       getFirstFieldName,
+      compareByDateAndStartTime:
+        typeof util.compareByDateAndStartTime === 'function' ? util.compareByDateAndStartTime : compareByDateAndStartTime,
     };
   }
 
@@ -487,6 +515,32 @@
       },
       log: (level, msg) => util?.log?.(level, msg),
     };
+  }
+
+  /**
+   * Initialize widget context and optionally add header for verbose mode
+   * Consolidates common initialization pattern used by all widgets
+   *
+   * @param {string} widgetName - Widget identifier (e.g., 'exams', 'homework')
+   * @param {Object} ctx - Main module context
+   * @param {HTMLElement} container - DOM element for widget content
+   * @param {string} studentCellTitle - Student name for display
+   * @param {Object} studentConfig - Student-specific configuration
+   * @param {Object} options - Additional options
+   * @param {boolean} options.forceHeader - Always add header regardless of verbose mode (default: false)
+   * @param {Object} [options.widgetCtx] - Optional existing widget context to reuse (avoids duplicate creation)
+   * @returns {Object} { widgetCtx, studentLabelText } - Context and label for compact mode
+   */
+  function initializeWidgetContextAndHeader(widgetName, ctx, container, studentCellTitle, studentConfig, options = {}) {
+    const widgetCtx = options.widgetCtx || createWidgetContext(widgetName, studentConfig, root.util || {}, ctx);
+    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
+
+    // Add header in verbose mode, or if forceHeader is true
+    if (options.forceHeader || (widgetCtx.isVerbose && studentCellTitle !== '')) {
+      addHeader(container, buildWidgetHeaderTitle(ctx, widgetName, widgetCtx, studentCellTitle));
+    }
+
+    return { widgetCtx, studentLabelText };
   }
 
   function normalizeDays(value, fallback = 0) {
@@ -521,35 +575,25 @@
 
     if (!widgetCtx || typeof widgetCtx.getConfig !== 'function') return allLabel;
 
+    const buildRelativeDayWindowLabel = () => {
+      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
+      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
+      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    };
+
     if (widgetName === 'grid') {
       const weekView = Boolean(widgetCtx.getConfig('weekView'));
       if (weekView) return weekViewLabel;
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+      return buildRelativeDayWindowLabel();
     }
 
-    if (widgetName === 'lessons') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
+    if (widgetName === 'lessons' || widgetName === 'homework' || widgetName === 'absences') {
+      return buildRelativeDayWindowLabel();
     }
 
     if (widgetName === 'exams') {
       const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
       return `+${nextDays} ${daysLabel}`;
-    }
-
-    if (widgetName === 'homework') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
-    }
-
-    if (widgetName === 'absences') {
-      const pastDays = normalizeDays(widgetCtx.getConfig('pastDays', 0), 0);
-      const nextDays = normalizeDays(widgetCtx.getConfig('nextDays', 0), 0);
-      return `-${pastDays}/+${nextDays} ${daysLabel}`;
     }
 
     if (widgetName === 'messagesofday') {
@@ -586,7 +630,6 @@
     const item = field[0];
     if (!item) return '';
 
-    // Return short name or long name based on format preference
     return format === 'long' ? item.longname || item.name : item.name || item.longname;
   }
 
@@ -660,10 +703,10 @@
     return getFieldValue(lesson, 'info', format);
   }
 
-  // Export all utilities
   root.util = {
     formatYmd,
     formatDisplayTime,
+    currentTimeAsHHMM,
     toMinutesSinceMidnight,
     formatDisplayDate,
     escapeHtml,
@@ -672,12 +715,12 @@
     resolveWidgetHelpers,
     getWidgetConfigResolved,
     createWidgetContext,
+    initializeWidgetContextAndHeader,
     buildWidgetHeaderTitle,
-    // Lesson status / change helpers
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
-    // New dynamic field utilities
+    compareByDateAndStartTime,
     getFieldValue,
     getTeachers,
     getSubject,

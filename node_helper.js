@@ -17,34 +17,21 @@ module.exports = NodeHelper.create({
    */
   start() {
     this._mmLog('debug', null, 'Node helper started');
-    // Initialize unified logger
     this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
 
-    // Create lib logger wrapper that adapts to _mmLog signature
-    // lib classes call: logger(level, message)
-    // _mmLog expects: (level, student, message)
     const libLogger = (level, message) => {
-      // Add [lib] prefix to distinguish lib logs from module logs
       this._mmLog(level, null, `[lib] ${message}`);
     };
 
-    // Store libLogger for later use when creating per-instance AuthService
     this._libLogger = libLogger;
-    // AuthService instances per module identifier to prevent cache cross-contamination
     this._authServicesByIdentifier = new Map();
 
-    // API Status tracking - maps endpoint to last HTTP status code
     this._apiStatusBySession = new Map(); // sessionKey -> { timetable: 200, exams: 403, ... }
-    // Track whether config warnings have been emitted to frontend to avoid repeat spam
     this._configWarningsSent = false;
-    // Multi-instance support: store config per identifier
     this._configsByIdentifier = new Map();
-    // Session-based config isolation: each browser window keeps its own config
-    // debugDate is now stored session-specifically in _configsBySession, not globally
     this._configsBySession = new Map();
     this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
-    // Track which identifiers have completed student auto-discovery
     this._studentsDiscovered = {};
   },
 
@@ -288,10 +275,6 @@ module.exports = NodeHelper.create({
 
     return { normalizedConfig, legacyUsed };
   },
-
-  // ---------------------------------------------------------------------------
-  // Logging and error helpers
-  // ---------------------------------------------------------------------------
 
   /**
    * Internal logging function that forwards messages to MagicMirror's Log system
@@ -797,20 +780,12 @@ module.exports = NodeHelper.create({
 
     let rawHolidays = [];
     try {
-      // Holidays are included in the app/data response (authSession.appData)
       if (authSession && authSession.appData) {
-        // Check if holidays are directly in appData or nested
         if (Array.isArray(authSession.appData.holidays)) {
           rawHolidays = authSession.appData.holidays;
-          // this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData (no API call needed)`);
         } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
           rawHolidays = authSession.appData.data.holidays;
-          // this._mmLog('debug', null, `Holidays: ${rawHolidays.length} periods from appData.data (no API call needed)`);
-        } else {
-          // this._mmLog('debug', null, 'Holidays: not found in appData (no API call - holidays unavailable)');
         }
-      } else {
-        // this._mmLog('debug', null, 'Holidays: no appData available');
       }
     } catch (error) {
       this._mmLog('error', null, `Holidays extraction failed: ${error && error.message ? error.message : error}`);
@@ -951,8 +926,6 @@ module.exports = NodeHelper.create({
     return sessionConfig;
   },
 
-  // ===== Warning Validation =====
-
   /**
    * Merge multiple warning arrays into one flattened warning list.
    *
@@ -979,7 +952,6 @@ module.exports = NodeHelper.create({
   _validateModuleConfig(config) {
     const warnings = [];
 
-    // Validate displayMode
     const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
     if (config.displayMode && typeof config.displayMode === 'string') {
       const widgets = config.displayMode
@@ -992,7 +964,6 @@ module.exports = NodeHelper.create({
       }
     }
 
-    // Validate logLevel
     const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
     if (config.logLevel && !validLogLevels.includes(config.logLevel.toLowerCase())) {
       warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
@@ -1227,7 +1198,148 @@ module.exports = NodeHelper.create({
     });
   },
 
-  // Backend performs API calls only; no data normalization here.
+  _createGroupWarningCollector() {
+    const groupWarnings = [];
+    const groupWarningMetaByMessage = new Map();
+    const currentFetchWarnings = new Set();
+
+    return {
+      groupWarnings,
+      groupWarningMetaByMessage,
+      currentFetchWarnings,
+      addGroupWarning: (message, meta = {}) => {
+        if (!message) return;
+        if (!currentFetchWarnings.has(message)) {
+          groupWarnings.push(message);
+          currentFetchWarnings.add(message);
+        }
+
+        if (!groupWarningMetaByMessage.has(message)) {
+          groupWarningMetaByMessage.set(message, {
+            kind: 'generic',
+            severity: 'warning',
+            ...meta,
+          });
+        }
+      },
+    };
+  },
+
+  _handleProcessGroupAuthFailure({ err, credKey, identifier, sessionKey, students, config, sessionId, warningsState }) {
+    const errorMsg = this._formatErr(err);
+    const isNetworkError = this._isNetworkError(err);
+    const msg = isNetworkError
+      ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
+      : `Authentication failed for ${credKey}: ${errorMsg}`;
+
+    this._mmLog('error', null, msg);
+
+    const authService = config?._authService || this._getAuthServiceForIdentifier(identifier);
+    if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
+      authService.invalidateAllCachesForSession(sessionKey);
+      this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
+    }
+
+    warningsState.addGroupWarning(msg, this._classifyWarningMetaFromError(err, { kind: isNetworkError ? 'network' : 'auth' }));
+    this._emitStudentAuthFailurePayloads({
+      identifier,
+      sessionId,
+      sessionKey,
+      students,
+      config,
+      warnings: warningsState.groupWarnings,
+      groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
+    });
+  },
+
+  async _collectStudentPayloadsForGroup({
+    students,
+    authSession,
+    identifier,
+    credKey,
+    compactHolidays,
+    config,
+    sessionKey,
+    sessionId,
+    warningsState,
+  }) {
+    const studentPayloads = [];
+
+    for (const student of students) {
+      try {
+        const studentValidationWarnings = this._validateStudentConfig(student);
+        if (studentValidationWarnings.length > 0) {
+          studentValidationWarnings.forEach((warning) => {
+            this._mmLog('warn', student, warning);
+            warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
+          });
+        }
+
+        const payload = await this.fetchData({
+          authSession,
+          student,
+          identifier,
+          credKey,
+          compactHolidays,
+          config,
+          sessionKey,
+          currentFetchWarnings: warningsState.currentFetchWarnings,
+        });
+
+        if (!payload) {
+          this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
+          continue;
+        }
+
+        const nextPayload = this._mergeGroupWarningsIntoPayload(
+          payload,
+          identifier,
+          warningsState.groupWarnings,
+          warningsState.groupWarningMetaByMessage
+        );
+        studentPayloads.push(nextPayload);
+      } catch (err) {
+        const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
+        this._mmLog('error', student, errorMsg);
+
+        const warningMsg = WebUntisClient.convertRestErrorToWarning(err, {
+          studentTitle: student.title,
+          school: student.school || config?.school,
+          server: student.server || config?.server || 'webuntis.com',
+        });
+        if (warningMsg) {
+          warningsState.addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
+          this._mmLog('warn', student, warningMsg);
+        }
+        const warningMetaBase = this._classifyWarningMetaFromError(err);
+
+        studentPayloads.push(
+          this._buildStudentFetchErrorPayload({
+            identifier,
+            sessionId,
+            sessionKey,
+            student,
+            config,
+            groupWarnings: warningsState.groupWarnings,
+            warningMsg,
+            groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
+            warningMetaBase,
+          })
+        );
+      }
+    }
+
+    return studentPayloads;
+  },
+
+  _emitStudentPayloadsForGroup(studentPayloads, identifier, sessionId) {
+    for (const payload of studentPayloads) {
+      this._emitGotData(payload, {
+        identifier,
+        sessionId,
+      });
+    }
+  },
 
   /**
    * Process a credential group: authenticate, fetch data for all students, send to frontend
@@ -1247,166 +1359,51 @@ module.exports = NodeHelper.create({
    * @returns {Promise<void>}
    */
   async processGroup(credKey, students, identifier, sessionKey, config) {
-    // Single-run processing: authenticate (authService handles caching) and fetch data for each student.
     let authSession;
     const sample = students[0];
-    const groupWarnings = [];
-    const groupWarningMetaByMessage = new Map();
-    // Per-fetch-cycle warning deduplication set. Keep it local to avoid
-    // cross-group races when multiple module instances fetch in parallel.
-    const currentFetchWarnings = new Set();
-    const addGroupWarning = (message, meta = {}) => {
-      if (!message) return;
-      if (!currentFetchWarnings.has(message)) {
-        groupWarnings.push(message);
-        currentFetchWarnings.add(message);
-      }
-
-      if (!groupWarningMetaByMessage.has(message)) {
-        groupWarningMetaByMessage.set(message, {
-          kind: 'generic',
-          severity: 'warning',
-          ...meta,
-        });
-      }
-    };
+    const warningsState = this._createGroupWarningCollector();
 
     try {
       const { sessionId } = this._parseSessionKey(sessionKey);
 
       try {
-        // Create/get authSession - authService handles caching internally
-        // If credentials were recently used, authService will return cached result
-        // Use identifier-specific AuthService to prevent cache cross-contamination
         authSession = await this._createAuthSession(sample, config, identifier, credKey);
       } catch (err) {
-        const errorMsg = this._formatErr(err);
-        // Differentiate between credential/config errors and network errors
-        const isNetworkError = this._isNetworkError(err);
-        const msg = isNetworkError
-          ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
-          : `Authentication failed for ${credKey}: ${errorMsg}`;
-        this._mmLog('error', null, msg);
-
-        // AGGRESSIVE REAUTH: On any auth error, invalidate ALL caches for this session
-        // This forces complete re-authentication (new cookies, OTP, etc.) for all future requests
-        // Prevents cascading failures from expired/corrupted auth state
-        const authService = config?._authService || this._getAuthServiceForIdentifier(identifier);
-        if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
-          authService.invalidateAllCachesForSession(sessionKey);
-          this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
-        }
-
-        // Record and mark this warning for the current fetch cycle
-        addGroupWarning(msg, this._classifyWarningMetaFromError(err, { kind: isNetworkError ? 'network' : 'auth' }));
-        this._emitStudentAuthFailurePayloads({
+        this._handleProcessGroupAuthFailure({
+          err,
+          credKey,
           identifier,
-          sessionId,
           sessionKey,
           students,
           config,
-          warnings: groupWarnings,
-          groupWarningMetaByMessage,
+          sessionId,
+          warningsState,
         });
         return;
       }
 
-      // ===== Holiday Extraction =====
-      // Holidays are shared across all students in the same school/group.
-      // Extract and compact them once before processing students to avoid redundant work.
-      // Holidays come from appData (no separate API call needed)
       const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config?.displayMode);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
-      if (shouldFetchHolidays) {
-        // this._mmLog(
-        //   'debug',
-        //   null,
-        //   `Holidays extracted for group: ${sharedCompactHolidays.length} periods (shared across ${students.length} students)`
-        // );
-      }
 
-      // Authentication complete via authService (no explicit login() needed)
-      // Collect all student payloads before sending to avoid multiple DOM updates
-      const studentPayloads = [];
+      const studentPayloads = await this._collectStudentPayloadsForGroup({
+        students,
+        authSession,
+        identifier,
+        credKey,
+        compactHolidays: sharedCompactHolidays,
+        config,
+        sessionKey,
+        sessionId,
+        warningsState,
+      });
 
-      for (const student of students) {
-        try {
-          // ===== Student Config Validation =====
-          const studentValidationWarnings = this._validateStudentConfig(student);
-          if (studentValidationWarnings.length > 0) {
-            studentValidationWarnings.forEach((w) => {
-              this._mmLog('warn', student, w);
-              addGroupWarning(w, { kind: 'config', severity: 'warning' });
-            });
-          }
-
-          // Fetch fresh data for this student
-          const payload = await this.fetchData({
-            authSession,
-            student,
-            identifier,
-            credKey,
-            compactHolidays: sharedCompactHolidays,
-            config,
-            sessionKey,
-            currentFetchWarnings,
-          });
-          if (!payload) {
-            this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
-          } else {
-            const nextPayload = this._mergeGroupWarningsIntoPayload(payload, identifier, groupWarnings, groupWarningMetaByMessage);
-            studentPayloads.push(nextPayload);
-          }
-        } catch (err) {
-          const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
-          this._mmLog('error', student, errorMsg);
-
-          // ===== REST Error Warning Conversion =====
-          const warningMsg = WebUntisClient.convertRestErrorToWarning(err, {
-            studentTitle: student.title,
-            school: student.school || config?.school,
-            server: student.server || config?.server || 'webuntis.com',
-          });
-          if (warningMsg) {
-            // Only record each distinct warning once per fetch cycle
-            addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
-            this._mmLog('warn', student, warningMsg);
-          }
-          const warningMetaBase = this._classifyWarningMetaFromError(err);
-
-          studentPayloads.push(
-            this._buildStudentFetchErrorPayload({
-              identifier,
-              sessionId,
-              sessionKey,
-              student,
-              config,
-              groupWarnings,
-              warningMsg,
-              groupWarningMetaByMessage,
-              warningMetaBase,
-            })
-          );
-        }
-      }
-
-      // Send all collected payloads at once to minimize DOM redraws
-      for (const payload of studentPayloads) {
-        this._emitGotData(payload, {
-          identifier,
-          sessionId,
-        });
-      }
+      this._emitStudentPayloadsForGroup(studentPayloads, identifier, sessionId);
     } catch (error) {
       this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
       const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
-      addGroupWarning(authMsg, this._classifyWarningMetaFromError(error, { kind: 'auth' }));
-    } finally {
-      // Cleanup not needed - session managed by authService cache.
+      warningsState.addGroupWarning(authMsg, this._classifyWarningMetaFromError(error, { kind: 'auth' }));
     }
   },
-
-  // ===== Socket Notifications =====
 
   /**
    * Handle socket notifications sent by the frontend module
@@ -1422,7 +1419,6 @@ module.exports = NodeHelper.create({
    * @returns {Promise<void>}
    */
   async socketNotificationReceived(notification, payload) {
-    // Processing socket notifications silently (no logging for cleaner output)
     const handlers = {
       INIT_MODULE: async () => this._handleInitModule(payload),
       FETCH_DATA: async () => this._handleFetchData(payload),
@@ -1449,7 +1445,6 @@ module.exports = NodeHelper.create({
     if (route.identifier) nextPayload.id = route.identifier;
     if (route.sessionId) nextPayload.sessionId = route.sessionId;
 
-    // Send to all module instances; frontend filters by sessionId (preferred) or id (fallback).
     this.sendSocketNotification('GOT_DATA', nextPayload);
   },
 
@@ -1489,8 +1484,6 @@ module.exports = NodeHelper.create({
     this.sendSocketNotification('MODULE_INITIALIZED', nextPayload);
   },
 
-  // ===== Session State =====
-
   /**
    * Track frontend lifecycle state per session (suspend/resume)
    * so backend can guard against cross-session/background fetches.
@@ -1512,8 +1505,6 @@ module.exports = NodeHelper.create({
 
     this._mmLog('debug', null, `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${reason})`);
   },
-
-  // ===== Initialization & Fetch Flow =====
 
   /**
    * Handle INIT_MODULE notification - performs one-time module initialization
@@ -1735,9 +1726,6 @@ module.exports = NodeHelper.create({
     config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
 
     try {
-      // Note: Auto-discovery and config validation already done during INIT_MODULE
-      // This is pure data fetch - config is already normalized and students are discovered
-
       // AGGRESSIVE REAUTH: Wait for any session-wide authentication to complete
       // This ensures all API requests are blocked until complete re-authentication finishes
       // Prevents cascading failures from expired/corrupted tokens
@@ -1746,11 +1734,8 @@ module.exports = NodeHelper.create({
         await authService.waitForSessionAuth(sessionKey);
       }
 
-      // Group students by credential so we can reuse the same untis session
-      // Students with the same credentials share a single auth session (reduces API calls)
       const groups = new Map();
 
-      // Group students by credential. Student configs are already normalized during INIT_MODULE.
       const studentsList = Array.isArray(config.students) ? config.students : [];
       for (const student of studentsList) {
         const credKey = this._getCredentialKey(student, config, sessionKey);
@@ -1758,27 +1743,25 @@ module.exports = NodeHelper.create({
         groups.get(credKey).push(student);
       }
 
-      // Process each credential group for this session
-      // authService handles caching of authentication, so we don't need to cache authSession here
       for (const [credKey, students] of groups.entries()) {
-        // Check if another session is already fetching this credKey
-        // This prevents duplicate API calls when multiple sessions use the same credentials
-        if (this._pendingFetchByCredKey.has(credKey)) {
-          this._mmLog('debug', null, `Session ${sessionKey}: Another session is fetching credKey=${credKey}, waiting...`);
-          // Wait for the other session to complete (its cache will be available to us too)
-          await new Promise((resolve) => setTimeout(resolve, 100));
+        // If the same scoped credential group is already being fetched, wait for that
+        // fetch to finish before starting the next one.
+        const pendingFetch = this._pendingFetchByCredKey.get(credKey);
+        if (pendingFetch) {
+          this._mmLog('debug', null, `Session ${sessionKey}: Another fetch is in progress for credKey=${credKey}, waiting...`);
+          // Swallow errors from another session's in-flight fetch to avoid cascading failures
+          await pendingFetch.catch(() => {});
         }
 
-        // Mark as processing
-        this._pendingFetchByCredKey.set(credKey, true);
+        const inFlightFetch = this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);
+        this._pendingFetchByCredKey.set(credKey, inFlightFetch);
 
         try {
-          // Process this session's data
-          // authService.getAuth() will use its internal cache for subsequent calls with same cacheKey
-          await this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);
+          await inFlightFetch;
         } finally {
-          // Remove from pending after completion
-          this._pendingFetchByCredKey.delete(credKey);
+          if (this._pendingFetchByCredKey.get(credKey) === inFlightFetch) {
+            this._pendingFetchByCredKey.delete(credKey);
+          }
         }
       }
     } catch (error) {

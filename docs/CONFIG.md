@@ -24,14 +24,19 @@ Comprehensive documentation of all configuration options for MMM-Webuntis.
 
 ## Global Options
 
-All configuration options are documented in [MMM-Webuntis.js](MMM-Webuntis.js#L1-L48) in the `defaults` object. Global options can be declared at the top level of `config` and can be overridden per-student.
+The canonical defaults live in the `defaults` object in `MMM-Webuntis.js`. Global options can be declared at the top level of `config` and can be overridden per-student where supported.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `header` | string | `'MMM-Webuntis'` | Title displayed by MagicMirror for this module. |
 | `updateInterval` | int | `5 * 60 * 1000` | Fetch interval in milliseconds (default 5 minutes). |
 | `logLevel` | string | `'none'` | Log verbosity: `'debug'`, `'info'`, `'warn'`, `'error'`, or `'none'`. |
+| `timezone` | string | `'Europe/Berlin'` | Timezone used for date calculations and debug-date handling. |
+| `debugDate` | string\|null | `null` | Freeze "today" for testing (`YYYY-MM-DD`). |
 | `demoDataFile` | string\|null | `null` | Relative path to local fixture JSON for frontend-only demo mode (backend/API skipped). |
+| `dumpBackendPayloads` | bool | `false` | Write backend payload snapshots to `debug_dumps/`. |
+| `dumpRawApiResponses` | bool | `false` | Write raw REST responses to `debug_dumps/raw_api_*.json`. |
+| `useClassTimetable` | bool | `false` | Use class timetable instead of student timetable where required by the school setup. |
 
 ---
 
@@ -108,10 +113,11 @@ Configure grid widget behavior using the `grid` namespace:
 | `grid.dateFormat` | string | `'EEE dd.MM.'` | Date format for grid header. |
 | `grid.mergeGap` | int | `15` | Maximum gap (minutes) between lessons to merge them. |
 | `grid.maxLessons` | int | `0` | Limit lessons per day. `0` = show all; `>=1` limits to first N timeUnits. |
+| `grid.pxPerMinute` | number | `0.8` | Vertical scaling factor for the grid. Higher values make lessons taller. |
 | `grid.showNowLine` | bool | `true` | Show current time line in grid. |
 | `grid.weekView` | bool | `false` | **Calendar week view (Mon-Fri only)**. Overrides `nextDays`/`pastDays`. Auto-switches to next week on Friday from 15:45 onward (or >=16:00), plus Saturday and Sunday (real-time mode only, i.e., without `debugDate`). |
-| `grid.nextDays` | int | - | Days ahead to display. Ignored when `weekView: true`. |
-| `grid.pastDays` | int | - | Days past to display. Ignored when `weekView: true`. |
+| `grid.nextDays` | int | `4` | Days ahead to display. Ignored when `weekView: true`. |
+| `grid.pastDays` | int | `0` | Days past to display. Ignored when `weekView: true`. |
 | `grid.naText` | string | `'N/A'` | Placeholder text when a changed value has no current replacement (e.g., removed room/teacher/subject). |
 
 **Example (5-day view):**
@@ -181,7 +187,7 @@ grid: {
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `exams.dateFormat` | string | `'dd.MM.'` | Date format for exam dates. |
+| `exams.dateFormat` | string | `'EEE dd.MM.'` | Date format for exam dates. |
 | `exams.nextDays` | int | `21` | Days ahead to fetch exams (0 = off). |
 | `exams.showSubject` | bool | `true` | Show subject for exams. |
 | `exams.showTeacher` | bool | `true` | Show teacher for exams. |
@@ -192,7 +198,7 @@ grid: {
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `homework.dateFormat` | string | `'dd.MM.'` | Date format for homework due dates. |
+| `homework.dateFormat` | string | `'EEE dd.MM.'` | Date format for homework due dates. |
 | `homework.showSubject` | bool | `true` | Show subject name with homework. |
 | `homework.showText` | bool | `true` | Show homework description/text. |
 | `homework.nextDays` | int | `28` | Widget-specific days ahead override. |
@@ -204,7 +210,7 @@ grid: {
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `absences.dateFormat` | string | `'dd.MM.'` | Date format for absence dates. |
+| `absences.dateFormat` | string | `'EEE dd.MM.'` | Date format for absence dates. |
 | `absences.pastDays` | int | `21` | Past days to fetch absences. |
 | `absences.nextDays` | int | `7` | Future days to fetch absences. |
 | `absences.showDate` | bool | `true` | Show absence date. |
@@ -360,7 +366,7 @@ Configure specific students using their `studentId`:
 students: [
   {
     studentId: 12345,  // Must match auto-discovered ID
-    // title omitted = uses auto-discovered name
+    title: "Emma Schmidt",
     homework: { nextDays: 45 },
   },
   {
@@ -383,7 +389,9 @@ students: [
 
 ---
 
-## Debug / Development Options
+### Debug / Development Options
+
+These options are listed again here because they are commonly used during troubleshooting:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -415,9 +423,7 @@ Notes:
 
 ### Timetable Source
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `useClassTimetable` | bool | `false` | Use class timetable instead of student timetable (some schools only provide class data). |
+`useClassTimetable` is a top-level option with default `false`. It can also be overridden per student when individual students need class timetable mode.
 
 ---
 

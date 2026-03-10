@@ -10,7 +10,9 @@ Short guide to contribute:
 
 - `cd modules/MMM-Webuntis`
 - `npm ci`
-- `node --run lint` and `node --run test` (includes `node --run test:spelling`).
+- `node --run lint`
+- `node --run check`
+- `node --run test:spelling`
 
 3. Create a PR
 

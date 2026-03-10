@@ -8,8 +8,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDisplayDate, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render homework widget for a single student
@@ -26,19 +25,15 @@
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
     let addedRows = 0;
 
-    // Use widget context helper to reduce config duplication
-    const widgetCtx = createWidgetContext('homework', studentConfig, root.util || {}, ctx);
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    // Header is already added by main module if studentCellTitle is empty
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'homework', widgetCtx, studentCellTitle));
-    }
+    // Initialize widget context and add header if needed
+    const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('homework', ctx, container, studentCellTitle, studentConfig);
 
     if (!Array.isArray(homeworks) || homeworks.length === 0) {
       addRow(container, 'homeworkRowEmpty', studentLabelText, ctx.translate('no_homework'));
       return 1;
     }
 
+    const { formatDisplayDate } = root.util || {};
     const dateFormat = widgetCtx.getConfig('dateFormat');
     const showSubject = Boolean(widgetCtx.getConfig('showSubject'));
     const showText = Boolean(widgetCtx.getConfig('showText'));
@@ -54,11 +49,14 @@
       const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
       const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
-      const left = due ? `${due}` : ctx.translate('homework');
+      const left = due
+        ? `<span class="wu-homework__date">${escapeHtml(due)}</span>`
+        : `<span class="wu-homework__label">${escapeHtml(ctx.translate('homework'))}</span>`;
       const rightParts = [];
-      if (subj) rightParts.push(`<b>${escapeHtml(subj)}</b>`);
-      if (text) rightParts.push(`<span>${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
-      const right = rightParts.length > 0 ? rightParts.join(': ') : ctx.translate('homework');
+      if (subj) rightParts.push(`<b class="wu-homework__subject">${escapeHtml(subj)}</b>`);
+      if (text) rightParts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
+      const right =
+        rightParts.length > 0 ? rightParts.join(': ') : `<span class="wu-homework__label">${escapeHtml(ctx.translate('homework'))}</span>`;
 
       addRow(container, 'homeworkRow', studentLabelText, left, right);
       addedRows++;

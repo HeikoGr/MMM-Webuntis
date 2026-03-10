@@ -3,19 +3,18 @@
  * Renders daily messages/announcements from school
  * Supports:
  * - Subject and text display
- * - HTML-formatted text (safe tags only: b, i, u, br, p)
+ * - HTML-formatted text with sanitized inline formatting
  * - Expanded message display mode
  * - Localized "Messages of the Day" header
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { log, escapeHtml, addFullRow, addHeader, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addFullRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render messages of day widget for a single student
    * Displays messages in full-width rows with subject + text
-   * Text supports safe HTML formatting tags (backend sanitizes)
+   * Text supports the backend's sanitized inline formatting subset.
    *
    * @param {Object} ctx - Main module context (provides translate, config)
    * @param {HTMLElement} container - DOM element to append message rows
@@ -27,11 +26,10 @@
   function renderMessagesOfDayForStudent(ctx, container, studentCellTitle, studentConfig, messagesOfDay) {
     let addedRows = 0;
 
-    const widgetCtx = createWidgetContext('messagesofday', studentConfig, root.util || {}, ctx);
-
-    // Add widget header with active filter/range context
-    const headerTitle = buildWidgetHeaderTitle(ctx, 'messagesofday', widgetCtx, studentCellTitle);
-    addHeader(container, headerTitle);
+    // Initialize widget context and always add header (forceHeader: true)
+    initializeWidgetContextAndHeader('messagesofday', ctx, container, studentCellTitle, studentConfig, {
+      forceHeader: true,
+    });
 
     const messagesContainer = document.createElement('div');
     messagesContainer.className = 'messages-grid';
@@ -53,13 +51,13 @@
       const isExpanded = msg?.isExpanded === true;
 
       // Subject as bold prefix, followed by text on the same line or next line
-      const subjectHtml = subject ? `<span class="message-subject">${escapeHtml(subject)}</span>` : '';
+      const subjectHtml = subject ? `<span class="message-subject wu-message__subject">${escapeHtml(subject)}</span>` : '';
       const contentText = text || ctx.translate('no_text');
 
       // Combine subject and text
       const fullContent = subjectHtml
-        ? `${subjectHtml}<span class="message-text">${contentText}</span>`
-        : `<span class="message-text">${contentText}</span>`;
+        ? `${subjectHtml}<span class="message-text wu-message__text">${contentText}</span>`
+        : `<span class="message-text wu-message__text">${contentText}</span>`;
 
       // Build the row classes
       let rowClasses = 'messageRow';
@@ -67,8 +65,7 @@
         rowClasses += ' message-expanded';
       }
 
-      // Text contains safe HTML formatting tags from backend (b, i, u, etc.)
-      // Don't escape - render as HTML via innerHTML. Backend sanitizes and only allows safe tags.
+      // Text is rendered as HTML because the backend sanitizes it down to a limited inline tag subset.
       addFullRow(messagesContainer, rowClasses, fullContent);
       addedRows++;
     }

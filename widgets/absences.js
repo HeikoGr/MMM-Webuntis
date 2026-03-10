@@ -11,8 +11,7 @@
  */
 (function () {
   const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
-  const { escapeHtml, addRow, addHeader, formatDisplayDate, formatDisplayTime, createWidgetContext, buildWidgetHeaderTitle } =
-    root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -29,19 +28,15 @@
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
     let addedRows = 0;
 
-    // Determine mode and handle header using helper
-    const widgetCtx = createWidgetContext('absences', studentConfig, root.util || {}, ctx);
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'absences', widgetCtx, studentCellTitle));
-    }
+    // Initialize widget context and add header if needed
+    const { widgetCtx, studentLabelText } = initializeWidgetContextAndHeader('absences', ctx, container, studentCellTitle, studentConfig);
 
     if (!Array.isArray(absences) || absences.length === 0) {
       addRow(container, 'absenceRowEmpty', studentLabelText, ctx.translate('no_absences'));
       return 1;
     }
 
-    // Read widget-specific config (defaults already applied by MMM-Webuntis.js)
+    const { formatDisplayDate, formatDisplayTime, compareByDateAndStartTime } = root.util || {};
     const maxItems = widgetCtx.getConfig('maxItems');
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
@@ -49,7 +44,6 @@
     const nowLocal = new Date();
     const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
 
-    // Absence range options
     const rangeStart = widgetCtx.getConfig('pastDays');
     const rangeEnd = widgetCtx.getConfig('nextDays');
     const dateFormat = widgetCtx.getConfig('dateFormat');
@@ -60,7 +54,6 @@
         const absenceYmd = Number(ab?.date) || 0;
         if (absenceYmd === 0) return false;
 
-        // Calculate days difference from YYYYMMDD format
         const absYear = Math.floor(absenceYmd / 10000);
         const absMonth = Math.floor((absenceYmd % 10000) / 100);
         const absDay = absenceYmd % 100;
@@ -72,9 +65,6 @@
         const nowUtcMs = Date.UTC(nowYear, nowMonth - 1, nowDay);
         const daysDiff = Math.floor((nowUtcMs - absUtcMs) / (1000 * 60 * 60 * 24));
 
-        // daysDiff > 0 = past, daysDiff < 0 = future
-        // rangeStart: show up to N days in the past
-        // rangeEnd: show up to N days in the future
         if (rangeStart !== null && daysDiff > rangeStart) {
           return false;
         }
@@ -83,7 +73,7 @@
         }
         return true;
       })
-      .sort((a, b) => (Number(a.date) || 0) - (Number(b.date) || 0) || (Number(a.startTime) || 0) - (Number(b.startTime) || 0));
+      .sort((a, b) => compareByDateAndStartTime(a, b, { dateKey: 'date', timeKey: 'startTime' }));
 
     let visibleCount = 0;
     for (const ab of sorted) {
@@ -100,10 +90,8 @@
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;
 
-      // Meta column: date (matches exams/homework layout)
-      const meta = showDate && dateStr ? dateStr : '';
+      const meta = showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : '';
 
-      // Build status label (if any) and its class
       let statusLabel = '';
       let statusClass = '';
       if (showExcused) {
@@ -116,25 +104,31 @@
         }
       }
 
-      // Data column: time first, then subject (+status) and reason
       const dataParts = [];
-      if (time) dataParts.push(`<b>${escapeHtml(time)}</b>`);
+      if (time) dataParts.push(`<b class="wu-absence__time">${escapeHtml(time)}</b>`);
 
       if (subj) {
         const subjEsc = escapeHtml(subj);
-        const note = statusLabel ? ` <span class='${statusClass} small dimmed'>(${escapeHtml(statusLabel)})</span>` : '';
-        dataParts.push(`${subjEsc}${note}`);
+        const note = statusLabel ? ` <span class='${statusClass} wu-absence__status'>(${escapeHtml(statusLabel)})</span>` : '';
+        dataParts.push(`<span class="wu-absence__subject">${subjEsc}</span>${note}`);
       } else if (statusLabel) {
-        dataParts.push(`<span class='${statusClass} small dimmed'>${escapeHtml(statusLabel)}</span>`);
+        dataParts.push(`<span class='${statusClass} wu-absence__status'>${escapeHtml(statusLabel)}</span>`);
       }
 
       if (showReason && reason) {
-        dataParts.push(`<br><span class='xsmall dimmed'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
+        dataParts.push(`<br><span class='wu-absence__reason'>${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
       }
 
-      const data = dataParts.length > 0 ? dataParts.join(' ') : escapeHtml(ctx.translate('absences'));
+      const data =
+        dataParts.length > 0 ? dataParts.join(' ') : `<span class="wu-absence__label">${escapeHtml(ctx.translate('absences'))}</span>`;
 
-      addRow(container, 'absenceRow', studentLabelText, meta || ctx.translate('absences'), data);
+      addRow(
+        container,
+        'absenceRow',
+        studentLabelText,
+        meta || `<span class="wu-absence__label">${escapeHtml(ctx.translate('absences'))}</span>`,
+        data
+      );
       addedRows++;
       visibleCount++;
     }

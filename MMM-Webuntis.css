@@ -89,6 +89,10 @@
   --wu-changed-highlight: var(--wu-substitution-accent);
   --wu-message-card-bg: rgba(var(--wu-rgb-white), var(--wu-alpha-soft));
   --wu-message-card-border: var(--wu-accent-yellow);
+  --wu-widget-detail-font-size: 0.78rem;
+  --wu-widget-detail-line-height: 1.2;
+  --wu-widget-detail-font-weight: 500;
+  --wu-widget-detail-margin-top: 0.12rem;
 
   /* Patterns */
   --wu-stripe-light: rgba(var(--wu-rgb-white), var(--wu-alpha-soft));
@@ -107,6 +111,10 @@
   --wu-exam-border-width: 6px;
   --wu-messages-min-width: 200px;
   --wu-messages-max-cols: 3;
+  --wu-message-card-radius: 4px;
+  --wu-message-card-padding-block: 2px;
+  --wu-message-card-padding-inline: 3px;
+  --wu-message-card-gap: 5px;
 
   /* Icons */
   --wu-icon-warning: '⚠️';
@@ -127,7 +135,7 @@
   box-sizing: inherit;
 }
 
-/* Widget Container (replaces table) */
+/* Shared layout / grid base */
 .MMM-Webuntis .wu-widget-container {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -142,31 +150,12 @@
   margin-bottom: 0;
 }
 
-/* Widget Error Boundary */
-.MMM-Webuntis .widget-error {
-  display: block;
-  grid-column: 1 / -1;
-  padding: 0.5rem 0.75rem;
-  margin: 0.5rem 0 0.5rem 0;
-  background-color: var(--wu-error-bg);
-  border-left: 4px solid var(--wu-error-border);
-  border-radius: 2px;
-  color: var(--wu-error-text);
-  font-weight: 500;
-  text-align: left;
-}
-
-.MMM-Webuntis .widget-error.dimmed {
-  opacity: 0.7;
-}
-
-/* Widget Row (replaces tr) - now transparent container */
+/* Shared row and column primitives */
 .MMM-Webuntis .wu-row {
   display: contents;
   /* Makes row transparent, cols become direct grid items */
 }
 
-/* Widget Row Header (for verbose mode) - overrides display: contents */
 .MMM-Webuntis .wu-row-header {
   display: block;
   /* Override contents for header */
@@ -184,7 +173,6 @@
   font-size: 0.88em;
 }
 
-/* Widget Columns (replaces td) */
 .MMM-Webuntis .wu-col {
   white-space: pre-line;
   text-align: left;
@@ -219,34 +207,6 @@
   text-align: left;
 }
 
-.MMM-Webuntis .cancelled {
-  text-decoration: line-through;
-}
-
-.MMM-Webuntis .substitution {
-  color: var(--wu-substitution-generic);
-  font-weight: bold;
-}
-
-.MMM-Webuntis .error {
-  color: var(--wu-error-text);
-}
-
-.MMM-Webuntis .info {
-  font-style: italic;
-}
-
-.MMM-Webuntis .student {
-  padding-top: 0.94rem;
-  border-bottom: 1px solid var(--wu-border-strong);
-}
-
-/* Widget rows */
-.MMM-Webuntis .examRow,
-.MMM-Webuntis .examRowEmpty {
-  color: var(--wu-legacy-exam-row-color);
-}
-
 .MMM-Webuntis .grid-timecell {
   padding: 0.1rem 0.4rem 0.1rem 0;
   border-bottom: 1px dotted var(--wu-border-muted);
@@ -260,7 +220,7 @@
   display: grid;
 }
 
-/* Combined grid (time + content) */
+/* Grid widget */
 .MMM-Webuntis .grid-combined {
   display: grid;
   grid-template-columns: minmax(5.625rem, auto) 1fr;
@@ -576,10 +536,6 @@
   pointer-events: none;
 }
 
-.MMM-Webuntis .absence-excused {
-  color: var(--wu-absence-excused-color);
-}
-
 /* Presentation: uppercase day labels and meta/date columns */
 .MMM-Webuntis .grid-daylabel,
 .MMM-Webuntis .wu-col-meta {
@@ -587,51 +543,7 @@
   text-align: left;
 }
 
-.MMM-Webuntis .absence-unexcused {
-  color: var(--wu-absence-unexcused-color);
-  font-weight: 600;
-}
-
-.MMM-Webuntis .absences-unavailable-info {
-  display: block;
-  padding: 0.5rem;
-  margin-bottom: 0.6rem;
-  border-left: 3px solid var(--wu-warning-color);
-  background-color: var(--wu-warning-bg-strong);
-  font-style: italic;
-}
-
-.MMM-Webuntis .mmm-webuntis-warning {
-  display: block;
-  padding: 0.4rem 0.6rem;
-  margin-bottom: 0.6rem;
-  border-left: 3px solid var(--wu-warning-color);
-  background-color: var(--wu-warning-bg-soft);
-  color: var(--wu-warning-color);
-  font-weight: 600;
-}
-
-/* Critical warnings (e.g., dependency issues) */
-.MMM-Webuntis .mmm-webuntis-warning.critical {
-  border-left-color: var(--wu-critical-color);
-  background-color: var(--wu-critical-bg);
-  color: var(--wu-critical-color);
-  font-weight: 700;
-  animation: pulse-warning 2s ease-in-out infinite;
-}
-
-@keyframes pulse-warning {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* Ticker Animation for Multiple Lessons in Same Time Slot */
+/* Grid ticker for overlapping lessons */
 .MMM-Webuntis .lesson-ticker-wrapper {
   overflow: hidden;
   background: transparent;
@@ -720,9 +632,7 @@
   background: var(--wu-exam-bar);
 }
 
-/* Semantic CSS Classes for Accessibility */
-
-/* Lesson Primary Field (Grid & Lessons) */
+/* List widgets: lessons, exams, homework, absences */
 .MMM-Webuntis .lesson-primary {
   font-weight: 600;
   font-size: 0.75rem;
@@ -732,7 +642,6 @@
   text-overflow: clip;
 }
 
-/* Lesson Secondary Field (Grid & Lessons) */
 .MMM-Webuntis .lesson-secondary {
   font-size: 0.69rem;
   color: var(--wu-secondary-text);
@@ -745,7 +654,6 @@
   max-width: 100%;
 }
 
-/* Teacher Name (inline in Lessons/Exams widgets) */
 .MMM-Webuntis .teacher-name {
   color: var(--wu-secondary-text);
   font-weight: 400;
@@ -758,7 +666,6 @@
   font-size: inherit;
 }
 
-/* Substitution Text (yellow/orange) */
 .MMM-Webuntis .lesson-substitution-text {
   font-size: 0.75rem;
   color: var(--wu-substitution-accent);
@@ -767,7 +674,6 @@
   display: block;
 }
 
-/* General Lesson Info Text (lstext field) */
 .MMM-Webuntis .lesson-info-text {
   font-size: 0.75rem;
   color: var(--wu-muted-text);
@@ -802,7 +708,6 @@
   content: '↺';
 }
 
-/* MOVED lesson badge (lesson shifted to different time) */
 .MMM-Webuntis .lesson-moved-badge {
   font-size: 0.85rem;
   position: static;
@@ -869,14 +774,67 @@
   min-width: 14px;
 }
 
-/* Exam Description */
-.MMM-Webuntis .exam-description {
-  font-size: 0.8rem;
+/* Shared list-widget detail text */
+.MMM-Webuntis .wu-exam__description,
+.MMM-Webuntis .wu-absence__reason,
+.MMM-Webuntis .wu-absence__status {
+  display: inline-block;
+  font-size: var(--wu-widget-detail-font-size);
+  line-height: var(--wu-widget-detail-line-height);
+  font-weight: var(--wu-widget-detail-font-weight);
+}
+
+.MMM-Webuntis .wu-exam__description,
+.MMM-Webuntis .wu-absence__reason {
+  margin-top: var(--wu-widget-detail-margin-top);
+}
+
+/* Exams Widget */
+.MMM-Webuntis .examRow,
+.MMM-Webuntis .examRowEmpty {
+  color: var(--wu-legacy-exam-row-color);
+}
+
+.MMM-Webuntis .wu-exam__description {
   color: var(--wu-exam-description-color);
+}
+
+/* Absences Widget */
+.MMM-Webuntis .absence-excused {
+  color: var(--wu-absence-excused-color);
+}
+
+.MMM-Webuntis .absence-unexcused {
+  color: var(--wu-absence-unexcused-color);
   font-weight: 600;
 }
 
-/* Message Subject */
+.MMM-Webuntis .wu-absence__reason {
+  color: var(--wu-secondary-text);
+}
+
+.MMM-Webuntis .wu-absence__status {
+  white-space: nowrap;
+}
+
+.MMM-Webuntis .wu-absence__status.absence-excused {
+  color: var(--wu-absence-excused-color);
+}
+
+.MMM-Webuntis .wu-absence__status.absence-unexcused {
+  color: var(--wu-absence-unexcused-color);
+}
+
+.MMM-Webuntis .absences-unavailable-info {
+  display: block;
+  padding: 0.5rem;
+  margin-bottom: 0.6rem;
+  border-left: 3px solid var(--wu-warning-color);
+  background-color: var(--wu-warning-bg-strong);
+  font-style: italic;
+}
+
+/* Messages of day */
 .MMM-Webuntis .message-subject {
   font-weight: 700;
   font-size: 1rem;
@@ -884,20 +842,18 @@
   margin-bottom: 4px;
 }
 
-/* Message Text */
 .MMM-Webuntis .message-text {
   font-size: 0.9rem;
   color: var(--wu-message-text);
   display: block;
 }
 
-/* Messages Grid Layout */
 .MMM-Webuntis .messages-grid {
   display: block;
   columns: var(--wu-messages-max-cols) var(--wu-messages-min-width);
-  column-gap: 5px;
+  column-gap: var(--wu-message-card-gap);
   column-fill: balance;
-  margin-bottom: 5px;
+  margin-bottom: var(--wu-message-card-gap);
   grid-column: 1 / -1; /* Ensure it spans full width of widget container */
   width: 100%;
 }
@@ -910,27 +866,96 @@
   display: flex; /* Override display: contents from .wu-row */
   background-color: var(--wu-message-card-bg);
   border-left: 3px solid var(--wu-message-card-border);
-  border-radius: 4px;
-  padding: 2px 3px;
+  border-radius: var(--wu-message-card-radius);
+  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   flex-direction: column;
   line-height: 1.1;
   width: 100%;
-  margin-bottom: 5px;
+  margin-bottom: var(--wu-message-card-gap);
   break-inside: avoid;
   break-inside: avoid-column;
 }
 
 .MMM-Webuntis .messages-grid .messageRowEmpty {
   display: block; /* Override display: contents */
-  padding: 2px 3px;
+  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   color: var(--wu-muted-text);
   font-style: italic;
   width: 100%;
-  margin-bottom: 5px;
+  margin-bottom: var(--wu-message-card-gap);
   break-inside: avoid;
   break-inside: avoid-column;
 }
 
 .MMM-Webuntis .messages-grid .wu-col-full-width {
   width: 100%;
+}
+
+/* Warnings / utility / legacy shims */
+.MMM-Webuntis .widget-error {
+  display: block;
+  grid-column: 1 / -1;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0.5rem 0;
+  background-color: var(--wu-error-bg);
+  border-left: 4px solid var(--wu-error-border);
+  border-radius: 2px;
+  color: var(--wu-error-text);
+  font-weight: 500;
+  text-align: left;
+}
+
+.MMM-Webuntis .widget-error.dimmed {
+  opacity: 0.7;
+}
+
+.MMM-Webuntis .mmm-webuntis-warning {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.6rem;
+  border-left: 3px solid var(--wu-warning-color);
+  background-color: var(--wu-warning-bg-soft);
+  color: var(--wu-warning-color);
+  font-weight: 600;
+}
+
+.MMM-Webuntis .mmm-webuntis-warning.critical {
+  border-left-color: var(--wu-critical-color);
+  background-color: var(--wu-critical-bg);
+  color: var(--wu-critical-color);
+  font-weight: 700;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.MMM-Webuntis .cancelled {
+  text-decoration: line-through;
+}
+
+.MMM-Webuntis .substitution {
+  color: var(--wu-substitution-generic);
+  font-weight: bold;
+}
+
+.MMM-Webuntis .error {
+  color: var(--wu-error-text);
+}
+
+.MMM-Webuntis .info {
+  font-style: italic;
+}
+
+.MMM-Webuntis .student {
+  padding-top: 0.94rem;
+  border-bottom: 1px solid var(--wu-border-strong);
 }

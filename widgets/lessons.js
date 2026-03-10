@@ -16,10 +16,10 @@
     log,
     escapeHtml,
     addRow,
-    addHeader,
+    initializeWidgetContextAndHeader,
     formatDisplayDate,
+    currentTimeAsHHMM,
     createWidgetContext,
-    buildWidgetHeaderTitle,
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
@@ -114,7 +114,7 @@
     // Use module's computed today value when available (supports debugDate), else local now
     const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
     const nowLocal = new Date();
-    const nowHm = nowLocal.getHours() * 100 + nowLocal.getMinutes();
+    const nowHm = currentTimeAsHHMM(nowLocal);
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
     // Group lessons by date for efficient day-by-day rendering
@@ -135,10 +135,10 @@
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    const studentLabelText = widgetCtx.isVerbose ? '' : studentCellTitle;
-    if (widgetCtx.isVerbose && studentCellTitle !== '') {
-      addHeader(container, buildWidgetHeaderTitle(ctx, 'lessons', widgetCtx, studentCellTitle));
-    }
+    // Add header after validation passes, reusing the already-created widgetCtx
+    const { studentLabelText } = initializeWidgetContextAndHeader('lessons', ctx, container, studentCellTitle, studentConfig, {
+      widgetCtx,
+    });
 
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
@@ -202,14 +202,14 @@
 
       let renderedForDate = 0;
       for (const entry of entries) {
-        const dateStr = String(entry.date);
-        const year = parseInt(dateStr.substring(0, 4), 10);
-        const month = parseInt(dateStr.substring(4, 6), 10);
-        const day = parseInt(dateStr.substring(6, 8), 10);
+        const entryYmdStr = String(entry.date);
+        const year = parseInt(entryYmdStr.substring(0, 4), 10);
+        const month = parseInt(entryYmdStr.substring(4, 6), 10);
+        const day = parseInt(entryYmdStr.substring(6, 8), 10);
         const stNum = Number(entry.startTime) || 0;
         const stHour = Math.floor(stNum / 100);
         const stMin = stNum % 100;
-        const timeForDay = new Date(year, month - 1, day);
+        const entryDate = new Date(year, month - 1, day);
 
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
@@ -233,8 +233,8 @@
         addedRows++;
         renderedForDate++;
 
-        const dateLabel = formatDisplayDate(timeForDay, lessonsDateFormat);
-        let timeStr = `${dateLabel}&nbsp;`;
+        const dateLabel = formatDisplayDate(entryDate, lessonsDateFormat);
+        let timeStr = `<span class="wu-lesson__date">${escapeHtml(dateLabel)}</span>&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
@@ -255,21 +255,21 @@
         }
 
         if (showStartTime) {
-          timeStr += formattedStart;
+          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
         } else if (startLabel !== undefined) {
           if (endPeriodLabel !== undefined && endPeriodLabel !== startLabel) {
-            timeStr += `${startLabel}.-${endPeriodLabel}.`;
+            timeStr += `<span class="wu-lesson__period">${startLabel}.-${endPeriodLabel}.</span>`;
           } else {
-            timeStr += `${startLabel}.`;
+            timeStr += `<span class="wu-lesson__period">${startLabel}.</span>`;
           }
         } else {
-          timeStr += formattedStart;
+          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
         }
 
         const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
         const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = escapeHtml(useShortSubject ? subjShort : subjLong);
+        let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(useShortSubject ? subjShort : subjLong)}</span>`;
         if (subjectChanged && !entry.su?.[0]) {
           subjectStr = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         } else if (subjectChanged) {

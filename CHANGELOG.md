@@ -2,15 +2,34 @@
 
 ## Unreleased
 
-### ⚠️ Warning Lifecycle & Recovery
+Current package version: 0.7.5
 
-- Fixed a runtime edge case where per-student fetch exceptions could log backend errors without always delivering a warning payload to frontend.
-- Backend now emits a valid fallback `GOT_DATA` envelope (with empty `data.*` and populated `state.warnings` / `state.warningMeta`) for student-level fetch exceptions.
-- Fixed stale runtime warning persistence after connectivity recovery by clearing module-scoped transient warning state on healthy student payloads.
+## 0.7.5
+
+### ✅ Stability & Recovery
+
+- Backend initialization is more reliable during MagicMirror startup, reducing cases where the module stayed empty until a later cycle.
+- Runtime warnings are now delivered more consistently after per-student fetch failures and are cleared again after healthy fetches.
+- Authentication, network-error handling, and auto-discovery flows were tightened to reduce empty-data states in mixed and parent-account setups.
+
+### 🌐 WebUntis API Handling
+
+- Endpoints that permanently return HTTP `403` are handled gracefully and skipped on later fetches instead of producing repeated noisy failures.
+- Internal fetch orchestration and payload assembly were cleaned up without changing the documented frontend contract, making data refreshes more predictable.
+
+### 🎨 UI & Customization
+
+- Student config merging and widget fallback resolution were refined so per-student rendering behaves more consistently across widgets.
+- Widget CSS class names were normalized for consistency. Users with custom CSS overrides should review their selectors after updating.
+
+### 🔧 Compatibility
+
+- The supported minimum Node.js version is now `>=20.18.1`.
+- This requirement is based on observed authentication/runtime failures on older Node 20 installations. The most likely area is the native HTTP/fetch stack used by the module, but the exact lower-version break point is not isolated yet.
 
 ### 📚 Documentation
 
-- Updated architecture and API docs to reflect current warning transport, warning metadata, recovery behavior, and frontend warning debounce lifecycle.
+- README, configuration docs, architecture docs, API docs, and CSS customization docs were synchronized with the current code and release behavior.
 
 ## 0.7.4
 
@@ -164,7 +183,7 @@
 
 ### ⚙️ Configuration Changes
 
-- **Parent Account Support**: New config options `parentUsername`, `parentPassword` (optional, for multi-student setups)
+- **Parent Account Support**: Added module-level parent account credentials for multi-student setups (current canonical keys are `username`, `password`, `school`, `server`)
 - **Widget-Specific Configuration**: All widgets now support nested configuration (e.g., `lessons: { dateFormat: 'EEEE' }`)
 - **Unified Date Range**: `nextDays` and `pastDays` replace legacy `daysToShow` / `pastDaysToShow`
 - **Enhanced Validation**: Comprehensive config validation with detailed error messages and warnings
