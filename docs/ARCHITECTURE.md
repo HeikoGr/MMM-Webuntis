@@ -1,6 +1,6 @@
 # MMM-Webuntis Architecture & Data Flow
 
-**Last Updated**: 2026-03-05
+**Last Updated**: 2026-03-10
 **Project Status**: Production-ready with timetable-first fetch strategy (prevents silent token failures)
 
 ## Executive Summary
@@ -215,7 +215,7 @@ graph TB
 ### Core Services
 
 **[node_helper.js](../node_helper.js)** - MagicMirror adapter/coordinator (1,803 LOC)
-- [`_shouldSkipApi()`](../node_helper.js#L58) - API status tracking: Skip permanent errors (403, 404, 410), retry temporary errors (5xx)
+- `_shouldSkipApi()` - API status tracking: skip permanent errors (403, 404, 410), retry temporary errors (5xx)
 - `_apiStatusBySession` Map - Tracks HTTP status codes per session/endpoint
 - Prevents repeated API calls to endpoints with permanent permission errors
 - Does NOT skip temporary errors (503, 500, 429) - retries on next fetch
@@ -223,8 +223,8 @@ graph TB
 - **Dependencies**: `lib/webuntis/*` core + `lib/webuntis-client/*` adapter build layer
 
 **[authService.js](../lib/webuntis/authService.js)** - Authentication and token caching
-- [`class AuthService`](../lib/webuntis/authService.js#L11) - Main service class
-- [`getAuth()`](../lib/webuntis/authService.js#L199) - Main auth entry point (with caching)
+- `class AuthService` - Main service class
+- `getAuth()` - Main auth entry point (with caching)
 - Token caching: 14-minute TTL, **5-minute safety buffer** (prevents silent API failures from expired tokens)
 - QR code auth flow, parent account support
 - School/server resolution from QR codes
@@ -232,39 +232,39 @@ graph TB
 - **Dependencies**: httpClient.js, fetchClient.js, cacheManager.js
 
 **[httpClient.js](../lib/webuntis/httpClient.js)** - JSON-RPC client for WebUntis authentication
-- [`class HttpClient`](../lib/webuntis/httpClient.js#L35) - Main class
-- [`authenticateWithCredentials()`](../lib/webuntis/httpClient.js#L218) - Username/password auth
-- [`authenticateWithQRCode()`](../lib/webuntis/httpClient.js#L47) - QR code + OTP auth
-- [`getBearerToken()`](../lib/webuntis/httpClient.js#L273) - Fetch JWT bearer token
+- `class HttpClient` - Main class
+- `authenticateWithCredentials()` - Username/password auth
+- `authenticateWithQRCode()` - QR code + OTP auth
+- `getBearerToken()` - Fetch JWT bearer token
 - Session cookie management via [cookieJar.js](../lib/webuntis/cookieJar.js)
 - **Dependencies**: cookieJar.js
 
 **[webuntisApiService.js](../lib/webuntis/webuntisApiService.js)** - Unified REST API client
-- [`callWebUntisAPI()`](../lib/webuntis/webuntisApiService.js#L51) - Generic API caller
-- [`getTimetable()`](../lib/webuntis/webuntisApiService.js#L306) - Fetch timetable data
-- [`getExams()`](../lib/webuntis/webuntisApiService.js#L417) - Fetch exams
-- [`getHomework()`](../lib/webuntis/webuntisApiService.js#L476) - Fetch homework
-- [`getAbsences()`](../lib/webuntis/webuntisApiService.js#L563) - Fetch absences
-- [`getMessagesOfDay()`](../lib/webuntis/webuntisApiService.js#L611) - Fetch messages
+- `callWebUntisAPI()` - Generic API caller
+- `getTimetable()` - Fetch timetable data
+- `getExams()` - Fetch exams
+- `getHomework()` - Fetch homework
+- `getAbsences()` - Fetch absences
+- `getMessagesOfDay()` - Fetch messages
 - **Dependencies**: restClient.js, authService.js
 
 **[restClient.js](../lib/webuntis/restClient.js)** - REST API wrapper
-- [`callRestAPI()`](../lib/webuntis/restClient.js#L101) - Generic REST caller
+- `callRestAPI()` - Generic REST caller
 - Bearer token authentication
 - Tenant ID header management (`Tenant-Id`)
 - Response parsing and error handling
 - **Dependencies**: fetchClient.js, errorHandler.js, logger.js, errorUtils.js
 
 **[webuntisClient.js](../lib/webuntis/webuntisClient.js)** - Endpoint execution orchestration
-- [`_extractRestRequestContext()`](../lib/webuntis/webuntisClient.js#L89) - Build per-request context once
-- [`_buildRestAuthHandlers()`](../lib/webuntis/webuntisClient.js#L114) - Centralized `getAuth` / `onAuthError` handlers
-- [`_executeRestEndpoint()`](../lib/webuntis/webuntisClient.js#L135) - Shared skip/error/status tracking wrapper for all REST endpoints
+- `_extractRestRequestContext()` - Build per-request context once
+- `_buildRestAuthHandlers()` - Centralized `getAuth` / `onAuthError` handlers
+- `_executeRestEndpoint()` - Shared skip/error/status tracking wrapper for all REST endpoints
 - Individual `_get*ViaRest` methods only provide endpoint-specific request parameters
 
 ### Orchestration & Building
 
 **[dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js)** - Timetable-first + parallel fetch strategy (NEW)
-- [`orchestrateFetch()`](../lib/webuntis/dataFetchOrchestrator.js#L45) - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
+- `orchestrateFetch()` - Orchestrate fetching: timetable first (token validation), then 4 APIs in parallel
 - **Strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
 - **Auth canary**: If timetable is not requested, a minimal timetable call is used as a token canary before other APIs
 - **Performance**: Fast (~100ms overhead for sequential timetable, prevents wasted parallel calls)
@@ -273,7 +273,7 @@ graph TB
 - **Dependencies**: errorUtils.js
 
 **[payloadBuilder.js](../lib/webuntis-client/payloadBuilder.js)** - Adapter-side GOT_DATA payload construction (NEW)
-- [`buildGotDataPayload()`](../lib/webuntis-client/payloadBuilder.js#L34) - Build complete payload for frontend
+- `buildGotDataPayload()` - Build complete payload for frontend
 - Attach compact holiday ranges (`data.holidays.ranges`) and active holiday (`data.holidays.current`)
 - Warning collection and deduplication
 - Debug dump generation (non-blocking)
@@ -282,72 +282,72 @@ graph TB
 ### Data Processing
 
 **[dataOrchestration.js](../lib/webuntis/dataOrchestration.js)** - Data transformation and orchestration (NEW)
-- [`stripAllHtml()`](../lib/webuntis/dataOrchestration.js#L26) - Strip all HTML tags (line break preservation optional)
-- [`normalizeDateToInteger()`](../lib/webuntis/dataOrchestration.js#L80) - Dates → YYYYMMDD integers
-- [`normalizeTimeToHHMM()`](../lib/webuntis/dataOrchestration.js#L140) - Times → HHMM integers
-- [`calculateFetchRanges()`](../lib/webuntis/dataOrchestration.js#L237) - Calculate date ranges for all data types
-- [`compactHolidays()`](../lib/webuntis/dataOrchestration.js#L163) - Remove unnecessary holiday fields
+- `stripAllHtml()` - Strip all HTML tags (line break preservation optional)
+- `normalizeDateToInteger()` - Dates → YYYYMMDD integers
+- `normalizeTimeToHHMM()` - Times → HHMM integers
+- `calculateFetchRanges()` - Calculate date ranges for all data types
+- `compactHolidays()` - Remove unnecessary holiday fields
 - **Dependencies**: None (pure functions)
 
 `dataTransformer.js` was removed from the active backend path; transformations are documented via `dataOrchestration.js`, `webuntisApiService.js`, and `payloadCompactor.js`.
 
 **[payloadCompactor.js](../lib/webuntis/payloadCompactor.js)** - Payload optimization and sanitization
-- [`compactArray()`](../lib/webuntis/payloadCompactor.js#L45) - Reduce array size with schemas
-- [`sanitizeHtml()`](../lib/webuntis/payloadCompactor.js#L219) - Whitelist-based HTML sanitization (b, strong, i, em, u, br, p)
+- `compactArray()` - Reduce array size with schemas
+- `sanitizeHtml()` - Whitelist-based HTML sanitization (b, strong, i, em, u, br, p)
 - Line break conversion (`<br>` → `\n`)
 - HTML entity decoding
 - Schema definitions for lessons, exams, homework, absences, messages
 - **Dependencies**: None (pure functions)
 
 **[cacheManager.js](../lib/webuntis/cacheManager.js)** - TTL-based caching
-- [`class CacheManager`](../lib/webuntis/cacheManager.js#L9) - Main cache class
-- [`set()`](../lib/webuntis/cacheManager.js#L55) - Store with TTL
-- [`get()`](../lib/webuntis/cacheManager.js#L28) - Retrieve (auto-expire)
+- `class CacheManager` - Main cache class
+- `set()` - Store with TTL
+- `get()` - Retrieve (auto-expire)
 - Class ID caching, generic key-value cache
 - **Dependencies**: None
 
 **[dateTimeUtils.js](../lib/dateTimeUtils.js)** - Date and time utilities
-- [`addDays()`](../lib/dateTimeUtils.js#L81) - Date arithmetic
-- [`toMinutesSinceMidnight()`](../lib/dateTimeUtils.js#L23) - Time string to minutes
-- [`formatHHMMTime()`](../lib/dateTimeUtils.js#L56) - Format time strings
-- [`formatDateToISO()`](../lib/dateTimeUtils.js#L96) - Date to YYYY-MM-DD string
+- `addDays()` - Date arithmetic
+- `toMinutesSinceMidnight()` - Time string to minutes
+- `formatHHMMTime()` - Format time strings
+- `formatDateToISO()` - Date to YYYY-MM-DD string
 - **Dependencies**: None (pure functions)
 
 ### Configuration & Validation
 
 **[configValidator.js](../lib/configValidator.js)** - Configuration validation and legacy mapping
-- [`validateConfig()`](../lib/configValidator.js#L199) - Schema-based validation
-- [`applyLegacyMappings()`](../lib/configValidator.js#L89) - Map 25 legacy keys to new structure
-- [`LEGACY_MAPPINGS`](../lib/configValidator.js#L25) - Legacy key definitions
+- `validateConfig()` - Schema-based validation
+- `applyLegacyMappings()` - Map legacy keys to new structure
+- `LEGACY_MAPPINGS` - Legacy key definitions
 - Detailed deprecation warnings
 - **Dependencies**: None
 
 **[widgetConfigValidator.js](../lib/widgetConfigValidator.js)** - Widget-specific validation
-- [`validateGridConfig()`](../lib/widgetConfigValidator.js#L24) - Grid widget validation
-- [`validateLessonsConfig()`](../lib/widgetConfigValidator.js#L86) - Lessons widget validation
-- [`validateExamsConfig()`](../lib/widgetConfigValidator.js#L116) - Exams widget validation
-- [`validateHomeworkConfig()`](../lib/widgetConfigValidator.js#L148) - Homework widget validation
-- [`validateAbsencesConfig()`](../lib/widgetConfigValidator.js#L180) - Absences widget validation
+- `validateGridConfig()` - Grid widget validation
+- `validateLessonsConfig()` - Lessons widget validation
+- `validateExamsConfig()` - Exams widget validation
+- `validateHomeworkConfig()` - Homework widget validation
+- `validateAbsencesConfig()` - Absences widget validation
 - Range validation (nextDays: 0-365, pastDays: 0-90)
 - **Dependencies**: None
 
 ### Error Handling & Logging
 
 **[errorUtils.js](../lib/webuntis/errorUtils.js)** - Lightweight error handling utilities (NEW)
-- [`wrapAsync()`](../lib/webuntis/errorUtils.js#L56) - Wrap async calls with error handling + warning collection
-- [`tryOrDefault()`](../lib/webuntis/errorUtils.js#L90) - Sync call with fallback to default value
-- [`tryOrThrow()`](../lib/webuntis/errorUtils.js#L111) - Sync call with fail-fast error propagation
-- [`tryOrNull()`](../lib/webuntis/errorUtils.js#L133) - Sync call with null fallback (silent)
+- `wrapAsync()` - Wrap async calls with error handling + warning collection
+- `tryOrDefault()` - Sync call with fallback to default value
+- `tryOrThrow()` - Sync call with fail-fast error propagation
+- `tryOrNull()` - Sync call with null fallback (silent)
 - **Dependencies**: errorHandler.js
 
 **[errorHandler.js](../lib/webuntis/errorHandler.js)** - Centralized error handling
-- [`convertRestErrorToWarning()`](../lib/webuntis/errorHandler.js#L45) - Convert API errors to user-friendly warnings
-- [`checkEmptyDataWarning()`](../lib/webuntis/errorHandler.js#L111) - Generate warnings for empty datasets
+- `convertRestErrorToWarning()` - Convert API errors to user-friendly warnings
+- `checkEmptyDataWarning()` - Generate warnings for empty datasets
 - Error severity classification (critical/warning/info)
 - **Dependencies**: None
 
 **[logger.js](../lib/logger.js)** - Backend logging service
-- [`createBackendLogger()`](../lib/logger.js#L101) - Create logger instance
+- `createBackendLogger()` - Create logger instance
 - Configurable log levels (none/error/warn/info/debug)
 - Structured logging with student context
 - MagicMirror logger integration
@@ -358,10 +358,10 @@ graph TB
 ### 1. **Initialization Phase**
 
 **Key Files**:
-- Frontend: [MMM-Webuntis.js#start()](../MMM-Webuntis.js#L1111)
-- Backend: [node_helper.js#socketNotificationReceived()](../node_helper.js#L1148)
-- Orchestration: [dataFetchOrchestrator.js#orchestrateFetch()](../lib/webuntis/dataFetchOrchestrator.js#L45)
-- Payload Building: [payloadBuilder.js#buildGotDataPayload()](../lib/webuntis-client/payloadBuilder.js#L34)
+- [MMM-Webuntis.js](../MMM-Webuntis.js) - frontend startup, session handling, widget rendering
+- [node_helper.js](../node_helper.js) - `INIT_MODULE` / `FETCH_DATA` handling
+- [lib/webuntis/dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js) - timetable-first fetch orchestration
+- [lib/webuntis-client/payloadBuilder.js](../lib/webuntis-client/payloadBuilder.js) - `GOT_DATA` payload construction
 
 ```mermaid
 sequenceDiagram
@@ -379,50 +379,50 @@ sequenceDiagram
 
     Note over FE,NH: Module Initialization
     B->>FE: Module loaded by MagicMirror
-    FE->>FE: start() L1111<br/>initialize data structures
-    FE->>FE: _buildSendConfig() L672<br/>(merge defaults into students[])
+    FE->>FE: start()<br/>initialize state, debugDate, timers
+    FE->>FE: _buildSendConfig()<br/>send canonical config + session metadata
     FE->>NH: sendSocketNotification('INIT_MODULE')
 
     Note over NH: Config Validation & Normalization
-    NH->>NH: socketNotificationReceived() L1148<br/>Receive INIT_MODULE
-    NH->>NH: configValidator.validateConfig() L199<br/>(schema validation)
-    NH->>NH: configValidator.applyLegacyMappings() L89<br/>(25 legacy key mappings)
+    NH->>NH: socketNotificationReceived()<br/>route INIT_MODULE
+    NH->>NH: _normalizeLegacyConfig()<br/>apply legacy mappings once
+    NH->>NH: validateConfig()<br/>validate canonical config
     NH->>NH: widgetConfigValidator.validateAllWidgets()<br/>(widget-specific validation)
 
     Note over NH: Auto-Discovery (if students[] empty)
     alt students[] is empty
-        NH->>Auth: getAuth() L199 (parent account)
-        Auth->>HTTP: authenticateWithCredentials() L218
+        NH->>Auth: getAuth() / getAuthFromQRCode()<br/>parent credentials or parent QR
+        Auth->>HTTP: authenticateWithCredentials() or authenticateWithQRCode()
         HTTP->>REST: POST /jsonrpc.do (authenticate)
         REST-->>HTTP: sessionId, cookies
-        HTTP->>HTTP: getBearerToken() L273
+        HTTP->>HTTP: getBearerToken()
         HTTP->>REST: GET /api/token/new
         REST-->>HTTP: bearer token
         HTTP-->>Auth: { cookies, token }
         Auth->>REST: GET /app/data (fetchClient)
         REST-->>Auth: appData (students list)
         Auth-->>NH: { students[], tenantId, schoolYearId }
-        NH->>NH: _deriveStudentsFromAppData() L262<br/>(extract studentId, title)
+        NH->>NH: _deriveStudentsFromAppData()<br/>extract studentId/title pairs
     end
 
     NH-->>FE: sendSocketNotification('MODULE_INITIALIZED')<br/>(session-scoped)
     FE->>FE: socketNotificationReceived()<br/>mark initialized + start timer
-    NH->>NH: _handleFetchData() L1327<br/>(auto-trigger first fetch)
+    NH->>NH: _handleFetchData()<br/>auto-trigger first fetch
 
     Note over NH: Authentication Flow (per student)
     loop for each student
         alt QR Code Login
             NH->>Auth: getAuth() with QR config
-            Auth->>HTTP: authenticateWithQRCode() L47
+            Auth->>HTTP: authenticateWithQRCode()
             HTTP->>REST: POST /jsonrpc.do (OTP auth)
             REST-->>HTTP: sessionId, personId
         else Username/Password
-            NH->>Auth: getAuth() L199
-            Auth->>HTTP: authenticateWithCredentials() L218
+            NH->>Auth: getAuth()
+            Auth->>HTTP: authenticateWithCredentials()
             HTTP->>REST: POST /jsonrpc.do (authenticate)
             REST-->>HTTP: sessionId, cookies
         end
-        HTTP->>HTTP: getBearerToken() L273
+        HTTP->>HTTP: getBearerToken()
         HTTP->>REST: GET /api/token/new
         REST-->>HTTP: bearer token (JWT, 15min expiry)
         HTTP-->>Auth: { cookies, token }
@@ -432,12 +432,12 @@ sequenceDiagram
     Note over NH,REST: ✨ Timetable-First + Parallel Fetching (prevents silent token failures)
     loop for each student
         NH->>Client: fetchStudentData()
-        Client->>Orch: orchestrateFetch() L45
+        Client->>Orch: orchestrateFetch()
 
         Note over Orch: Step 0: If timetable disabled, run a minimal timetable call as auth canary
 
         Note over Orch: Step 1: Fetch timetable FIRST (token validation canary)
-        Orch->>API: getTimetable() L306
+        Orch->>API: getTimetable()
         API->>REST: GET /timetable/entries
         REST-->>API: timetable[] or 401 Unauthorized
         API-->>Orch: normalized timetable
@@ -449,22 +449,22 @@ sequenceDiagram
 
         Note over Orch: Step 2: Token validated, fetch remaining 4 APIs in parallel
         par Parallel Fetch via Promise.all
-            Orch->>API: getExams() L417
+            Orch->>API: getExams()
             API->>REST: GET /exams
             REST-->>API: exams[]
             API-->>Orch: normalized exams
         and
-            Orch->>API: getHomework() L476
+            Orch->>API: getHomework()
             API->>REST: GET /homeworks/lessons
             REST-->>API: homeworks[]
             API-->>Orch: normalized homework
         and
-            Orch->>API: getAbsences() L563
+            Orch->>API: getAbsences()
             API->>REST: GET /absences/students
             REST-->>API: absences[]
             API-->>Orch: normalized absences
         and
-            Orch->>API: getMessagesOfDay() L611
+            Orch->>API: getMessagesOfDay()
             API->>REST: GET /public/news/newsWidgetData
             REST-->>API: messagesOfDay[]
             API-->>Orch: normalized messages
@@ -475,7 +475,7 @@ sequenceDiagram
 
     Note over NH: Error Handling & Payload Building
     Client->>Mapper: mapBundleToMmmPayload()
-    Mapper->>PayBuild: buildGotDataPayload() L34
+    Mapper->>PayBuild: buildGotDataPayload()
     PayBuild->>PayBuild: Compact arrays via schemas
     PayBuild->>PayBuild: Attach data.holidays.ranges + data.holidays.current
     PayBuild->>PayBuild: Collect & dedupe warnings
@@ -487,28 +487,28 @@ sequenceDiagram
     NH->>FE: sendSocketNotification('GOT_DATA', payload)
 
     Note over FE: Store & Render
-    FE->>FE: socketNotificationReceived() L1671<br/>(store config, warnings)
+    FE->>FE: socketNotificationReceived()<br/>store config, warnings, runtime state
     FE->>FE: _updateRuntimeWarnings()<br/>(per-student runtime state)
     FE->>FE: moduleWarningsSet.add()<br/>(config warnings only)
     FE->>FE: _buildHolidayMapFromRanges()<br/>(ranges → YYYYMMDD day-map)
     FE->>FE: updateDom()
-    FE->>FE: getDom() L1453<br/>(render all widgets)
+    FE->>FE: getDom()<br/>render configured widgets
 ```
 
 ### 2. **Configuration Normalization**
 
-**Process**: [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L672) → [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L117) → [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L89)
+**Process**: [MMM-Webuntis.js](../MMM-Webuntis.js) → [node_helper.js](../node_helper.js) → [lib/configValidator.js](../lib/configValidator.js)
 
 ```mermaid
 graph LR
     A["Raw Config<br/>(user input)"]:::input
-    --> B["_buildSendConfig() L672<br/><a href='../MMM-Webuntis.js#L672'>Frontend</a>"]:::frontend
+    --> B["_buildSendConfig()<br/>Frontend"]:::frontend
     --> C["Merged student[]<br/>(defaults + per-student)"]:::merged
     --> D["sendSocketNotification<br/>INIT_MODULE"]:::socket
-    --> E["_normalizeLegacyConfig() L117<br/><a href='../node_helper.js#L117'>Backend</a>"]:::backend
-    --> F["applyLegacyMappings() L89<br/>(25 legacy keys)<br/><a href='../lib/configValidator.js#L89'>configValidator</a>"]:::validator
+    --> E["_normalizeLegacyConfig()<br/>Backend"]:::backend
+    --> F["applyLegacyMappings()<br/>(25 legacy keys)"]:::validator
     --> G["Normalized Config<br/>(canonical keys only)"]:::normalized
-    --> H["fetchData() L1552<br/><a href='../node_helper.js#L1552'>Backend fetch logic</a>"]:::fetch
+    --> H["_handleFetchData() / fetchData()<br/>Backend fetch logic"]:::fetch
 
     classDef input fill:#e3f2fd
     classDef frontend fill:#bbdefb
@@ -522,44 +522,41 @@ graph LR
 
 ### 3. **Widget Rendering Pipeline**
 
-**Main Functions**:
-- [`MMM-Webuntis.js#getDom()`](../MMM-Webuntis.js#L1453) - Main render entry
-- [`MMM-Webuntis.js#_renderWidgetTableRows()`](../MMM-Webuntis.js#L570) - Render helper
-
-**Widget Renderers**:
-- [`widgets/lessons.js#renderLessonsForStudent()`](../widgets/lessons.js#L79)
-- [`widgets/grid.js#renderGridForStudent()`](../widgets/grid.js#L2089) (1,300+ LOC; marked as high-complexity area)
-- [`widgets/exams.js#renderExamsForStudent()`](../widgets/exams.js#L26)
-- [`widgets/homework.js#renderHomeworksForStudent()`](../widgets/homework.js#L26)
-- [`widgets/absences.js#renderAbsencesForStudent()`](../widgets/absences.js#L29)
-- [`widgets/messagesofday.js#renderMessagesOfDayForStudent()`](../widgets/messagesofday.js#L27)
+**Main Files**:
+- [MMM-Webuntis.js](../MMM-Webuntis.js) - render entry and widget dispatch
+- [widgets/lessons.js](../widgets/lessons.js)
+- [widgets/grid.js](../widgets/grid.js) - still the highest-complexity renderer
+- [widgets/exams.js](../widgets/exams.js)
+- [widgets/homework.js](../widgets/homework.js)
+- [widgets/absences.js](../widgets/absences.js)
+- [widgets/messagesofday.js](../widgets/messagesofday.js)
 
 ```mermaid
 graph TD
-    FE["socketNotificationReceived() L1671<br/>(GOT_DATA)"]:::frontend
+    FE["socketNotificationReceived()<br/>(GOT_DATA)"]:::frontend
     --> CB["configByStudent[title] =<br/>payload.context.config"]:::store
-    --> VW["_getDisplayWidgets() L367<br/>(parse displayMode)"]:::parse
-    --> DOM["getDom() L1453"]:::render
+    --> VW["_getDisplayWidgets()<br/>(parse displayMode)"]:::parse
+    --> DOM["getDom()"]:::render
     --> WRN["render module warnings<br/>(above all widgets)"]:::warn
-    --> RW["_renderWidgetTableRows() L570<br/>for each widget type"]:::loop
+    --> RW["_renderWidgetTableRows()<br/>for each widget type"]:::loop
 
-    RW --> W1["<a href='../widgets/lessons.js#L79'>lessons.js</a><br/>renderLessonsForStudent()"]:::widget
+    RW --> W1["lessons.js<br/>renderLessonsForStudent()"]:::widget
     W1 --> W1B["uses: lessons.nextDays<br/>lessons.dateFormat<br/>lessons[]<br/>derived holidayMap{}"]:::config
 
-    RW --> W2["<a href='../widgets/grid.js#L2089'>grid.js</a><br/>renderGridForStudent()<br/>⚠️ 1,300+ LOC"]:::widget
-    W2 --> W2B["uses: grid.mergeGap<br/>grid.dateFormat<br/>timeUnits[]<br/>derived holidayMap{}"]:::config
+    RW --> W2["grid.js<br/>renderGridForStudent()<br/>⚠️ highest-complexity widget"]:::widget
+    W2 --> W2B["uses: grid.nextDays / pastDays / weekView<br/>grid.mergeGap / pxPerMinute<br/>timeUnits[] + lessons[] + absences[]"]:::config
 
-    RW --> W3["<a href='../widgets/exams.js#L26'>exams.js</a><br/>renderExamsForStudent()"]:::widget
-    W3 --> W3B["uses: exams.daysAhead<br/>exams.dateFormat<br/>exams[]"]:::config
+    RW --> W3["exams.js<br/>renderExamsForStudent()"]:::widget
+    W3 --> W3B["uses: exams.nextDays<br/>exams.dateFormat<br/>exams[]"]:::config
 
-    RW --> W4["<a href='../widgets/homework.js#L26'>homework.js</a><br/>renderHomeworksForStudent()"]:::widget
+    RW --> W4["homework.js<br/>renderHomeworksForStudent()"]:::widget
     W4 --> W4B["uses: homework.dateFormat<br/>homeworks[]"]:::config
 
-    RW --> W5["<a href='../widgets/absences.js#L29'>absences.js</a><br/>renderAbsencesForStudent()"]:::widget
+    RW --> W5["absences.js<br/>renderAbsencesForStudent()"]:::widget
     W5 --> W5B["uses: absences.pastDays<br/>absences.dateFormat<br/>absences[]"]:::config
 
-    RW --> W6["<a href='../widgets/messagesofday.js#L27'>messagesofday.js</a><br/>renderMessagesOfDayForStudent()"]:::widget
-    W6 --> W6B["uses: messagesofday.dateFormat<br/>messagesOfDay[]"]:::config
+    RW --> W6["messagesofday.js<br/>renderMessagesOfDayForStudent()"]:::widget
+    W6 --> W6B["uses: messagesOfDay[]<br/>masonry-like card layout"]:::config
 
     classDef frontend fill:#e3f2fd
     classDef store fill:#bbdefb
@@ -575,21 +572,21 @@ graph TD
 
 ### 4. **REST API Request Flow** (per data type)
 
-**Key Functions**:
-- [dataFetchOrchestrator.js#orchestrateFetch()](../lib/webuntis/dataFetchOrchestrator.js#L45) - Timetable-first orchestration (NEW)
-- [webuntisApiService.js#callWebUntisAPI()](../lib/webuntis/webuntisApiService.js#L51) - Generic API caller
-- [authService.js#getAuth()](../lib/webuntis/authService.js#L199) - Auth with caching
-- [restClient.js#callRestAPI()](../lib/webuntis/restClient.js#L101) - REST wrapper
-- [errorUtils.js#wrapAsync()](../lib/webuntis/errorUtils.js#L56) - Error handling wrapper (NEW)
+**Key Files**:
+- [lib/webuntis/dataFetchOrchestrator.js](../lib/webuntis/dataFetchOrchestrator.js)
+- [lib/webuntis/webuntisApiService.js](../lib/webuntis/webuntisApiService.js)
+- [lib/webuntis/authService.js](../lib/webuntis/authService.js)
+- [lib/webuntis/restClient.js](../lib/webuntis/restClient.js)
+- [lib/webuntis/errorUtils.js](../lib/webuntis/errorUtils.js)
 
 ```mermaid
 sequenceDiagram
     participant Orch as dataFetchOrchestrator
-    participant API as webuntisApiService<br/>callWebUntisAPI() L51
-    participant Auth as authService<br/>getAuth() L199
-    participant RC as restClient<br/>callRestAPI() L101
+    participant API as webuntisApiService
+    participant Auth as authService
+    participant RC as restClient
     participant REST as WebUntis REST API
-    participant ErrUtils as errorUtils<br/>wrapAsync()
+    participant ErrUtils as errorUtils
 
     Note over Orch: Timetable-first orchestration (NEW)
 
@@ -606,7 +603,7 @@ sequenceDiagram
     end
 
     Orch->>ErrUtils: wrapAsync(() => getTimetable())
-    ErrUtils->>API: getTimetable() L306
+    ErrUtils->>API: getTimetable()
     API->>Auth: getAuth() [checks cache first]
 
     alt Token in cache and >= 5 minutes remaining
@@ -638,19 +635,19 @@ sequenceDiagram
     Note over Orch: Remaining enabled data types fetched in parallel
     par Exams
         Orch->>ErrUtils: wrapAsync(() => getExams())
-        ErrUtils->>API: getExams() L417
+        ErrUtils->>API: getExams()
         API->>RC: callRestAPI('/exams', auth)
     and Homework
         Orch->>ErrUtils: wrapAsync(() => getHomework())
-        ErrUtils->>API: getHomework() L476
+        ErrUtils->>API: getHomework()
         API->>RC: callRestAPI('/homeworks/lessons', auth)
     and Absences
         Orch->>ErrUtils: wrapAsync(() => getAbsences())
-        ErrUtils->>API: getAbsences() L563
+        ErrUtils->>API: getAbsences()
         API->>RC: callRestAPI('/absences/students', auth)
     and Messages
         Orch->>ErrUtils: wrapAsync(() => getMessagesOfDay())
-        ErrUtils->>API: getMessagesOfDay() L611
+        ErrUtils->>API: getMessagesOfDay()
         API->>RC: callRestAPI('/public/news/newsWidgetData', auth)
     end
 
@@ -662,7 +659,7 @@ sequenceDiagram
 
 ### 5. **Caching Strategy**
 
-**Implementation**: [`lib/webuntis/cacheManager.js`](../lib/webuntis/cacheManager.js), [`lib/webuntis/authService.js#getAuthFromQRCode()`](../lib/webuntis/authService.js#L59), [`lib/webuntis/authService.js#getAuth()`](../lib/webuntis/authService.js#L199)
+**Implementation**: [lib/webuntis/cacheManager.js](../lib/webuntis/cacheManager.js), [lib/webuntis/authService.js](../lib/webuntis/authService.js)
 
 ```mermaid
 graph TB
@@ -711,20 +708,19 @@ graph TB
 
 **Process Flow**: User config → Frontend merge → Backend normalization → Fetch logic
 
-**Key Functions**:
-- [`MMM-Webuntis.js#defaults`](../MMM-Webuntis.js#L79) - Module defaults
-- [`MMM-Webuntis.js#_buildSendConfig()`](../MMM-Webuntis.js#L672) - Merge defaults with user config
-- [`node_helper.js#_normalizeLegacyConfig()`](../node_helper.js#L117) - Apply legacy mappings
-- [`configValidator.js#applyLegacyMappings()`](../lib/configValidator.js#L89) - 25 legacy key transformations
+**Key Files**:
+- [MMM-Webuntis.js](../MMM-Webuntis.js) - module defaults and frontend config packaging
+- [node_helper.js](../node_helper.js) - backend normalization and per-session config
+- [lib/configValidator.js](../lib/configValidator.js) - legacy mappings and validation
 
 ```mermaid
 graph LR
-    Defaults["<a href='../MMM-Webuntis.js#L79'>Module Defaults</a><br/>(MMM-Webuntis.js L79)"]:::defaults
+    Defaults["Module Defaults<br/>(MMM-Webuntis.js)"]:::defaults
     --> GlobalConf["Global Config<br/>(config/config.js)"]:::global
     --> StudentConf["Per-Student Config<br/>(students[i] overrides)"]:::student
-    --> Merged["<a href='../MMM-Webuntis.js#L672'>Merged Config</a><br/>_buildSendConfig() L672<br/>(defaults + global + student)"]:::merged
-    --> Normalized["<a href='../node_helper.js#L117'>Normalized Config</a><br/>_normalizeLegacyConfig() L117<br/>(25 legacy keys mapped)"]:::normalized
-    --> FetchLogic["<a href='../node_helper.js#L920'>Fetch Orchestration</a><br/>processGroup() L920<br/>(respects per-student overrides)"]:::fetch
+    --> Merged["Merged Config<br/>_buildSendConfig()<br/>(defaults + global + student)"]:::merged
+    --> Normalized["Normalized Config<br/>_normalizeLegacyConfig()<br/>(25 legacy keys mapped)"]:::normalized
+    --> FetchLogic["Fetch Orchestration<br/>processGroup() + fetchData()<br/>(respects per-student overrides)"]:::fetch
 
     classDef defaults fill:#e1f5fe
     classDef global fill:#b3e5fc
@@ -736,21 +732,21 @@ graph LR
 
 **Example Config Inheritance**:
 ```javascript
-// 1. Module Defaults (MMM-Webuntis.js#defaults)
-{ nextDays: 7, pastDays: 0, mode: 'compact' }
+// 1. Module Defaults
+{ mode: 'verbose', lessons: { nextDays: 2 }, grid: { nextDays: 4, pastDays: 0 } }
 
 // 2. Global Config (user's config.js)
-{ nextDays: 10 }  // Override default
+{ grid: { nextDays: 7 } }  // Override grid default
 
 // 3. Per-Student Config
 students: [
-  { title: 'Alice', nextDays: 14 },  // Override global
-  { title: 'Bob' }                    // Inherits global (10 days)
+    { title: 'Alice', grid: { nextDays: 10 } },
+    { title: 'Bob' }
 ]
 
 // 4. Final Merged Result
-// Alice: { nextDays: 14, pastDays: 0, mode: 'compact' }
-// Bob:   { nextDays: 10, pastDays: 0, mode: 'compact' }
+// Alice: { mode: 'verbose', grid: { nextDays: 10, pastDays: 0 }, lessons: { nextDays: 2 } }
+// Bob:   { mode: 'verbose', grid: { nextDays: 7,  pastDays: 0 }, lessons: { nextDays: 2 } }
 ```
 
 ### 7. **Warning Collection & Propagation**
@@ -803,29 +799,29 @@ Additional runtime behavior:
 
 ### **Backend ([node_helper.js](../node_helper.js))**
 
-| Function | Line | Purpose | Called by | Calls |
-|----------|------|---------|-----------|-------|
-| [`start()`](../node_helper.js#L18) | L18 | Initialize services & caches | MagicMirror | AuthService, CacheManager, logger |
-| [`socketNotificationReceived()`](../node_helper.js#L1148) | L1148 | Entry point for INIT_MODULE + FETCH_DATA (auto-fetch after init) | Frontend | `_handleInitModule()`, `_handleFetchData()` |
-| [`_ensureStudentsFromAppData()`](../node_helper.js#L360) | L360 | Auto-discover students if empty | `_handleInitModule()` | `authService.getAuth()`, `_deriveStudentsFromAppData()` |
-| [`_normalizeLegacyConfig()`](../node_helper.js#L117) | L117 | Map old config keys → new | `_handleInitModule()` | `configValidator.applyLegacyMappings()` |
-| [`processGroup()`](../node_helper.js#L920) | L920 | Orchestrate fetches for student group | `_handleFetchData()` | `WebUntisClient.fetchStudentData()` |
-| [`_deriveStudentsFromAppData()`](../node_helper.js#L262) | L262 | Extract student list from app/data | `_ensureStudentsFromAppData()` | — |
-| [`_mmLog()`](../node_helper.js#L190) | L190 | Backend logging wrapper | All functions | MagicMirror logger |
+| Function | Purpose | Called by | Calls |
+|----------|---------|-----------|-------|
+| `start()` | Initialize services, caches, and logger plumbing | MagicMirror | Auth service factory, cache setup |
+| `socketNotificationReceived()` | Entry point for `INIT_MODULE`, `FETCH_DATA`, session state | Frontend | `_handleInitModule()`, `_handleFetchData()` |
+| `_handleInitModule()` | Normalize, validate, auto-discover students, trigger first fetch | `socketNotificationReceived()` | `_ensureStudentsFromAppData()`, `_handleFetchData()` |
+| `_handleFetchData()` | Session-aware fetch coordination and self-healing init retry | `socketNotificationReceived()`, `_handleInitModule()` | `processGroup()`, `fetchData()` |
+| `processGroup()` | Group students by credentials/session and orchestrate fetches | `_handleFetchData()` | `WebUntisClient.fetchStudentData()` |
+| `_ensureStudentsFromAppData()` | Auto-discover students or enrich configured entries from `app/data` | `_handleInitModule()` | Auth service, `_deriveStudentsFromAppData()` |
+| `_normalizeLegacyConfig()` | Convert deprecated config keys to canonical structure | `_handleInitModule()` | `applyLegacyMappings()` |
 
-**Note**: Legacy [`fetchData()`](../node_helper.js#L1552) remains as adapter-level entry point and delegates orchestration to `WebUntisClient` + `dataFetchOrchestrator.js` + payload builder.
+**Note**: `fetchData()` still exists as the adapter-level bridge into `WebUntisClient` + `dataFetchOrchestrator` + payload builder.
 
 ### **Frontend ([MMM-Webuntis.js](../MMM-Webuntis.js))**
 
-| Function | Line | Purpose | Called by | Calls |
-|----------|------|---------|-----------|-------|
-| [`start()`](../MMM-Webuntis.js#L1111) | L1111 | Initialize module & send INIT_MODULE | MagicMirror | `_buildSendConfig()`, `sendSocketNotification()` |
-| [`_buildSendConfig()`](../MMM-Webuntis.js#L672) | L672 | Merge defaults into students | `start()`, `_startFetchTimer()` | — |
-| [`socketNotificationReceived()`](../MMM-Webuntis.js#L1671) | L1671 | Receive GOT_DATA from backend | Backend | `updateDom()`, `_updateRuntimeWarnings()` |
-| [`getDom()`](../MMM-Webuntis.js#L1453) | L1453 | Render all widgets | MagicMirror | `_getDisplayWidgets()`, `_renderWidgetTableRows()` |
-| [`_renderWidgetTableRows()`](../MMM-Webuntis.js#L570) | L570 | Render per-student tables | `getDom()` | Widget renderers (lessons/grid/exams/etc) |
-| [`_getDisplayWidgets()`](../MMM-Webuntis.js#L367) | L367 | Parse displayMode config | `getDom()` | — |
-| [`_startFetchTimer()`](../MMM-Webuntis.js#L1263) | L1263 | Start periodic data fetch timer | `start()`, `socketNotificationReceived()` | `sendSocketNotification()` |
+| Function | Purpose | Called by | Calls |
+|----------|---------|-----------|-------|
+| `start()` | Initialize state, session ID, demo mode, and send `INIT_MODULE` | MagicMirror | `_buildSendConfig()`, `sendSocketNotification()` |
+| `_buildSendConfig()` | Package current config plus `id` and `sessionId` for backend | `start()`, `_sendFetchData()` | frontend validation helpers |
+| `socketNotificationReceived()` | Receive `MODULE_INITIALIZED` and `GOT_DATA` | Backend | `updateDom()`, `_updateRuntimeWarnings()` |
+| `getDom()` | Render module warnings and configured widgets | MagicMirror | `_getDisplayWidgets()`, `_renderWidgetTableRows()` |
+| `_renderWidgetTableRows()` | Shared per-student widget loop | `getDom()` | Widget renderer wrappers |
+| `_getDisplayWidgets()` | Canonicalize `displayMode` (`list`, aliases, comma list) | `getDom()`, script loading | — |
+| `_sendFetchData()` | Trigger periodic/manual/resume fetches | timer/resume/grid date change | `sendSocketNotification()` |
 
 ### **Orchestration Services**
 
@@ -889,87 +885,84 @@ Additional runtime behavior:
 {
   // === GLOBAL OPTIONS ===
   header: "MMM-Webuntis",                  // module title in MagicMirror
-  fetchIntervalMs: 900000,                 // fetch interval (15 min default)
+    updateInterval: 300000,                  // fetch interval (5 min default)
   logLevel: "none",                        // "error", "warn", "info", "debug"
+    timezone: "Europe/Berlin",
 
   // === DISPLAY OPTIONS ===
-  displayMode: "list",                     // "list", "grid", or comma-separated widgets:
-                                           // "lessons,exams,grid,homework,absences,messagesofday"
+    displayMode: "lessons, exams",          // "list" alias or comma-separated widgets
   mode: "verbose",                         // "verbose" (per-student) or "compact" (combined)
+    useClassTimetable: false,
 
-  // === TIMETABLE FETCH RANGE ===
-  // Preferred: nextDays/pastDays. Legacy: daysToShow/pastDaysToShow still supported
-  nextDays: 7,                            // upcoming days to fetch/display
-  pastDays: 0,                            // past days to include
-  debugDate: null,                        // YYYY-MM-DD to freeze "today" for testing
+    // === DEBUG OPTIONS ===
+    debugDate: null,                         // YYYY-MM-DD to freeze "today" for testing
+    demoDataFile: null,
+    dumpBackendPayloads: false,
+    dumpRawApiResponses: false,
 
   // === PARENT ACCOUNT CREDENTIALS (optional) ===
-  // Global credentials for parent account access to multiple children
   username: "parent@example.com",         // parent WebUntis username
   password: "password",                   // parent WebUntis password
   school: "school_name",                  // WebUntis school identifier
-  server: "webuntis.com",                 // WebUntis server hostname
-
-  // === DEBUG OPTIONS ===
-  dumpBackendPayloads: false,             // dump API responses to debug_dumps/
+    server: "school.webuntis.com",          // WebUntis server hostname
 
   // === WIDGET-SPECIFIC OPTIONS ===
-  // Per-widget namespaces (preferred modern structure)
   lessons: {
-    dateFormat: "EEEE",                   // date display format
-    showStartTime: false,                 // show lesson start time
-    showRegular: false,                   // show regular lessons
-    useShortSubject: false,               // use short subject names
-    showTeacherMode: "full",              // "off", "initial", "full"
-    showSubstitution: false,              // show substitution text
-    nextDays: 7,                          // (optional) widget-specific days ahead
+        nextDays: 2,
+        dateFormat: "EEE",
+        showStartTime: false,
+        showRegular: false,
+        useShortSubject: false,
+        showTeacherMode: "full",
+        showRoom: false,
+        showSubstitution: false,
+        naText: "N/A",
   },
 
   grid: {
-    dateFormat: "EEE dd.MM.",             // date display format
-    mergeGap: 15,                         // merge lessons with gap <= N minutes
-    maxLessons: 0,                        // max lessons to display (0 = unlimited)
-    showNowLine: true,                    // show current time indicator
-    nextDays: 1,                          // (optional) widget-specific days ahead
-    pastDays: 0,                          // (optional) widget-specific days past
+        nextDays: 4,
+        pastDays: 0,
+        weekView: false,
+        dateFormat: "EEE dd.MM.",
+        showNowLine: true,
+        mergeGap: 15,
+        maxLessons: 0,
+        pxPerMinute: 0.8,
+        naText: "N/A",
+        fields: {
+            primary: "subject",
+            secondary: "teacher",
+            additional: ["room"],
+            format: { subject: "long", teacher: "long", class: "short", room: "short", studentGroup: "short" }
+        }
   },
 
   exams: {
-    dateFormat: "dd.MM.",                 // date display format
-    daysAhead: 45,                        // days ahead to fetch exams
-    showSubject: true,                    // show exam subject
-    showTeacher: true,                    // show exam teacher
+        nextDays: 21,
+        dateFormat: "EEE dd.MM.",
+        showSubject: true,
+        showTeacher: true,
   },
 
   homework: {
-    dateFormat: "dd.MM.",                 // date display format
-    showSubject: true,                    // show subject name
-    showText: true,                       // show homework description
-    nextDays: 28,                         // (optional) widget-specific days ahead
-    pastDays: 1,                          // (optional) widget-specific days past
+        nextDays: 28,
+        pastDays: 0,
+        dateFormat: "EEE dd.MM.",
+        showSubject: true,
+        showText: true,
   },
 
   absences: {
-    dateFormat: "dd.MM.",                 // date display format
-    pastDays: 20,                         // days in past to show absences
-    futureDays: 20,                       // days in future to show absences
-    showDate: true,                       // show absence date
-    showExcused: true,                    // show excused/unexcused status
-    showReason: true,                     // show reason for absence
-    maxItems: null,                       // max entries to show (null = unlimited)
+        pastDays: 21,
+        nextDays: 7,
+        dateFormat: "EEE dd.MM.",
+        showDate: true,
+        showExcused: true,
+        showReason: true,
+        maxItems: null,
   },
 
-  messagesofday: {
-    dateFormat: "dd.MM.",                 // date display format
-  },
-
-  // === LEGACY OPTIONS (deprecated but still supported) ===
-  // Legacy top-level options (use widget namespaces instead)
-  daysToShow: 7,                          // → nextDays
-  pastDaysToShow: 0,                      // → pastDays
-  examsDaysAhead: 21,                     // → exams.daysAhead
-  absencesPastDays: 21,                   // → absences.pastDays
-  mergeGapMinutes: 15,                    // → grid.mergeGap
+    messagesofday: {},
 
   // === STUDENTS ===
   students: [

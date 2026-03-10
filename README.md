@@ -12,6 +12,14 @@
 
 A MagicMirror² module that displays WebUntis timetables, exams, homework, absences and messagesofday.
 
+## Requirements
+
+- Node.js `>=20.18.1`
+
+Older Node 20 installations have shown authentication/runtime failures in real-world setups, especially around the module's native HTTP stack. MMM-Webuntis uses the built-in Node.js `fetch`/`Headers`/`AbortController` path plus response-header cookie handling, so `20.18.1` is now the supported baseline.
+
+The exact break point is not isolated to a single API call yet, so this is documented as a compatibility baseline rather than a fully proven fetch-only bug. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
+
 ## Installation
 
 ```bash
@@ -25,6 +33,7 @@ npm ci --omit=dev
 
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
+node -v  # must be >= 20.18.1
 git pull
 npm ci --omit=dev
 ```
@@ -252,6 +261,8 @@ Set via `displayMode` (comma-separated):
 - `absences` - Absence records
 - `messagesofday` - School announcements
 
+`list` remains a supported alias for the default pair `lessons, exams`.
+
 **Example:**
 ```javascript
 displayMode: "grid,exams,homework"
@@ -358,6 +369,14 @@ Test your configuration without running MagicMirror:
 cd ~/MagicMirror/modules/MMM-Webuntis
 node --run debug
 ```
+
+Available project scripts:
+
+- `node --run lint`
+- `node --run check`
+- `node --run debug`
+- `node --run test:spelling`
+- `node --run test:auth:curl`
 
 **Low-level authentication test** (curl-based, bypasses all module logic):
 

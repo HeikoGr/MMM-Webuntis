@@ -38,7 +38,7 @@ let config = {
         // === DISPLAY OPTIONS ===
         displayMode: 'lessons, exams', // comma-separated list: lessons, exams, grid, homework, absences, messagesofday
         mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
-        useClassTimetable: true,
+        useClassTimetable: false,
 
         // === AUTHENTICATION ===
         // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
@@ -68,7 +68,7 @@ let config = {
         // === WIDGET NAMESPACED DEFAULTS ===
         // Per-widget configuration namespaces
         lessons: {
-          nextDays: 2, // widget-specific days ahead
+          nextDays: 4, // widget-specific days ahead
           dateFormat: 'EEE', // format for lesson dates
           showStartTime: false, // show lesson start time instead of timeunit
           showRegular: false, // show also regular lessons

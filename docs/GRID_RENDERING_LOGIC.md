@@ -94,11 +94,11 @@ flowchart TD
     Start([Overlap Group]) --> Classify[Classify lessons\n- cancelled/additional/substitution/event\n- tickerCandidates\n- plannedParallelCandidates]
 
     Classify --> CheckTicker{Ticker?\nplanned parallel base >= 2\nand real time overlap?}
-    CheckTicker -->|Yes| Ticker[TICKER\nGroup by subject+studentGroup/class\nSplit pairs merged by replacement set]
+  CheckTicker -->|Yes| Ticker[TICKER\nGroup by subject+studentGroup/class\nMerge split pairs by replacement set\nPreserve natural geometry]
     Ticker --> Stop1[continue - STOP]
 
     CheckTicker -->|No| CheckSplit{Split View?\ncancelled + replacement exists}
-    CheckSplit -->|Yes| Split[SPLIT VIEW\nLeft: replacement\nRight: cancelled]
+  CheckSplit -->|Yes| Split[SPLIT VIEW\nStandalone split only\nLeft: replacement\nRight: cancelled]
     Split --> Stop2[continue - STOP]
 
     CheckSplit -->|No| CheckSpan{Span Split?\nfull-span + sub-period pattern}

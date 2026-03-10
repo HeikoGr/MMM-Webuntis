@@ -166,11 +166,11 @@ module.exports = {
         server: "myhighschool.webuntis.com",
 
         // Display configuration
-        displayMode: "list", // or "grid"
-        daysToShow: 14,
-        pastDaysToShow: 0,
-        exams: { daysAhead: 60 },
-        absences: { pastDays: 30, futureDays: 60 },
+      displayMode: "lessons,exams,grid",
+      updateInterval: 5 * 60 * 1000,
+      grid: { nextDays: 4, pastDays: 0, pxPerMinute: 0.8 },
+      exams: { nextDays: 60 },
+      absences: { pastDays: 30, nextDays: 60 },
 
         // Students
         students: [
@@ -432,7 +432,7 @@ Error: No parent account credentials found
 
 2. Check for typos (case-sensitive!):
    - Should be `username` and `password` at module config level
-   - Legacy names `parentUsername`/`parentPassword` are automatically mapped
+   - Legacy keys are normalized by `configValidator`, but current docs and configs should use canonical names
 
 3. For QR code login, verify `qrcode` field is present:
    ```bash
@@ -517,8 +517,9 @@ REST API returned 0 exams
 
 4. Adjust date configuration in config.js:
    ```javascript
-   daysToShow: 21,        // Increase to see more days
-   exams: { daysAhead: 90 },    // Increase exam look-ahead
+   grid: { nextDays: 7 },       // Increase grid look-ahead
+   lessons: { nextDays: 7 },    // Increase lessons look-ahead
+   exams: { nextDays: 90 },     // Increase exam look-ahead
    ```
 
 ### Node process exits with code 1
@@ -555,9 +556,9 @@ interface StudentConfig {
   username?: string;          // Optional override username
   password?: string;          // Optional override password
   qrcode?: string;            // QR code (alternative to credentials)
-  daysToShow?: number;        // Override module daysToShow
-  pastDaysToShow?: number;    // Override module pastDaysToShow
-  exams?: { daysAhead?: number }; // Override exams.daysAhead
+   lessons?: { nextDays?: number; pastDays?: number };
+   grid?: { nextDays?: number; pastDays?: number; pxPerMinute?: number };
+   exams?: { nextDays?: number };
 }
 ```
 
@@ -571,11 +572,12 @@ interface ModuleConfig {
   password?: string;
   school: string;
   server: string;
-  daysToShow?: number;        // Default: 14
-  pastDaysToShow?: number;    // Default: 0
-  displayMode?: "list" | "grid"; // Default: "list"
-  exams?: { daysAhead?: number }; // Default: 60
-  absences?: { pastDays?: number; futureDays?: number }; // Default: 0, 60
+   updateInterval?: number;
+   displayMode?: string;       // e.g. "list" or "grid,lessons,exams"
+   lessons?: { nextDays?: number; pastDays?: number };
+   grid?: { nextDays?: number; pastDays?: number; pxPerMinute?: number };
+   exams?: { nextDays?: number };
+   absences?: { pastDays?: number; nextDays?: number };
   students: StudentConfig[];
 }
 ```

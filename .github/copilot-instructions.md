@@ -11,7 +11,7 @@
 **Frontend → Backend Socket Flow**:
 ```
 MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
-  → node_helper.js:socketNotificationReceived() [~L1201] → _handleInitModule()
+  → node_helper.js:socketNotificationReceived() [~L1421] → _handleInitModule()
     → validate + applyLegacyMappings → auto-discover students (optional)
     → socketNotification("MODULE_INITIALIZED") to FE
     → _handleFetchData() auto-runs first fetch (no FE FETCH_DATA needed)
