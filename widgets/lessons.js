@@ -135,8 +135,10 @@
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
-    // Add header after validation passes
-    const studentLabelText = initializeWidgetContextAndHeader('lessons', ctx, container, studentCellTitle, studentConfig).studentLabelText;
+    // Add header after validation passes, reusing the already-created widgetCtx
+    const { studentLabelText } = initializeWidgetContextAndHeader('lessons', ctx, container, studentCellTitle, studentConfig, {
+      widgetCtx,
+    });
 
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
