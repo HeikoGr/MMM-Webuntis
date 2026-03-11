@@ -694,11 +694,26 @@ Module.register('MMM-Webuntis', {
   _updateRuntimeWarnings(studentTitle, warningsList) {
     const key = studentTitle || '__module__';
     this.runtimeWarningsByStudent = this.runtimeWarningsByStudent || {};
-    if (Array.isArray(warningsList) && warningsList.length > 0) {
-      this.runtimeWarningsByStudent[key] = new Set(warningsList);
+    const nextWarnings = Array.isArray(warningsList) && warningsList.length > 0 ? new Set(warningsList) : null;
+    const prevWarnings = this.runtimeWarningsByStudent[key] instanceof Set ? this.runtimeWarningsByStudent[key] : null;
+
+    const hasChanged = (() => {
+      if (!prevWarnings && !nextWarnings) return false;
+      if (!prevWarnings || !nextWarnings) return true;
+      if (prevWarnings.size !== nextWarnings.size) return true;
+      for (const warning of prevWarnings) {
+        if (!nextWarnings.has(warning)) return true;
+      }
+      return false;
+    })();
+
+    if (nextWarnings) {
+      this.runtimeWarningsByStudent[key] = nextWarnings;
     } else {
       delete this.runtimeWarningsByStudent[key];
     }
+
+    return hasChanged;
   },
 
   /**
@@ -1869,14 +1884,18 @@ Module.register('MMM-Webuntis', {
     this.configByStudent[title] = payload?.context?.config || {};
 
     this._syncDebugDate(this.configByStudent[title]);
-    this._processPayloadData(title, payload);
-    this._processGotDataWarnings(title, payload);
+    const dataChanged = this._processPayloadData(title, payload);
+    const warningsChanged = this._processGotDataWarnings(title, payload);
 
     if (this._updateDomTimer) {
       clearTimeout(this._updateDomTimer);
       this._updateDomTimer = null;
     }
-    this.updateDom();
+    if (dataChanged || warningsChanged) {
+      this.updateDom();
+    } else {
+      this._log('debug', `[GOT_DATA] Skipping DOM update for ${title}: no effective data/warning changes`);
+    }
   },
 
   _syncDebugDate(cfg) {
@@ -1894,6 +1913,7 @@ Module.register('MMM-Webuntis', {
   },
 
   _processPayloadData(title, payload) {
+    let dataChanged = false;
     const apiStatus = payload?.state?.api || {};
     const fetchFlags = payload?.state?.fetch || {};
     const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
@@ -1925,6 +1945,7 @@ Module.register('MMM-Webuntis', {
       )
     ) {
       this.timeUnitsByStudent[title] = timeUnits;
+      dataChanged = true;
     }
 
     const periodMap = {};
@@ -1945,6 +1966,7 @@ Module.register('MMM-Webuntis', {
       )
     ) {
       this.timetableByStudent[title] = rawLessons;
+      dataChanged = true;
     }
     this._log('debug', `[GOT_DATA] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`);
 
@@ -1987,6 +2009,7 @@ Module.register('MMM-Webuntis', {
       const parsedArray = Array.isArray(source) ? source : [];
       if (!this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList, warningMeta)) {
         target[title] = parsedArray;
+        dataChanged = true;
         if (target === this.absencesByStudent) {
           this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(status));
         }
@@ -1994,8 +2017,22 @@ Module.register('MMM-Webuntis', {
     });
 
     const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
-    this.holidaysByStudent[title] = holidays;
-    this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);
+    if (
+      !this._shouldPreserveData(
+        holidays,
+        this.holidaysByStudent[title] || [],
+        fetchFlags.timetable ?? true,
+        apiStatus.timetable,
+        warningsList,
+        warningMeta
+      )
+    ) {
+      this.holidaysByStudent[title] = holidays;
+      this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);
+      dataChanged = true;
+    }
+
+    return dataChanged;
   },
 
   _processGotDataWarnings(title, payload) {
@@ -2038,17 +2075,18 @@ Module.register('MMM-Webuntis', {
       this._log('debug', `[GOT_DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
     }
 
-    this._updateRuntimeWarnings(title, visibleWarnings);
+    let warningsChanged = this._updateRuntimeWarnings(title, visibleWarnings);
 
     // Recovery cleanup: if we receive a clean student-scoped payload,
     // drop stale module-scoped runtime warnings from earlier title-less payloads.
     if (title !== '__module__' && visibleWarnings.length === 0) {
-      this._updateRuntimeWarnings('__module__', []);
+      warningsChanged = this._updateRuntimeWarnings('__module__', []) || warningsChanged;
       if (this._runtimeWarningStreakByStudent) {
         delete this._runtimeWarningStreakByStudent.__module__;
       }
     }
 
     this._logRuntimeWarnings(visibleWarnings);
+    return warningsChanged;
   },
 });
