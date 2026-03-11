@@ -13,7 +13,7 @@ const http = require('node:http');
 
 const dumpPath = process.argv[2] || 'debug_dumps/forged/api.json';
 const port = 8888;
-const STATIC_ROOT = path.join(__dirname, '..');
+const STATIC_ROOT = path.resolve(__dirname, '..');
 
 if (!fs.existsSync(dumpPath)) {
   throw new Error(`Dump file not found: ${dumpPath}`);
@@ -168,7 +168,8 @@ const server = http.createServer((req, res) => {
   }
 
   // Normalize and restrict requested path to STATIC_ROOT to prevent directory traversal.
-  const requestedPath = req.url.replace(/^\//, '');
+  const url = new URL(req.url, 'http://localhost');
+  const requestedPath = url.pathname.replace(/^\//, '');
   const safePath = path.resolve(STATIC_ROOT, requestedPath);
 
   if (!safePath.startsWith(STATIC_ROOT + path.sep) && safePath !== STATIC_ROOT) {
