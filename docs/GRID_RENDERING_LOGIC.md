@@ -8,7 +8,7 @@ Lessons are grouped by overlapping time slots. For each overlap group, exactly o
 
 ## Key Terms
 
-- **Ticker candidates**: lessons with `activityType === NORMAL_TEACHING_PERIOD`
+- **Ticker candidates**: lessons without the derived `displayIcons` marker `EVENT`
 - **Planned parallel base**: ticker candidates with status in `REGULAR | CHANGED | CANCELLED`
 - **Split view**: replacement lesson(s) on the left + cancelled lesson(s) on the right
 - **Span split**: one lesson spans the full group, others cover sub-periods
@@ -56,10 +56,10 @@ If ticker is active, cancelled+replacement is rendered as split content **inside
   - `SUBSTITUTION` **without** `studentGroup/class` hint (treated as full-class replacement)
   - `EVENT`
 
-### Why no `layoutWidth` in decision logic
+### Why no `layoutWidth` dependency
 
-`layoutWidth` is still forwarded in the payload, but split-vs-ticker strategy does **not** depend on it.
-Reason: `layoutWidth` is a vendor-specific WebUntis rendering hint and may change or disappear.
+`layoutWidth` is no longer transported in the module payload, and split-vs-ticker strategy does **not** depend on it.
+Reason: `layoutWidth` is a vendor-specific WebUntis rendering hint and was not needed for stable rendering decisions.
 For rendering stability, the grid uses `studentGroup/class` presence as the parallelism indicator.
 
 Rendering:

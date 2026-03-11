@@ -215,9 +215,7 @@ Representative shape:
   "start": 750,
   "end": 935,
   "status": "REGULAR",
-  "statusDetail": null,
-  "activityType": "NORMAL_TEACHING_PERIOD",
-  "layoutWidth": 1000,
+  "displayIcons": ["HOMEWORK", "EXAM"],
   "subject": [{ "name": "SUB", "long": "Subject" }],
   "teacher": [{ "name": "TCH", "long": "Teacher" }],
   "room": [{ "name": "R.01", "long": "Room 01" }],
@@ -237,7 +235,8 @@ Representative shape:
 }
 ```
 
-The exact lesson schema is intentionally rich because grid and lessons widgets depend on change-state and parallel-layout metadata.
+The exact lesson schema is intentionally rich because grid and lessons widgets depend on change-state and normalized display markers.
+`displayIcons[]` contains normalized lesson markers derived from timetable metadata, for example `HOMEWORK`, `EXAM`, `EVENT`, `BREAK_SUPERVISION`, or `MOVED`.
 
 ### 6.3 `data.exams[]`
 
@@ -268,6 +267,8 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
   "elementIds": [1001]
 }
 ```
+
+`homework.lessonId` references `lesson.id` from `data.lessons[]`.
 
 ### 6.5 `data.absences[]`
 

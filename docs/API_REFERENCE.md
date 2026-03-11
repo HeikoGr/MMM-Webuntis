@@ -138,7 +138,7 @@ Parameters:
 The module relies on:
 - `data.homeworks[]`
 - `data.lessons[]`
-- relation via `lessonId`
+- relation via `homework.lessonId -> lesson.id`
 
 Normalization note:
 - Homework items are joined with lesson metadata before transport to frontend.
