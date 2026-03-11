@@ -115,6 +115,7 @@
   --wu-message-card-padding-block: 2px;
   --wu-message-card-padding-inline: 3px;
   --wu-message-card-gap: 5px;
+  --wu-widget-stack-gap: 0.6rem;
 
   /* Icons */
   --wu-icon-warning: '⚠️';
@@ -123,10 +124,21 @@
   --wu-icon-holiday: '🏖️';
   --wu-icon-no-lessons: '📅';
   --wu-icon-absence: '⚡';
+  --wu-icon-changed: '↺';
   --wu-icon-moved: '↕';
+  --wu-icon-chip-size: 14px;
+  --wu-icon-chip-radius: 3px;
+  --wu-icon-glyph-size: 10px;
+  --wu-icon-glyph-size-emoji: 9px;
+  --wu-icon-chip-bg: rgba(var(--wu-rgb-white), 0.9);
+  --wu-icon-chip-border: rgba(var(--wu-rgb-black), 0.16);
+  --wu-icon-chip-shadow: rgba(var(--wu-rgb-black), 0.22);
+  --wu-icon-homework-color: var(--wu-accent-blue);
+  --wu-icon-moved-color: #1e1e1e;
   width: 100%;
   box-sizing: border-box;
   font-size: 0.875rem;
+  text-align: left;
 }
 
 .MMM-Webuntis *,
@@ -142,8 +154,7 @@
   column-gap: 0.5rem;
   row-gap: 0.25rem;
   width: 100%;
-  margin-bottom: 0.6rem;
-  text-align: left;
+  margin-bottom: var(--wu-widget-stack-gap);
 }
 
 .MMM-Webuntis > .wu-widget-container:last-child {
@@ -164,7 +175,6 @@
   font-weight: bold;
   padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--wu-border-strong);
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-row-header .wu-header-meta {
@@ -175,36 +185,30 @@
 
 .MMM-Webuntis .wu-col {
   white-space: pre-line;
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-col-student {
   font-weight: bold;
   white-space: nowrap;
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-col-meta {
   white-space: nowrap;
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-col-data {
   word-break: break-word;
   white-space: pre-line;
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-col-full {
   /* When only one data column is present, it should span both meta and data */
   grid-column: 2 / -1;
-  text-align: left;
 }
 
 .MMM-Webuntis .wu-col-full-width {
   /* Full row without student/meta columns - spans all 3 grid columns */
   grid-column: 1 / -1;
-  text-align: left;
 }
 
 .MMM-Webuntis .grid-timecell {
@@ -231,6 +235,23 @@
   position: relative;
 }
 
+/* Shared absolute positioning within the timetable */
+.MMM-Webuntis .grid-combined .grid-lesson,
+.MMM-Webuntis .grid-combined .no-lesson,
+.MMM-Webuntis .grid-hourline,
+.MMM-Webuntis .grid-nowline {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.MMM-Webuntis .grid-combined .grid-lesson::after,
+.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content,
+.MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
+  position: absolute;
+  inset: 0;
+}
+
 .MMM-Webuntis .grid-combined .grid-timecell {
   border-bottom: 1px dotted var(--wu-border-muted);
   display: flex;
@@ -242,8 +263,6 @@
 }
 
 .MMM-Webuntis .grid-combined .grid-timecell > div {
-  margin: 0;
-  padding: 0;
   line-height: 1;
   font-size: 0.78rem;
 }
@@ -255,9 +274,6 @@
 }
 
 .MMM-Webuntis .grid-combined .grid-lesson {
-  position: absolute;
-  left: 0;
-  right: 0;
   border-radius: var(--wu-lesson-radius);
   padding: var(--wu-lesson-padding);
   box-sizing: border-box;
@@ -268,7 +284,6 @@
   z-index: 1;
   border: 1px solid var(--wu-lesson-outline);
   background: var(--wu-lesson-surface);
-  text-align: left;
   line-height: 1;
 }
 
@@ -291,10 +306,7 @@
   background-color: var(--wu-no-lesson-bg);
   padding: 0.313rem;
   color: var(--wu-no-lesson-text);
-  position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -388,11 +400,6 @@
 
 /* Ensure inner content fills the parent cell for consistent visuals */
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -407,8 +414,6 @@
 .MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-primary,
 .MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-secondary {
   position: static !important; /* override any absolute positioning */
-  margin: 0;
-  padding: 0;
   color: var(--wu-break-supervision-text) !important;
   font-size: 9px;
   line-height: 1;
@@ -422,8 +427,6 @@
 /* Overlay for past lessons; opacity is toggled to fade in stripes */
 .MMM-Webuntis .grid-combined .grid-lesson::after {
   content: '';
-  position: absolute;
-  inset: 0;
   background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
   opacity: 0;
   pointer-events: none;
@@ -443,18 +446,8 @@
 
 .MMM-Webuntis .grid-combined .homework-icon,
 .MMM-Webuntis .lesson-content .homework-icon {
-  position: static;
-  font-size: 0.9rem;
-  line-height: 1;
-  z-index: auto;
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 2px;
-  background: var(--wu-accent-blue);
-  color: var(--wu-text-on-dark);
+  font-size: var(--wu-icon-glyph-size-emoji);
+  color: var(--wu-icon-homework-color);
   overflow: hidden;
 }
 
@@ -471,14 +464,12 @@
   border-radius: var(--wu-lesson-radius) 0 0 var(--wu-lesson-radius);
   background: var(--wu-absence-overlay-bg);
   border-left: 2px solid var(--wu-absence-overlay-border);
-  pointer-events: auto;
   z-index: 2;
   cursor: default;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  overflow: visible;
 }
 
 .MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay {
@@ -510,7 +501,6 @@
 }
 
 .MMM-Webuntis .holiday-notice {
-  background: transparent;
   color: var(--wu-holiday-notice-color);
   font-weight: 600;
   padding-left: 0.25rem;
@@ -519,16 +509,10 @@
 .MMM-Webuntis .grid-hourline {
   height: 1px;
   background: var(--wu-hourline-color);
-  position: absolute;
-  left: 0;
-  right: 0;
   z-index: 0;
 }
 
 .MMM-Webuntis .grid-nowline {
-  position: absolute;
-  left: 0;
-  right: 0;
   height: 2px;
   background: linear-gradient(90deg, var(--wu-nowline-start), var(--wu-nowline-end));
   box-shadow: 0 0 6px var(--wu-nowline-glow);
@@ -536,17 +520,9 @@
   pointer-events: none;
 }
 
-/* Presentation: uppercase day labels and meta/date columns */
-.MMM-Webuntis .grid-daylabel,
-.MMM-Webuntis .wu-col-meta {
-  /* text-transform: uppercase; */
-  text-align: left;
-}
-
 /* Grid ticker for overlapping lessons */
 .MMM-Webuntis .lesson-ticker-wrapper {
   overflow: hidden;
-  background: transparent;
   /* No border, no padding - items have their own styling */
 }
 
@@ -562,8 +538,6 @@
 
 .MMM-Webuntis .ticker-item {
   flex-shrink: 0;
-  padding: 0;
-  margin: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -571,7 +545,6 @@
   /* Align content to left, not center */
   justify-content: flex-start;
   /* Align content to top, not center */
-  text-align: left;
   /* Left-align text like normal lessons */
   line-height: 1;
   overflow: hidden;
@@ -579,10 +552,6 @@
 
 /* Ticker items with stacked lesson-content */
 .MMM-Webuntis .ticker-item:has(.lesson-content) {
-  border: none;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
   gap: var(--wu-ticker-stack-gap);
   /* Gap between stacked lessons */
 }
@@ -611,11 +580,6 @@
 /* Apply styling to ticker items based on lesson type */
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
   content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
   opacity: 0.72;
   pointer-events: none;
@@ -625,9 +589,7 @@
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item.has-exam::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
+  inset: 0 auto 0 0;
   width: 4px;
   background: var(--wu-exam-bar);
 }
@@ -637,48 +599,35 @@
   font-weight: 600;
   font-size: 0.75rem;
   display: block;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
 }
 
 .MMM-Webuntis .lesson-secondary {
   font-size: 0.69rem;
   color: var(--wu-secondary-text);
-  font-weight: 400;
   display: block;
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
   line-height: 1.15;
   max-width: 100%;
 }
 
-.MMM-Webuntis .teacher-name {
-  color: var(--wu-secondary-text);
-  font-weight: 400;
-  font-size: inherit;
-}
-
+.MMM-Webuntis .teacher-name,
 .MMM-Webuntis .lesson-room-name {
   color: var(--wu-secondary-text);
-  font-weight: 400;
-  font-size: inherit;
+}
+
+.MMM-Webuntis .lesson-substitution-text,
+.MMM-Webuntis .lesson-info-text {
+  font-size: 0.75rem;
+  font-style: italic;
+  display: block;
 }
 
 .MMM-Webuntis .lesson-substitution-text {
-  font-size: 0.75rem;
   color: var(--wu-substitution-accent);
-  font-style: italic;
   font-weight: 500;
-  display: block;
 }
 
 .MMM-Webuntis .lesson-info-text {
-  font-size: 0.75rem;
   color: var(--wu-muted-text);
-  font-style: italic;
-  display: block;
 }
 
 .MMM-Webuntis .lesson-changed-new {
@@ -694,33 +643,17 @@
 }
 
 .MMM-Webuntis .lesson-changed-generic-badge {
-  font-size: 0.85rem;
-  line-height: 1;
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
+  font-size: var(--wu-icon-glyph-size);
   color: var(--wu-changed-highlight);
 }
 
 .MMM-Webuntis .lesson-changed-generic-badge::before {
-  content: '↺';
+  content: var(--wu-icon-changed);
 }
 
 .MMM-Webuntis .lesson-moved-badge {
-  font-size: 0.85rem;
-  position: static;
-  opacity: 1;
-  margin: 0;
-  line-height: 1;
-  z-index: auto;
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
-  color: #1e1e1e;
+  font-size: var(--wu-icon-glyph-size);
+  color: var(--wu-icon-moved-color);
 }
 
 .MMM-Webuntis .lesson-moved-badge::before {
@@ -728,10 +661,39 @@
 }
 
 .MMM-Webuntis .lesson-inline-icon {
+  margin-right: 0.2rem;
+}
+
+.MMM-Webuntis .grid-combined .homework-icon,
+.MMM-Webuntis .lesson-changed-generic-badge,
+.MMM-Webuntis .lesson-moved-badge,
+.MMM-Webuntis .lesson-inline-icon,
+.MMM-Webuntis .wu-inline-icon {
   display: inline-flex;
+  width: var(--wu-icon-chip-size);
+  height: var(--wu-icon-chip-size);
   align-items: center;
   justify-content: center;
-  margin-right: 0.2rem;
+  line-height: 1;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: var(--wu-icon-chip-radius);
+  background: var(--wu-icon-chip-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--wu-icon-chip-border),
+    0 1px 1px var(--wu-icon-chip-shadow);
+}
+
+.MMM-Webuntis .grid-combined .homework-icon,
+.MMM-Webuntis .lesson-inline-icon,
+.MMM-Webuntis .wu-inline-icon {
+  font-size: var(--wu-icon-glyph-size-emoji);
+}
+
+.MMM-Webuntis .lesson-changed-generic-badge,
+.MMM-Webuntis .lesson-moved-badge,
+.MMM-Webuntis .lesson-inline-icon {
+  vertical-align: middle;
 }
 
 .MMM-Webuntis .lesson-inline-icon-holiday::before,
@@ -751,12 +713,6 @@
 
 .MMM-Webuntis .day-notice-icon-no-lessons::before {
   content: var(--wu-icon-no-lessons);
-}
-
-.MMM-Webuntis .wu-inline-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .MMM-Webuntis .wu-icon-warning::before {
@@ -826,30 +782,29 @@
 }
 
 .MMM-Webuntis .absences-unavailable-info {
-  display: block;
   padding: 0.5rem;
-  margin-bottom: 0.6rem;
-  border-left: 3px solid var(--wu-warning-color);
   background-color: var(--wu-warning-bg-strong);
   font-style: italic;
 }
 
 /* Messages of day */
+.MMM-Webuntis .message-subject,
+.MMM-Webuntis .message-text {
+  display: block;
+}
+
 .MMM-Webuntis .message-subject {
   font-weight: 700;
   font-size: 1rem;
-  display: block;
   margin-bottom: 4px;
 }
 
 .MMM-Webuntis .message-text {
   font-size: 0.9rem;
   color: var(--wu-message-text);
-  display: block;
 }
 
 .MMM-Webuntis .messages-grid {
-  display: block;
   columns: var(--wu-messages-max-cols) var(--wu-messages-min-width);
   column-gap: var(--wu-message-card-gap);
   column-fill: balance;
@@ -867,20 +822,19 @@
   background-color: var(--wu-message-card-bg);
   border-left: 3px solid var(--wu-message-card-border);
   border-radius: var(--wu-message-card-radius);
-  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   flex-direction: column;
   line-height: 1.1;
-  width: 100%;
-  margin-bottom: var(--wu-message-card-gap);
-  break-inside: avoid;
-  break-inside: avoid-column;
 }
 
 .MMM-Webuntis .messages-grid .messageRowEmpty {
   display: block; /* Override display: contents */
-  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   color: var(--wu-muted-text);
   font-style: italic;
+}
+
+.MMM-Webuntis .messages-grid .messageRow,
+.MMM-Webuntis .messages-grid .messageRowEmpty {
+  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   width: 100%;
   margin-bottom: var(--wu-message-card-gap);
   break-inside: avoid;
@@ -893,7 +847,6 @@
 
 /* Warnings / utility / legacy shims */
 .MMM-Webuntis .widget-error {
-  display: block;
   grid-column: 1 / -1;
   padding: 0.5rem 0.75rem;
   margin: 0.5rem 0 0.5rem 0;
@@ -902,18 +855,24 @@
   border-radius: 2px;
   color: var(--wu-error-text);
   font-weight: 500;
-  text-align: left;
 }
 
 .MMM-Webuntis .widget-error.dimmed {
   opacity: 0.7;
 }
 
+.MMM-Webuntis .absences-unavailable-info,
 .MMM-Webuntis .mmm-webuntis-warning {
-  display: block;
-  padding: 0.4rem 0.6rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: var(--wu-widget-stack-gap);
   border-left: 3px solid var(--wu-warning-color);
+}
+
+.MMM-Webuntis .absences-unavailable-info {
+  padding: 0.5rem;
+}
+
+.MMM-Webuntis .mmm-webuntis-warning {
+  padding: 0.4rem 0.6rem;
   background-color: var(--wu-warning-bg-soft);
   color: var(--wu-warning-color);
   font-weight: 600;
@@ -940,22 +899,4 @@
 
 .MMM-Webuntis .cancelled {
   text-decoration: line-through;
-}
-
-.MMM-Webuntis .substitution {
-  color: var(--wu-substitution-generic);
-  font-weight: bold;
-}
-
-.MMM-Webuntis .error {
-  color: var(--wu-error-text);
-}
-
-.MMM-Webuntis .info {
-  font-style: italic;
-}
-
-.MMM-Webuntis .student {
-  padding-top: 0.94rem;
-  border-bottom: 1px solid var(--wu-border-strong);
 }
