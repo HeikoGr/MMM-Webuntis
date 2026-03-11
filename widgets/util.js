@@ -388,9 +388,11 @@
     }
     if (lessonOrStatus && typeof lessonOrStatus === 'object') {
       const status = String(lessonOrStatus.status || '').toUpperCase();
-      const activityType = String(lessonOrStatus.activityType || '').toUpperCase();
+      const displayIcons = Array.isArray(lessonOrStatus.displayIcons)
+        ? lessonOrStatus.displayIcons.map((icon) => String(icon || '').toUpperCase())
+        : [];
       if (IRREGULAR_STATUSES.has(status)) return true;
-      if (IRREGULAR_ACTIVITY_TYPES.has(activityType)) return true;
+      if (displayIcons.some((icon) => IRREGULAR_ACTIVITY_TYPES.has(icon))) return true;
       return false;
     }
     return false;

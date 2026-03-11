@@ -663,7 +663,7 @@ function getModuleRootElement(ctx) {
         code: el.code || '',
         substText: el.substText || '',
         text: el.lstext || '',
-        lessonId: el.id ?? el.lid ?? el.lessonId ?? null,
+        lessonId: el.id ?? null,
       };
     });
   }
@@ -737,7 +737,7 @@ function getModuleRootElement(ctx) {
       }
 
       // Always show break supervisions (they can occur outside regular periods, e.g., early morning supervision)
-      if (lesson.activityType === 'BREAK_SUPERVISION') {
+      if (lessonIsBreakSupervision(lesson)) {
         return true;
       }
 
@@ -789,21 +789,35 @@ function getModuleRootElement(ctx) {
     return filtered;
   }
 
+  function lessonHasDisplayIcon(lesson, iconName) {
+    if (!lesson || !Array.isArray(lesson.displayIcons) || lesson.displayIcons.length === 0 || !iconName) {
+      return false;
+    }
+
+    const normalizedIcon = String(iconName).trim().toUpperCase();
+    return lesson.displayIcons.some((icon) => String(icon).trim().toUpperCase() === normalizedIcon);
+  }
+
   /**
-   * Check if lesson is an exam
-   * Uses lesson payload field activityType (activityType === 'EXAM')
-   *
-   * Note: The raw REST API sends 'type: "EXAM"' which is mapped to 'activityType'
-   * during transformation (see lib/webuntisApiService.js#L260). The 'type' field
-   * in lesson objects is always null.
+   * Check if lesson is an exam.
    *
    * @param {Object} lesson - Lesson object
    * @returns {boolean} True if lesson is an exam
    */
   function lessonHasExam(lesson) {
-    if (lesson?.activityType && String(lesson.activityType).toUpperCase() === 'EXAM') return true;
+    return lessonHasDisplayIcon(lesson, 'EXAM');
+  }
 
-    return false;
+  function lessonIsBreakSupervision(lesson) {
+    return lessonHasDisplayIcon(lesson, 'BREAK_SUPERVISION');
+  }
+
+  function lessonIsEvent(lesson) {
+    return lessonHasDisplayIcon(lesson, 'EVENT');
+  }
+
+  function lessonIsMoved(lesson) {
+    return lessonHasDisplayIcon(lesson, 'MOVED');
   }
 
   /**
@@ -929,7 +943,7 @@ function getModuleRootElement(ctx) {
   function applyLessonClasses(element, lesson, options = {}) {
     const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
 
-    if (lesson.activityType === 'BREAK_SUPERVISION') {
+    if (lessonIsBreakSupervision(lesson)) {
       element.classList.add('lesson-break-supervision');
     } else if (lesson.status === 'CANCELLED') {
       element.classList.add('lesson-cancelled');
@@ -999,7 +1013,7 @@ function getModuleRootElement(ctx) {
    * @returns {string} HTML content for lesson cell
    */
   function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
-    if (lesson.activityType === 'BREAK_SUPERVISION') {
+    if (lessonIsBreakSupervision(lesson)) {
       const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
       const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
       const supervisedArea = lesson.room || lesson.roomLong || '';
@@ -1013,7 +1027,7 @@ function getModuleRootElement(ctx) {
     const changedFields = getChangedFieldSet(lesson);
     const hasUnknownChangedDetails = lesson.status === 'CHANGED' && changedFields.size === 0;
 
-    const hasMovedBadge = lesson.statusDetail === 'MOVED';
+    const hasMovedBadge = lessonIsMoved(lesson);
     const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : '';
     const changedBadge = hasUnknownChangedDetails ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>` : '';
     const iconsHtml = movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : '';
@@ -1117,28 +1131,13 @@ function getModuleRootElement(ctx) {
   }
 
   /**
-   * Check if lesson has matching homework
-   * Matches by date and subject name
+   * Check whether a lesson carries the timetable homework icon.
    *
    * @param {Object} lesson - Lesson object
-   * @param {Array} homeworks - Array of homework objects
-   * @returns {boolean} True if homework matches lesson
+   * @returns {boolean} True if the timetable marked this lesson with HOMEWORK
    */
-  function checkHomeworkMatch(lesson, homeworks) {
-    if (!homeworks || !Array.isArray(homeworks) || homeworks.length === 0) {
-      return false;
-    }
-
-    const lessonDateYmd = Number(lesson.date);
-    const lessonNames = Array.isArray(lesson.su) ? lesson.su.flatMap((su) => [su.name, su.longname].filter(Boolean)) : [];
-
-    return homeworks.some((hw) => {
-      const hwDueDate = Number(hw.dueDate);
-      const hwSuArr = Array.isArray(hw.su) ? hw.su : hw.su ? [hw.su] : [];
-      const hwNames = hwSuArr.flatMap((su) => [su.name, su.longname].filter(Boolean));
-      const subjectMatch = lessonNames.some((ln) => hwNames.includes(ln));
-      return hwDueDate === lessonDateYmd && subjectMatch;
-    });
+  function checkHomeworkMatch(lesson) {
+    return lessonHasDisplayIcon(lesson, 'HOMEWORK');
   }
 
   /**
@@ -1191,7 +1190,7 @@ function getModuleRootElement(ctx) {
       const breakSupervisions = [];
 
       for (const lesson of lessons) {
-        if (lesson.activityType === 'BREAK_SUPERVISION') {
+        if (lessonIsBreakSupervision(lesson)) {
           breakSupervisions.push(lesson);
         } else {
           regularLessons.push(lesson);
@@ -1253,24 +1252,10 @@ function getModuleRootElement(ctx) {
    * @param {Object} ctx - Main module context
    * @param {Function} escapeHtml - HTML escape function
    * @param {boolean} isPast - True if lesson group is in the past (used for ticker wrapper)
-   * @param {Array} homeworks - Array of homework objects
    * @param {number} nowYmd - Current date as YYYYMMDD integer
    * @param {number} nowMin - Current time in minutes since midnight
    */
-  function createTickerAnimation(
-    lessons,
-    topPx,
-    heightPx,
-    container,
-    ctx,
-    escapeHtml,
-    isPast,
-    homeworks,
-    nowYmd,
-    nowMin,
-    tickerData,
-    lessonConfig
-  ) {
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, isPast, nowYmd, nowMin, tickerData, lessonConfig) {
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
         return lesson.su[0].name || lesson.su[0].longname;
@@ -1319,7 +1304,7 @@ function getModuleRootElement(ctx) {
 
         if (matchingReplacements.length > 0) {
           const replacementKey = matchingReplacements
-            .map((r) => `${r.lessonId ?? 'noId'}_${r.startMin}_${r.endMin}_${r.status || ''}`)
+            .map((r) => `${r.id ?? r.lessonId ?? 'noId'}_${r.startMin}_${r.endMin}_${r.status || ''}`)
             .sort()
             .join('|');
 
@@ -1422,7 +1407,7 @@ function getModuleRootElement(ctx) {
 
           lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
 
-          if (checkHomeworkMatch(lesson, homeworks)) {
+          if (checkHomeworkMatch(lesson)) {
             addHomeworkIcon(lessonDiv);
           }
 
@@ -1481,7 +1466,7 @@ function getModuleRootElement(ctx) {
           });
 
           replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(replacement, homeworks)) {
+          if (checkHomeworkMatch(replacement)) {
             addHomeworkIcon(replacementDiv);
           }
 
@@ -1506,7 +1491,7 @@ function getModuleRootElement(ctx) {
           });
 
           cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(cancelled, homeworks)) {
+          if (checkHomeworkMatch(cancelled)) {
             addHomeworkIcon(cancelledDiv);
           }
 
@@ -1581,8 +1566,8 @@ function getModuleRootElement(ctx) {
     const cancelledLessons = lessons.filter((lesson) => lesson.status === 'CANCELLED');
     const addedLessons = lessons.filter((lesson) => lesson.status === 'ADDITIONAL');
     const substLessons = lessons.filter((lesson) => lesson.status === 'SUBSTITUTION');
-    const eventLessons = lessons.filter((lesson) => lesson.activityType === 'EVENT');
-    const tickerCandidates = lessons.filter((lesson) => lesson.activityType === 'NORMAL_TEACHING_PERIOD');
+    const eventLessons = lessons.filter((lesson) => lessonIsEvent(lesson));
+    const tickerCandidates = lessons.filter((lesson) => !lessonIsEvent(lesson));
     const plannedParallelCandidates = tickerCandidates.filter((lesson) => {
       const status = String(lesson.status || '').toUpperCase();
       return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
@@ -1695,7 +1680,6 @@ function getModuleRootElement(ctx) {
     allStart,
     allEnd,
     totalMinutes,
-    homeworks,
     ctx,
     studentConfig,
   }) {
@@ -1706,18 +1690,7 @@ function getModuleRootElement(ctx) {
       return;
     }
 
-    renderLessonCells(
-      lessonsToRender,
-      { bothInner },
-      allStart,
-      allEnd,
-      totalMinutes,
-      totalHeight,
-      homeworks,
-      ctx,
-      escapeHtml,
-      studentConfig
-    );
+    renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, studentConfig);
   }
 
   /**
@@ -1755,7 +1728,6 @@ function getModuleRootElement(ctx) {
     studentTitle,
     studentConfig,
     timetable,
-    homeworks,
     timeUnits,
     absences,
     baseDate,
@@ -1800,7 +1772,6 @@ function getModuleRootElement(ctx) {
       allStart,
       allEnd,
       totalMinutes,
-      homeworks,
       ctx,
       studentConfig,
     });
@@ -1842,23 +1813,11 @@ function getModuleRootElement(ctx) {
    * @param {number} allEnd - Grid end in minutes since midnight.
    * @param {number} totalMinutes - Total visible duration in minutes.
    * @param {number} totalHeight - Total column height in pixels.
-   * @param {Array} homeworks - Homework entries for icon matching.
    * @param {Object} ctx - Module context.
    * @param {Function} escapeHtml - HTML escaping helper.
    * @param {Object} lessonConfig - Grid rendering configuration.
    */
-  function renderLessonCells(
-    lessonsToRender,
-    containers,
-    allStart,
-    allEnd,
-    totalMinutes,
-    totalHeight,
-    homeworks,
-    ctx,
-    escapeHtml,
-    lessonConfig
-  ) {
+  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig) {
     const { bothInner } = containers;
 
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
@@ -1884,7 +1843,7 @@ function getModuleRootElement(ctx) {
       const cell = createLessonCell(topPx, heightPx, lesson.dateStr, lE);
       applyLessonClasses(cell, lesson, { hasExam: lessonHasExam(lesson), isPast: calcIsPast(ymd, lE, nowYmd, nowMin) });
       cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
-      if (checkHomeworkMatch(lesson, homeworks)) addHomeworkIcon(cell);
+      if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
       bothInner.appendChild(cell);
     };
 
@@ -1914,7 +1873,6 @@ function getModuleRootElement(ctx) {
           ctx,
           escapeHtml,
           isPast,
-          homeworks,
           nowYmd,
           nowMin,
           tickerData,
@@ -1948,7 +1906,7 @@ function getModuleRootElement(ctx) {
         const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
         applyLessonClasses(cell, repl, { hasExam: lessonHasExam(repl), isPast, additionalClasses: ['split-left'] });
         cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(repl, homeworks)) addHomeworkIcon(cell);
+        if (checkHomeworkMatch(repl)) addHomeworkIcon(cell);
         bothInner.appendChild(cell);
       }
 
@@ -1965,7 +1923,7 @@ function getModuleRootElement(ctx) {
           additionalClasses: ['split-right'],
         });
         cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(cancelled, homeworks)) addHomeworkIcon(cell);
+        if (checkHomeworkMatch(cancelled)) addHomeworkIcon(cell);
         bothInner.appendChild(cell);
       }
 
@@ -1990,7 +1948,7 @@ function getModuleRootElement(ctx) {
         const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
         applyLessonClasses(cell, spanning, { hasExam: lessonHasExam(spanning), isPast, additionalClasses: ['split-left'] });
         cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(spanning, homeworks)) addHomeworkIcon(cell);
+        if (checkHomeworkMatch(spanning)) addHomeworkIcon(cell);
         bothInner.appendChild(cell);
       }
 
@@ -2003,7 +1961,7 @@ function getModuleRootElement(ctx) {
         const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
         applyLessonClasses(cell, sub, { hasExam: lessonHasExam(sub), isPast, additionalClasses: ['split-right'] });
         cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(sub, homeworks)) addHomeworkIcon(cell);
+        if (checkHomeworkMatch(sub)) addHomeworkIcon(cell);
         bothInner.appendChild(cell);
       }
 
@@ -2144,13 +2102,11 @@ function getModuleRootElement(ctx) {
    * @param {string} studentTitle - Student name
    * @param {Object} studentConfig - Student-specific configuration
    * @param {Array} timetable - Array of lesson objects
-   * @param {Array} homeworks - Array of homework objects
    * @param {Array} timeUnits - Array of time unit objects (periods)
-   * @param {Array} exams - Array of exam objects (not used in grid, but passed for context)
    * @param {Array} absences - Array of absence objects
    * @returns {HTMLElement} Grid widget wrapper element
    */
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, homeworks, timeUnits, _exams, absences) {
+  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, timeUnits, absences) {
     const config = validateAndExtractGridConfig(ctx, studentConfig);
     const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
@@ -2194,7 +2150,6 @@ function getModuleRootElement(ctx) {
         studentTitle,
         studentConfig,
         timetable,
-        homeworks,
         timeUnits,
         absences,
         baseDate,

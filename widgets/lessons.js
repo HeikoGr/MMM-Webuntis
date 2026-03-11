@@ -66,7 +66,7 @@
    * Displays lessons grouped by date, sorted by time, with visual indicators for:
    * - Cancelled lessons (code='cancelled' or status='CANCELLED')
    * - Substitutions (code='irregular' or status='SUBSTITUTION')
-   * - Exam lessons (activityType='EXAM')
+   * - Exam lessons (`displayIcons` contains `EXAM`)
    * - Holiday notices when no lessons
    *
    * @param {Object} ctx - Main module context (provides translate, config, debug support)
@@ -330,7 +330,10 @@
         }
 
         let addClass = '';
-        if (String(entry.activityType || '').toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM) {
+        if (
+          Array.isArray(entry.displayIcons) &&
+          entry.displayIcons.some((icon) => String(icon || '').toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM)
+        ) {
           addClass = 'exam';
         } else if (entry.status === 'CANCELLED') {
           addClass = 'cancelled';

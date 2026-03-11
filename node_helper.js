@@ -875,8 +875,8 @@ module.exports = NodeHelper.create({
       wantsMessagesOfDayWidget,
       fetchTimegrid: Boolean(wantsGridWidget || wantsLessonsWidget),
       fetchTimetable: Boolean(wantsGridWidget || wantsLessonsWidget),
-      fetchExams: Boolean(wantsGridWidget || wantsExamsWidget),
-      fetchHomeworks: Boolean(wantsGridWidget || wantsHomeworkWidget),
+      fetchExams: Boolean(wantsExamsWidget),
+      fetchHomeworks: Boolean(wantsHomeworkWidget),
       fetchAbsences: Boolean(wantsGridWidget || wantsAbsencesWidget),
       fetchMessagesOfDay: Boolean(wantsMessagesOfDayWidget),
     };

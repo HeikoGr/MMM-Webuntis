@@ -1003,20 +1003,18 @@ Module.register('MMM-Webuntis', {
    * @param {string} studentTitle - Student name/title
    * @param {Object} studentConfig - Student configuration
    * @param {Array} timetable - Filtered timetable entries
-   * @param {Array} homeworks - Homework entries
    * @param {Array} timeUnits - Time slots (periods)
-   * @param {Array} exams - Exam entries
    * @param {Array} absences - Absence entries
    * @returns {HTMLElement|null} Grid DOM element or null if widget not loaded
    */
-  _renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences) {
+  _renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences) {
     const api = this._getWidgetApi();
     const fn = api?.grid?.renderGridForStudent;
     if (typeof fn !== 'function') {
       this._log('warn', 'grid widget script not loaded');
       return null;
     }
-    return fn(this, studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
+    return fn(this, studentTitle, studentConfig, timetable, timeUnits, absences);
   },
 
   /**
@@ -1138,13 +1136,13 @@ Module.register('MMM-Webuntis', {
    */
   _renderGridWidgets(wrapper, studentTitles, appendWidgetError) {
     for (const studentTitle of studentTitles) {
-      const { studentConfig, timetable, timeUnits, homeworks, exams, absences, holidays } = this._getStudentWidgetData(studentTitle);
+      const { studentConfig, timetable, timeUnits, absences, holidays } = this._getStudentWidgetData(studentTitle);
       if (timeUnits.length === 0 && holidays.length === 0) {
         continue;
       }
 
       try {
-        const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, homeworks, timeUnits, exams, absences);
+        const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences);
         if (gridElem) {
           wrapper.appendChild(gridElem);
         }
@@ -1636,6 +1634,7 @@ Module.register('MMM-Webuntis', {
 
   getDom() {
     const wrapper = document.createElement('div');
+    wrapper.className = 'MMM-Webuntis';
     const widgets = this._getDisplayWidgets();
     const withWarningIcon = (element, text) => {
       const icon = document.createElement('span');
