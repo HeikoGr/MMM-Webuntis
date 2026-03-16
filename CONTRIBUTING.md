@@ -14,6 +14,12 @@ Short guide to contribute:
 - `node --run check`
 - `node --run test:spelling`
 
+**Development Container:**
+- Recommended: Use the devcontainer for a pre-configured environment
+- See [.devcontainer/README.md](.devcontainer/README.md) for available tools (httpie, jest, playwright, etc.)
+- All dependencies and CLI tools are pre-installed
+
+
 3. Create a PR
 
 - Make a branch, commit clearly, and open a PR with testing steps.

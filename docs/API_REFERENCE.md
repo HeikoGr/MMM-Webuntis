@@ -13,6 +13,9 @@ Out of scope:
 
 For the internal socket payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 
+**Related Documentation**:
+- [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md) - Testing tool and v2 calendar-entry API research (verdict: keep existing v1 architecture)
+
 ---
 
 ## Authentication

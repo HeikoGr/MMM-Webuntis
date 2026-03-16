@@ -39,6 +39,8 @@
     "lint:fix": "eslint --fix && prettier --write .",
     "test:spelling": "cspell .",
     "test:auth:curl": "bash scripts/test_auth_with_curl.sh --from-config",
+    "test:api": "node scripts/test_api_endpoint.js",
+    "test:api:discover": "bash scripts/discover_endpoints.sh",
     "debug": "node cli/node_helper_wrapper.js",
     "check": "node scripts/magicmirror-check.mjs --current"
   },

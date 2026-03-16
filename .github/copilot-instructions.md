@@ -248,6 +248,37 @@ Debug dumps are generated when `dumpBackendPayloads: true` is set in config. Fil
 
 Use `jq` to inspect: `cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head`
 
+### Available CLI Tools in Devcontainer
+
+The devcontainer includes additional CLI tools beyond the standard Node.js development stack. See [.devcontainer/README.md](../.devcontainer/README.md) for full details.
+
+**REST API Testing:**
+- `httpie` (or `http` command) - Modern REST API client with better syntax than curl
+  ```bash
+  http GET https://arche.webuntis.com/... Authorization:"Bearer $TOKEN"
+  ```
+- `curl` - Traditional HTTP client (fallback)
+
+**Process & System Monitoring:**
+- `htop` - Interactive process viewer (better than `top`)
+- `watch` - Repeat commands periodically (e.g., `watch -n 2 'pm2 list'`)
+
+**Data Processing:**
+- `jq` - JSON parsing and filtering (heavily used for debug dumps)
+
+**Network Debugging:**
+- `netcat` (`nc` command) - Test TCP/UDP connections and ports
+
+**Development:**
+- `jest` - Testing framework (globally available: `jest tests/unit.test.js`)
+- `diff-so-fancy` - Enhanced git diff output (automatically used by git)
+- `playwright` - Frontend testing (Chrome browser installed via postCreate.sh)
+
+**Configuration:**
+- Playwright installation controlled by `INSTALL_PLAYWRIGHT_BROWSERS` env var (default: enabled)
+- See `.devcontainer/README.md` for lifecycle scripts and environment variables
+
+
 ## Code Review Guidelines
 
 ### Review Philosophy

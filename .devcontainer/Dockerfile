@@ -9,11 +9,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     ca-certificates \
     build-essential \
+    httpie \
+    procps \
+    htop \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-ca-certificates
 
-RUN npm install -g pm2 prettier cspell
+RUN npm install -g pm2 prettier cspell jest diff-so-fancy
 
 COPY .devcontainer/bootstrap-magicmirror.sh /usr/local/bin/bootstrap-magicmirror.sh
 
