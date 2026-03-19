@@ -209,6 +209,13 @@ function getModuleRootElement(ctx) {
     return parts;
   }
 
+  function normalizeComparableLessonText(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
   /**
    * Start the now-line updater (runs every minute)
    * Updates now-line position and refreshes past lesson masks
@@ -1094,10 +1101,20 @@ function getModuleRootElement(ctx) {
           additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
         }
 
+        const normalizedLessonText = normalizeComparableLessonText(lesson.text);
+        const shouldShowLessonText =
+          normalizedLessonText !== '' &&
+          normalizedLessonText !== normalizeComparableLessonText(displayParts.primary) &&
+          normalizedLessonText !== normalizeComparableLessonText(displayParts.secondary) &&
+          !(
+            Array.isArray(displayParts.additional) &&
+            displayParts.additional.some((item) => normalizedLessonText === normalizeComparableLessonText(item))
+          );
+
         const subst = lesson.substText
           ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
           : '';
-        const txt = lesson.text ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+        const txt = shouldShowLessonText ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
 
         const secondaryLine =
           secondaryHtml || additionalHtml ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
@@ -1121,10 +1138,17 @@ function getModuleRootElement(ctx) {
       roomInfo = ` <span class='lesson-room'>(${escapeHtml(lesson.room)})</span>`;
     }
 
+    const normalizedLessonText = normalizeComparableLessonText(lesson.text);
+    const shouldShowLessonText =
+      normalizedLessonText !== '' &&
+      normalizedLessonText !== normalizeComparableLessonText(lesson.subjectShort || lesson.subject) &&
+      normalizedLessonText !== normalizeComparableLessonText(lesson.teacherInitial || lesson.teacher) &&
+      normalizedLessonText !== normalizeComparableLessonText(lesson.room || lesson.roomLong);
+
     const subst = lesson.substText
       ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
       : '';
-    const txt = lesson.text ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+    const txt = shouldShowLessonText ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
     const secondaryLine = secondaryInfo ? `<br><span class='lesson-secondary'>${secondaryInfo}${roomInfo}</span>` : '';
 
     return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
