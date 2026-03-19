@@ -58,8 +58,27 @@
     if (subjectChanged) return true;
     if (teacherChanged && (teacherMode === 'initial' || teacherMode === 'full')) return true;
     if (roomChanged && showRoom) return true;
+    if (getLessonDisplayFallback(entry, 'long') !== '') return true;
 
     return false;
+  }
+
+  function getLessonDisplayFallback(entry, format = 'long') {
+    const infoEntry = Array.isArray(entry?.info) && entry.info.length > 0 ? entry.info[0] || {} : null;
+    const infoLabel = infoEntry
+      ? String(format === 'short' ? infoEntry.name || infoEntry.longname || '' : infoEntry.longname || infoEntry.name || '').trim()
+      : '';
+
+    if (infoLabel !== '') return infoLabel;
+
+    return String(entry?.lstext || '').trim();
+  }
+
+  function normalizeComparableLessonText(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
   }
   /**
    * Render lessons widget for a single student
@@ -266,12 +285,16 @@
           timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
         }
 
-        const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || 'N/A';
-        const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || 'N/A';
+        const fallbackLong = getLessonDisplayFallback(entry, 'long');
+        const fallbackShort = getLessonDisplayFallback(entry, 'short');
+        const hasSubject = Boolean(entry.su?.[0]);
+        const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || fallbackLong || 'N/A';
+        const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || fallbackShort || fallbackLong || 'N/A';
+        const subjectLabel = useShortSubject ? subjShort : subjLong;
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(useShortSubject ? subjShort : subjLong)}</span>`;
-        if (subjectChanged && !entry.su?.[0]) {
-          subjectStr = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+        let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
+        if (subjectChanged && !hasSubject) {
+          subjectStr = `<span class='lesson-changed-new'>${escapeHtml(subjectLabel || naText)}</span>`;
         } else if (subjectChanged) {
           subjectStr = `<span class='lesson-changed-new'>${subjectStr}</span>`;
         }
@@ -316,7 +339,7 @@
           }
         }
 
-        if (entry.status === 'CHANGED' && changedFields.size === 0) {
+        if (entry.status === 'CHANGED' && changedFields.size === 0 && fallbackLong === '') {
           subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
         }
 
@@ -324,9 +347,17 @@
           subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(entry.substText)}</span>`;
         }
 
-        if ((entry.lstext || '') !== '') {
+        const lessonText = String(entry.lstext || '').trim();
+        const normalizedLessonText = normalizeComparableLessonText(lessonText);
+        const shouldShowLessonText =
+          normalizedLessonText !== '' &&
+          normalizedLessonText !== normalizeComparableLessonText(subjectLabel) &&
+          normalizedLessonText !== normalizeComparableLessonText(subjLong) &&
+          normalizedLessonText !== normalizeComparableLessonText(subjShort);
+
+        if (shouldShowLessonText) {
           if (subjectStr.trim() !== '') subjectStr += '<br/>';
-          subjectStr += `<span class='lesson-info-text'>${escapeHtml(entry.lstext)}</span>`;
+          subjectStr += `<span class='lesson-info-text'>${escapeHtml(lessonText)}</span>`;
         }
 
         let addClass = '';
