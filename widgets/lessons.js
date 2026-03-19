@@ -239,7 +239,7 @@
         const visibleChangedInLessons = entry.status === 'CHANGED' ? hasVisibleLessonChange(entry, teacherMode, showRoom) : false;
 
         const isChangedButNotVisible = entry.status === 'CHANGED' && !showRegular && !visibleChangedInLessons;
-        if ((!showRegular && isRegularLesson) || (isPast && entry.status !== 'CANCELLED' && (ctx.config.logLevel ?? 'info') !== 'debug')) {
+        if ((!showRegular && isRegularLesson) || (isPast && (ctx.config.logLevel ?? 'info') !== 'debug')) {
           log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
           continue;
         }
