@@ -21,53 +21,9 @@
       "problemMatcher": []
     },
     {
-      "label": "node --run lint",
-      "hide": true,
-      "type": "shell",
-      "command": "node --run lint",
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "panel": "dedicated",
-        "close": true
-      },
-      "isBackground": false,
-      "options": {
-        "statusbar": {
-          "hide": true,
-          "label": "$(notebook-template) Lint",
-          "color": "#2196F3",
-          "detail": "Run linter"
-        }
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "prettier: write widgets",
-      "hide": true,
-      "type": "shell",
-      "command": "npx prettier --write .",
-      "presentation": {
-        "echo": true,
-        "reveal": "always",
-        "panel": "dedicated",
-        "close": true
-      },
-      "isBackground": false,
-      "options": {
-        "statusbar": {
-          "hide": true,
-          "label": "$(paintcan) Prettier",
-          "color": "#8BC34A",
-          "detail": "Format all files"
-        }
-      },
-      "problemMatcher": []
-    },
-    {
       "label": "lint + prettier",
       "type": "shell",
-      "command": "node --run lint && npx prettier --write .",
+      "command": "node --run lint:fix",
       "presentation": {
         "echo": true,
         "reveal": "always",
