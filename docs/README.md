@@ -6,6 +6,7 @@ This directory contains comprehensive documentation for the MMM-Webuntis module.
 
 ### Core Documentation
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture, data flow diagrams, and module structure
+- **[SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md)** - End-to-end request flow, statuses, timeouts, retries, and Mermaid diagrams
 - **[API_REFERENCE.md](API_REFERENCE.md)** - REST and JSON-RPC endpoints, authentication, data normalization
 - **[API_V2_MANIFEST.md](API_V2_MANIFEST.md)** - Canonical socket payload contract (`GOT_DATA` v2)
 - **[API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)** - API testing tool, calendar-entry research, and endpoint comparison

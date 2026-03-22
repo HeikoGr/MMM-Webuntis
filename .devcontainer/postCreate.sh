@@ -17,6 +17,8 @@ fi
 
 if [ "${INSTALL_PLAYWRIGHT_BROWSERS:-1}" = "1" ]; then
   echo "Installing Playwright Chrome browser..."
+  echo "Note: Playwright may print a generic npx warning because the CLI is fetched on demand in this devcontainer."
+  npm install
   npx -y playwright install chrome --with-deps || {
     echo "WARNING: Playwright browser install failed"
   }

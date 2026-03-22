@@ -31,6 +31,7 @@ This devcontainer provides a complete development environment for MMM-Webuntis.
 - Controlled by `INSTALL_PLAYWRIGHT_BROWSERS` environment variable (default: `1`)
 - Location: `/tmp/playwright-browsers` (see `PLAYWRIGHT_BROWSERS_PATH`)
 - Used for frontend testing and Playwright MCP integration
+- Playwright may print a generic `npx playwright install` warning during `postCreate.sh`; in this repo that is expected because the CLI is fetched on demand rather than installed as a project dependency
 
 ## Environment Variables
 
