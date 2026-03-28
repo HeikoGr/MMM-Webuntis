@@ -5,79 +5,62 @@ This devcontainer provides a complete development environment for MMM-Webuntis.
 ## Installed Tools
 
 ### Base Image
-- **Node.js 22** (mcr.microsoft.com/devcontainers/javascript-node:22)
-- MagicMirror² (bootstrapped automatically)
+- Shared base image: `ghcr.io/heikogr/mmm-devcontainer-base:node24-trixie-slim`
+- Node.js 24
+- MagicMirror² preinstalled at `/opt/magic_mirror`
+- Playwright, `playwright-mcp`, and Chrome preinstalled in the image
 
 ### APT Packages (Dockerfile)
-- `git` - Version control
-- `curl` / `wget` - HTTP utilities
-- `python3` - Build dependencies
-- `jq` - JSON parsing in shell scripts
-- `httpie` - Modern REST API testing tool (better than curl for WebUntis API debugging)
-- `procps` - Process tools including `watch` for monitoring
-- `htop` - Interactive process viewer
-- `netcat-openbsd` - Network debugging and port testing
-- `build-essential` - Compiler toolchain (node-gyp dependencies)
+- Shared image provides common tooling such as `git`, `curl`, `ripgrep`, `python3`, `jq`, `httpie`, `build-essential`, `pm2`, Playwright, and MagicMirror².
+- This repo-specific Dockerfile only adds `procps`, `htop`, and `netcat-openbsd`.
 
-### NPM Global Packages (Dockerfile)
-- `pm2` - Process manager for MagicMirror²
-- `prettier` - Code formatting
-- `cspell` - Spell checker
-- `jest` - Testing framework
-- `diff-so-fancy` - Enhanced git diffs
-
-### Playwright (postCreate.sh)
-- **Chrome browser** - Installed via `npx playwright install chrome --with-deps`
-- Controlled by `INSTALL_PLAYWRIGHT_BROWSERS` environment variable (default: `1`)
-- Location: `/tmp/playwright-browsers` (see `PLAYWRIGHT_BROWSERS_PATH`)
-- Used for frontend testing and Playwright MCP integration
-- Playwright may print a generic `npx playwright install` warning during `postCreate.sh`; in this repo that is expected because the CLI is fetched on demand rather than installed as a project dependency
+### MagicMirror Modules In The Shared Image
+- `MMM-Cursor`
+- `MMM-Carousel`
+- `MMM-KeyBindings`
 
 ## Environment Variables
 
 Configured in `devcontainer.json`:
-- `PLAYWRIGHT_BROWSERS_PATH=/tmp/playwright-browsers`
 - `PLAYWRIGHT_CHROMIUM_ARGS=--no-sandbox --disable-dev-shm-usage --disable-gpu`
-- `INSTALL_PLAYWRIGHT_BROWSERS=1` - Set to `0` to skip browser installation
 - `ENABLE_PLAYWRIGHT_MCP=1` - Set to `0` to disable Playwright MCP server
 
 ## Lifecycle Scripts
 
 1. **postCreateCommand** (`postCreate.sh`):
-   - Installs module dependencies (`npm install`)
-   - Installs Playwright Chrome browser (if enabled)
+   - Installs module dependencies if `node_modules` are still missing
+   - Prepares `/tmp/playwright-mcp`
 
 2. **postStartCommand**:
    - Starts Playwright MCP server on port 8931 (if enabled)
    - MagicMirror available at http://localhost:8080
 
+3. **entrypoint.sh**:
+   - Creates config symlinks into `/opt/magic_mirror`
+   - Loads `.env`
+   - Installs missing module-local dependencies
+   - Starts MagicMirror via `pm2-runtime`
+
 ## Tool Rationale
 
 ### Why in Dockerfile?
-Tools that are **always needed** and rarely change:
-- Core build tools (git, curl, build-essential)
-- Development utilities (jq, httpie, htop)
-- NPM globals for linting/testing (jest, prettier, cspell)
+The repo-local Dockerfile should stay thin and only contain Webuntis-specific additions on top of the shared base image.
 
 ### Why in postCreate.sh?
-Tools that are:
-- **Optional** (controllable via environment variables)
-- **Large** (Playwright ~300MB)
-- **Version-sensitive** (always installs latest Playwright)
-- **Faster to rebuild** (no Docker image rebuild needed)
+Only lightweight workspace initialization remains there. Heavy shared tooling belongs in the shared base image.
 
 ## Rebuilding
 
 After changing `Dockerfile`:
 ```bash
-# Rebuild container
-docker compose build
-# OR in Codespace: Command Palette → "Rebuild Container"
+# Rebuild the devcontainer image
+docker build -f .devcontainer/Dockerfile -t mmm-webuntis-devcontainer .devcontainer
+# OR in VS Code: Command Palette -> "Dev Containers: Rebuild Container"
 ```
 
 After changing `postCreate.sh`:
 ```bash
-# Just run the script manually
+# Run the workspace initialization manually
 /bin/sh .devcontainer/postCreate.sh
 ```
 

@@ -20,6 +20,12 @@ let config = {
     { module: 'alert' },
     { module: 'clock', position: 'top_left' },
     {
+      module: 'MMM-Cursor',
+      config: {
+        timeout: 1500,
+      },
+    },
+    {
       module: 'MMM-Webuntis',
       position: 'top_right',
       config: {

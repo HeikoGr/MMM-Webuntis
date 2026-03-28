@@ -2,7 +2,7 @@
   "name": "MMM-Webuntis (MagicMirror Dev)",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": ".."
+    "context": "."
   },
   "workspaceFolder": "/opt/magic_mirror/modules/MMM-Webuntis",
   "workspaceMount": "source=${localWorkspaceFolder},target=/opt/magic_mirror/modules/MMM-Webuntis,type=bind",
@@ -12,9 +12,7 @@
   "remoteUser": "root",
   "containerEnv": {
     "IN_DEVCONTAINER": "1",
-    "PLAYWRIGHT_BROWSERS_PATH": "/tmp/playwright-browsers",
     "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu",
-    "INSTALL_PLAYWRIGHT_BROWSERS": "1",
     "ENABLE_PLAYWRIGHT_MCP": "1"
   },
   "forwardPorts": [8080],
@@ -22,11 +20,12 @@
     "vscode": {
       "extensions": ["actboy168.tasks", "dbaeumer.vscode-eslint", "vstirbu.vscode-mermaid-preview"],
       "settings": {
+        "chat.mcp.autoStart": true,
         "editor.formatOnSave": true,
         "files.trimTrailingWhitespace": true
       }
     }
   },
   "postCreateCommand": "/bin/sh .devcontainer/postCreate.sh",
-  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && if [ \"${ENABLE_PLAYWRIGHT_MCP:-1}\" = \"1\" ]; then nohup npx @playwright/mcp@latest --isolated --no-sandbox --viewport-size=1920x1080 --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo \"Playwright MCP started (logs: /tmp/playwright-mcp.log, port: 8931)\"; else echo 'Playwright MCP disabled via ENABLE_PLAYWRIGHT_MCP'; fi; echo 'Devcontainer started. MagicMirror at http://localhost:8080'"
+  "postStartCommand": "mkdir -p /tmp/playwright-mcp-output && if [ \"${ENABLE_PLAYWRIGHT_MCP:-1}\" = \"1\" ]; then nohup playwright-mcp --headless --isolated --no-sandbox --port=8931 --output-dir=/tmp/playwright-mcp-output > /tmp/playwright-mcp.log 2>&1 & echo \"Playwright MCP started (logs: /tmp/playwright-mcp.log, port: 8931)\"; else echo 'Playwright MCP disabled via ENABLE_PLAYWRIGHT_MCP'; fi; echo 'Devcontainer started. MagicMirror at http://localhost:8080'; echo 'Playwright MCP is configured in .vscode/mcp.json'"
 }

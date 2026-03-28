@@ -13,13 +13,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-if command -v bootstrap-magicmirror.sh >/dev/null 2>&1; then
-  echo "Ensuring MagicMirror is installed..."
-  bootstrap-magicmirror.sh
-else
-  echo "${YELLOW}WARNING:${NC} bootstrap-magicmirror.sh missing; MagicMirror may not be installed"
-fi
-
 # Helper function to create/update symlinks
 create_symlink() {
   local source=$1
@@ -91,28 +84,6 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
-# Install MMM-Carousel module if not present
-CAROUSEL_MODULE="${MODULES_DIR}/MMM-Carousel"
-if [ ! -d "$CAROUSEL_MODULE" ]; then
-  echo "${GREEN}Installing MMM-Carousel module...${NC}"
-  git clone https://github.com/shbatm/MMM-Carousel.git "$CAROUSEL_MODULE" || true
-fi
-
-# Install MMM-KeyBindings module if not present
-KEYBINDINGS_MODULE="${MODULES_DIR}/MMM-KeyBindings"
-if [ ! -d "$KEYBINDINGS_MODULE" ]; then
-  echo "${GREEN}Installing MMM-KeyBindings module...${NC}"
-  git clone https://github.com/shbatm/MMM-KeyBindings.git "$KEYBINDINGS_MODULE" || true
-fi
-
-
-# Install MMM-Cursor module if not present
-CURSOR_MODULE="${MODULES_DIR}/MMM-Cursor"
-if [ ! -d "$CURSOR_MODULE" ]; then
-  echo "${GREEN}Installing MMM-Cursor module...${NC}"
-  git clone https://github.com/uxigene/MMM-Cursor.git "$CURSOR_MODULE" || true
-fi
-
 # Install module dependencies if needed
 echo "${GREEN}=== MagicMirror Startup (module devcontainer) ===${NC}"
 if [ -d "${MODULES_DIR}" ]; then
@@ -120,7 +91,7 @@ if [ -d "${MODULES_DIR}" ]; then
     if [ -f "$MOD/package.json" ]; then
       if [ ! -d "$MOD/node_modules" ] || [ -z "$(ls -A "$MOD/node_modules" 2>/dev/null)" ]; then
         echo "${YELLOW}Installing dependencies: $(basename "$MOD")${NC}"
-        npm --prefix "$MOD" install || true
+        npm --prefix "$MOD" install --no-audit --no-fund || true
       fi
     fi
   done

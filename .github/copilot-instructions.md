@@ -273,10 +273,10 @@ The devcontainer includes additional CLI tools beyond the standard Node.js devel
 **Development:**
 - `jest` - Testing framework (globally available: `jest tests/unit.test.js`)
 - `diff-so-fancy` - Enhanced git diff output (automatically used by git)
-- `playwright` - Frontend testing (Chrome browser installed via postCreate.sh)
+- `playwright` - Frontend testing (provided by the shared devcontainer base image)
 
 **Configuration:**
-- Playwright installation controlled by `INSTALL_PLAYWRIGHT_BROWSERS` env var (default: enabled)
+- Playwright, `playwright-mcp`, and Chrome are preinstalled in the shared devcontainer base image
 - See `.devcontainer/README.md` for lifecycle scripts and environment variables
 
 
@@ -384,7 +384,7 @@ In addition to the non‑interactive capture script, we now support Playwright M
 - Enhanced forensics: combine screenshots, console logs, network traces and accessibility snapshots in a single session.
 
 Startup / environment options:
-- Recommended (isolated): `npx @playwright/mcp@latest --isolated` or configure via `.vscode/mcp.json` (see repo).
+- Recommended: use the preinstalled `playwright-mcp` binary or the committed `.vscode/mcp.json` configuration.
 - Running Chromium as root (e.g. in Codespaces) requires `--no-sandbox`. Set `PLAYWRIGHT_CHROMIUM_ARGS="--no-sandbox"` or export that environment variable before launching.
 - Use a separate user data directory for parallel runs: `PLAYWRIGHT_CHROMIUM_USER_DATA_DIR=$(mktemp -d)`.
 
