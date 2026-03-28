@@ -1275,6 +1275,8 @@ module.exports = NodeHelper.create({
           });
         }
 
+        const studentFetchWarnings = new Set();
+
         const payload = await this.fetchData({
           authSession,
           student,
@@ -1283,7 +1285,7 @@ module.exports = NodeHelper.create({
           compactHolidays,
           config,
           sessionKey,
-          currentFetchWarnings: warningsState.currentFetchWarnings,
+          currentFetchWarnings: studentFetchWarnings,
         });
 
         if (!payload) {

@@ -2,11 +2,12 @@ FROM mcr.microsoft.com/devcontainers/javascript-node:22
 
 WORKDIR /opt/magic_mirror
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get full-upgrade -y && apt-get install -y --no-install-recommends \
     git \
     curl \
     python3 \
     jq \
+    ripgrep \
     ca-certificates \
     build-essential \
     httpie \

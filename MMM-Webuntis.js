@@ -988,11 +988,14 @@ Module.register('MMM-Webuntis', {
    * @param {Array} nextData - New data from backend
    * @param {Array} prevData - Previous cached data
    * @param {boolean} fetchFlag - Whether this data type was actually fetched
-   * @param {number} status - HTTP status code from API
+   * @param {number} status - HTTP status code from the specific API
    * @param {string[]} warnings - Warning messages from fetch
+   * @param {Object[]} warningMeta - Structured warning metadata from payload
+   * @param {Object} apiStatus - Aggregate API status snapshot from payload
+   * @param {Object} fetchFlags - Aggregate fetch flags from payload
    * @returns {boolean} True if previous data should be preserved
    */
-  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings, warningMeta = []) {
+  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings, warningMeta = [], apiStatus = {}, fetchFlags = {}) {
     const nextIsArray = Array.isArray(nextData);
     const prevIsArray = Array.isArray(prevData);
     const nextEmpty = nextIsArray && nextData.length === 0;
@@ -1007,8 +1010,13 @@ Module.register('MMM-Webuntis', {
     const isBadStatus = Number.isFinite(numericStatus) && (numericStatus === 0 || numericStatus >= 400);
     const hasCriticalMeta = this._hasCriticalWarningMeta(warnings, warningMeta);
     const hasNetworkFallbackWarning = this._hasNetworkTextFallback(warnings, warningMeta);
+    const timetableCanaryStatus = Number(apiStatus?.timetable);
+    const hasCriticalTimetableCanaryFailure =
+      fetchFlags?.timetable !== true &&
+      Number.isFinite(timetableCanaryStatus) &&
+      (timetableCanaryStatus === 0 || timetableCanaryStatus === 401 || timetableCanaryStatus === 429 || timetableCanaryStatus >= 500);
 
-    return isBadStatus || hasCriticalMeta || hasNetworkFallbackWarning;
+    return isBadStatus || hasCriticalMeta || hasNetworkFallbackWarning || hasCriticalTimetableCanaryFailure;
   },
 
   /**
@@ -1941,7 +1949,9 @@ Module.register('MMM-Webuntis', {
         fetchFlags.timegrid ?? fetchFlags.timetable ?? true,
         apiStatus.timetable,
         warningsList,
-        warningMeta
+        warningMeta,
+        apiStatus,
+        fetchFlags
       )
     ) {
       this.timeUnitsByStudent[title] = timeUnits;
@@ -1962,7 +1972,9 @@ Module.register('MMM-Webuntis', {
         fetchFlags.timetable ?? true,
         apiStatus.timetable,
         warningsList,
-        warningMeta
+        warningMeta,
+        apiStatus,
+        fetchFlags
       )
     ) {
       this.timetableByStudent[title] = rawLessons;
@@ -2007,7 +2019,9 @@ Module.register('MMM-Webuntis', {
 
     dataMaps.forEach(({ source, target, flag, status }) => {
       const parsedArray = Array.isArray(source) ? source : [];
-      if (!this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList, warningMeta)) {
+      if (
+        !this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList, warningMeta, apiStatus, fetchFlags)
+      ) {
         target[title] = parsedArray;
         dataChanged = true;
         if (target === this.absencesByStudent) {
@@ -2024,7 +2038,9 @@ Module.register('MMM-Webuntis', {
         fetchFlags.timetable ?? true,
         apiStatus.timetable,
         warningsList,
-        warningMeta
+        warningMeta,
+        apiStatus,
+        fetchFlags
       )
     ) {
       this.holidaysByStudent[title] = holidays;
