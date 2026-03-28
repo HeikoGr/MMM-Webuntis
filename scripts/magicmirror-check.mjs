@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -246,6 +246,50 @@ function normalizeAndValidateCheckerRepo(checkerRepo) {
   return normalized;
 }
 
+function runCommandCapture(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const err = new Error(`${command} ${args.join(' ')} exited with code ${code}`);
+      err.stdout = stdout;
+      err.stderr = stderr;
+      reject(err);
+    });
+  });
+}
+
+async function getLocalCommitDate(repoPath) {
+  try {
+    const { stdout } = await runCommandCapture('git', ['log', '-1', '--format=%cI'], { cwd: repoPath });
+    const value = stdout.trim();
+    return value.length > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureCheckerRepository(checkerRepo) {
   const safeCheckerRepo = normalizeAndValidateCheckerRepo(checkerRepo);
 
@@ -359,9 +403,11 @@ async function prepareCheckerFiles(checkerRepo, validModules) {
   }
 
   const moduleDataArray = [];
+  const preserveGitMetadata = validModules.length === 1;
 
   for (const mod of validModules) {
     const moduleCopyPath = path.join(checkerModulesDir, `${mod.name}-----${mod.maintainer}`);
+    const lastCommit = await getLocalCommitDate(mod.path);
 
     if (existsSync(moduleCopyPath)) {
       await fs.rm(moduleCopyPath, { recursive: true });
@@ -377,8 +423,7 @@ async function prepareCheckerFiles(checkerRepo, validModules) {
         const relativePath = path.relative(mod.path, src);
         return (
           !relativePath.startsWith('node_modules') &&
-          relativePath !== '.git' &&
-          !relativePath.startsWith('.git/') &&
+          (preserveGitMetadata || (relativePath !== '.git' && !relativePath.startsWith('.git/'))) &&
           !relativePath.startsWith('.mm-module-checker') &&
           relativePath !== 'magicmirror-check-results.md' &&
           !relativePath.includes('magicmirror-check.mjs')
@@ -398,6 +443,7 @@ async function prepareCheckerFiles(checkerRepo, validModules) {
       description: npkg.description,
       license: npkg.license,
       keywords: npkg.keywords,
+      lastCommit,
       issues: [],
       packageJson: {
         status: 'parsed',
@@ -418,114 +464,96 @@ async function prepareCheckerFiles(checkerRepo, validModules) {
   await fs.mkdir(websiteDataDir, { recursive: true });
   await fs.writeFile(path.join(websiteDataDir, 'modules.stage.4.json'), JSON.stringify({ modules: moduleDataArray }, null, 2));
 
-  return { checkerModulesDir, websiteDataDir };
+  return { checkerModulesDir, websiteDataDir, moduleDataArray };
 }
 
-async function runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validModules) {
+async function runChecker(checkerRepo, moduleDataArray, validModules) {
   const checkText = validModules.length === 1 ? 'Running module check...' : `Running checks for ${validModules.length} modules...`;
   console.log(`\n🔎 ${checkText}`);
 
-  await new Promise((resolve, reject) => {
-    const childEnv = {
-      ...process.env,
-      CHECK_MODULES_PROJECT_ROOT: checkerRepo,
-      CHECK_MODULES_MODULES_DIR: checkerModulesDir,
-      CHECK_MODULES_STAGE4_PATH: path.join(websiteDataDir, 'modules.stage.4.json'),
-      NODE_OPTIONS: '--no-warnings',
-    };
+  const previousLogLevel = process.env.LOG_LEVEL;
+  const previousLogFormat = process.env.LOG_FORMAT;
+  process.env.LOG_LEVEL = 'error';
+  process.env.LOG_FORMAT = 'text';
 
-    const cp = spawn('npx', ['tsx', 'scripts/check-modules/index.ts'], {
-      cwd: checkerRepo,
-      env: childEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+  const checkerRepoUrl = pathToFileURL(`${checkerRepo}${path.sep}`).href;
+  const [{ createInProcessStageRunner }, { loadStageGraph, buildExecutionPlan }, { runStagesSequentially }] = await Promise.all([
+    import(new URL('scripts/orchestrator/in-process-stage-runner.ts', checkerRepoUrl).href),
+    import(new URL('scripts/orchestrator/stage-graph.ts', checkerRepoUrl).href),
+    import(new URL('scripts/orchestrator/stage-executor.ts', checkerRepoUrl).href),
+  ]);
 
-    const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    let frameIndex = 0;
-    let elapsed = 0;
-    const tick = 200;
+  const graphPath = path.join(checkerRepo, 'pipeline', 'stage-graph.json');
+  const graph = await loadStageGraph(graphPath);
+  const { stages } = buildExecutionPlan(graph, 'full-refresh-parallel');
 
-    let stderr = '';
-    let progressSeen = false;
-    let progressCurrent = 0;
-    let progressTotal = 0;
-    let detectedModule = '';
+  const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let frameIndex = 0;
+  let elapsed = 0;
+  const tick = 200;
+  let activeStage = 'collect-metadata';
 
-    const spinnerInterval = setInterval(() => {
-      const frame = spinnerFrames[frameIndex++ % spinnerFrames.length];
-      let text = `Checking... ${frame} ${Math.floor(elapsed / 1000)}s`;
-      if (detectedModule) {
-        text += `  ${detectedModule} (${progressCurrent}/${progressTotal || validModules.length})`;
-      } else if (progressSeen) {
-        text += `  Progress ${progressCurrent}/${progressTotal}`;
-      }
-      try {
-        readline.clearLine(process.stdout, 0);
-        readline.cursorTo(process.stdout, 0);
-        process.stdout.write(text);
-      } catch {
-        return;
-      }
-      elapsed += tick;
-    }, tick);
+  const spinnerInterval = setInterval(() => {
+    const frame = spinnerFrames[frameIndex++ % spinnerFrames.length];
+    const text = `Checking... ${frame} ${Math.floor(elapsed / 1000)}s  ${activeStage}`;
+    try {
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+      process.stdout.write(text);
+    } catch {
+      return;
+    }
+    elapsed += tick;
+  }, tick);
 
-    const flushSpinner = () => {
-      try {
-        readline.clearLine(process.stdout, 0);
-        readline.cursorTo(process.stdout, 0);
-      } catch {
-        return;
-      }
-    };
+  const flushSpinner = () => {
+    try {
+      readline.clearLine(process.stdout, 0);
+      readline.cursorTo(process.stdout, 0);
+    } catch {
+      return;
+    }
+  };
 
-    cp.stdout.on('data', (chunk) => {
-      const text = chunk.toString();
-      const m = text.match(/Progress:\s*(\d+)\/(\d+)/);
-      if (m) {
-        progressSeen = true;
-        progressCurrent = parseInt(m[1], 10);
-        progressTotal = parseInt(m[2], 10);
-      }
-      for (const vm of validModules) {
-        if (text.includes(vm.name)) {
-          detectedModule = vm.name;
-          if (!progressTotal) progressTotal = validModules.length;
-          progressCurrent = validModules.findIndex((v) => v.name === vm.name) + 1;
-          break;
-        }
-      }
-    });
-
-    cp.stderr.on('data', (chunk) => {
-      const text = chunk.toString();
-      stderr += text;
-      for (const vm of validModules) {
-        if (text.includes(vm.name)) {
-          detectedModule = vm.name;
-          if (!progressTotal) progressTotal = validModules.length;
-          progressCurrent = validModules.findIndex((v) => v.name === vm.name) + 1;
-          break;
-        }
-      }
-    });
-
-    cp.on('close', (code) => {
-      clearInterval(spinnerInterval);
-      flushSpinner();
-      if (code === 0) {
-        if (progressSeen) {
-          console.log(`Checking complete. Progress: ${progressCurrent}/${progressTotal}`);
-        } else {
-          console.log('Checking complete.');
-        }
-        resolve();
-      } else {
-        const err = new Error(`Command failed with exit code ${code}`);
-        err.stderr = stderr;
-        reject(err);
-      }
-    });
+  const stageRunner = createInProcessStageRunner({
+    projectRoot: checkerRepo,
+    stageRuntimes: {
+      collectMetadata: async () => ({ modules: moduleDataArray }),
+    },
   });
+
+  try {
+    await runStagesSequentially(stages, {
+      cwd: checkerRepo,
+      env: {
+        ...process.env,
+        LOG_LEVEL: 'error',
+        LOG_FORMAT: 'text',
+        NODE_OPTIONS: '--no-warnings',
+      },
+      stageRunner,
+      logger: {
+        start: (stage) => {
+          activeStage = stage.id;
+        },
+      },
+    });
+  } finally {
+    clearInterval(spinnerInterval);
+    flushSpinner();
+    if (previousLogLevel === undefined) {
+      delete process.env.LOG_LEVEL;
+    } else {
+      process.env.LOG_LEVEL = previousLogLevel;
+    }
+    if (previousLogFormat === undefined) {
+      delete process.env.LOG_FORMAT;
+    } else {
+      process.env.LOG_FORMAT = previousLogFormat;
+    }
+  }
+
+  console.log('Checking complete.');
 }
 
 async function parseCheckerResults(checkerRepo, validModules) {
@@ -792,9 +820,9 @@ async function main() {
       console.log(`  ${idx + 1}. ${mod.name} (${mod.maintainer})`);
     });
 
-    const { checkerModulesDir, websiteDataDir } = await prepareCheckerFiles(checkerRepo, validModules);
+    const { moduleDataArray } = await prepareCheckerFiles(checkerRepo, validModules);
 
-    await runChecker(checkerRepo, checkerModulesDir, websiteDataDir, validModules);
+    await runChecker(checkerRepo, moduleDataArray, validModules);
 
     const allResults = await parseCheckerResults(checkerRepo, validModules);
     const { cleanModules, modulesWithIssues, totalIssues } = displayResults(allResults);
