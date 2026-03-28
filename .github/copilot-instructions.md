@@ -136,7 +136,8 @@ console.warn('[feature] Warning:', error);
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
-- `docs/DATA_TRANSFORMATIONS.md` - **Complete analysis of all data transformations (time, date, HTML sanitization)**
+- `docs/API_REFERENCE.md` - External APIs plus normalization rules (time, date, HTML sanitization)
+- `docs/SERVER_REQUEST_FLOW.md` - Runtime request order, retries, skip rules, and statuses
 - `docs/01-research/API_ARCHITECTURE.md` - REST endpoints, auth methods, coverage
 - `docs/ISSUES.md` - Known issues, CRITICAL refactoring tasks
 - `docs/lib-README.md` - Service documentation

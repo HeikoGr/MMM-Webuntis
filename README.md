@@ -10,15 +10,13 @@
 >
 > This project contains substantial AI-generated code. Review, test, and audit all files, web UI, and documentation before using it in production or safety-relevant contexts. Treat defaults and generated logic as untrusted until verified.
 
-A MagicMirror² module that displays WebUntis timetables, exams, homework, absences and messagesofday.
+A MagicMirror² module that displays WebUntis timetables, exams, homework, absences, and messages of day.
 
 ## Requirements
 
 - Node.js `>=20.18.1`
 
-Older Node 20 installations have shown authentication/runtime failures in real-world setups, especially around the module's native HTTP stack. MMM-Webuntis uses the built-in Node.js `fetch`/`Headers`/`AbortController` path plus response-header cookie handling, so `20.18.1` is now the supported baseline.
-
-The exact break point is not isolated to a single API call yet, so this is documented as a compatibility baseline rather than a fully proven fetch-only bug. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
+Older Node 20 installations have shown authentication and runtime failures in real-world setups, especially around the module's native HTTP stack. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
 
 ## Installation
 
@@ -33,379 +31,120 @@ npm ci --omit=dev
 
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
-node -v  # must be >= 20.18.1
+node -v
 git pull
 npm ci --omit=dev
 ```
 
-### Troubleshooting: Git History Conflicts
-
-If `git pull` fails with errors like "divergent branches" or your commit history doesn't match the repository (e.g., after a history rewrite), you can reset your local installation:
-
-**⚠️ Warning:** This will **discard all local changes** (custom code etc.). Back them up first!
-
-**Option 1: Fresh Clone (Recommended for most users)**
-
-```bash
-cd ~/MagicMirror/modules
-mv MMM-Webuntis MMM-Webuntis.backup  # Backup your old installation
-git clone https://github.com/HeikoGr/MMM-Webuntis
-cd MMM-Webuntis
-npm ci --omit=dev
-```
-
-**Option 2: Force Reset (If you want to keep the same directory)**
+If `git pull` fails because your local history diverged, either re-clone the module or reset it to the remote state after backing up local changes:
 
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
-
-# Reset to match the remote repository
 git fetch origin
 git reset --hard origin/master
 npm ci --omit=dev
 ```
 
-After resetting, restart MagicMirror² to apply changes.
+## Quick Start
 
-## Authentication Methods
+Use [docs/CONFIG.md](docs/CONFIG.md) as the configuration source of truth. A minimal QR-code setup looks like this:
 
-MMM-Webuntis supports two authentication methods for both student and parent accounts:
-
-### 1. QR Code Login
-
-**Available for:** Students and Parents
-
-**How to get QR code:**
-1. Open WebUntis app or website
-2. Go to Account → Data Access
-3. Generate QR code for this app
-4. Copy the `untis://...` URL
-
-**Student account:**
 ```javascript
 {
-  module: "MMM-Webuntis",
-  position: "top_right",
+  module: 'MMM-Webuntis',
+  position: 'top_right',
   config: {
+    displayMode: 'grid, lessons, exams',
     students: [
       {
-        title: "Alice",
-        qrcode: "untis://setschool?url=myschool.webuntis.com&school=myschool&user=alice&key=ABC123..."
-      }
-    ]
-  }
-}
-```
-
-**Parent account (auto-discovery):**
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    qrcode: "untis://setschool?url=myschool.webuntis.com&school=myschool&user=parent&key=XYZ789...",
-    students: []  // Empty = auto-discover all children
-  }
-}
-```
-
-### 2. Direct Login (Username/Password)
-
-**Available for:** Students and Parents
-
-**Student account:**
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    students: [
-      {
-        title: "Alice",
-        username: "alice.smith",
-        password: "student-password",
-        school: "myschool",
-        server: "myschool.webuntis.com"
-      }
-    ]
-  }
-}
-```
-
-**Parent account (auto-discovery):**
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    username: "parent@example.com",
-    password: "parent-password",
-    school: "myschool",
-    server: "myschool.webuntis.com",
-    students: []  // Empty = auto-discover all children
-  }
-}
-```
-
-### Mixed Authentication
-
-You can combine different authentication methods in one config:
-
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    students: [
-      {
-        title: "Alice",
-        qrcode: "untis://..."  // Student with QR code
+        title: 'Alice',
+        qrcode: 'untis://setschool?url=myschool.webuntis.com&school=myschool&user=alice&key=ABC123...',
       },
-      {
-        title: "Bob",
-        username: "bob.jones",  // Student with direct login
-        password: "password123",
-        school: "myschool",
-        server: "myschool.webuntis.com"
-      }
-    ]
-  }
+    ],
+  },
 }
 ```
 
-## Common Use Cases
+## Authentication
 
-### Week View (Monday-Friday)
+MMM-Webuntis supports two canonical auth modes:
 
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    displayMode: "grid",
-    grid: {
-      weekView: true,  // Auto-shows Mon-Fri, advances on weekends
-      maxLessons: 8,
-    },
-    students: [
-      { title: "Alice", qrcode: "untis://..." }
-    ]
-  }
-}
-```
+- QR code login for students, parents, and SSO-backed accounts
+- Username/password login for regular non-SSO accounts
 
-### Multiple Students (Same Family)
+Parent accounts can be configured at module level with `students: []` to enable child auto-discovery. Mixed per-student credentials are supported, but the full matrix of valid config shapes is documented only in [docs/CONFIG.md](docs/CONFIG.md#authentication-patterns).
 
-**Option 1: Parent account with auto-discovery**
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_left",
-  config: {
-    qrcode: "untis://...",  // Parent QR code
-    students: []  // Auto-discovers all children
-  }
-}
-```
+## Common Setups
 
-**Option 2: Individual student accounts**
-```javascript
-{
-  module: "MMM-Webuntis",
-  position: "top_left",
-  config: {
-    students: [
-      { title: "Alice", qrcode: "untis://..." },
-      { title: "Bob", qrcode: "untis://..." }
-    ]
-  }
-}
-```
+Typical patterns:
 
-### Multiple Families (Separate Instances)
+- Week view: `displayMode: 'grid'` with `grid.weekView: true`
+- Parent account auto-discovery: top-level credentials plus `students: []`
+- Multiple families: use multiple module instances
+- Class timetable mode: set `useClassTimetable: true` globally or per student
 
-```javascript
-// Family 1 - top left
-{
-  module: "MMM-Webuntis",
-  position: "top_left",
-  config: {
-    header: "Family Schmidt",
-    qrcode: "untis://...",  // Parent Schmidt QR code
-    students: []
-  }
-},
-// Family 2 - top right
-{
-  module: "MMM-Webuntis",
-  position: "top_right",
-  config: {
-    header: "Family Müller",
-    username: "mueller@example.com",  // Parent Müller login
-    password: "password",
-    school: "school",
-    server: "school.webuntis.com",
-    students: []
-  }
-}
-```
+## Widgets
 
-## Widget Types
+Set `displayMode` to a comma-separated list:
 
-Set via `displayMode` (comma-separated):
+- `grid`
+- `lessons`
+- `exams`
+- `homework`
+- `absences`
+- `messagesofday`
 
-- `grid` - Visual timetable grid
-- `lessons` - List of upcoming lessons
-- `exams` - Upcoming exams
-- `homework` - Homework assignments
-- `absences` - Absence records
-- `messagesofday` - School announcements
+`list` remains a supported alias for `lessons, exams`.
 
-`list` remains a supported alias for the default pair `lessons, exams`.
+## Styling
 
-**Example:**
-```javascript
-displayMode: "grid,exams,homework"
-```
+The module uses a semantic color system:
 
-## Color Scheme Philosophy
+- Blue for active and informational states
+- Yellow for changed and warning states
+- Red for cancelled and critical states
 
-MMM-Webuntis now uses a reduced, semantic color system with **three core colors**:
-
-- **Blue** → new / active / informational
-- **Yellow** → changed / warning / attention
-- **Red** → cancelled / critical / error
-
-### Why reduce the number of colors?
-
-- **Faster recognition:** fewer colors make state meaning easier to learn and remember.
-- **Higher consistency across widgets:** grid, lessons, exams, absences, and messages use the same semantics.
-- **Better accessibility baseline:** reduced palette helps keep contrast and emphasis predictable.
-- **Simpler customization:** users can theme the whole module by changing a small set of CSS variables.
-
-### Consistent color logic
-
-- Colors represent **state meaning**, not widget type.
-- The same state keeps the same color family in every widget.
-- Intensity variants (e.g. "today" styles, overlays) are derived from the same semantic base colors.
-
-If you prefer the previous multi-color look, see:
-- [docs/LEGACY_COLOR_SCHEME.md](docs/LEGACY_COLOR_SCHEME.md)
-
-## Class Timetable Mode
-
-By default, MMM-Webuntis shows the **student's personal timetable** with their specific schedule. Some schools only provide **class timetables** that show the entire class schedule.
-
-Enable class timetable mode per student:
-
-```javascript
-students: [
-  {
-    title: "Alice",
-    qrcode: "untis://...",
-    useClassTimetable: true  // Show class timetable instead of personal schedule
-  }
-]
-```
-
-**When to use:**
-- Your school uses class-based schedules instead of individual student schedules
-- You want to see the entire class schedule instead of just your child's lessons
-- Personal timetable shows no data but class timetable is available
-
-## Configuration
-
-For all configuration options, see [docs/CONFIG.md](docs/CONFIG.md).
-
-### Most Common Options
-
-| Option | Default | Description |
-| --- | --- | --- |
-| `displayMode` | `'lessons,exams'` | Widgets to show (comma-separated) |
-| `updateInterval` | `5 * 60 * 1000` | Update frequency (milliseconds) |
-| `grid.weekView` | `false` | Enable Mon-Fri week view |
-| `grid.maxLessons` | `0` | Limit grid height (0 = all) |
-| `grid.fields.primary` | `'subject'` | Main grid field (e.g., subject/teacher/room). See detailed options in [docs/CONFIG.md](docs/CONFIG.md#grid-field-display-options). |
-| `grid.naText` | `'N/A'` | Placeholder text for changed fields without current value in grid |
-| `lessons.naText` | `'N/A'` | Placeholder text for changed fields without current value in lessons |
-| `lessons.showRoom` | `false` | Show room in lessons rows (enables visible room-change highlighting) |
-| `logLevel` | `'none'` | Debug logging: `'debug'`, `'info'`, `'warn'`, `'error'`, `'none'` |
+For styling, CSS variables, accessibility guidance, and the legacy multi-color recreation, use [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md#legacy-color-theme-exact-values).
 
 ## Troubleshooting
 
-**No data showing?**
-1. Verify authentication credentials:
-   - **QR code:** Check complete `untis://...` URL (must include `key=` parameter)
-   - **Direct login:** Verify username, password, school, server
-2. Enable debug logging: `logLevel: 'debug'`
-3. Check browser console and PM2 logs: `pm2 logs --lines 100`
+If data is missing or empty:
 
-**Empty grid/widgets?**
-- Past lessons are hidden by default
-- Adjust `nextDays` to show more future days
-- Try `grid.weekView: true` for automatic week display
+1. Verify the auth method and credentials.
+2. Set `logLevel: 'debug'`.
+3. Check recent backend logs with `pm2 logs --lines 100`.
+4. For parent setups, confirm that `students: []` is used for auto-discovery.
+5. For SSO accounts, use QR code instead of direct credentials.
 
-**SSO/Corporate login not working?**
-- SSO accounts cannot use direct username/password login
-- Use QR code instead (works with all account types)
-- Generate from WebUntis app/website → Account → Data Access
+## CLI And Checks
 
-**Parent account shows no children?**
-- Set `students: []` (empty array) to enable auto-discovery
-- Check logs for "Auto-discovered X student(s)" message
-- Verify parent credentials have access to student data
+Useful scripts:
 
-**Auto-discovery not working?**
-- Enable debug logging: `logLevel: 'debug'`
-- Check PM2 logs for authentication errors
-- Verify parent account credentials
-- See [docs/CONFIG.md - Auto-Discovery](docs/CONFIG.md#auto-discovery-feature) for details
-
-## CLI Testing Tool
-
-Test your configuration without running MagicMirror:
-
-```bash
-cd ~/MagicMirror/modules/MMM-Webuntis
-node --run debug
-```
-
-Available project scripts:
-
-- `node --run lint`
-- `node --run check`
 - `node --run debug`
+- `node --run check`
+- `node --run lint`
 - `node --run test:spelling`
 - `node --run test:auth:curl`
 
-**Low-level authentication test** (curl-based, bypasses all module logic):
+Use the low-level curl auth test when you want to bypass module logic entirely:
 
 ```bash
-# Test with credentials from config.js
 node --run test:auth:curl
-
-# Or test with specific credentials
 ./scripts/test_auth_with_curl.sh "school" "server.webuntis.com" "username" "password"
-```
-
-Useful for debugging authentication issues, especially with special characters (spaces, umlauts) in usernames.
-
-## Development
-
-```bash
-node --run lint           # Check code style
-node --run lint:fix       # Auto-fix formatting
-node --run test:spelling  # Check spelling
-node --run check          # Verify configuration
 ```
 
 ## Documentation
 
-- **[docs/CONFIG.md](docs/CONFIG.md)** - Complete configuration reference
-- **[docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md)** - Styling and themes
-- **[docs/LEGACY_COLOR_SCHEME.md](docs/LEGACY_COLOR_SCHEME.md)** - Recreate legacy multi-color look via CSS
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture
-- **[config/config.template.js](config/config.template.js)** - Full example config
+Start with [docs/README.md](docs/README.md).
+
+- [docs/CONFIG.md](docs/CONFIG.md) - canonical configuration reference
+- [docs/API_V2_MANIFEST.md](docs/API_V2_MANIFEST.md) - backend/frontend payload contract
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - external WebUntis endpoints and normalization
+- [docs/SERVER_REQUEST_FLOW.md](docs/SERVER_REQUEST_FLOW.md) - runtime fetch, retry, and status behavior
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - high-level module structure and responsibilities
+- [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md) - styling, accessibility, and legacy theme overrides
+- [cli/README.md](cli/README.md) - CLI usage
+- [config/config.template.js](config/config.template.js) - example configuration
 
 ## Screenshots
 
@@ -420,8 +159,8 @@ node --run check          # Verify configuration
 ## Support
 
 - Issues: [GitHub Issues](https://github.com/HeikoGr/MMM-Webuntis/issues)
-- Documentation: Check [docs/CONFIG.md](docs/CONFIG.md) first
-- Logs: Enable `logLevel: 'debug'` in config
+- Documentation: start with [docs/README.md](docs/README.md)
+- Logs: enable `logLevel: 'debug'` in your config
 
 ## License
 
@@ -430,4 +169,3 @@ MIT License - See [LICENSE](LICENSE)
 ---
 
 **Note:** This module contains AI-generated code. Review and test thoroughly before production use.
-

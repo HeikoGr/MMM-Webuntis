@@ -620,10 +620,11 @@ date -d "2026-03-17" +"%A"  # Should be a weekday
 ## Related Documentation
 
 - [API_REFERENCE.md](API_REFERENCE.md) - Full WebUntis API reference
-- [API_ENDPOINT_DISCOVERY.md](API_ENDPOINT_DISCOVERY.md) - Methods to discover available endpoints
 - [API_V2_MANIFEST.md](API_V2_MANIFEST.md) - Internal payload format
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
-- [DATA_TRANSFORMATIONS.md](DATA_TRANSFORMATIONS.md) - Data transformation rules
+- [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md) - Runtime fetch and retry behavior
+
+Endpoint discovery is handled by the testing workflow and `scripts/discover_endpoints.sh`; there is no separate endpoint-discovery document.
 
 ---
 

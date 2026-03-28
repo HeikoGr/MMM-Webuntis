@@ -418,6 +418,92 @@ Naming convention for new hooks:
 - `.lesson-substitution` - Substitution/replacement lessons
 - `.lesson-regular` - Regular lessons
 - `.past` - Past lessons (adds striped overlay)
+
+## Legacy Color Theme (Exact Values)
+
+Use this section if you want the previous multi-color look on current module versions.
+
+Goal: recreate the historical palette through `config/custom.css` without reverting the current styling architecture.
+
+```css
+.MMM-Webuntis {
+  --wu-bg: rgba(0, 0, 0, 0.05);
+  --wu-time-color: #666;
+
+  --wu-replacement-bg: #bfe6ff;
+  --wu-replacement-text: #032f56;
+  --wu-cancelled-bg: #ffbdbd;
+  --wu-cancelled-text: #7a0000;
+  --wu-regular-bg: #c9ffbf;
+  --wu-regular-text: #0f6b0f;
+  --wu-lesson-border: #9fd39f;
+
+  --wu-homework-bg: #e9e9e9;
+  --wu-no-lesson-bg: #642463;
+  --wu-exam-bar: #ffeb3b;
+
+  --wu-substitution-generic: #ffa500;
+  --wu-substitution-accent: #ffa500;
+  --wu-legacy-exam-row-color: rgb(0, 255, 255);
+
+  --wu-today-replacement-bg: #82c6f0;
+  --wu-today-replacement-text: #01242f;
+  --wu-today-cancelled-bg: #ff8a8a;
+  --wu-today-cancelled-text: #590000;
+  --wu-today-regular-bg: #a8f59f;
+  --wu-today-regular-text: #054a05;
+  --wu-today-lesson-border: #cfcfcf;
+
+  --wu-absence-overlay-bg: rgba(255, 100, 100, 0.5);
+  --wu-absence-overlay-border: rgba(255, 100, 100, 0.8);
+  --wu-absence-overlay-today-bg: rgba(255, 80, 80, 0.6);
+  --wu-absence-overlay-today-border: rgba(255, 80, 80, 0.9);
+  --wu-nowline-start: rgba(255, 0, 0, 0.95);
+  --wu-nowline-end: rgba(255, 0, 0, 0.85);
+  --wu-nowline-glow: rgba(255, 0, 0, 0.45);
+
+  --wu-warning-color: #ff9800;
+  --wu-warning-bg-soft: rgba(255, 152, 0, 0.06);
+  --wu-warning-bg-strong: rgba(255, 152, 0, 0.1);
+  --wu-critical-color: #f44336;
+  --wu-critical-bg: rgba(244, 67, 54, 0.15);
+  --wu-error-bg: #ffebee;
+  --wu-error-border: #d32f2f;
+  --wu-error-text: #b71c1c;
+
+  --wu-secondary-text: #888;
+  --wu-muted-text: #999;
+  --wu-message-text: #ddd;
+}
+```
+
+Optional add-ons for an even closer historical match:
+
+```css
+.MMM-Webuntis .grid-combined .lesson-break-supervision,
+.MMM-Webuntis .grid-combined .lesson-content.break-supervision,
+.MMM-Webuntis .ticker-item .lesson-content.break-supervision {
+  background-color: #d47aeb;
+  color: #ffffff;
+}
+
+.MMM-Webuntis .grid-combined .no-lesson {
+  color: #fff;
+}
+
+.MMM-Webuntis .substitution {
+  color: #ffa500;
+}
+
+.MMM-Webuntis .error {
+  color: red;
+}
+```
+
+Notes:
+- This is a visual recreation, not a rollback to older code.
+- The semantic variable system stays active; only values are overridden.
+- You can mix this palette with the newer icon, spacing, and accessibility options above.
 - `.has-exam` - Lessons with exams (yellow left border)
 
 ### Text Element Classes
