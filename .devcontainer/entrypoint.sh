@@ -54,8 +54,7 @@ mkdir -p "${MAGICMIRROR_PATH}/config" "${MAGICMIRROR_PATH}/css"
 
 # Create symlinks (BEFORE loading .env)
 create_symlink "${MODULE_DIR}/config/config.js" "${MAGICMIRROR_PATH}/config/config.js" "config.js"
-create_symlink "${MODULE_DIR}/config/custom.css" "${MAGICMIRROR_PATH}/css/custom.css" "custom.css"
-create_symlink "${MODULE_DIR}/config/.env" "${MAGICMIRROR_PATH}/.env" ".env"
+create_symlink "${MODULE_DIR}/config/custom.css" "${MAGICMIRROR_PATH}/config/custom.css" "custom.css"
 
 # Load environment variables from .env
 ENV_FILE="${MAGICMIRROR_PATH}/.env"
