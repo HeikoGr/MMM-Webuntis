@@ -1,4 +1,4 @@
-FROM ghcr.io/heikogr/mmm-devcontainer-base:node24-trixie-slim
+FROM ghcr.io/heikogr/mmm-devcontainer:node24-trixie-slim
 
 WORKDIR /opt/magic_mirror
 

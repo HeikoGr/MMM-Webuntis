@@ -20,9 +20,21 @@ create_symlink() {
   local name=$3
 
   if [ -f "$source" ]; then
+    # If a non-symlink file/dir exists at the target, back it up before replacing
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+      mv "$target" "${target}.bak" || true
+      echo "→ Backed up existing $target to ${target}.bak"
+    fi
+
+    # Remove existing symlink if present
     [ -L "$target" ] && rm -f "$target"
-    ln -s "$source" "$target" || true
-    echo "✓ Symlink: $name"
+
+    # Create symlink and report success/failure
+    if ln -s "$source" "$target"; then
+      echo "✓ Symlink: $name"
+    else
+      echo "✗ Failed to create symlink: $name" >&2
+    fi
   fi
 }
 
@@ -55,6 +67,7 @@ mkdir -p "${MAGICMIRROR_PATH}/config" "${MAGICMIRROR_PATH}/css"
 # Create symlinks (BEFORE loading .env)
 create_symlink "${MODULE_DIR}/config/config.js" "${MAGICMIRROR_PATH}/config/config.js" "config.js"
 create_symlink "${MODULE_DIR}/config/custom.css" "${MAGICMIRROR_PATH}/config/custom.css" "custom.css"
+create_symlink "${MODULE_DIR}/config/.env" "${MAGICMIRROR_PATH}/.env" ".env"
 
 # Load environment variables from .env
 ENV_FILE="${MAGICMIRROR_PATH}/.env"
