@@ -251,7 +251,7 @@ Use `jq` to inspect: `cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.time
 
 ### Available CLI Tools in Devcontainer
 
-The devcontainer includes additional CLI tools beyond the standard Node.js development stack. See [.devcontainer/README.md](../.devcontainer/README.md) for full details.
+The devcontainer includes additional CLI tools beyond the standard Node.js development stack. See [docs/DEVCONTAINER.md](../docs/DEVCONTAINER.md) for full details.
 
 **REST API Testing:**
 - `httpie` (or `http` command) - Modern REST API client with better syntax than curl
@@ -277,7 +277,7 @@ The devcontainer includes additional CLI tools beyond the standard Node.js devel
 
 **Configuration:**
 - Playwright, `playwright-mcp`, and Chrome are preinstalled in the shared devcontainer base image
-- See `.devcontainer/README.md` for lifecycle scripts and environment variables
+- See `docs/DEVCONTAINER.md` for lifecycle scripts and environment variables
 
 
 ## Code Review Guidelines

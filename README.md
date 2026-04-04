@@ -143,7 +143,7 @@ Start with [docs/README.md](docs/README.md).
 - [docs/SERVER_REQUEST_FLOW.md](docs/SERVER_REQUEST_FLOW.md) - runtime fetch, retry, and status behavior
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - high-level module structure and responsibilities
 - [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md) - styling, accessibility, and legacy theme overrides
-- [cli/README.md](cli/README.md) - CLI usage
+- [docs/CLI.md](docs/CLI.md) - CLI usage
 - [config/config.template.js](config/config.template.js) - example configuration
 
 ## Screenshots

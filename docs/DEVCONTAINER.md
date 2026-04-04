@@ -66,7 +66,7 @@ After changing `postCreate.sh`:
 
 ## Common Commands
 
-See [CLI_COMPREHENSIVE_GUIDE.md](../docs/CLI_COMPREHENSIVE_GUIDE.md) for detailed command usage.
+See [CLI.md](CLI.md) for detailed command usage.
 
 **Quick reference:**
 - `node --run check` - Test config, auth, and data fetching

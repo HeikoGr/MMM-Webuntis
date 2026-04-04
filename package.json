@@ -41,12 +41,14 @@
     "test:auth:curl": "bash scripts/test_auth_with_curl.sh --from-config",
     "test:api": "node scripts/test_api_endpoint.js",
     "test:api:discover": "bash scripts/discover_endpoints.sh",
-    "debug": "node cli/node_helper_wrapper.js",
-    "check": "node scripts/magicmirror-check.mjs --current"
+    "debug": "node scripts/node_helper_wrapper.js",
+    "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current"
   },
   "lint-staged": {
+    "*.{js,mjs}": [
+      "eslint --fix"
+    ],
     "*": [
-      "eslint --fix",
       "prettier --write --ignore-unknown"
     ]
   },
@@ -57,7 +59,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "cspell": "^9.7.0",
-    "eslint": "^10.1.0",
+    "eslint": "^10.2.0",
     "eslint-plugin-n": "^17.24.0",
     "globals": "^17.4.0",
     "lint-staged": "^16.4.0",

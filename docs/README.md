@@ -14,7 +14,9 @@ This directory is organized by source of truth. Each topic should have one canon
 | High-level structure | [ARCHITECTURE.md](ARCHITECTURE.md) | Module boundaries, responsibilities, extension points |
 | Styling and theming | [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md) | CSS variables, classes, accessibility, legacy theme |
 | Grid-specific renderer internals | [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md) | Grid rendering decisions and special cases |
-| CLI usage | [../cli/README.md](../cli/README.md) | Commands, options, outputs, troubleshooting |
+| CLI usage | [CLI.md](CLI.md) | Commands, options, outputs, troubleshooting |
+| Devcontainer setup | [DEVCONTAINER.md](DEVCONTAINER.md) | Tooling, lifecycle scripts, environment variables |
+| Internal cleanup backlog | [CODE_QUALITY_TODOS.md](CODE_QUALITY_TODOS.md) | Open and completed code quality work |
 | API research and ad-hoc endpoint tests | [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md) | Experimental endpoint checks and testing scripts |
 
 ## Core Docs
@@ -27,7 +29,9 @@ This directory is organized by source of truth. Each topic should have one canon
 - [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)
 - [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md)
 - [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)
-- [../cli/README.md](../cli/README.md)
+- [CLI.md](CLI.md)
+- [DEVCONTAINER.md](DEVCONTAINER.md)
+- [CODE_QUALITY_TODOS.md](CODE_QUALITY_TODOS.md)
 
 ## Quick Reference
 

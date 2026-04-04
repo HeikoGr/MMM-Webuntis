@@ -16,7 +16,7 @@ Short guide to contribute:
 
 **Development Container:**
 - Recommended: Use the devcontainer for a pre-configured environment
-- See [.devcontainer/README.md](.devcontainer/README.md) for available tools (httpie, jest, playwright, etc.)
+- See [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md) for available tools (httpie, jest, playwright, etc.)
 - All dependencies and CLI tools are pre-installed
 
 

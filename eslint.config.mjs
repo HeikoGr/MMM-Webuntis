@@ -50,6 +50,23 @@ export default defineConfig([
     },
   },
   {
+    files: ['scripts/node_helper_wrapper.js'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    plugins: {
+      n: pluginN,
+    },
+    rules: {
+      ...pluginN.configs.recommended.rules,
+      'n/no-process-exit': 'off',
+    },
+  },
+  {
     files: ['widgets/**/*.js'],
     languageOptions: {
       ecmaVersion: 2021,
