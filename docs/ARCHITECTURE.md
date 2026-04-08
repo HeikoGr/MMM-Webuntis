@@ -19,15 +19,17 @@ flowchart LR
     FE[MMM-Webuntis.js]
     W[widgets/*.js]
     NH[node_helper.js]
+    FACADE[lib/webuntisClient.js]
     CORE[lib/webuntis/*]
-    BUILD[lib/webuntis-client/*]
+    BUILD[lib/mmm-adapter/*]
     API[WebUntis REST and JSON-RPC]
 
     MM --> FE
     FE --> W
     FE <--> NH
-    NH --> CORE
-    CORE --> BUILD
+    NH --> FACADE
+    FACADE --> CORE
+    FACADE --> BUILD
     CORE --> API
     BUILD --> FE
 ```
@@ -54,6 +56,7 @@ The frontend should not know WebUntis endpoint details.
 
 Files:
 - `node_helper.js`
+- `lib/webuntisClient.js`
 - `lib/configValidator.js`
 - `lib/widgetConfigValidator.js`
 - `lib/logger.js`
@@ -62,6 +65,7 @@ Responsibilities:
 - validate and normalize module config
 - manage session identifiers and lifecycle
 - coordinate fetches per configured module instance
+- compose WebUntis core results with the MMM payload adapter
 - convert backend results into MagicMirror socket notifications
 
 This layer owns the MagicMirror-facing behavior, not the raw WebUntis API logic.
@@ -84,6 +88,7 @@ Responsibilities:
 - decide which WebUntis targets to query
 - execute timetable-first fetching and endpoint retries
 - isolate transport concerns from business logic
+- stop at normalized bundle data and stay unaware of the MagicMirror payload contract
 
 This layer is the source of truth for external WebUntis interactions.
 
@@ -91,17 +96,16 @@ This layer is the source of truth for external WebUntis interactions.
 
 Files:
 - `lib/webuntis/dataOrchestration.js`
-- `lib/webuntis/payloadCompactor.js`
 - `lib/webuntis/errorHandler.js`
 - `lib/webuntis/errorUtils.js`
-- `lib/webuntis-client/payloadBuilder.js`
-- `lib/webuntis-client/mmmPayloadMapper.js`
+- `lib/mmm-adapter/mmmPayloadMapper.js`
 
 Responsibilities:
 - normalize dates, times, and field shapes
 - sanitize HTML-bearing fields
 - compact payloads before they reach the frontend
 - map fetched data into the canonical `GOT_DATA` contract
+- keep MMM contract-building logic co-located in one adapter module
 
 This layer separates transport data from frontend-facing runtime data.
 
@@ -111,7 +115,7 @@ This layer separates transport data from frontend-facing runtime data.
 2. `node_helper.js` validates config and prepares session state.
 3. `node_helper.js` triggers the first fetch automatically.
 4. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
-5. `payloadBuilder` assembles the contract payload.
+5. `lib/webuntisClient.js` maps the normalized bundle into the `GOT_DATA` payload.
 6. `node_helper.js` emits `GOT_DATA`.
 7. Frontend widgets render the normalized result.
 
@@ -131,6 +135,7 @@ This layer separates transport data from frontend-facing runtime data.
 ### Contract Rules
 
 - The frontend relies on the normalized runtime contract documented in [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+- `lib/webuntis/webuntisClient.js` must not import `lib/mmm-adapter/*`; payload mapping belongs to the public adapter facade.
 - Debug dumps can be richer than the runtime payload and are not a public contract.
 
 ### Styling Rules

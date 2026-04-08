@@ -10,6 +10,13 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Logger object with log(level, msg) method
    */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
+    if (globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
+      return globalThis.MMModuleRuntimeUtils.createLevelLogger({
+        prefix: `[${moduleName}]`,
+        getLevel: () => window.MMMWebuntisLogLevel || 'info',
+      });
+    }
+
     const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
     const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     return {
@@ -42,6 +49,11 @@ Module.register('MMM-Webuntis', {
    * @private
    */
   _generateSessionId(length = 9) {
+    if (globalThis.MMModuleRuntimeUtils?.generateScopedId) {
+      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId('wu', length);
+      return scopedId.startsWith('wu_') ? scopedId.slice(3) : scopedId;
+    }
+
     const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
 
     const cryptoObj =
@@ -191,7 +203,7 @@ Module.register('MMM-Webuntis', {
   getScripts() {
     window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
 
-    const scripts = [this.file('widgets/util.js')];
+    const scripts = [this.file('lib/runtime-utils.js'), this.file('widgets/util.js')];
 
     const widgetScriptMap = {
       lessons: 'widgets/lessons.js',
@@ -451,7 +463,6 @@ Module.register('MMM-Webuntis', {
       try {
         if (msgLevel === 'error') console.error('[MMM-Webuntis]', ...args);
         else if (msgLevel === 'warn') console.warn('[MMM-Webuntis]', ...args);
-        else if (msgLevel === 'info') console.warn('[MMM-Webuntis]', ...args);
         else console.warn('[MMM-Webuntis]', ...args);
       } catch {
         void 0;

@@ -7,7 +7,7 @@ const path = require('path');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
-const { WebUntisClient } = require('./lib/webuntis/webuntisClient');
+const { WebUntisClient } = require('./lib/webuntisClient');
 const { calculateFetchRanges } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
 module.exports = NodeHelper.create({

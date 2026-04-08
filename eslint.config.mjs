@@ -32,6 +32,17 @@ export default defineConfig([
     },
   },
   {
+    files: ['lib/webuntis/**/*.js'],
+    rules: {
+      'no-restricted-modules': [
+        'error',
+        {
+          patterns: ['../mmm-adapter/*', '../webuntis-client/*'],
+        },
+      ],
+    },
+  },
+  {
     files: ['cli/**/*.js'],
     languageOptions: {
       ecmaVersion: 2021,

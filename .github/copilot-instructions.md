@@ -64,29 +64,29 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 - Use canonical function and field names only.
 - Frontend and backend are deployed synchronously, so compatibility shims are unnecessary and should be removed instead of extended.
 
-- Normalization/compaction happens in `webuntisApiService.js` + `payloadCompactor.js` + `webuntis-client/payloadBuilder.js`
+- Normalization/compaction and MMM payload mapping happen in `webuntisApiService.js` + `mmm-adapter/mmmPayloadMapper.js`
 - Dates MUST be normalized to YYYYMMDD integers (e.g., `20260114`) via `normalizeDateToInteger()`
-- HTML sanitization in `payloadCompactor.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
+- HTML sanitization in `mmm-adapter/mmmPayloadMapper.js#sanitizeHtml()` - whitelist: b, strong, i, em, u, br, p
 - Never send raw API objects to frontend - run through `compactArray()` with schema
 
 **Time Transformation** (simple, no validation layer needed):
 - REST API sends HHMM integers (e.g., 1350 = 13:50) → pass through directly
-- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `parseHHMMStringToInteger(v)`
+- Timegrid sends HH:MM strings (e.g., "13:50") → parse to HHMM via `webuntis/dataOrchestration.js#parseHHMMStringToInteger(v)`
 - Frontend receives HHMM integers; widgets format via `formatDisplayTime(hhmm)` → "13:50"
 
 **Important**: Data format is always deterministic - always know and specify the source format. No guessing.
 
 ### ⚠️ Known Pitfall: extractDayLessons() — Whitelist Trap
 
-`widgets/grid.js#extractDayLessons()` maps raw payload lesson objects into the internal grid lesson shape. It uses `...el` (spread) as a base, then overrides specific keys. **If you add a new field to `schemas.lesson` in `payloadCompactor.js`, it is automatically forwarded** — no change to `extractDayLessons` needed.
+`widgets/grid.js#extractDayLessons()` maps raw payload lesson objects into the internal grid lesson shape. It uses `...el` (spread) as a base, then overrides specific keys. **If you add a new field to `schemas.lesson` in `mmm-adapter/mmmPayloadMapper.js`, it is automatically forwarded** — no change to `extractDayLessons` needed.
 
 This was NOT always the case. Previously it whitelisted explicit field names, causing any new field (e.g. `changedFields`, `teOld`) to be silently dropped in the frontend. If a new field from the payload is missing in the widget despite appearing correctly in debug dumps, check whether `extractDayLessons` needs updating.
 
 **Full data flow for lesson fields:**
 ```
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
-  → payloadCompactor.js#schemas.lesson        – declares field for compaction
-    → webuntis-client/payloadBuilder.js#compactArray() – compacts lessons
+  → mmm-adapter/mmmPayloadMapper.js#schemas.lesson – declares field for compaction
+    → mmm-adapter/mmmPayloadMapper.js#compactArray() – compacts lessons
       → socket GOT_DATA payload               – field present in data.lessons[]
         → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
@@ -108,15 +108,16 @@ console.debug('[feature]', data);
 console.warn('[feature] Warning:', error);
 ```
 
-## File Organization (Updated: lib/ fully documented)
+## File Organization (Updated: `lib/webuntis/` contains internal WebUntis API logic)
 
 **Essential files** (most editing happens here):
 - `node_helper.js` (1,803 LOC) - Socket listener, data fetch orchestrator, API status tracking
-- `lib/authService.js` - Auth, QR code, token caching (14min TTL, 5min buffer)
-- `lib/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
-- `lib/restClient.js` - REST wrapper (headers, error handling, retry, returns HTTP status)
-- `lib/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
-- `lib/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
+- `lib/webuntisClient.js` - Public WebUntis entry point for backend consumers
+- `lib/webuntis/authService.js` - Auth, QR code, token caching (14min TTL, 5min buffer)
+- `lib/webuntis/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
+- `lib/webuntis/restClient.js` - REST wrapper (headers, error handling, retry, returns HTTP status)
+- `lib/webuntis/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
+- `lib/webuntis/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
 - `lib/configValidator.js` - Config schema + 25 legacy key mappings
 - `widgets/*.js` - 6 renderer modules (lessons, grid, exams, homework, absences, messagesofday)
 - `widgets/util.js` - Flexible field utilities (getTeachers, getSubject, getRoom, getClass, getStudentGroup, buildFlexibleLessonDisplay)
@@ -124,15 +125,21 @@ console.warn('[feature] Warning:', error);
 - `tests/unit.test.js` - Jest tests (currently 0% coverage)
 
 **Supporting modules** (rarely modified):
-- `lib/fetchClient.js` - HTTP fetch abstraction
-- `lib/httpClient.js` - JSON-RPC client (auth only)
-- `lib/cacheManager.js` - TTL cache
-- `lib/payloadCompactor.js` - Schema-driven payload optimization + time/HTML transformations (`sanitizeHtml()`)
-- `lib/errorHandler.js` - Error mapping + warnings
+- `lib/webuntis/fetchClient.js` - HTTP fetch abstraction
+- `lib/webuntis/httpClient.js` - JSON-RPC client (auth only)
+- `lib/webuntis/cacheManager.js` - TTL cache
+- `lib/mmm-adapter/mmmPayloadMapper.js` - MMM adapter: compaction schemas, payload mapping, and debug dumps
+- `lib/webuntis/errorHandler.js` - Error mapping + warnings
+- `lib/webuntis/errorUtils.js` - Shared async/error helpers for internal API modules
 - `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
 - `lib/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
-- `lib/webuntis-client/payloadBuilder.js` - Build GOT_DATA payloads + debug dumps (MMM adapter layer)
+- `lib/mmm-adapter/mmmPayloadMapper.js` - Build GOT_DATA payloads + debug dumps (MMM adapter layer)
+
+Boundary rule:
+- Only `lib/webuntisClient.js` is a public WebUntis API entry point at the lib root.
+- Everything under `lib/webuntis/` is internal implementation detail unless a change explicitly promotes it.
+- `lib/webuntis/` must not import `lib/mmm-adapter/`; the public facade composes core bundles with the MMM adapter.
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
@@ -392,7 +399,7 @@ Migration guidance:
 - If a dedicated capture script is introduced, it should be registered in `package.json` and documented here.
 
 Security note:
-- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/webuntis-client/payloadBuilder.js`).
+- MCP can read the DOM and execute page scripts — treat dumps and console exports as sensitive data. Redaction/filtering is recommended (see `lib/mmm-adapter/mmmPayloadMapper.js`).
 
 ### Testing Changes
 

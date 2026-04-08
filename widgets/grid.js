@@ -644,8 +644,9 @@ function getModuleRootElement(ctx) {
 
       // IMPORTANT: Spread `el` first so ALL payload fields are forwarded automatically.
       // Explicit keys below override where the grid needs computed/normalized values.
-      // Without the spread, any new field added to payloadCompactor.js/schemas.lesson
-      // would silently vanish here and never reach makeLessonInnerHTML().
+      // Without the spread, any new field added to
+      // lib/mmm-adapter/mmmPayloadMapper.js/schemas.lesson would silently vanish
+      // here and never reach makeLessonInnerHTML().
       return {
         ...el,
         dateStr: String(el.date),

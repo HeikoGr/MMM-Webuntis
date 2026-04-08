@@ -4,6 +4,7 @@ Detailed reference for how MMM-Webuntis performs server requests against WebUnti
 
 Primary source files for this document:
 - `node_helper.js`
+- `lib/webuntisClient.js`
 - `lib/webuntis/webuntisClient.js`
 - `lib/webuntis/dataFetchOrchestrator.js`
 - `lib/webuntis/webuntisApiService.js`
@@ -45,14 +46,15 @@ flowchart TD
     GROUP[Group students by credential key]
     AUTHSESSION[_createAuthSession]
 
-    CLIENT[webuntisClient.fetchStudentData]
+    FACADE[lib/webuntisClient.js facade]
+    CLIENT[webuntis/webuntisClient.fetchBundle]
     BUNDLE[fetchBundle]
     TARGETS[authService.buildRestTargets]
     ORCH[orchestrateFetch]
     CANARY[Timetable auth canary]
     TTABLE[Timetable first]
     PAR[Exams, homework, absences, messages in parallel]
-    MAP[mmmPayloadMapper and payloadBuilder]
+    MAP[mmmPayloadMapper]
 
     AUTH[authService.getAuth / getAuthFromQRCode]
     JSONRPC[JSON-RPC auth and token bootstrap]
@@ -77,7 +79,8 @@ flowchart TD
     FE --> FETCH --> NH --> EXEC
     FE --> STATE --> NH
 
-    EXEC --> GROUP --> AUTHSESSION --> CLIENT
+    EXEC --> GROUP --> AUTHSESSION --> FACADE
+    FACADE --> CLIENT
     CLIENT --> BUNDLE --> TARGETS --> ORCH
 
     ORCH --> CANARY
@@ -110,7 +113,8 @@ flowchart TD
 sequenceDiagram
     participant FE as Frontend
     participant NH as node_helper
-    participant WC as webuntisClient
+    participant WF as webuntisClient facade
+    participant WC as webuntis core client
     participant OR as dataFetchOrchestrator
     participant API as webuntisApiService
     participant RC as restClient
@@ -119,7 +123,8 @@ sequenceDiagram
     participant WU as WebUntis
 
     FE->>NH: INIT_MODULE or FETCH_DATA
-    NH->>WC: fetchStudentData(...)
+    NH->>WF: fetchStudentData(...)
+    WF->>WC: fetchBundle(...)
     WC->>OR: orchestrateFetch(...)
 
     Note over OR: Timetable first, because it reliably returns 401 on expired auth.

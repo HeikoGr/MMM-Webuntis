@@ -207,7 +207,7 @@ Requires Bearer token authentication with additional headers:
 }
 ```
 
-**MMM-Webuntis Transformation** (in `lib/webuntisApiService.js#mapPositionsToFields`):
+**MMM-Webuntis Transformation** (in `lib/webuntis/webuntisApiService.js#mapPositionsToFields`):
 
 The module transforms the position-based format into named fields:
 - `position1-7[].current` (type=TEACHER) → `te[]` array

@@ -58,10 +58,10 @@ Status: offen
 ## Prioritaet Niedrig
 
 - [x] Auskommentierten/dead Code entfernen
-  - Dateien: lib/webuntis-client/payloadBuilder.js, widgets/exams.js
+  - Dateien: lib/mmm-adapter/mmmPayloadMapper.js, widgets/exams.js
   - Aufgabe: Veraltete, auskommentierte Bloecke loeschen.
   - Akzeptanz: Keine toten Kommentar-Codepfade mehr in diesen Dateien.
-  - Erledigt: 2026-03-10 - veralteten Kommentarblock in exams entfernt und unnoetige eslint-disable-Kommentarpfade in payloadBuilder bereinigt
+  - Erledigt: 2026-03-10 - veralteten Kommentarblock in exams entfernt und unnoetige eslint-disable-Kommentarpfade im MMM-Adapter bereinigt
 
 - [x] Logger-Signatur vereinheitlichen
   - Dateien: lib/webuntis/errorUtils.js, ggf. widgets/util.js
@@ -83,6 +83,6 @@ Status: offen
   - Erledigt: 2026-03-10 - In Phasen-Helper aufgeteilt (validateFetchParams, buildOrchestratorContext, buildTargetHelpers, runAuthCanaryIfNeeded, fetchTimetablePhase, buildParallelFetchPlans)
 
 - [x] buildGotDataPayload modularisieren
-  - Datei: lib/webuntis-client/payloadBuilder.js
+  - Datei: lib/mmm-adapter/mmmPayloadMapper.js
   - Idee: Redaction, Compaction, Warning-Assembly und Debug-Dump in getrennte Funktionen.
   - Erledigt: 2026-03-10 - In Helper aufgeteilt (Compaction, Base-Payload, Meta-Anreicherung, Warning-Assembly, Redaction/Ordering, Debug-Dump)
