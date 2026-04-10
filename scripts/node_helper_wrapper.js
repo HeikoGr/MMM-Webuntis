@@ -5,9 +5,9 @@
  * directly without a MagicMirror instance.
  */
 
-const fs = require('fs');
-const path = require('path');
-const process = require('process');
+const fs = require('node:fs');
+const path = require('node:path');
+const process = require('node:process');
 
 const ANSI = {
   reset: '\x1b[0m',
@@ -89,13 +89,13 @@ const NodeHelper = {
 };
 
 function loadNodeHelper() {
-  const Module = require('module');
+  const Module = require('node:module');
   const originalRequire = Module.prototype.require;
 
-  Module.prototype.require = function (moduleName) {
+  Module.prototype.require = function (moduleName, ...args) {
     if (moduleName === 'node_helper') return NodeHelper;
     if (moduleName === 'logger') return Log;
-    return originalRequire.apply(this, arguments);
+    return originalRequire.call(this, moduleName, ...args);
   };
 
   const nodeHelper = require('../node_helper.js');

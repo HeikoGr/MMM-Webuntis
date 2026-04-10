@@ -7,7 +7,7 @@
  * - MMM-Webuntis.js (defaults object)
  * - README.md (Configuration options section)
  */
-let config = {
+const config = {
   address: '0.0.0.0',
   port: 8080,
   basePath: '/',

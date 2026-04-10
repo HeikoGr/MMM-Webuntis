@@ -37,8 +37,9 @@ function getModuleRootElement(ctx) {
   return document.getElementById(id);
 }
 
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
   const {
     log,
     escapeHtml,
@@ -435,7 +436,7 @@ function getModuleRootElement(ctx) {
       });
     }
 
-    if (!isFinite(allStart) || allEnd <= allStart) {
+    if (!Number.isFinite(allStart) || allEnd <= allStart) {
       allStart = 7 * 60;
       allEnd = 17 * 60;
     }
@@ -1175,7 +1176,7 @@ function getModuleRootElement(ctx) {
     const icon = document.createElement('span');
     icon.className = 'homework-icon';
     icon.setAttribute('aria-hidden', 'true');
-    if (cell && cell.innerHTML) {
+    if (cell?.innerHTML) {
       const iconContainer = cell.querySelector('.lesson-content') || cell;
       let icons = iconContainer.querySelector('.lesson-icons');
       if (!icons) {
@@ -1280,7 +1281,7 @@ function getModuleRootElement(ctx) {
    * @param {number} nowYmd - Current date as YYYYMMDD integer
    * @param {number} nowMin - Current time in minutes since midnight
    */
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, isPast, nowYmd, nowMin, tickerData, lessonConfig) {
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, _isPast, nowYmd, nowMin, tickerData, lessonConfig) {
     const getSubjectName = (lesson) => {
       if (lesson.su && lesson.su.length > 0) {
         return lesson.su[0].name || lesson.su[0].longname;
@@ -1322,7 +1323,7 @@ function getModuleRootElement(ctx) {
     }
 
     const splitViewPairs = [];
-    if (tickerData && tickerData.hasSplitView && tickerData.cancelledLessons.length > 0) {
+    if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
       const pairMap = new Map();
       for (const cancelled of tickerData.cancelledLessons) {
         const matchingReplacements = tickerData.replacements.filter((r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin);
@@ -1655,7 +1656,7 @@ function getModuleRootElement(ctx) {
    * @returns {string} YYYYMMDD key.
    */
   function formatDateKey(date) {
-    return `${date.getFullYear()}${('0' + (date.getMonth() + 1)).slice(-2)}${('0' + date.getDate()).slice(-2)}`;
+    return `${date.getFullYear()}${(`0${date.getMonth() + 1}`).slice(-2)}${(`0${date.getDate()}`).slice(-2)}`;
   }
 
   function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
@@ -1772,7 +1773,7 @@ function getModuleRootElement(ctx) {
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
     const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
-    const holiday = (ctx.holidayMapByStudent?.[studentTitle] || {})[Number(dayYmdStr)] || null;
+    const holiday = ctx.holidayMapByStudent?.[studentTitle]?.[Number(dayYmdStr)] || null;
     const hiddenCount = dayLessons.length - lessonsToRender.length;
     const col = 2 + dayOffset - config.startOffset;
     const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
@@ -2289,7 +2290,7 @@ function getModuleRootElement(ctx) {
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {
-        if (!inner.classList || !inner.classList.contains('is-today')) {
+        if (!inner.classList?.contains('is-today')) {
           const nl = inner._nowLine;
           if (nl) nl.style.display = 'none';
           return;

@@ -6,8 +6,9 @@
  * - Past exam filtering (debug mode exception)
  * - Sorted by date and time
  */
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
   const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
@@ -66,7 +67,7 @@
 
           if (showTeacher) {
             const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
-            if (teacher) nameCell += '&nbsp;' + `<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
+            if (teacher) nameCell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
           }
 
           if (exam.text) {

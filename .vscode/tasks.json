@@ -21,7 +21,7 @@
       "problemMatcher": []
     },
     {
-      "label": "lint + prettier",
+      "label": "lint + biome",
       "type": "shell",
       "command": "node --run lint:fix",
       "presentation": {
@@ -34,9 +34,9 @@
       "isBackground": false,
       "options": {
         "statusbar": {
-          "label": "$(check-all) Lint + Prettier",
+          "label": "$(check-all) Lint + Biome",
           "color": "#00BCD4",
-          "detail": "Run lint and prettier"
+          "detail": "Run Biome checks and fixes"
         }
       },
       "problemMatcher": []

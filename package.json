@@ -35,8 +35,8 @@
   },
   "scripts": {
     "prepare": "node scripts/install-hooks.js",
-    "lint": "eslint --ext .js && prettier --check .",
-    "lint:fix": "eslint --fix && prettier --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "test:spelling": "cspell .",
     "test:auth:curl": "bash scripts/test_auth_with_curl.sh --from-config",
     "test:api": "node scripts/test_api_endpoint.js",
@@ -45,11 +45,8 @@
     "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current"
   },
   "lint-staged": {
-    "*.{js,mjs}": [
-      "eslint --fix"
-    ],
     "*": [
-      "prettier --write --ignore-unknown"
+      "biome check --write --files-ignore-unknown=true"
     ]
   },
   "dependencies": {
@@ -57,13 +54,9 @@
     "sanitize-html": "^2.17.2"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@biomejs/biome": "^2.4.11",
     "cspell": "^10.0.0",
-    "eslint": "^10.2.0",
-    "eslint-plugin-n": "^17.24.0",
-    "globals": "^17.4.0",
     "lint-staged": "^16.4.0",
-    "prettier": "^3.8.1",
     "simple-git-hooks": "^2.13.1"
   },
   "simple-git-hooks": {

@@ -18,7 +18,7 @@
   "forwardPorts": [8080],
   "customizations": {
     "vscode": {
-      "extensions": ["actboy168.tasks", "dbaeumer.vscode-eslint", "vstirbu.vscode-mermaid-preview"],
+      "extensions": ["actboy168.tasks", "biomejs.biome", "vstirbu.vscode-mermaid-preview"],
       "settings": {
         "chat.mcp.autoStart": true,
         "editor.formatOnSave": true,

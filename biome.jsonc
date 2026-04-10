@@ -1,0 +1,85 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "defaultBranch": "master"
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!**/node_modules", "!**/*.png", "!**/*.md", "!**/.mm-module-checker"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140,
+    "lineEnding": "lf",
+    "useEditorconfig": false
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "complexity": {
+        "noArguments": "error",
+        "noImportantStyles": "warn",
+        "useDateNow": "warn",
+        "useOptionalChain": "warn"
+      },
+      "correctness": {
+        "noUndeclaredVariables": "error",
+        "noUnusedFunctionParameters": "on",
+        "noUnusedVariables": "error"
+      },
+      "style": {
+        "noDescendingSpecificity": "warn",
+        "useNodejsImportProtocol": "error",
+        "useConst": "error",
+        "useTemplate": "warn"
+      },
+      "suspicious": {
+        "noAssignInExpressions": "error",
+        "noDuplicateProperties": "error",
+        "noConsole": "off",
+        "noGlobalIsFinite": "error",
+        "noGlobalIsNan": "error",
+        "useIterableCallbackReturn": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "trailingCommas": "es5",
+      "semicolons": "always",
+      "arrowParentheses": "always",
+      "bracketSameLine": true
+    },
+    "globals": ["Log", "Module", "config"]
+  },
+  "overrides": [
+    {
+      "includes": ["widgets/**/*.js"],
+      "javascript": {
+        "globals": ["config"]
+      }
+    },
+    {
+      "includes": ["MMM-Webuntis.js"],
+      "javascript": {
+        "globals": ["Log", "Module", "config"]
+      }
+    }
+  ]
+}

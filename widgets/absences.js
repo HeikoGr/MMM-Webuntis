@@ -9,8 +9,9 @@
  * - Subject information
  * - Maximum item limit
  */
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
   const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**

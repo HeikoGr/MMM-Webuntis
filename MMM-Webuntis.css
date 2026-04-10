@@ -118,14 +118,14 @@
   --wu-widget-stack-gap: 0.6rem;
 
   /* Icons */
-  --wu-icon-warning: '⚠️';
-  --wu-icon-homework: '📘';
-  --wu-icon-break-supervision: '🔔';
-  --wu-icon-holiday: '🏖️';
-  --wu-icon-no-lessons: '📅';
-  --wu-icon-absence: '⚡';
-  --wu-icon-changed: '↺';
-  --wu-icon-moved: '↕';
+  --wu-icon-warning: "⚠️";
+  --wu-icon-homework: "📘";
+  --wu-icon-break-supervision: "🔔";
+  --wu-icon-holiday: "🏖️";
+  --wu-icon-no-lessons: "📅";
+  --wu-icon-absence: "⚡";
+  --wu-icon-changed: "↺";
+  --wu-icon-moved: "↕";
   --wu-icon-chip-size: 14px;
   --wu-icon-chip-radius: 3px;
   --wu-icon-glyph-size: 10px;
@@ -245,9 +245,7 @@
   right: 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-lesson::after,
-.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content,
-.MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
+.MMM-Webuntis .grid-combined .grid-lesson::after {
   position: absolute;
   inset: 0;
 }
@@ -398,8 +396,25 @@
   font-weight: 500;
 }
 
+/* List widgets: lessons, exams, homework, absences */
+.MMM-Webuntis .lesson-primary {
+  font-weight: 600;
+  font-size: 0.75rem;
+  display: block;
+}
+
+.MMM-Webuntis .lesson-secondary {
+  font-size: 0.69rem;
+  color: var(--wu-secondary-text);
+  display: block;
+  line-height: 1.15;
+  max-width: 100%;
+}
+
 /* Ensure inner content fills the parent cell for consistent visuals */
 .MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -413,8 +428,8 @@
 /* Override lesson-primary and lesson-secondary styles within break-supervision */
 .MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-primary,
 .MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-secondary {
-  position: static !important; /* override any absolute positioning */
-  color: var(--wu-break-supervision-text) !important;
+  position: static;
+  color: var(--wu-break-supervision-text);
   font-size: 9px;
   line-height: 1;
 }
@@ -426,7 +441,7 @@
 
 /* Overlay for past lessons; opacity is toggled to fade in stripes */
 .MMM-Webuntis .grid-combined .grid-lesson::after {
-  content: '';
+  content: "";
   background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
   opacity: 0;
   pointer-events: none;
@@ -579,7 +594,9 @@
 
 /* Apply styling to ticker items based on lesson type */
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
-  content: '';
+  position: absolute;
+  inset: 0;
+  content: "";
   background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
   opacity: 0.72;
   pointer-events: none;
@@ -587,26 +604,11 @@
 }
 
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item.has-exam::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
   background: var(--wu-exam-bar);
-}
-
-/* List widgets: lessons, exams, homework, absences */
-.MMM-Webuntis .lesson-primary {
-  font-weight: 600;
-  font-size: 0.75rem;
-  display: block;
-}
-
-.MMM-Webuntis .lesson-secondary {
-  font-size: 0.69rem;
-  color: var(--wu-secondary-text);
-  display: block;
-  line-height: 1.15;
-  max-width: 100%;
 }
 
 .MMM-Webuntis .teacher-name,
@@ -837,7 +839,6 @@
   padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
   width: 100%;
   margin-bottom: var(--wu-message-card-gap);
-  break-inside: avoid;
   break-inside: avoid-column;
 }
 

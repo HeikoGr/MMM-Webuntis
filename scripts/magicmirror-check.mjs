@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { existsSync } from 'node:fs';
-import { spawn } from 'node:child_process';
 
 const DEFAULT_SHARED_CHECK_SCRIPT = process.env.MAGICMIRROR_SHARED_CHECK_SCRIPT || '/opt/mm-tools/magicmirror-check.mjs';
 const REQUIREMENT_FLAG = '--devcontainer-only';

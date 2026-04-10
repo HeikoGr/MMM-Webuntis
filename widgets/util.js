@@ -3,8 +3,9 @@
  * Provides common utility functions for all MMM-Webuntis widgets
  * Functions include: date/time formatting, DOM manipulation, logging, field extraction
  */
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
 
   const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
   const LOG_LEVEL_WEIGHTS = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
@@ -61,7 +62,7 @@
     if (level === 'error') {
       console.error(tag, ...args);
     } else {
-      // ESLint only allows warn and error; use warn for info and debug too
+      // Route non-error widget logs through warn so they stay visible in restricted environments.
       console.warn(tag, ...args);
     }
   }
@@ -122,7 +123,6 @@
     // Get locale from MagicMirror global config (fallback to browser default)
     let locale;
     try {
-      // eslint-disable-next-line no-undef
       locale = (typeof config !== 'undefined' && config && config.language) || undefined;
     } catch {
       locale = undefined;

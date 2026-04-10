@@ -26,6 +26,6 @@ Short guide to contribute:
 
 4. Style
 
-- Use ESLint and Prettier. Run `node --run lint:fix` to auto-fix style issues.
+- Use Biome. Run `node --run lint:fix` to auto-fix style issues.
 
 Thanks for contributing — we review PRs promptly.

@@ -151,9 +151,9 @@ Boundary rule:
 
 ## Quality bar
 
-- Follow the repository’s existing ESLint/Prettier configuration.
+- Follow the repository’s existing Biome configuration.
 - Avoid broad refactors “for cleanliness”; do focused edits.
-- After any code change: run `node --run lint` and fix any new lint errors before saving/closing the change.
+- After any code change: run `node --run lint` and fix any new Biome diagnostics before saving/closing the change.
 - Align config/CLI changes with the matching templates and translations (`config.template.js`, `translations/*.json`, `custom.template.css` etc.) to avoid drift.
 - Fix errors and warnings where possible. Don't suppress them unless absolutely necessary.
 - Implement easy fixes even if they weren't your fault.
@@ -345,7 +345,7 @@ If you're uncertain whether something is an issue, don't comment. False positive
 2. **Plan changes** → identify which files/services need modification
 3. **Implement** → make focused, testable changes
 4. **Validate**:
-   - Run `node --run lint` to catch ESLint/Prettier issues
+  - Run `node --run lint` to catch Biome issues
   - Run `node --run check` / `node --run debug` to validate behavior
    - Use `node --run debug` to test backend functionality with real config
    - Inspect debug dumps if transformations changed
@@ -355,7 +355,7 @@ If you're uncertain whether something is an issue, don't comment. False positive
 
 | Command | Purpose | Output Behavior | Use Case |
 |---------|---------|-----------------|----------|
-| `node --run lint` | ESLint + Prettier validation | Returns immediately | Before finishing any code changes |
+| `node --run lint` | Biome validation | Returns immediately | Before finishing any code changes |
 | `node --run debug` | Interactive CLI test (config, auth, fetch) | Returns immediately | Debug auth issues, test data fetching, config loading |
 | `node --run check` | Same as debug, quieter mode | Returns immediately | Quick validation |
 | `pm2 logs --lines 200` | View recent PM2 logs | Returns immediately with last 200 lines | Check runtime behavior |

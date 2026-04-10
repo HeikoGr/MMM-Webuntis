@@ -28,8 +28,8 @@
  *   --raw         Output raw JSON only (no formatting)
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const AuthService = require('../lib/webuntis/authService');
 const { callRestAPI } = require('../lib/webuntis/restClient');
 
@@ -284,7 +284,7 @@ async function main() {
       console.log(JSON.stringify(response.data, null, 2));
     } else {
       // Formatted output with metadata
-      console.log('\n' + '='.repeat(80));
+      console.log(`\n${'='.repeat(80)}`);
       console.log('API RESPONSE');
       console.log('='.repeat(80));
       console.log(`Endpoint: ${cleanPath}`);
@@ -296,7 +296,7 @@ async function main() {
       console.log('='.repeat(80));
       console.log('\nResponse Data:');
       console.log(JSON.stringify(response.data, null, 2));
-      console.log('\n' + '='.repeat(80));
+      console.log(`\n${'='.repeat(80)}`);
 
       // Analysis hints
       if (response.data && typeof response.data === 'object') {
@@ -346,6 +346,5 @@ main().catch((error) => {
   if (!options.raw) {
     console.error(`\n❌ Fatal error: ${error.message}`);
   }
-  // eslint-disable-next-line n/no-process-exit
   process.exit(1);
 });

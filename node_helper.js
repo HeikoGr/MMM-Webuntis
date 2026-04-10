@@ -1,9 +1,7 @@
-/* eslint-disable n/no-missing-require */
 const NodeHelper = require('node_helper');
 const Log = require('logger');
-/* eslint-enable n/no-missing-require */
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const { createBackendLogger } = require('./lib/logger');
@@ -269,7 +267,7 @@ module.exports = NodeHelper.create({
         const formattedJson = JSON.stringify(redacted, null, 2);
         this._mmLog('info', null, `Normalized config:\n${formattedJson}`);
       } catch (e) {
-        this._mmLog('debug', null, `Failed to process legacy config: ${e && e.message ? e.message : e}`);
+        this._mmLog('debug', null, `Failed to process legacy config: ${e?.message ? e.message : e}`);
       }
     }
 
@@ -286,7 +284,7 @@ module.exports = NodeHelper.create({
    */
   _mmLog(level, student, message) {
     // Don't add [MMM-Webuntis] tag here - MagicMirror's Log methods add it automatically
-    const studentTag = student && student.title ? `[${String(student.title).trim()}] ` : '';
+    const studentTag = student?.title ? `[${String(student.title).trim()}] ` : '';
     const formatted = `${studentTag}${message}`;
 
     // Always forward debug messages to the underlying MagicMirror logger.
@@ -502,7 +500,7 @@ module.exports = NodeHelper.create({
       if (!autoStudents || autoStudents.length === 0) return;
 
       configuredStudents.forEach((configStudent) => {
-        if (!configStudent || !configStudent.studentId) return;
+        if (!configStudent?.studentId) return;
         const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
         if (!match) {
           const candidateIds = this._getCandidateStudentIdsForConfig(configStudent, autoStudents);
@@ -524,7 +522,9 @@ module.exports = NodeHelper.create({
       const autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
 
       if (autoStudents && autoStudents.length > 0) {
-        configuredStudents.forEach((configStudent) => this._enhanceConfiguredStudentFromAutoData(configStudent, autoStudents));
+        configuredStudents.forEach((configStudent) => {
+          this._enhanceConfiguredStudentFromAutoData(configStudent, autoStudents);
+        });
       }
 
       return autoStudents;
@@ -629,8 +629,8 @@ module.exports = NodeHelper.create({
   async _createAuthSession(sample, moduleConfig, identifier, cacheKeyOverride = null) {
     const useQrLogin = Boolean(sample.qrcode);
     const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
-    const hasParentCredentials = moduleConfig && moduleConfig.username && moduleConfig.password && moduleConfig.school;
-    const hasParentQr = moduleConfig && moduleConfig.qrcode;
+    const hasParentCredentials = moduleConfig?.username && moduleConfig.password && moduleConfig.school;
+    const hasParentQr = moduleConfig?.qrcode;
 
     // Get identifier-specific AuthService to prevent cache cross-contamination
     const authService = this._getAuthServiceForIdentifier(identifier);
@@ -732,7 +732,7 @@ module.exports = NodeHelper.create({
     }
 
     // New format: direct array of time slots from _extractTimegridFromTimetable
-    if (firstRow && firstRow.startTime && firstRow.endTime) {
+    if (firstRow?.startTime && firstRow.endTime) {
       return rawGrid.map((u) => ({
         startTime: u.startTime,
         endTime: u.endTime,
@@ -780,7 +780,7 @@ module.exports = NodeHelper.create({
 
     let rawHolidays = [];
     try {
-      if (authSession && authSession.appData) {
+      if (authSession?.appData) {
         if (Array.isArray(authSession.appData.holidays)) {
           rawHolidays = authSession.appData.holidays;
         } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
@@ -788,7 +788,7 @@ module.exports = NodeHelper.create({
         }
       }
     } catch (error) {
-      this._mmLog('error', null, `Holidays extraction failed: ${error && error.message ? error.message : error}`);
+      this._mmLog('error', null, `Holidays extraction failed: ${error?.message ? error.message : error}`);
     }
 
     return this._compactHolidays(rawHolidays);
@@ -1057,7 +1057,7 @@ module.exports = NodeHelper.create({
         apiStatus.messages = Number(status);
         return;
       }
-      if (Object.prototype.hasOwnProperty.call(apiStatus, endpoint)) {
+      if (Object.hasOwn(apiStatus, endpoint)) {
         apiStatus[endpoint] = Number(status);
       }
     });

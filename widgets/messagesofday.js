@@ -7,8 +7,9 @@
  * - Expanded message display mode
  * - Localized "Messages of the Day" header
  */
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
   const { log, escapeHtml, addFullRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**

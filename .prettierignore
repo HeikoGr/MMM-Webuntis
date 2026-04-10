@@ -1,7 +1,0 @@
-# Ignore all Markdown files
-*.md
-**/*.md
-
-# Ignore coverage reports (generated files)
-coverage/
-**/coverage/

@@ -31,7 +31,6 @@ Module.register('MMM-Webuntis', {
           }
 
           const method = METHODS[level] || 'warn';
-          // eslint-disable-next-line no-console
           console[method](`${moduleName}: ${msg}`);
         } catch {
           return undefined;
@@ -201,7 +200,7 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of JavaScript file paths
    */
   getScripts() {
-    window.MMMWebuntisLogLevel = (this.config && this.config.logLevel) || this.defaults.logLevel || 'info';
+    window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
     const scripts = [this.file('lib/runtime-utils.js'), this.file('widgets/util.js')];
 
@@ -456,7 +455,7 @@ Module.register('MMM-Webuntis', {
     }
 
     const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    const configured = (this.config && this.config.logLevel) || this.defaults.logLevel || 'none';
+    const configured = this.config?.logLevel || this.defaults.logLevel || 'none';
     const configuredLevel = levels[configured] !== undefined ? configured : 'none';
     const msgLevel = levels[level] !== undefined ? level : 'info';
     if (levels[msgLevel] <= levels[configuredLevel]) {
@@ -734,14 +733,18 @@ Module.register('MMM-Webuntis', {
   _getRuntimeWarnings() {
     if (!this.runtimeWarningsByStudent) return [];
     const aggregate = new Set();
-    Object.values(this.runtimeWarningsByStudent).forEach((warningSet) => {
-      if (!warningSet) return;
+    for (const warningSet of Object.values(this.runtimeWarningsByStudent)) {
+      if (!warningSet) continue;
       if (warningSet instanceof Set) {
-        warningSet.forEach((w) => aggregate.add(w));
+        warningSet.forEach((w) => {
+          aggregate.add(w);
+        });
       } else if (Array.isArray(warningSet)) {
-        warningSet.forEach((w) => aggregate.add(w));
+        warningSet.forEach((w) => {
+          aggregate.add(w);
+        });
       }
-    });
+    }
     return Array.from(aggregate);
   },
 
@@ -1288,7 +1291,7 @@ Module.register('MMM-Webuntis', {
     }
 
     try {
-      if (!this.config.language && typeof config !== 'undefined' && config && config.language) {
+      if (!this.config.language && typeof config !== 'undefined' && config?.language) {
         this.config.language = config.language;
       }
     } catch {
@@ -1298,7 +1301,7 @@ Module.register('MMM-Webuntis', {
     if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
       const s = String(this.config.debugDate).trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        const d = new Date(s + 'T00:00:00');
+        const d = new Date(`${s}T00:00:00`);
         this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
         this._log('debug', `[start] debugDate="${s}" (frozen test mode)`);
       } else if (/^\d{8}$/.test(s)) {
@@ -1840,7 +1843,9 @@ Module.register('MMM-Webuntis', {
 
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
       this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
-      payload.warnings.forEach((w) => this._log('warn', `Init warning: ${w}`));
+      payload.warnings.forEach((w) => {
+        this._log('warn', `Init warning: ${w}`);
+      });
     }
 
     this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
@@ -1850,10 +1855,14 @@ Module.register('MMM-Webuntis', {
   _handleInitError(payload) {
     this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
     if (Array.isArray(payload.errors)) {
-      payload.errors.forEach((err) => this._log('error', `  - ${err}`));
+      payload.errors.forEach((err) => {
+        this._log('error', `  - ${err}`);
+      });
     }
     if (Array.isArray(payload.warnings)) {
-      payload.warnings.forEach((warn) => this._log('warn', `  - ${warn}`));
+      payload.warnings.forEach((warn) => {
+        this._log('warn', `  - ${warn}`);
+      });
     }
     this._initialized = false;
     this._initRequested = false;
@@ -2000,7 +2009,9 @@ Module.register('MMM-Webuntis', {
       if (!groupedRaw[key]) groupedRaw[key] = [];
       groupedRaw[key].push(el);
     });
-    Object.keys(groupedRaw).forEach((k) => groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0)));
+    Object.keys(groupedRaw).forEach((k) => {
+      groupedRaw[k].sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+    });
     this.preprocessedByStudent[title] = { ...(this.preprocessedByStudent[title] || {}), rawGroupedByDate: groupedRaw };
 
     const dataMaps = [

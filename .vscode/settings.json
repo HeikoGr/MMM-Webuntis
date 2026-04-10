@@ -1,13 +1,14 @@
 {
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
   },
   "editor.rulers": [100],
   "editor.trimAutoWhitespace": true,
   "editor.insertSpaces": true,
   "editor.tabSize": 2,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.defaultFormatter": "biomejs.biome",
   "files.exclude": {
     "**/node_modules": true
   },
@@ -24,11 +25,11 @@
   "terminal.integrated.scrollback": 5000,
   "git.autofetch": true,
   "[javascript]": {
-    "editor.defaultFormatter": "vscode.typescript-language-features",
+    "editor.defaultFormatter": "biomejs.biome",
     "editor.formatOnSave": true
   },
   "[json]": {
-    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.defaultFormatter": "biomejs.biome",
     "editor.formatOnSave": true
   },
   "chat.mcp.serverSampling": {
@@ -37,6 +38,6 @@
     }
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "vscode.json-language-features"
+    "editor.defaultFormatter": "biomejs.biome"
   }
 }

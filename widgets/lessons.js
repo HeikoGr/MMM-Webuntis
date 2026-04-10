@@ -7,8 +7,9 @@
  * - Configurable date formats and student group filtering
  * - Exam detection within lesson entries
  */
-(function () {
-  const root = window.MMMWebuntisWidgets || (window.MMMWebuntisWidgets = {});
+(() => {
+  const root = window.MMMWebuntisWidgets || {};
+  window.MMMWebuntisWidgets = root;
   const LESSON_ACTIVITY_TYPE = Object.freeze({
     EXAM: 'EXAM',
   });
@@ -185,8 +186,8 @@
       const dayIndex = startOffset + d;
       const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
       const y = dayDate.getFullYear();
-      const m = ('0' + (dayDate.getMonth() + 1)).slice(-2);
-      const dd = ('0' + dayDate.getDate()).slice(-2);
+      const m = `0${dayDate.getMonth() + 1}`.slice(-2);
+      const dd = `0${dayDate.getDate()}`.slice(-2);
       const dateYmd = Number(`${y}${m}${dd}`);
 
       const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => {
@@ -201,7 +202,7 @@
       });
 
       if (!entries || entries.length === 0) {
-        const holiday = (ctx.holidayMapByStudent?.[effectiveStudentTitle] || {})[dateYmd] || null;
+        const holiday = ctx.holidayMapByStudent?.[effectiveStudentTitle]?.[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
           const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
@@ -304,24 +305,24 @@
           if (teacherInitial !== '') {
             const teacherText = `(${escapeHtml(teacherInitial)})`;
             if (teacherChanged) {
-              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${teacherText}</span>`;
+              subjectStr += `&nbsp;<span class="lesson-changed-new">${teacherText}</span>`;
             } else {
-              subjectStr += '&nbsp;' + `<span class="teacher-name">${teacherText}</span>`;
+              subjectStr += `&nbsp;<span class="teacher-name">${teacherText}</span>`;
             }
           } else if (teacherChanged) {
-            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         } else if (teacherMode === 'full') {
           const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
           if (teacherFull !== '') {
             const teacherText = `(${escapeHtml(teacherFull)})`;
             if (teacherChanged) {
-              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${teacherText}</span>`;
+              subjectStr += `&nbsp;<span class="lesson-changed-new">${teacherText}</span>`;
             } else {
-              subjectStr += '&nbsp;' + `<span class="teacher-name">${teacherText}</span>`;
+              subjectStr += `&nbsp;<span class="teacher-name">${teacherText}</span>`;
             }
           } else if (teacherChanged) {
-            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         }
 
@@ -330,17 +331,17 @@
           if (roomName !== '') {
             const roomText = `(${escapeHtml(roomName)})`;
             if (roomChanged) {
-              subjectStr += '&nbsp;' + `<span class="lesson-changed-new">${roomText}</span>`;
+              subjectStr += `&nbsp;<span class="lesson-changed-new">${roomText}</span>`;
             } else {
-              subjectStr += '&nbsp;' + `<span class="lesson-room-name">${roomText}</span>`;
+              subjectStr += `&nbsp;<span class="lesson-room-name">${roomText}</span>`;
             }
           } else if (roomChanged) {
-            subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         }
 
         if (entry.status === 'CHANGED' && changedFields.size === 0 && fallbackLong === '') {
-          subjectStr += '&nbsp;' + `<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+          subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
         }
 
         if (showSubstitution && (entry.substText || '') !== '') {
@@ -374,7 +375,7 @@
       }
 
       if (renderedForDate === 0) {
-        const holiday = (ctx.holidayMapByStudent?.[effectiveStudentTitle] || {})[dateYmd] || null;
+        const holiday = ctx.holidayMapByStudent?.[effectiveStudentTitle]?.[dateYmd] || null;
         if (holiday) {
           log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
           const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
