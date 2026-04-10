@@ -4,7 +4,8 @@
     {
       "label": "pm2: restart all",
       "type": "shell",
-      "command": "pm2 restart all",
+      "command": "./scripts/require-devcontainer.sh",
+      "args": ["pm2", "restart", "all"],
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -44,7 +45,8 @@
     {
       "label": "pm2: logs (follow)",
       "type": "shell",
-      "command": "pm2 logs --lines 200",
+      "command": "./scripts/require-devcontainer.sh",
+      "args": ["pm2", "logs", "--lines", "200"],
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -104,7 +106,8 @@
     {
       "label": "pm2: restart & clean",
       "type": "shell",
-      "command": "clear && pm2 restart all && pm2 flush",
+      "command": "./scripts/require-devcontainer.sh",
+      "args": ["bash", "-lc", "clear && pm2 restart all && pm2 flush"],
       "presentation": {
         "echo": true,
         "reveal": "always",
