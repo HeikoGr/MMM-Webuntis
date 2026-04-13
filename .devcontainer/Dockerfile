@@ -2,6 +2,8 @@ FROM ghcr.io/heikogr/mmm-devcontainer:node24-trixie-slim
 
 WORKDIR /opt/magic_mirror
 
+RUN command -v ncu >/dev/null 2>&1 || npm install -g npm-check-updates
+
 # Copy shell scripts and ensure correct line endings (LF) for cross-platform compatibility (Windows/Linux)
 COPY --chmod=755 ./entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && \

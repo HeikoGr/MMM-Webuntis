@@ -42,7 +42,9 @@
     "test:api": "node scripts/test_api_endpoint.js",
     "test:api:discover": "bash scripts/discover_endpoints.sh",
     "debug": "node scripts/node_helper_wrapper.js",
-    "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current"
+    "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current",
+    "deps:check": "npm outdated && ncu",
+    "deps:update": "ncu -u && npm install"
   },
   "lint-staged": {
     "*": [

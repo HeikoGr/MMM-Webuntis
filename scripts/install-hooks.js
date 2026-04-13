@@ -1,21 +1,21 @@
 const { execSync } = require('node:child_process');
 
 try {
-  // Prüfen, ob simple-git-hooks überhaupt installiert ist
+  // Check whether simple-git-hooks is installed
   require.resolve('simple-git-hooks');
 
-  // Falls vorhanden: CLI ausführen (vermeidet Abhängigkeit von interner API)
+  // If available: run CLI (avoids dependency on internal API)
   try {
     execSync('npx simple-git-hooks install', { stdio: 'inherit' });
     console.log('Git hooks installed successfully');
   } catch (e) {
-    // Wenn das CLI-Aufruf schiefgeht, loggen, aber Fehler nicht weiterreichen
+    // If CLI invocation fails, log it but do not fail installation
     console.error('simple-git-hooks found but CLI install failed:', e.message);
     console.log('Continuing without failing the install.');
   }
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND') {
-    // In Production / bei --omit=dev ist das erwartetes Verhalten
+    // In production / with --omit=dev this is expected behavior
     console.log('Skipping git hooks installation: simple-git-hooks is not installed.');
   } else {
     console.error('Unexpected error while checking simple-git-hooks:', err.message || err);
