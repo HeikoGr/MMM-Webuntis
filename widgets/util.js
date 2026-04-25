@@ -7,7 +7,6 @@
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
 
-  const LOG_LEVELS = ['error', 'warn', 'info', 'debug'];
   const LOG_LEVEL_WEIGHTS = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
   const LESSON_STATUS = Object.freeze({
     ADDITIONAL: 'ADDITIONAL',
@@ -27,24 +26,11 @@
    * Global log function for widgets
    * Respects window.MMMWebuntisLogLevel set by main module
    *
-   * Supports two signatures for backward compatibility:
-   *   - log(level, ...args)              [recommended]
-   *   - log(ctx, level, ...args)         [legacy, ctx is ignored]
-   *
-   * @param {...any} fullArgs - Variable arguments (level, message) or (ctx, level, message)
+   * @param {string} level - Log level
+   * @param {...any} args - Log payload
    */
-  function log(...fullArgs) {
-    // Handle both log(level, ...args) and log(ctx, level, ...args) signatures
-    let level, args;
-    if (fullArgs.length >= 1 && typeof fullArgs[0] === 'string' && LOG_LEVELS.includes(fullArgs[0])) {
-      // New signature: log(level, ...args)
-      [level, ...args] = fullArgs;
-    } else if (fullArgs.length >= 2) {
-      // Legacy signature: log(ctx, level, ...args)
-      [, level, ...args] = fullArgs;
-    } else {
-      return; // Not enough args
-    }
+  function log(level, ...args) {
+    if (typeof level !== 'string') return;
 
     const configured = window.MMMWebuntisLogLevel || 'none';
     // Special: if configured is 'none', never log
@@ -706,6 +692,7 @@
   }
 
   root.util = {
+    logLevelWeights: LOG_LEVEL_WEIGHTS,
     formatYmd,
     formatDisplayTime,
     currentTimeAsHHMM,

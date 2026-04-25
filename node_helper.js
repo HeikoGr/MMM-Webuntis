@@ -4,9 +4,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
-const { createBackendLogger } = require('./lib/logger');
-const { WebUntisClient } = require('./lib/webuntisClient');
-const { calculateFetchRanges } = require('./lib/webuntis/dataOrchestration');
+const createBackendLogger = require('./lib/logger');
+const {
+  AuthService,
+  WebUntisClient,
+  formatError,
+  convertRestErrorToWarning,
+  normalizeDateToInteger,
+  normalizeTimeToHHMM,
+} = require('./lib/webuntisClient');
+const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
 module.exports = NodeHelper.create({
   /**
@@ -15,7 +22,7 @@ module.exports = NodeHelper.create({
    */
   start() {
     this._mmLog('debug', null, 'Node helper started');
-    this.logger = createBackendLogger(this._mmLog.bind(this), 'MMM-Webuntis');
+    this.logger = createBackendLogger(this._mmLog.bind(this));
 
     const libLogger = (level, message) => {
       this._mmLog(level, null, `[lib] ${message}`);
@@ -129,23 +136,25 @@ module.exports = NodeHelper.create({
       msg.includes('fetch failed') ||
       msg.includes('network error') ||
       msg.includes('timeout') ||
+      msg.includes('timed out') ||
       msg.includes('econnrefused') ||
       msg.includes('enotfound') ||
-      msg.includes('ehostunreach')
+      msg.includes('ehostunreach') ||
+      msg.includes('eai_again') ||
+      msg.includes('connection refused')
     );
   },
 
   /**
-   * Build deterministic warning metadata from an error object.
+   * Build structured warning metadata from a fetch/auth error.
    *
    * @param {Error|Object} err - Error object
-   * @param {Object} [extra={}] - Additional metadata fields
-   * @returns {Object} warning meta
+   * @param {Object} extra - Additional or overriding metadata
+   * @returns {Object} warning metadata
    */
   _classifyWarningMetaFromError(err, extra = {}) {
     const status = this._extractHttpStatus(err);
     const code = String(err?.code || err?.cause?.code || '').toUpperCase() || null;
-
     let kind = 'generic';
     let severity = 'warning';
 
@@ -201,7 +210,7 @@ module.exports = NodeHelper.create({
   _getAuthServiceForIdentifier(identifier) {
     if (!this._authServicesByIdentifier.has(identifier)) {
       // Creating AuthService silently
-      this._authServicesByIdentifier.set(identifier, WebUntisClient.createAuthService({ logger: this._libLogger }));
+      this._authServicesByIdentifier.set(identifier, new AuthService({ logger: this._libLogger }));
     }
     return this._authServicesByIdentifier.get(identifier);
   },
@@ -318,7 +327,7 @@ module.exports = NodeHelper.create({
    * @returns {string} Formatted error message
    */
   _formatErr(err) {
-    return WebUntisClient.formatError(err);
+    return formatError(err);
   },
   /**
    * Cleanup old debug dumps, keeping only the N most recent files
@@ -755,8 +764,8 @@ module.exports = NodeHelper.create({
     if (!Array.isArray(rawHolidays)) return [];
     return rawHolidays.map((h) => {
       // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-      const startDate = h.startDate ?? WebUntisClient.normalizeDateToInteger(h.start);
-      const endDate = h.endDate ?? WebUntisClient.normalizeDateToInteger(h.end);
+      const startDate = h.startDate ?? normalizeDateToInteger(h.start);
+      const endDate = h.endDate ?? normalizeDateToInteger(h.end);
 
       return {
         id: h.id ?? null,
@@ -791,7 +800,7 @@ module.exports = NodeHelper.create({
       this._mmLog('error', null, `Holidays extraction failed: ${error?.message ? error.message : error}`);
     }
 
-    return this._compactHolidays(rawHolidays);
+    return compactHolidays(rawHolidays);
   },
 
   /**
@@ -942,7 +951,7 @@ module.exports = NodeHelper.create({
   _validateStudentConfig(student) {
     return this._collectValidationWarnings(
       widgetConfigValidator.validateStudentCredentials(student),
-      widgetConfigValidator.validateStudentWidgets(student)
+      widgetConfigValidator.validateAllWidgets(student)
     );
   },
 
@@ -1304,7 +1313,7 @@ module.exports = NodeHelper.create({
         const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
         this._mmLog('error', student, errorMsg);
 
-        const warningMsg = WebUntisClient.convertRestErrorToWarning(err, {
+        const warningMsg = convertRestErrorToWarning(err, {
           studentTitle: student.title,
           school: student.school || config?.school,
           server: student.server || config?.server || 'webuntis.com',
@@ -1827,8 +1836,8 @@ module.exports = NodeHelper.create({
 
     // Sort unique start times chronologically using shared HHMM normalization
     const sortedStarts = Array.from(startTimes).sort((a, b) => {
-      const timeA = WebUntisClient.normalizeTimeToHHMM(a) || 0;
-      const timeB = WebUntisClient.normalizeTimeToHHMM(b) || 0;
+      const timeA = normalizeTimeToHHMM(a) || 0;
+      const timeB = normalizeTimeToHHMM(b) || 0;
       return timeA - timeB;
     });
 

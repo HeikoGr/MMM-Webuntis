@@ -2,41 +2,21 @@ Module.register('MMM-Webuntis', {
   _cacheVersion: '2.0.2',
 
   /**
-   * Simple frontend logger factory for widget logging
-   * Creates a lightweight logger that respects the configured log level
-   * Avoids bundler require() issues by using pure JavaScript
+   * Frontend logger factory for widget logging.
+   * Uses the runtime utility loaded via getScripts(); _log provides the console fallback.
    *
    * @param {string} moduleName - Module name for log prefixes (default: 'MMM-Webuntis')
-   * @returns {Object} Logger object with log(level, msg) method
+   * @returns {Object|null} Logger object with log(level, msg) method, or null if unavailable
    */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
-    if (globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
-      return globalThis.MMModuleRuntimeUtils.createLevelLogger({
-        prefix: `[${moduleName}]`,
-        getLevel: () => window.MMMWebuntisLogLevel || 'info',
-      });
+    if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
+      return null;
     }
 
-    const METHODS = { error: 'error', warn: 'warn', info: 'warn', debug: 'warn' };
-    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    return {
-      log(level, msg) {
-        try {
-          const configured = window.MMMWebuntisLogLevel || 'info';
-          const configuredLevel = levels[configured] !== undefined ? configured : 'info';
-          const msgLevel = levels[level] !== undefined ? level : 'info';
-
-          if (levels[msgLevel] > levels[configuredLevel]) {
-            return;
-          }
-
-          const method = METHODS[level] || 'warn';
-          console[method](`${moduleName}: ${msg}`);
-        } catch {
-          return undefined;
-        }
-      },
-    };
+    return globalThis.MMModuleRuntimeUtils.createLevelLogger({
+      prefix: `[${moduleName}]`,
+      getLevel: () => window.MMMWebuntisLogLevel || 'info',
+    });
   },
 
   /**
@@ -454,7 +434,7 @@ Module.register('MMM-Webuntis', {
       void 0;
     }
 
-    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+    const levels = this._getWidgetApi()?.util?.logLevelWeights || { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
     const configured = this.config?.logLevel || this.defaults.logLevel || 'none';
     const configuredLevel = levels[configured] !== undefined ? configured : 'none';
     const msgLevel = levels[level] !== undefined ? level : 'info';

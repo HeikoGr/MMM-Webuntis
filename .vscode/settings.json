@@ -39,5 +39,12 @@
   },
   "[jsonc]": {
     "editor.defaultFormatter": "biomejs.biome"
-  }
+  },
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /opt/magic_mirror/modules/MMM-Webuntis && node --run lint$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  },
+  "markdown.validate.enabled": true
 }

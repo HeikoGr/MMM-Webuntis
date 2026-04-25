@@ -384,15 +384,13 @@ Important detail:
 
 ## 9. Actual Status and Log Messages
 
-### REST error messages created by `mapRestError()`
+### REST transport log messages from `restClient.callRestAPI()`
 
 | Trigger | Message |
 |---------|---------|
-| `401` | `Authentication failed (HTTP 401): Check credentials or token expired` |
-| `403` | `Access forbidden (HTTP 403): Endpoint not available or insufficient permissions` |
-| `404` | `Resource not found (HTTP 404): Check school name or studentId` |
-| `503` | `WebUntis API unavailable (HTTP 503): Server temporarily down` |
-| `429` | `Rate limit exceeded (HTTP 429): Too many requests, try again later` |
+| timeout / aborted request | `Connection timeout to WebUntis server "<server>" after <timeout>ms: check network or try again` |
+| network / DNS / refused connection | `Cannot connect to WebUntis server "<server>": check server name and network` |
+| other transport or HTTP failure | `REST API call failed: <error message>` |
 
 ### User-facing warning texts from `convertRestErrorToWarning()`
 
