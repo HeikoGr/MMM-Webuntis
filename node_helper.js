@@ -15,6 +15,68 @@ const {
 } = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
+
+const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
+const VALID_WIDGETS = new Set(ALL_WIDGETS);
+const VALID_LOG_LEVELS = Object.freeze(['none', 'error', 'warn', 'info', 'debug']);
+const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
+const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+const NETWORK_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ERR_NETWORK',
+  'ERR_SOCKET_CONNECTION_TIMEOUT',
+  'ERR_CONNECTION_REFUSED',
+  'ABORT_ERR',
+]);
+const AUTH_ERROR_CODES = new Set(['AUTH_FAILED', 'SESSION_EXPIRED', 'TOKEN_INVALID']);
+const DEFAULT_WARNING_META = Object.freeze({ kind: 'generic', severity: 'warning' });
+
+function createEmptyApiStatusSnapshot() {
+  return {
+    timetable: null,
+    exams: null,
+    homework: null,
+    absences: null,
+    messages: null,
+  };
+}
+
+function createWarningMetaEntry(message, meta = DEFAULT_WARNING_META) {
+  return {
+    message,
+    ...meta,
+  };
+}
+
+function buildWarningMetaList(messages, warningMetaByMessage, fallbackMeta = DEFAULT_WARNING_META) {
+  return messages.map((message) => warningMetaByMessage.get(message) || createWarningMetaEntry(message, fallbackMeta));
+}
+
+function createWarningMetaMap(entries = []) {
+  const warningMetaByMessage = new Map();
+  entries.forEach((entry) => {
+    if (!entry?.message) return;
+    warningMetaByMessage.set(String(entry.message), { ...entry });
+  });
+  return warningMetaByMessage;
+}
+
+function mergeUniqueWarnings(...warningGroups) {
+  return Array.from(
+    new Set(
+      warningGroups.flatMap((group) => {
+        if (Array.isArray(group)) return group.filter(Boolean);
+        return group ? [group] : [];
+      })
+    )
+  );
+}
+
 module.exports = NodeHelper.create({
   /**
    * Called when the helper is initialized by the MagicMirror backend.
@@ -60,13 +122,10 @@ module.exports = NodeHelper.create({
     // 403 Forbidden - user has no permission for this endpoint (school licensing)
     // 404 Not Found - endpoint doesn't exist
     // 410 Gone - resource permanently removed
-    const permanentErrors = [403, 404, 410];
-
-    if (!permanentErrors.includes(status)) return false;
+    if (!PERMANENT_API_ERRORS.has(status)) return false;
 
     // Retry after 24 hours in case the school adds a new module/license
-    const RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
-    if (recordedAt && Date.now() - recordedAt > RETRY_AFTER_MS) {
+    if (recordedAt && Date.now() - recordedAt > API_RETRY_AFTER_MS) {
       // Expired — clear status and allow retry
       delete this._apiStatusBySession.get(sessionKey)[endpoint];
       return false;
@@ -115,19 +174,7 @@ module.exports = NodeHelper.create({
   _isNetworkError(err) {
     const code = String(err?.code || err?.cause?.code || '').toUpperCase();
     const name = String(err?.name || err?.cause?.name || '').toUpperCase();
-    const networkCodes = new Set([
-      'ECONNREFUSED',
-      'ETIMEDOUT',
-      'ECONNRESET',
-      'EHOSTUNREACH',
-      'ENOTFOUND',
-      'EAI_AGAIN',
-      'ERR_NETWORK',
-      'ERR_SOCKET_CONNECTION_TIMEOUT',
-      'ERR_CONNECTION_REFUSED',
-      'ABORT_ERR',
-    ]);
-    if (networkCodes.has(code)) return true;
+    if (NETWORK_ERROR_CODES.has(code)) return true;
     if (name === 'ABORTERROR') return true;
 
     // Allowed fallback: some lower-level fetch paths only surface text.
@@ -161,7 +208,7 @@ module.exports = NodeHelper.create({
     if (this._isNetworkError(err)) {
       kind = 'network';
       severity = 'critical';
-    } else if (status === 401 || code === 'AUTH_FAILED' || code === 'SESSION_EXPIRED' || code === 'TOKEN_INVALID') {
+    } else if (status === 401 || AUTH_ERROR_CODES.has(code)) {
       kind = 'auth';
       severity = 'critical';
     } else if (status === 429) {
@@ -415,7 +462,6 @@ module.exports = NodeHelper.create({
    */
   _mergeModuleDefaultsIntoStudents(moduleConfig, students, options = {}) {
     const { markAutoDiscovered = false } = options;
-    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
 
     const defNoStudents = { ...(moduleConfig || {}) };
     delete defNoStudents.students;
@@ -434,7 +480,7 @@ module.exports = NodeHelper.create({
         ...inputStudent,
       };
 
-      widgetKeys.forEach((widget) => {
+      ALL_WIDGETS.forEach((widget) => {
         merged[widget] = {
           ...(defNoStudents[widget] || {}),
           ...(inputStudent[widget] || {}),
@@ -961,21 +1007,19 @@ module.exports = NodeHelper.create({
   _validateModuleConfig(config) {
     const warnings = [];
 
-    const validWidgets = ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
     if (config.displayMode && typeof config.displayMode === 'string') {
       const widgets = config.displayMode
         .split(',')
         .map((w) => w.trim())
         .filter(Boolean);
-      const invalid = widgets.filter((w) => !validWidgets.includes(w.toLowerCase()));
+      const invalid = widgets.filter((w) => !VALID_WIDGETS.has(w.toLowerCase()));
       if (invalid.length > 0) {
-        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
+        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${ALL_WIDGETS.join(', ')}`);
       }
     }
 
-    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
-    if (config.logLevel && !validLogLevels.includes(config.logLevel.toLowerCase())) {
-      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${validLogLevels.join(', ')}`);
+    if (config.logLevel && !VALID_LOG_LEVELS.includes(config.logLevel.toLowerCase())) {
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${VALID_LOG_LEVELS.join(', ')}`);
     }
 
     return this._collectValidationWarnings(warnings, widgetConfigValidator.validateAllWidgets(config));
@@ -1051,13 +1095,7 @@ module.exports = NodeHelper.create({
 
   _buildApiStatusSnapshot(sessionKey) {
     const rawApiStatus = this._apiStatusBySession.get(sessionKey) || {};
-    const apiStatus = {
-      timetable: null,
-      exams: null,
-      homework: null,
-      absences: null,
-      messages: null,
-    };
+    const apiStatus = createEmptyApiStatusSnapshot();
 
     Object.entries(rawApiStatus).forEach(([endpoint, record]) => {
       const status = typeof record === 'object' ? record?.status : record;
@@ -1075,33 +1113,19 @@ module.exports = NodeHelper.create({
   },
 
   _buildWarningMetaFromMessages(messages, groupWarningMetaByMessage, fallbackMeta) {
-    return messages.map(
-      (message) =>
-        groupWarningMetaByMessage.get(message) || {
-          message,
-          ...(fallbackMeta || { kind: 'generic', severity: 'warning' }),
-        }
-    );
+    return buildWarningMetaList(messages, groupWarningMetaByMessage, fallbackMeta || DEFAULT_WARNING_META);
   },
 
   _mergeGroupWarningsIntoPayload(payload, identifier, groupWarnings, groupWarningMetaByMessage) {
-    const uniqWarnings = Array.from(new Set(groupWarnings));
-    const mergedWarnings = Array.from(new Set([...(payload?.state?.warnings || []), ...uniqWarnings]));
-
-    const mergedWarningMetaByMessage = new Map();
-    (Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []).forEach((entry) => {
-      if (!entry?.message) return;
-      mergedWarningMetaByMessage.set(String(entry.message), { ...entry });
-    });
+    const uniqWarnings = mergeUniqueWarnings(groupWarnings);
+    const mergedWarnings = mergeUniqueWarnings(payload?.state?.warnings || [], uniqWarnings);
+    const mergedWarningMetaByMessage = createWarningMetaMap(Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []);
 
     uniqWarnings.forEach((message) => {
       const existing = mergedWarningMetaByMessage.get(message) || null;
       const groupMeta = groupWarningMetaByMessage.get(message) || null;
       if (!existing || (existing.kind === 'generic' && groupMeta)) {
-        mergedWarningMetaByMessage.set(message, {
-          message,
-          ...(groupMeta || { kind: 'generic', severity: 'warning' }),
-        });
+        mergedWarningMetaByMessage.set(message, createWarningMetaEntry(message, groupMeta || DEFAULT_WARNING_META));
       }
     });
 
@@ -1111,14 +1135,7 @@ module.exports = NodeHelper.create({
       state: {
         ...(payload.state || {}),
         warnings: mergedWarnings,
-        warningMeta: mergedWarnings.map(
-          (message) =>
-            mergedWarningMetaByMessage.get(message) || {
-              message,
-              kind: 'generic',
-              severity: 'warning',
-            }
-        ),
+        warningMeta: buildWarningMetaList(mergedWarnings, mergedWarningMetaByMessage),
       },
     };
   },
@@ -1148,15 +1165,7 @@ module.exports = NodeHelper.create({
       ...basePayload,
       state: {
         ...basePayload.state,
-        api: includeApiSnapshot
-          ? this._buildApiStatusSnapshot(sessionKey)
-          : {
-              timetable: null,
-              exams: null,
-              homework: null,
-              absences: null,
-              messages: null,
-            },
+        api: includeApiSnapshot ? this._buildApiStatusSnapshot(sessionKey) : createEmptyApiStatusSnapshot(),
         warnings,
         warningMeta: this._buildWarningMetaFromMessages(warnings, groupWarningMetaByMessage, warningFallbackMeta),
       },
@@ -1192,7 +1201,7 @@ module.exports = NodeHelper.create({
     groupWarningMetaByMessage,
     warningMetaBase,
   }) {
-    const mergedWarnings = Array.from(new Set([...(groupWarnings || []), ...(warningMsg ? [warningMsg] : [])]));
+    const mergedWarnings = mergeUniqueWarnings(groupWarnings || [], warningMsg);
 
     return this._buildStudentErrorPayload({
       identifier,
@@ -1225,8 +1234,7 @@ module.exports = NodeHelper.create({
 
         if (!groupWarningMetaByMessage.has(message)) {
           groupWarningMetaByMessage.set(message, {
-            kind: 'generic',
-            severity: 'warning',
+            ...DEFAULT_WARNING_META,
             ...meta,
           });
         }
