@@ -16,7 +16,7 @@ try {
 } catch (err) {
   if (err && err.code === 'MODULE_NOT_FOUND') {
     // In production / with --omit=dev this is expected behavior
-    console.log('Skipping git hooks installation: simple-git-hooks is not installed.');
+    // console.log('Skipping git hooks installation: simple-git-hooks is not installed.');
   } else {
     console.error('Unexpected error while checking simple-git-hooks:', err.message || err);
     console.log('Continuing without failing the install.');
