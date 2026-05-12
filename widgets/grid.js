@@ -62,6 +62,15 @@ function getModuleRootElement(ctx) {
     getFirstFieldName,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
 
+  function getModuleDateContext(ctx, configOverride = null) {
+    return ctx.getCurrentDateContext(configOverride || ctx.config || {});
+  }
+
+  function getCurrentDayDate(ctx) {
+    const nowContext = getModuleDateContext(ctx);
+    return new Date(nowContext.date.getFullYear(), nowContext.date.getMonth(), nowContext.date.getDate());
+  }
+
   /**
    * Determine lesson display mode based on available fields
    * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
@@ -233,29 +242,8 @@ function getModuleRootElement(ctx) {
 
     const tick = () => {
       try {
-        const nowLocal = new Date();
-        const realNowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
-        if (!isDebugMode) {
-          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = realNowYmd;
-          if (realNowYmd !== ctx._currentTodayYmd) {
-            try {
-              if (typeof ctx._sendFetchData === 'function') {
-                ctx._sendFetchData('date-change');
-              } else {
-                ctx.sendSocketNotification('FETCH_DATA', ctx.config);
-              }
-            } catch {
-              return;
-            }
-            try {
-              ctx.updateDom();
-            } catch {
-              return;
-            }
-            ctx._currentTodayYmd = realNowYmd;
-          }
-        }
+        const nowContext = getModuleDateContext(ctx);
+        ctx._handleClockDrivenDayRollover(nowContext);
 
         const gridWidget = ctx._getWidgetApi()?.grid;
         const moduleRoot = getModuleRootElement(ctx);
@@ -268,7 +256,7 @@ function getModuleRootElement(ctx) {
       }
     };
 
-    const now = new Date();
+    const now = getModuleDateContext(ctx).date;
     const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
 
     state.initialTimeout = setTimeout(
@@ -346,17 +334,17 @@ function getModuleRootElement(ctx) {
         const bd = parseInt(s.substring(6, 8), 10);
         baseDate = new Date(by, bm, bd);
       } else {
-        baseDate = new Date();
+        baseDate = getCurrentDayDate(ctx);
       }
 
       const dayOfWeek = baseDate.getDay();
-      const currentHour = new Date().getHours();
-      const currentMinute = new Date().getMinutes();
+      const nowContext = getModuleDateContext(ctx);
+      const currentHour = nowContext.date.getHours();
+      const currentMinute = nowContext.date.getMinutes();
 
       let weekOffset = 0;
       if (dayOfWeek === 5) {
-        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
-        if (!isDebugMode && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
+        if (ctx._usesLiveClock(nowContext) && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
           weekOffset = 1;
         }
       } else if (dayOfWeek === 6 || dayOfWeek === 0) {
@@ -1638,9 +1626,9 @@ function getModuleRootElement(ctx) {
    * @param {number|string} currentTodayYmd - Current date marker.
    * @returns {Date} Base date for grid rendering.
    */
-  function getBaseDateFromYmd(currentTodayYmd) {
+  function getBaseDateFromYmd(currentTodayYmd, ctx = null) {
     if (!currentTodayYmd) {
-      return new Date();
+      return getCurrentDayDate(ctx);
     }
 
     const raw = String(currentTodayYmd);
@@ -1847,12 +1835,9 @@ function getModuleRootElement(ctx) {
 
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
 
-    let nowYmd = ctx._currentTodayYmd;
-    if (nowYmd === undefined || nowYmd === null) {
-      const d = new Date();
-      nowYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-    }
-    const now = new Date();
+    const nowContext = getModuleDateContext(ctx);
+    const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
+    const now = nowContext.date;
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
     /** Render a single lesson as a standalone full-width cell at its own time position. */
@@ -2139,7 +2124,7 @@ function getModuleRootElement(ctx) {
 
     const totalMinutes = allEnd - allStart;
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
-    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd);
+    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
     const todayDateStr = formatDateKey(baseDate);
     const wrapper = document.createElement('div');
 
@@ -2207,11 +2192,9 @@ function getModuleRootElement(ctx) {
   function refreshPastMasks(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      const nowLocal = new Date();
-      const todayYmd =
-        typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd
-          ? ctx._currentTodayYmd
-          : nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowContext = getModuleDateContext(ctx);
+      const nowLocal = nowContext.date;
+      const todayYmd = typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
 
@@ -2285,7 +2268,7 @@ function getModuleRootElement(ctx) {
       }
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const inners = scope.querySelectorAll('.day-column-inner');
-      const nowLocal = new Date();
+      const nowLocal = getModuleDateContext(ctx).date;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {

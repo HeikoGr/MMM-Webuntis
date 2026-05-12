@@ -30,8 +30,9 @@
         return 0;
       }
 
-      const nowLocal = new Date();
-      const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+      const nowLocal = nowContext.date;
+      const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
       const nowHm = currentTimeAsHHMM(nowLocal);
 
       // Initialize widget context and add header if needed

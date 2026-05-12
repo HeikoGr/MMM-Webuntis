@@ -2,6 +2,7 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
+const { getCurrentDateContext } = require('./lib/runtime-utils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const createBackendLogger = require('./lib/logger');
@@ -944,21 +945,7 @@ module.exports = NodeHelper.create({
    * @returns {Date} Timezone-aware base date
    */
   _calculateBaseNow(config) {
-    try {
-      const dbg = (typeof config?.debugDate === 'string' && config.debugDate) || null;
-      if (dbg) {
-        const s = String(dbg).trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(`${s}T00:00:00`);
-        if (/^\d{8}$/.test(s)) {
-          return new Date(`${s.substring(0, 4)}-${s.substring(4, 6)}-${s.substring(6, 8)}T00:00:00`);
-        }
-      }
-    } catch {
-      void 0;
-    }
-
-    const now = new Date(Date.now());
-    return new Date(now.toLocaleString('en-US', { timeZone: config.timezone || 'Europe/Berlin' }));
+    return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' }).date;
   },
 
   /**

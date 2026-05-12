@@ -145,8 +145,9 @@
     );
 
     // Use module's computed today value when available (supports debugDate), else local now
-    const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
-    const nowLocal = new Date();
+    const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+    const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : nowContext.ymd);
+    const nowLocal = nowContext.date;
     const nowHm = currentTimeAsHHMM(nowLocal);
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 

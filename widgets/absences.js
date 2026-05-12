@@ -42,8 +42,8 @@
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
     const showReason = Boolean(widgetCtx.getConfig('showReason'));
-    const nowLocal = new Date();
-    const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+    const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+    const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
 
     const rangeStart = widgetCtx.getConfig('pastDays');
     const rangeEnd = widgetCtx.getConfig('nextDays');

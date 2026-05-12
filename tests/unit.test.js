@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const Module = require('node:module');
+const runtimeUtils = require('../lib/runtime-utils');
 
 function loadNodeHelper() {
   const originalLoad = Module._load;
@@ -91,4 +92,33 @@ test('createGroupWarningCollector stores one warning entry per message', () => {
     kind: 'generic',
     severity: 'warning',
   });
+});
+
+test('getCurrentDateContext keeps wall clock time while overriding debug date', () => {
+  const now = new Date(Date.UTC(2026, 4, 12, 14, 37, 22, 15));
+  const result = runtimeUtils.getCurrentDateContext(
+    {
+      debugDate: '2026-03-02',
+      timezone: 'UTC',
+    },
+    {
+      now,
+      defaultTimezone: 'UTC',
+    }
+  );
+
+  assert.equal(result.isDebug, true);
+  assert.equal(result.ymd, 20260302);
+  assert.equal(result.isoDate, '2026-03-02');
+  assert.equal(result.date.getHours(), 14);
+  assert.equal(result.date.getMinutes(), 37);
+  assert.equal(result.date.getSeconds(), 22);
+});
+
+test('_calculateBaseNow uses normalized debug date context', () => {
+  const baseNow = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
+
+  assert.equal(baseNow.getFullYear(), 2026);
+  assert.equal(baseNow.getMonth(), 2);
+  assert.equal(baseNow.getDate(), 2);
 });

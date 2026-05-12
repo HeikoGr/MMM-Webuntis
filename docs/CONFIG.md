@@ -83,7 +83,7 @@ The canonical defaults live in the `defaults` object in `MMM-Webuntis.js`. Globa
 | `updateInterval` | int | `5 * 60 * 1000` | Fetch interval in milliseconds. |
 | `logLevel` | string | `'none'` | Log verbosity: `debug`, `info`, `warn`, `error`, or `none`. |
 | `timezone` | string | `'Europe/Berlin'` | Timezone used for date calculations and debug-date handling. |
-| `debugDate` | string\|null | `null` | Freeze "today" for testing (`YYYY-MM-DD`). |
+| `debugDate` | string\|null | `null` | Freeze the calendar day for testing (`YYYY-MM-DD`) while keeping the live clock time. |
 | `demoDataFile` | string\|null | `null` | Relative path to a local fixture JSON for frontend-only demo mode. |
 | `dumpBackendPayloads` | bool | `false` | Write backend payload snapshots to `debug_dumps/`. |
 | `dumpRawApiResponses` | bool | `false` | Write raw REST responses to `debug_dumps/raw_api_*.json`. |
@@ -281,7 +281,7 @@ Optional explicit instance id:
 | --- | --- | --- | --- |
 | `dumpBackendPayloads` | bool | `false` | Dump backend responses to `debug_dumps/`. |
 | `dumpRawApiResponses` | bool | `false` | Dump raw REST responses to `debug_dumps/raw_api_*.json`. |
-| `debugDate` | string | `null` | Override "today" for testing. |
+| `debugDate` | string | `null` | Override the calendar day for testing while keeping the live clock time. |
 | `timezone` | string | `'Europe/Berlin'` | Timezone for date calculations. |
 | `demoDataFile` | string | `null` | Render fixture data in the frontend without backend/API calls. |
 

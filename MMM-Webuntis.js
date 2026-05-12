@@ -20,6 +20,70 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Central frontend clock access for widgets and module lifecycle logic.
+   * Keeps debugDate semantics in one place on the module instance.
+   *
+   * @param {Object|null} configOverride - Optional config to evaluate instead of this.config
+   * @returns {{date: Date, ymd: number, isoDate: string, isDebug: boolean, timezone: string}}
+   */
+  getCurrentDateContext(configOverride = null) {
+    if (globalThis.MMModuleRuntimeUtils?.getCurrentDateContext) {
+      return globalThis.MMModuleRuntimeUtils.getCurrentDateContext(configOverride || this.config || {}, {
+        defaultTimezone: this.defaults?.timezone || 'Europe/Berlin',
+      });
+    }
+
+    const now = new Date();
+    return {
+      date: now,
+      ymd: now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(),
+      isoDate: `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      isDebug: false,
+      timezone: configOverride?.timezone || this.config?.timezone || this.defaults?.timezone || 'Europe/Berlin',
+    };
+  },
+
+  _usesLiveClock(nowContext = this.getCurrentDateContext()) {
+    return nowContext?.isDebug !== true;
+  },
+
+  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+    if (!this._usesLiveClock(nowContext)) return false;
+
+    const nextTodayYmd = Number(nowContext?.ymd);
+    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+
+    if (this._currentTodayYmd === undefined || this._currentTodayYmd === null) {
+      this._currentTodayYmd = nextTodayYmd;
+      return false;
+    }
+
+    if (nextTodayYmd === this._currentTodayYmd) return false;
+
+    const previousTodayYmd = this._currentTodayYmd;
+
+    try {
+      if (typeof this._sendFetchData === 'function') {
+        this._sendFetchData('date-change');
+      } else {
+        this.sendSocketNotification('FETCH_DATA', this.config);
+      }
+    } catch {
+      return false;
+    }
+
+    try {
+      this.updateDom();
+    } catch {
+      return false;
+    }
+
+    this._currentTodayYmd = nextTodayYmd;
+    this._log('debug', `[clock] Detected day change: ${previousTodayYmd || 'unset'} -> ${nextTodayYmd}`);
+    return true;
+  },
+
+  /**
    * Generate a random session identifier.
    * Uses a cryptographically secure random number generator when available.
    *
@@ -67,7 +131,7 @@ Module.register('MMM-Webuntis', {
 
     // === DEBUG OPTIONS ===
     logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
-    debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+    debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     initRetryTimeout: 5000, // timeout for INIT_MODULE -> MODULE_INITIALIZED watchdog (milliseconds)
     initRetryMaxAttempts: 4, // max INIT_MODULE attempts before reopening init gate
@@ -520,8 +584,7 @@ Module.register('MMM-Webuntis', {
 
   _computeTodayYmdValue() {
     if (this._currentTodayYmd) return this._currentTodayYmd;
-    const now = new Date();
-    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    return this.getCurrentDateContext().ymd;
   },
 
   _shiftYmd(baseYmd, deltaDays = 0) {
@@ -1290,25 +1353,10 @@ Module.register('MMM-Webuntis', {
       void 0;
     }
 
-    if (this.config && typeof this.config.debugDate === 'string' && this.config.debugDate) {
-      const s = String(this.config.debugDate).trim();
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        const d = new Date(`${s}T00:00:00`);
-        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-        this._log('debug', `[start] debugDate="${s}" (frozen test mode)`);
-      } else if (/^\d{8}$/.test(s)) {
-        const by = parseInt(s.substring(0, 4), 10);
-        const bm = parseInt(s.substring(4, 6), 10) - 1;
-        const bd = parseInt(s.substring(6, 8), 10);
-        const d = new Date(by, bm, bd);
-        this._currentTodayYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-        const normalizedDate = `${String(by).padStart(4, '0')}-${String(bm + 1).padStart(2, '0')}-${String(bd).padStart(2, '0')}`;
-        this._log('debug', `[start] debugDate="${normalizedDate}" (frozen test mode)`);
-      }
-    }
-    if (!this._currentTodayYmd) {
-      const now = new Date();
-      this._currentTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    const startDateContext = this.getCurrentDateContext();
+    this._currentTodayYmd = startDateContext.ymd;
+    if (startDateContext.isDebug) {
+      this._log('debug', `[start] debugDate="${startDateContext.isoDate}" (frozen test mode)`);
     }
 
     this.timetableByStudent = {};
@@ -1631,12 +1679,11 @@ Module.register('MMM-Webuntis', {
     this._startFetchTimer();
     this._startNowLineUpdater();
 
-    if (!this.config?.debugDate) {
-      const now = new Date();
-      const realTodayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-      if (this._currentTodayYmd !== realTodayYmd) {
-        this._log('debug', `[resume] Detected day change while suspended: ${this._currentTodayYmd || 'unset'} -> ${realTodayYmd}`);
-        this._currentTodayYmd = realTodayYmd;
+    const resumeDateContext = this.getCurrentDateContext();
+    if (this._usesLiveClock(resumeDateContext)) {
+      if (this._currentTodayYmd !== resumeDateContext.ymd) {
+        this._log('debug', `[resume] Detected day change while suspended: ${this._currentTodayYmd || 'unset'} -> ${resumeDateContext.ymd}`);
+        this._currentTodayYmd = resumeDateContext.ymd;
       }
     }
 
@@ -1922,13 +1969,11 @@ Module.register('MMM-Webuntis', {
 
   _syncDebugDate(cfg) {
     this._log('debug', `[GOT_DATA] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
-    if (cfg && typeof cfg.debugDate === 'string' && cfg.debugDate) {
-      this._log('debug', `[GOT_DATA] Using debugDate="${cfg.debugDate}" from backend`);
-      const dbgNum = Number(String(cfg.debugDate).trim().replace(/-/g, ''));
-      if (Number.isFinite(dbgNum) && dbgNum > 0) {
-        this._currentTodayYmd = dbgNum;
-        this._log('debug', `[GOT_DATA] Updated _currentTodayYmd=${dbgNum} (before timetable filtering)`);
-      }
+    const debugDateContext = this.getCurrentDateContext(cfg || {});
+    if (debugDateContext.isDebug) {
+      this._log('debug', `[GOT_DATA] Using debugDate="${debugDateContext.isoDate}" from backend`);
+      this._currentTodayYmd = debugDateContext.ymd;
+      this._log('debug', `[GOT_DATA] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
     } else {
       this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
