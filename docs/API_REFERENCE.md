@@ -12,7 +12,8 @@ Out of scope:
 - frontend/backend transport contract
 - detailed retry, timeout, and skip behavior
 
-For the internal socket payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For the currently shipped internal socket payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For the planned widget-agnostic V3 successor contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
 For runtime fetch order, retries, timeouts, and skip rules, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md).
 
 **Related Documentation**:

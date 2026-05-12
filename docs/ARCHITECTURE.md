@@ -9,7 +9,9 @@ Use this document for:
 - finding the right file family before making changes
 - seeing how frontend, adapter, and WebUntis core fit together
 
-For runtime request behavior, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md). For the payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For runtime request behavior, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md).
+For the current payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For the target widget-agnostic V3 contract redesign, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
 
 ## System Boundaries
 

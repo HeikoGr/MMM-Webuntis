@@ -23,7 +23,7 @@
    * @param {HTMLElement} container - DOM element to append absence rows
    * @param {string} studentCellTitle - Student name for compact mode student column
    * @param {Object} studentConfig - Student-specific configuration
-   * @param {Array} absences - Array of absence objects (date, startTime, endTime, su, reason, excused)
+   * @param {Array} absences - Array of absence objects (date, startTime, endTime, subjects, reason, excused)
    * @returns {number} Number of rows added to container
    */
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
@@ -86,7 +86,8 @@
       const et = formatDisplayTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
-      const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';
+      const subjects = Array.isArray(ab?.subjects) ? ab.subjects : Array.isArray(ab?.su) ? ab.su : [];
+      const subj = subjects[0]?.longname || subjects[0]?.name || '';
       const reason = String(ab?.reason || '').trim();
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;

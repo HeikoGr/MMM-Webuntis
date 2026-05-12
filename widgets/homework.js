@@ -20,7 +20,7 @@
    * @param {HTMLElement} container - DOM element to append homework rows
    * @param {string} studentCellTitle - Student name for compact mode student column
    * @param {Object} studentConfig - Student-specific configuration
-   * @param {Array} homeworks - Array of homework objects (dueDate, su{name, longname}, text, remark)
+   * @param {Array} homeworks - Array of homework objects (dueDate, subject{name, longname}, text, remark)
    * @returns {number} Number of rows added to container
    */
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
@@ -39,15 +39,18 @@
     const showSubject = Boolean(widgetCtx.getConfig('showSubject'));
     const showText = Boolean(widgetCtx.getConfig('showText'));
 
-    const sorted = homeworks
-      .slice()
-      .sort(
-        (a, b) => (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) || String(a.su?.name || '').localeCompare(String(b.su?.name || ''))
+    const sorted = homeworks.slice().sort((a, b) => {
+      const aSubject = a?.subject || a?.su || null;
+      const bSubject = b?.subject || b?.su || null;
+      return (
+        (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) || String(aSubject?.name || '').localeCompare(String(bSubject?.name || ''))
       );
+    });
 
     for (const hw of sorted) {
       const due = hw?.dueDate ? formatDisplayDate(hw.dueDate, dateFormat) : '';
-      const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
+      const subject = hw?.subject || hw?.su || null;
+      const subj = showSubject ? subject?.longname || subject?.name || '' : '';
       const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
 
       const left = due

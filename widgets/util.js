@@ -21,6 +21,20 @@
   });
   const IRREGULAR_STATUSES = new Set(Object.values(LESSON_STATUS));
   const IRREGULAR_ACTIVITY_TYPES = new Set(Object.values(LESSON_ACTIVITY_TYPE));
+  const LESSON_FIELD_ALIASES = Object.freeze({
+    su: 'subjects',
+    te: 'teachers',
+    ro: 'rooms',
+    cl: 'classes',
+    sg: 'studentGroups',
+  });
+  const CHANGED_FIELD_ALIASES = Object.freeze({
+    su: 'subject',
+    te: 'teacher',
+    ro: 'room',
+    cl: 'class',
+    sg: 'studentGroup',
+  });
 
   /**
    * Global log function for widgets
@@ -392,10 +406,17 @@
    * @returns {Set<string>} Set of changed field keys ('su', 'te', 'ro', ...)
    */
   function getChangedFieldSet(entry) {
-    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
-    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
-    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
-    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
+    const changed = new Set(
+      (Array.isArray(entry?.changedFields) ? entry.changedFields : []).map((field) => CHANGED_FIELD_ALIASES[field] || field).filter(Boolean)
+    );
+
+    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('subject');
+    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('teacher');
+    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('room');
+    if (Array.isArray(entry?.previousSubjects) && entry.previousSubjects.length > 0) changed.add('subject');
+    if (Array.isArray(entry?.previousTeachers) && entry.previousTeachers.length > 0) changed.add('teacher');
+    if (Array.isArray(entry?.previousRooms) && entry.previousRooms.length > 0) changed.add('room');
+
     return changed;
   }
 
@@ -703,7 +724,8 @@
   function getFieldValue(lesson, fieldType, format = 'short') {
     if (!lesson) return '';
 
-    const field = lesson[fieldType];
+    const canonicalFieldType = LESSON_FIELD_ALIASES[fieldType] || fieldType;
+    const field = lesson[canonicalFieldType] || lesson[fieldType];
     if (!field || !Array.isArray(field) || field.length === 0) return '';
 
     const item = field[0];
@@ -721,8 +743,9 @@
    * @returns {string[]} Array of teacher names (may be empty)
    */
   function getTeachers(lesson, format = 'short') {
-    if (!lesson?.te || !Array.isArray(lesson.te)) return [];
-    return lesson.te
+    const teachers = Array.isArray(lesson?.teachers) ? lesson.teachers : Array.isArray(lesson?.te) ? lesson.te : [];
+    if (teachers.length === 0) return [];
+    return teachers
       .map((teacher) => (format === 'long' ? teacher.longname || teacher.name : teacher.name || teacher.longname))
       .filter(Boolean);
   }
@@ -735,7 +758,7 @@
    * @returns {string} Subject name or empty string
    */
   function getSubject(lesson, format = 'short') {
-    return getFieldValue(lesson, 'su', format);
+    return getFieldValue(lesson, 'subjects', format);
   }
 
   /**
@@ -746,7 +769,7 @@
    * @returns {string} Room name or empty string
    */
   function getRoom(lesson, format = 'short') {
-    return getFieldValue(lesson, 'ro', format);
+    return getFieldValue(lesson, 'rooms', format);
   }
 
   /**
@@ -757,7 +780,7 @@
    * @returns {string} Class name or empty string
    */
   function getClass(lesson, format = 'short') {
-    return getFieldValue(lesson, 'cl', format);
+    return getFieldValue(lesson, 'classes', format);
   }
 
   /**
@@ -768,7 +791,7 @@
    * @returns {string} Student group name or empty string
    */
   function getStudentGroup(lesson, format = 'short') {
-    return getFieldValue(lesson, 'sg', format);
+    return getFieldValue(lesson, 'studentGroups', format);
   }
 
   /**

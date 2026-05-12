@@ -2,6 +2,9 @@
 
 Normative transport contract for MMM-Webuntis runtime payloads.
 
+This document describes the currently shipped runtime contract.
+For the planned successor contract design, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+
 Scope of this document:
 - frontend -> backend request shape used by `INIT_MODULE` and `FETCH_DATA`
 - backend -> frontend `GOT_DATA` payload shape

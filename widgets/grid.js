@@ -84,11 +84,11 @@ function getModuleRootElement(ctx) {
    *   - showStudentGroup: boolean - Whether to show student group
    */
   function getLessonDisplayMode(lesson) {
-    const hasTeacher = lesson?.te && lesson.te.length > 0;
-    const hasSubject = lesson?.su && lesson.su.length > 0;
-    const hasRoom = lesson?.ro && lesson.ro.length > 0;
-    const hasClass = lesson?.cl && lesson.cl.length > 0;
-    const hasStudentGroup = lesson?.sg && lesson.sg.length > 0;
+    const hasTeacher = Array.isArray(lesson?.teachers) ? lesson.teachers.length > 0 : lesson?.te && lesson.te.length > 0;
+    const hasSubject = Array.isArray(lesson?.subjects) ? lesson.subjects.length > 0 : lesson?.su && lesson.su.length > 0;
+    const hasRoom = Array.isArray(lesson?.rooms) ? lesson.rooms.length > 0 : lesson?.ro && lesson.ro.length > 0;
+    const hasClass = Array.isArray(lesson?.classes) ? lesson.classes.length > 0 : lesson?.cl && lesson.cl.length > 0;
+    const hasStudentGroup = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups.length > 0 : lesson?.sg && lesson.sg.length > 0;
 
     const isTeacherView = hasClass && !hasStudentGroup;
     const isStudentView = hasStudentGroup && !hasClass;
@@ -644,23 +644,43 @@ function getModuleRootElement(ctx) {
         endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
         startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
         endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
-        subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
-        teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
-        teacher: getTeachers ? getTeachers(el, 'long')[0] : el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
-        room: getRoom ? getRoom(el, 'short') : el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
-        roomLong: getRoom ? getRoom(el, 'long') : el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
-        class: getClass ? getClass(el, 'short') : el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
-        classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
-        studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
-        studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
+        subjectShort: getSubject
+          ? getSubject(el, 'short')
+          : el.subjects?.[0]?.name || el.subjects?.[0]?.longname || el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
+        subject: getSubject
+          ? getSubject(el, 'long')
+          : el.subjects?.[0]?.longname || el.subjects?.[0]?.name || el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
+        teacherInitial: getTeachers
+          ? getTeachers(el, 'short')[0]
+          : el.teachers?.[0]?.name || el.teachers?.[0]?.longname || el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
+        teacher: getTeachers
+          ? getTeachers(el, 'long')[0]
+          : el.teachers?.[0]?.longname || el.teachers?.[0]?.name || el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
+        room: getRoom
+          ? getRoom(el, 'short')
+          : el.rooms?.[0]?.name || el.rooms?.[0]?.longname || el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
+        roomLong: getRoom
+          ? getRoom(el, 'long')
+          : el.rooms?.[0]?.longname || el.rooms?.[0]?.name || el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
+        class: getClass
+          ? getClass(el, 'short')
+          : el.classes?.[0]?.name || el.classes?.[0]?.longname || el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
+        classLong: getClass
+          ? getClass(el, 'long')
+          : el.classes?.[0]?.longname || el.classes?.[0]?.name || el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
+        studentGroup: getStudentGroup
+          ? getStudentGroup(el, 'short')
+          : el.studentGroups?.[0]?.name || el.studentGroups?.[0]?.longname || el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
+        studentGroupLong: getStudentGroup
+          ? getStudentGroup(el, 'long')
+          : el.studentGroups?.[0]?.longname || el.studentGroups?.[0]?.name || el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
         infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
         infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
         isTeacherView: displayMode.isTeacherView,
         isStudentView: displayMode.isStudentView,
         code: el.code || '',
-        substText: el.substText || '',
-        text: el.lstext || '',
+        substitutionText: el.substitutionText || el.substText || '',
+        text: el.lessonText || el.lstext || '',
         lessonId: el.id ?? null,
       };
     });
@@ -952,7 +972,7 @@ function getModuleRootElement(ctx) {
       // with a more significant field (subject, class, …) keeps the blue tint.
       const changedFields = getChangedFieldSet(lesson);
       const isMinorChange =
-        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'te' || f === 'ro');
+        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'teacher' || f === 'room');
       element.classList.add(isMinorChange ? 'lesson-regular' : 'lesson-substitution');
     } else {
       element.classList.add('lesson-regular');
@@ -1038,9 +1058,9 @@ function getModuleRootElement(ctx) {
         const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
         let primaryHtml;
-        if (changedFields.has('su')) {
-          const newSubject = lesson.su?.[0]?.name || '';
-          const oldSubject = getFirstFieldName(lesson.suOld);
+        if (changedFields.has('subject')) {
+          const newSubject = lesson.subjects?.[0]?.name || lesson.su?.[0]?.name || '';
+          const oldSubject = getFirstFieldName(lesson.previousSubjects || lesson.suOld);
           if (newSubject) {
             primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
           } else if (oldSubject) {
@@ -1053,9 +1073,9 @@ function getModuleRootElement(ctx) {
         }
 
         let secondaryHtml;
-        if (changedFields.has('te')) {
-          const newTeacher = lesson.te?.[0]?.name || '';
-          const oldTeacher = getFirstFieldName(lesson.teOld);
+        if (changedFields.has('teacher')) {
+          const newTeacher = lesson.teachers?.[0]?.name || lesson.te?.[0]?.name || '';
+          const oldTeacher = getFirstFieldName(lesson.previousTeachers || lesson.teOld);
           if (newTeacher) {
             secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
           } else if (oldTeacher) {
@@ -1068,9 +1088,9 @@ function getModuleRootElement(ctx) {
         }
 
         let additionalHtml = '';
-        if (changedFields.has('ro')) {
-          const newRoom = lesson.ro?.[0]?.name || '';
-          const oldRoom = getFirstFieldName(lesson.roOld);
+        if (changedFields.has('room')) {
+          const newRoom = lesson.rooms?.[0]?.name || lesson.ro?.[0]?.name || '';
+          const oldRoom = getFirstFieldName(lesson.previousRooms || lesson.roOld);
           if (newRoom) {
             additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
           } else if (oldRoom) {
@@ -1102,8 +1122,8 @@ function getModuleRootElement(ctx) {
             displayParts.additional.some((item) => normalizedLessonText === normalizeComparableLessonText(item))
           );
 
-        const subst = lesson.substText
-          ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
+        const subst = lesson.substitutionText
+          ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, '<br>')}</span>`
           : '';
         const txt = shouldShowLessonText ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
 
@@ -1136,8 +1156,8 @@ function getModuleRootElement(ctx) {
       normalizedLessonText !== normalizeComparableLessonText(lesson.teacherInitial || lesson.teacher) &&
       normalizedLessonText !== normalizeComparableLessonText(lesson.room || lesson.roomLong);
 
-    const subst = lesson.substText
-      ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
+    const subst = lesson.substitutionText
+      ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, '<br>')}</span>`
       : '';
     const txt = shouldShowLessonText ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
     const secondaryLine = secondaryInfo ? `<br><span class='lesson-secondary'>${secondaryInfo}${roomInfo}</span>` : '';
@@ -1272,22 +1292,25 @@ function getModuleRootElement(ctx) {
    */
   function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, _isPast, nowYmd, nowMin, tickerData, lessonConfig) {
     const getSubjectName = (lesson) => {
-      if (lesson.su && lesson.su.length > 0) {
-        return lesson.su[0].name || lesson.su[0].longname;
+      const subjects = Array.isArray(lesson?.subjects) ? lesson.subjects : Array.isArray(lesson?.su) ? lesson.su : [];
+      if (subjects.length > 0) {
+        return subjects[0].name || subjects[0].longname;
       }
       return null;
     };
 
     const getStudentGroupName = (lesson) => {
-      if (lesson.sg && lesson.sg.length > 0) {
-        return lesson.sg[0].name || lesson.sg[0].longname;
+      const studentGroups = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups : Array.isArray(lesson?.sg) ? lesson.sg : [];
+      if (studentGroups.length > 0) {
+        return studentGroups[0].name || studentGroups[0].longname;
       }
       return null;
     };
 
     const getClassName = (lesson) => {
-      if (lesson.cl && lesson.cl.length > 0) {
-        return lesson.cl[0].name || lesson.cl[0].longname;
+      const classes = Array.isArray(lesson?.classes) ? lesson.classes : Array.isArray(lesson?.cl) ? lesson.cl : [];
+      if (classes.length > 0) {
+        return classes[0].name || classes[0].longname;
       }
       return null;
     };
@@ -1548,8 +1571,8 @@ function getModuleRootElement(ctx) {
    * @returns {boolean} True when class/student-group metadata is present.
    */
   function lessonHasStudentGroupOrClassHint(lesson) {
-    const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
-    const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
+    const studentGroups = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups : Array.isArray(lesson?.sg) ? lesson.sg : [];
+    const classes = Array.isArray(lesson?.classes) ? lesson.classes : Array.isArray(lesson?.cl) ? lesson.cl : [];
     const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
     const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
     return hasStudentGroup || hasClass;

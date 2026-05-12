@@ -1720,6 +1720,13 @@ Module.register('MMM-Webuntis', {
       icon.setAttribute('aria-hidden', 'true');
       element.replaceChildren(icon, document.createTextNode(` ${text}`));
     };
+    const appendEmptyState = () => {
+      if (wrapper.hasChildNodes()) return;
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'wu-widget__info dimmed';
+      withWarningIcon(infoDiv, this.translate('no_data'));
+      wrapper.appendChild(infoDiv);
+    };
 
     const sortedStudentTitles = this._getSortedStudentTitles();
 
@@ -1773,6 +1780,7 @@ Module.register('MMM-Webuntis', {
     }
 
     if (sortedStudentTitles.length === 0) {
+      appendEmptyState();
       return wrapper;
     }
 
@@ -1792,6 +1800,8 @@ Module.register('MMM-Webuntis', {
       }
       renderWidget();
     }
+
+    appendEmptyState();
 
     return wrapper;
   },
@@ -1930,7 +1940,7 @@ Module.register('MMM-Webuntis', {
   },
 
   _handleGotData(payload) {
-    if (Number(payload?.contractVersion) !== 2) {
+    if (Number(payload?.contractVersion) !== 3) {
       this._log('warn', `[GOT_DATA] Ignored unsupported contractVersion=${payload?.contractVersion}`);
       return;
     }
