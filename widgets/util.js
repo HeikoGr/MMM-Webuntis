@@ -466,6 +466,7 @@
       getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
       getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
       getInfo: typeof util.getInfo === 'function' ? util.getInfo : () => '',
+      getEmptyDayState: typeof util.getEmptyDayState === 'function' ? util.getEmptyDayState : () => null,
       // Lesson status / change helpers
       isIrregularStatus,
       getChangedFieldSet,
@@ -599,6 +600,96 @@
     return `${name} <span class="wu-header-meta">(${meta})</span>`;
   }
 
+  function coerceDayDate(dayValue) {
+    if (dayValue instanceof Date) {
+      if (Number.isNaN(dayValue.getTime())) return null;
+      return new Date(dayValue.getFullYear(), dayValue.getMonth(), dayValue.getDate());
+    }
+
+    const raw = String(dayValue || '').trim();
+    if (/^\d{8}$/.test(raw)) {
+      const year = parseInt(raw.substring(0, 4), 10);
+      const month = parseInt(raw.substring(4, 6), 10) - 1;
+      const day = parseInt(raw.substring(6, 8), 10);
+      const date = new Date(year, month, day);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [year, month, day] = raw.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    return null;
+  }
+
+  function getDayYmd(dayValue) {
+    const dayDate = coerceDayDate(dayValue);
+    if (!dayDate) return null;
+    return dayDate.getFullYear() * 10000 + (dayDate.getMonth() + 1) * 100 + dayDate.getDate();
+  }
+
+  function translateDayState(ctx, key, fallback) {
+    const translated = ctx?.translate?.(key);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function getEmptyDayState(ctx, studentTitle, dayValue) {
+    const dayDate = coerceDayDate(dayValue);
+    const dateYmd = getDayYmd(dayValue);
+    if (!dayDate || !dateYmd) return null;
+
+    const holiday = ctx?.holidayMapByStudent?.[studentTitle]?.[dateYmd] || null;
+    if (holiday) {
+      return {
+        type: 'holiday',
+        dateYmd,
+        label: String(holiday.longName || holiday.name || '').trim(),
+        noticeType: 'holiday',
+        rowClass: 'holiday-notice',
+        inlineIconClass: 'lesson-inline-icon lesson-inline-icon-holiday',
+      };
+    }
+
+    const dayNotice = ctx?.dayNoticeMapByStudent?.[studentTitle]?.[dateYmd] || null;
+    const noticeKind = String(dayNotice?.kind || '').trim();
+    const noticeStatus = String(dayNotice?.status || '')
+      .trim()
+      .toUpperCase();
+
+    if (noticeKind === 'timetable-restricted' || noticeStatus === 'NOT_ALLOWED') {
+      return {
+        type: 'timetable-restricted',
+        dateYmd,
+        label: translateDayState(ctx, 'timetable-restricted', 'Plan gesperrt'),
+        noticeType: 'timetable-restricted',
+        rowClass: 'empty-day-notice',
+        inlineIconClass: 'wu-inline-icon wu-icon-warning',
+      };
+    }
+
+    if ([0, 6].includes(dayDate.getDay())) {
+      return {
+        type: 'weekend',
+        dateYmd,
+        label: translateDayState(ctx, 'weekend', 'Wochenende'),
+        noticeType: 'no-lessons',
+        rowClass: 'empty-day-notice',
+        inlineIconClass: 'wu-inline-icon wu-inline-icon-no-lessons',
+      };
+    }
+
+    return {
+      type: 'no-lessons',
+      dateYmd,
+      label: translateDayState(ctx, 'no-lessons', 'kein Unterricht'),
+      noticeType: 'no-lessons',
+      rowClass: 'empty-day-notice',
+      inlineIconClass: 'wu-inline-icon wu-inline-icon-no-lessons',
+    };
+  }
+
   /**
    * Extract field value from lesson data structure
    * Generic function to extract any field type (teacher, subject, room, class, etc.)
@@ -717,6 +808,7 @@
     getClass,
     getStudentGroup,
     getInfo,
+    getEmptyDayState,
   };
 
   root.dom = {

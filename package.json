@@ -44,7 +44,8 @@
     "debug": "node scripts/node_helper_wrapper.js",
     "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current",
     "deps:check": "npm outdated && ncu",
-    "deps:update": "ncu -u && npm install"
+    "deps:update": "ncu -u && npm install",
+    "biome:migrate": "npx biome migrate --write"
   },
   "lint-staged": {
     "*": [

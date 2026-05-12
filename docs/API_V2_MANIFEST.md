@@ -164,6 +164,7 @@ Example:
 {
   "timeUnits": [],
   "lessons": [],
+  "dayNotices": [],
   "exams": [],
   "homework": [],
   "absences": [],
@@ -178,6 +179,7 @@ Example:
 Required collections:
 - `timeUnits`
 - `lessons`
+- `dayNotices`
 - `exams`
 - `homework`
 - `absences`
@@ -188,6 +190,7 @@ Required collections:
 Canonical naming rules:
 - `homework` is singular
 - `messages` is the canonical transport field even though the upstream endpoint returns `messagesOfDay`
+- `dayNotices` is the canonical transport field for day-level timetable states without lesson entries, e.g. `NOT_ALLOWED`
 - No alias fields such as `homeworks`, `messagesOfDay`, or `_warnings` belong to the contract
 
 ### 6.1 `data.timeUnits[]`
@@ -238,7 +241,20 @@ Representative shape:
 The exact lesson schema is intentionally rich because grid and lessons widgets depend on change-state and normalized display markers.
 `displayIcons[]` contains normalized lesson markers derived from timetable metadata, for example `HOMEWORK`, `EXAM`, `EVENT`, `BREAK_SUPERVISION`, or `MOVED`.
 
-### 6.3 `data.exams[]`
+### 6.3 `data.dayNotices[]`
+
+```json
+{
+  "date": 20260515,
+  "kind": "timetable-restricted",
+  "status": "NOT_ALLOWED"
+}
+```
+
+`data.dayNotices[]` is used when the timetable endpoint returns a day-level status without renderable lesson entries.
+Frontend widgets may use this to render a restriction notice instead of falling back to a generic empty-day state.
+
+### 6.4 `data.exams[]`
 
 ```json
 {
@@ -252,7 +268,7 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
 }
 ```
 
-### 6.4 `data.homework[]`
+### 6.5 `data.homework[]`
 
 ```json
 {
@@ -270,7 +286,7 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
 
 `homework.lessonId` references `lesson.id` from `data.lessons[]`.
 
-### 6.5 `data.absences[]`
+### 6.6 `data.absences[]`
 
 ```json
 {
@@ -284,7 +300,7 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
 }
 ```
 
-### 6.6 `data.messages[]`
+### 6.7 `data.messages[]`
 
 ```json
 {
@@ -295,7 +311,7 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
 }
 ```
 
-### 6.7 `data.holidays`
+### 6.8 `data.holidays`
 
 ```json
 {

@@ -56,6 +56,7 @@ function getModuleRootElement(ctx) {
     getStudentGroup,
     getInfo,
     buildWidgetHeaderTitle,
+    getEmptyDayState,
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
@@ -1700,7 +1701,7 @@ function getModuleRootElement(ctx) {
    */
   function renderDayLessonsOrNotice({
     lessonsToRender,
-    holiday,
+    emptyDayState,
     bothInner,
     totalHeight,
     allStart,
@@ -1710,9 +1711,11 @@ function getModuleRootElement(ctx) {
     studentConfig,
   }) {
     if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-      if (!holiday) {
-        addDayNotice(bothInner, totalHeight, 'no-lessons', `<b>${ctx.translate('no-lessons')}</b>`, '1.5em');
-      }
+      const resolvedState = emptyDayState || { noticeType: 'no-lessons', label: ctx.translate('no-lessons') };
+      const noticeType = resolvedState?.noticeType || 'no-lessons';
+      const noticeText = `<b>${escapeHtml(resolvedState?.label || ctx.translate('no-lessons'))}</b>`;
+      const iconSize = resolvedState?.type === 'holiday' ? '2em' : '1.5em';
+      addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
       return;
     }
 
@@ -1773,14 +1776,10 @@ function getModuleRootElement(ctx) {
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
     const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
-    const holiday = ctx.holidayMapByStudent?.[studentTitle]?.[Number(dayYmdStr)] || null;
+    const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
     const hiddenCount = dayLessons.length - lessonsToRender.length;
     const col = 2 + dayOffset - config.startOffset;
     const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
-
-    if (holiday) {
-      addDayNotice(bothInner, totalHeight, 'holiday', escapeHtml(holiday.longName || holiday.name), '2em');
-    }
 
     grid.appendChild(bothWrap);
     addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
@@ -1792,7 +1791,7 @@ function getModuleRootElement(ctx) {
 
     renderDayLessonsOrNotice({
       lessonsToRender,
-      holiday,
+      emptyDayState,
       bothInner,
       totalHeight,
       allStart,

@@ -21,6 +21,7 @@
     formatDisplayDate,
     currentTimeAsHHMM,
     createWidgetContext,
+    getEmptyDayState,
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
@@ -81,13 +82,25 @@
       .replace(/\s+/g, ' ')
       .toLowerCase();
   }
+
+  function renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState) {
+    if (!dayState) return 0;
+
+    const dayLabel = formatDisplayDate(dayDate, lessonsDateFormat);
+    const icon = dayState.inlineIconClass ? `<span class='${dayState.inlineIconClass}' aria-hidden='true'></span>` : '';
+    const rowClass = dayState.rowClass ? `lessonRow ${dayState.rowClass}` : 'lessonRow';
+
+    addRow(container, rowClass, studentLabelText, dayLabel, `${icon}${escapeHtml(dayState.label)}`);
+    return 1;
+  }
+
   /**
    * Render lessons widget for a single student
    * Displays lessons grouped by date, sorted by time, with visual indicators for:
    * - Cancelled lessons (code='cancelled' or status='CANCELLED')
    * - Substitutions (code='irregular' or status='SUBSTITUTION')
    * - Exam lessons (`displayIcons` contains `EXAM`)
-   * - Holiday notices when no lessons
+   * - Empty-day notices for holidays, weekends, restrictions, and regular no-lesson days
    *
    * @param {Object} ctx - Main module context (provides translate, config, debug support)
    * @param {HTMLElement} container - DOM element to append lesson rows
@@ -202,25 +215,13 @@
       });
 
       if (!entries || entries.length === 0) {
-        const holiday = ctx.holidayMapByStudent?.[effectiveStudentTitle]?.[dateYmd] || null;
-        if (holiday) {
-          log('debug', `[lessons] ${dateYmd}: holiday "${holiday.name}"`);
-          const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
-          addRow(
-            container,
-            'lessonRow holiday-notice',
-            studentLabelText,
-            holidayDateStr,
-            `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
-          );
-          addedRows++;
-        }
+        const dayState = getEmptyDayState(ctx, effectiveStudentTitle, dayDate);
+        addedRows += renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState);
         continue;
       }
 
       log('debug', `[lessons] ${dateYmd}: ${entries.length} entries`);
 
-      let renderedForDate = 0;
       for (const entry of entries) {
         const entryYmdStr = String(entry.date);
         const year = parseInt(entryYmdStr.substring(0, 4), 10);
@@ -251,8 +252,6 @@
         }
 
         addedRows++;
-        renderedForDate++;
-
         const dateLabel = formatDisplayDate(entryDate, lessonsDateFormat);
         let timeStr = `<span class="wu-lesson__date">${escapeHtml(dateLabel)}</span>&nbsp;`;
         const hh = String(stHour).padStart(2, '0');
@@ -372,22 +371,6 @@
         }
 
         addRow(container, 'lessonRow', studentLabelText, timeStr, subjectStr, addClass);
-      }
-
-      if (renderedForDate === 0) {
-        const holiday = ctx.holidayMapByStudent?.[effectiveStudentTitle]?.[dateYmd] || null;
-        if (holiday) {
-          log('debug', `[lessons] ${dateYmd}: holiday (after filters) "${holiday.name}"`);
-          const holidayDateStr = formatDisplayDate(dayDate, lessonsDateFormat);
-          addRow(
-            container,
-            'lessonRow holiday-notice',
-            studentLabelText,
-            holidayDateStr,
-            `<span class='lesson-inline-icon lesson-inline-icon-holiday' aria-hidden='true'></span>${escapeHtml(holiday.longName || holiday.name)}`
-          );
-          addedRows++;
-        }
       }
     }
 

@@ -574,6 +574,17 @@ Module.register('MMM-Webuntis', {
     return map;
   },
 
+  _buildDayNoticeMap(dayNotices) {
+    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
+
+    return dayNotices.reduce((map, notice) => {
+      const ymd = Number(notice?.date);
+      if (!Number.isFinite(ymd) || ymd <= 0) return map;
+      map[ymd] = notice;
+      return map;
+    }, {});
+  },
+
   /**
    * Build configuration object to send to backend
    * Backend performs normalization/default handling for nested widget configs
@@ -1134,6 +1145,7 @@ Module.register('MMM-Webuntis', {
     return {
       studentConfig: this.configByStudent?.[studentTitle] || this.config,
       timetable: this.timetableByStudent?.[studentTitle] || [],
+      dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
       timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
       homeworks: this.homeworksByStudent?.[studentTitle] || [],
       exams: this.examsByStudent?.[studentTitle] || [],
@@ -1300,6 +1312,7 @@ Module.register('MMM-Webuntis', {
     }
 
     this.timetableByStudent = {};
+    this.dayNoticesByStudent = {};
     this.examsByStudent = {};
     this.configByStudent = {};
     this.timeUnitsByStudent = {};
@@ -1310,6 +1323,7 @@ Module.register('MMM-Webuntis', {
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.holidayMapByStudent = {};
+    this.dayNoticeMapByStudent = {};
     this.preprocessedByStudent = {};
 
     this.moduleWarningsSet = new Set();
@@ -1981,6 +1995,24 @@ Module.register('MMM-Webuntis', {
       dataChanged = true;
     }
     this._log('debug', `[GOT_DATA] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`);
+
+    const dayNotices = Array.isArray(payload?.data?.dayNotices) ? payload.data.dayNotices : [];
+    if (
+      !this._shouldPreserveData(
+        dayNotices,
+        this.dayNoticesByStudent[title] || [],
+        fetchFlags.timetable ?? true,
+        apiStatus.timetable,
+        warningsList,
+        warningMeta,
+        apiStatus,
+        fetchFlags
+      )
+    ) {
+      this.dayNoticesByStudent[title] = dayNotices;
+      this.dayNoticeMapByStudent[title] = this._buildDayNoticeMap(dayNotices);
+      dataChanged = true;
+    }
 
     const groupedRaw = {};
     (this.timetableByStudent[title] || []).forEach((el) => {

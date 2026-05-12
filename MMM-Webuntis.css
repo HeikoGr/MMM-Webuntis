@@ -703,6 +703,10 @@
   content: var(--wu-icon-holiday);
 }
 
+.MMM-Webuntis .wu-inline-icon-no-lessons::before {
+  content: var(--wu-icon-no-lessons);
+}
+
 .MMM-Webuntis .lesson-break-supervision-icon::before {
   content: var(--wu-icon-break-supervision);
 }
@@ -715,6 +719,10 @@
 
 .MMM-Webuntis .day-notice-icon-no-lessons::before {
   content: var(--wu-icon-no-lessons);
+}
+
+.MMM-Webuntis .day-notice-icon-timetable-restricted::before {
+  content: var(--wu-icon-warning);
 }
 
 .MMM-Webuntis .wu-icon-warning::before {
