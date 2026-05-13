@@ -1532,8 +1532,8 @@ module.exports = NodeHelper.create({
 
     try {
       // Create a deep copy of payload to prevent modifying the original config
-      // Use structuredClone for proper deep cloning (handles Date, undefined, circular refs)
-      const payloadCopy = typeof structuredClone === 'function' ? structuredClone(payload) : JSON.parse(JSON.stringify(payload));
+      // structuredClone is available in Node.js 17+ (devcontainer uses Node 20+)
+      const payloadCopy = structuredClone(payload);
 
       // Apply legacy mappings to convert old keys to new structure
       // This ensures backwards compatibility with 25+ deprecated config keys

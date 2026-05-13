@@ -236,6 +236,9 @@ function getModuleRootElement(ctx) {
     const tick = () => {
       try {
         const nowContext = getModuleDateContext(ctx);
+        // Skip clock-driven updates when debugDate is active (time is frozen)
+        if (nowContext?.isDebug) return;
+
         ctx._handleClockDrivenDayRollover(nowContext);
 
         const gridWidget = ctx._getWidgetApi()?.grid;

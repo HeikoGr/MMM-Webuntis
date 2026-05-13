@@ -1792,11 +1792,6 @@ Module.register('MMM-Webuntis', {
       wrapper.appendChild(runtimeContainer);
     }
 
-    if (sortedStudentTitles.length === 0) {
-      appendEmptyState();
-      return wrapper;
-    }
-
     const widgetRenderers = this._createWidgetRenderers(
       wrapper,
       sortedStudentTitles,
