@@ -9,7 +9,8 @@
 (() => {
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
-  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM, getFirstFieldName } =
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -30,8 +31,9 @@
         return 0;
       }
 
-      const nowLocal = new Date();
-      const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+      const nowLocal = nowContext.date;
+      const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
       const nowHm = currentTimeAsHHMM(nowLocal);
 
       // Initialize widget context and add header if needed
@@ -66,7 +68,7 @@
           }
 
           if (showTeacher) {
-            const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
+            const teacher = getFirstFieldName(exam.teachers, 'short');
             if (teacher) nameCell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
           }
 

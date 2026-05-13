@@ -35,7 +35,7 @@ const config = {
 
         // === DEBUG OPTIONS ===
         logLevel: 'none', // 'none', 'error', 'warn', 'info', 'debug'
-        debugDate: null, // set to 'YYYY-MM-DD' to freeze "today" for debugging (null = disabled)
+        debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
         demoDataFile: null, // optional: local fixture JSON path (e.g. 'demo/fixtures/single-student-week.json') to run frontend-only demo mode
         initRetryTimeout: 5000, // retry timeout for missing MODULE_INITIALIZED during startup (milliseconds)
         initRetryMaxAttempts: 4, // max startup INIT_MODULE attempts before waiting for next trigger

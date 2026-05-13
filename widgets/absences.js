@@ -12,7 +12,7 @@
 (() => {
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
-  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader, getFirstFieldName } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -23,7 +23,7 @@
    * @param {HTMLElement} container - DOM element to append absence rows
    * @param {string} studentCellTitle - Student name for compact mode student column
    * @param {Object} studentConfig - Student-specific configuration
-   * @param {Array} absences - Array of absence objects (date, startTime, endTime, su, reason, excused)
+   * @param {Array} absences - Array of absence objects (date, startTime, endTime, subjects, reason, excused)
    * @returns {number} Number of rows added to container
    */
   function renderAbsencesForStudent(ctx, container, studentCellTitle, studentConfig, absences) {
@@ -42,8 +42,8 @@
     const showDate = Boolean(widgetCtx.getConfig('showDate'));
     const showExcused = Boolean(widgetCtx.getConfig('showExcused'));
     const showReason = Boolean(widgetCtx.getConfig('showReason'));
-    const nowLocal = new Date();
-    const nowYmd = ctx._currentTodayYmd ?? nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+    const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+    const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
 
     const rangeStart = widgetCtx.getConfig('pastDays');
     const rangeEnd = widgetCtx.getConfig('nextDays');
@@ -86,7 +86,8 @@
       const et = formatDisplayTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
-      const subj = ab?.su?.[0]?.longname || ab?.su?.[0]?.name || '';
+      const subjects = Array.isArray(ab?.subjects) ? ab.subjects : [];
+      const subj = getFirstFieldName(subjects, 'long');
       const reason = String(ab?.reason || '').trim();
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;

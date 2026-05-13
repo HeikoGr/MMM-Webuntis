@@ -1,5 +1,5 @@
 {
-  "contractVersion": 2,
+  "contractVersion": 3,
   "meta": {
     "generatedAt": "2026-03-02T07:30:00.000Z",
     "moduleVersion": "demo-fixture",
@@ -76,10 +76,6 @@
     "range": {
       "startYmd": 20260302,
       "endYmd": 20260306
-    },
-    "display": {
-      "mode": "verbose",
-      "widgets": ["messagesofday", "grid", "exams", "homework", "absences"]
     }
   },
   "data": {
@@ -123,33 +119,33 @@
         "endTime": 845,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ma",
             "longname": "Mathematics"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "AByte",
             "longname": "Prof. Ada Byte"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-211",
             "longname": "Room 211"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Proof warm-up: triangles and confidence."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Proof warm-up: triangles and confidence."
       },
       {
         "id": 2,
@@ -158,33 +154,33 @@
         "endTime": 935,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "En",
             "longname": "English"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "PQuill",
             "longname": "Ms. Penny Quill"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-107",
             "longname": "Room 107"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Vocabulary duel: pick your bravest adjective."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Vocabulary duel: pick your bravest adjective."
       },
       {
         "id": 3,
@@ -193,33 +189,33 @@
         "endTime": 1120,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Sc",
             "longname": "Science"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "NSparks",
             "longname": "Dr. Nova Sparks"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "LAB-1",
             "longname": "Science Lab 1"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Double period experiment: bubbles, hypotheses, and zero explosions (hopefully)."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Double period experiment: bubbles, hypotheses, and zero explosions (hopefully)."
       },
       {
         "id": 4,
@@ -228,33 +224,33 @@
         "endTime": 1215,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Hi",
             "longname": "History"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "TChron",
             "longname": "Mr. Theo Chronos"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-203",
             "longname": "Room 203"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Ancient Rome: roads, togas, and dramatic speeches."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Ancient Rome: roads, togas, and dramatic speeches."
       },
       {
         "id": 5,
@@ -263,33 +259,33 @@
         "endTime": 1305,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "PE",
             "longname": "Physical Education"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "MSprint",
             "longname": "Coach Max Sprint"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "GYM",
             "longname": "Main Gym"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Team relay day. Stretch now, thank yourself later."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Team relay day. Stretch now, thank yourself later."
       },
       {
         "id": 6,
@@ -298,33 +294,33 @@
         "endTime": 845,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Fr",
             "longname": "French"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "CBjr",
             "longname": "Mme. Claire Bonjour"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-108",
             "longname": "Room 108"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Bonjour drills and croissant-level pronunciation goals."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Bonjour drills and croissant-level pronunciation goals."
       },
       {
         "id": 7,
@@ -333,33 +329,33 @@
         "endTime": 935,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "CS",
             "longname": "Computer Science"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "LKernel",
             "longname": "Dr. Lin Kernel"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "IT-2",
             "longname": "Computer Lab 2"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Algorithms: sorting socks and numbers with equal seriousness."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Algorithms: sorting socks and numbers with equal seriousness."
       },
       {
         "id": 8,
@@ -368,33 +364,33 @@
         "endTime": 1030,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ar",
             "longname": "Art"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "IPalet",
             "longname": "Ms. Iris Palette"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "ART-1",
             "longname": "Art Studio 1"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Color theory and one suspiciously green sunset."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Color theory and one suspiciously green sunset."
       },
       {
         "id": 9,
@@ -403,33 +399,33 @@
         "endTime": 1120,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Mu",
             "longname": "Music"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "LChord",
             "longname": "Mr. Leo Chord"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "MUS",
             "longname": "Music Room"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Rhythm lab: clap first, panic never."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Rhythm lab: clap first, panic never."
       },
       {
         "id": 10,
@@ -438,33 +434,33 @@
         "endTime": 1210,
         "status": "CHANGED",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "En",
             "longname": "English"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "PQuill",
             "longname": "Ms. Penny Quill"
           }
         ],
-        "ro": [],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [
+        "rooms": [],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [
           {
             "name": "R-207",
             "longname": "Room 207"
           }
         ],
-        "substText": "Room assignment was removed after a tiny mystery leak.",
-        "lstext": "Bring your notebook and portable curiosity."
+        "substitutionText": "Room assignment was removed after a tiny mystery leak.",
+        "lessonText": "Bring your notebook and portable curiosity."
       },
       {
         "id": 11,
@@ -473,33 +469,33 @@
         "endTime": 1305,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ge",
             "longname": "Geography"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "TGlobe",
             "longname": "Ms. Terra Globe"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-205",
             "longname": "Room 205"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Maps, mountains, and where exactly snacks come from."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Maps, mountains, and where exactly snacks come from."
       },
       {
         "id": 12,
@@ -508,33 +504,33 @@
         "endTime": 845,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ma",
             "longname": "Mathematics"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "AByte",
             "longname": "Prof. Ada Byte"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-211",
             "longname": "Room 211"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Fractions meet pizza logic."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Fractions meet pizza logic."
       },
       {
         "id": 13,
@@ -543,33 +539,33 @@
         "endTime": 935,
         "status": "REGULAR",
         "activityType": "EXAM",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Bi",
             "longname": "Biology"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "FGreen",
             "longname": "Dr. Flora Green"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "LAB-2",
             "longname": "Biology Lab 2"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Biology quiz: cells, organelles, and one suspicious mitochondrion."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Biology quiz: cells, organelles, and one suspicious mitochondrion."
       },
       {
         "id": 14,
@@ -578,38 +574,38 @@
         "endTime": 1120,
         "status": "CHANGED",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": ["teacher"],
+        "subjects": [
           {
             "name": "Hi",
             "longname": "History"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "RProxy",
             "longname": "Ms. Rita Proxy"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-203",
             "longname": "Room 203"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": ["te"],
-        "suOld": [],
-        "teOld": [
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [
           {
             "name": "TChron",
             "longname": "Mr. Theo Chronos"
           }
         ],
-        "roOld": [],
-        "substText": "Substitution: Mr. Chronos is at the district history conference.",
-        "lstext": "Double period: medieval trade routes and dramatic maps."
+        "previousRooms": [],
+        "substitutionText": "Substitution: Mr. Chronos is at the district history conference.",
+        "lessonText": "Double period: medieval trade routes and dramatic maps."
       },
       {
         "id": 15,
@@ -618,33 +614,33 @@
         "endTime": 1215,
         "status": "CHANGED",
         "activityType": "NORMAL_TEACHING_PERIOD",
-        "su": [
+        "info": [],
+        "changedFields": ["room"],
+        "subjects": [
           {
             "name": "Ar",
             "longname": "Art"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "IPalet",
             "longname": "Ms. Iris Palette"
           }
         ],
-        "ro": [],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": ["ro"],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [
+        "rooms": [],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [
           {
             "name": "ART-1",
             "longname": "Art Studio 1"
           }
         ],
-        "substText": "Room unavailable after an enthusiastic paint storm.",
-        "lstext": "Bring sketchbook only; room assignment currently missing."
+        "substitutionText": "Room unavailable after an enthusiastic paint storm.",
+        "lessonText": "Bring sketchbook only; room assignment currently missing."
       },
       {
         "id": 16,
@@ -653,33 +649,33 @@
         "endTime": 1305,
         "status": "REGULAR",
         "activityType": "NORMAL_TEACHING_PERIOD",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "CS",
             "longname": "Computer Science"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "LKernel",
             "longname": "Dr. Lin Kernel"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "IT-2",
             "longname": "Computer Lab 2"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Debugging kata: one bug, two clues, infinite confidence."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Debugging kata: one bug, two clues, infinite confidence."
       },
       {
         "id": 17,
@@ -688,33 +684,33 @@
         "endTime": 845,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "En",
             "longname": "English"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "PQuill",
             "longname": "Ms. Penny Quill"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-107",
             "longname": "Room 107"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Mini debate: should dragons do homework?"
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Mini debate: should dragons do homework?"
       },
       {
         "id": 18,
@@ -723,33 +719,33 @@
         "endTime": 935,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Fr",
             "longname": "French"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "CBjr",
             "longname": "Mme. Claire Bonjour"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-108",
             "longname": "Room 108"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Dialogue lab: order imaginary pastries politely."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Dialogue lab: order imaginary pastries politely."
       },
       {
         "id": 19,
@@ -758,33 +754,33 @@
         "endTime": 1030,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Sc",
             "longname": "Science"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "NSparks",
             "longname": "Dr. Nova Sparks"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "LAB-1",
             "longname": "Science Lab 1"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Gravity challenge: predictions before the drop."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Gravity challenge: predictions before the drop."
       },
       {
         "id": 20,
@@ -793,33 +789,33 @@
         "endTime": 1120,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Mu",
             "longname": "Music"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "LChord",
             "longname": "Mr. Leo Chord"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "MUS",
             "longname": "Music Room"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Tempo training: faster than Monday, calmer than Friday."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Tempo training: faster than Monday, calmer than Friday."
       },
       {
         "id": 21,
@@ -829,33 +825,33 @@
         "status": "CANCELLED",
         "statusDetail": "MOVED",
         "activityType": "NORMAL_TEACHING_PERIOD",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ge",
             "longname": "Geography"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "TGlobe",
             "longname": "Ms. Terra Globe"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-205",
             "longname": "Room 205"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "Cancelled because PE was moved into this slot to avoid a gap.",
-        "lstext": "Geography moved out of period 5."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "Cancelled because PE was moved into this slot to avoid a gap.",
+        "lessonText": "Geography moved out of period 5."
       },
       {
         "id": 210,
@@ -865,33 +861,33 @@
         "status": "ADDITIONAL",
         "statusDetail": "MOVED",
         "activityType": "ADDITIONAL_PERIOD",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "PE",
             "longname": "Physical Education"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "MSprint",
             "longname": "Coach Max Sprint"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "GYM",
             "longname": "Main Gym"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "Moved from period 6 into period 5 to avoid an idle gap.",
-        "lstext": "Same PE session, earlier slot."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "Moved from period 6 into period 5 to avoid an idle gap.",
+        "lessonText": "Same PE session, earlier slot."
       },
       {
         "id": 22,
@@ -901,33 +897,33 @@
         "status": "CANCELLED",
         "statusDetail": "MOVED",
         "activityType": "NORMAL_TEACHING_PERIOD",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "PE",
             "longname": "Physical Education"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "MSprint",
             "longname": "Coach Max Sprint"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "GYM",
             "longname": "Main Gym"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "Moved to period 5 so there is no gap after period 4.",
-        "lstext": "Original period 6 slot cancelled after move."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "Moved to period 5 so there is no gap after period 4.",
+        "lessonText": "Original period 6 slot cancelled after move."
       },
       {
         "id": 23,
@@ -936,33 +932,33 @@
         "endTime": 845,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ma",
             "longname": "Mathematics"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "AByte",
             "longname": "Prof. Ada Byte"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-211",
             "longname": "Room 211"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Weekly challenge puzzle: no calculators, only courage."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Weekly challenge puzzle: no calculators, only courage."
       },
       {
         "id": 24,
@@ -971,33 +967,33 @@
         "endTime": 935,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "CS",
             "longname": "Computer Science"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "LKernel",
             "longname": "Dr. Lin Kernel"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "IT-2",
             "longname": "Computer Lab 2"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Code review day: be kind to bugs, then remove them."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Code review day: be kind to bugs, then remove them."
       },
       {
         "id": 25,
@@ -1006,33 +1002,33 @@
         "endTime": 1120,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Ar",
             "longname": "Art"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "IPalet",
             "longname": "Ms. Iris Palette"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "ART-1",
             "longname": "Art Studio 1"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Double period studio: poster design for the school science fair."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Double period studio: poster design for the school science fair."
       },
       {
         "id": 26,
@@ -1041,33 +1037,33 @@
         "endTime": 1215,
         "status": "REGULAR",
         "activityType": "EXAM",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "Hi",
             "longname": "History"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "TChron",
             "longname": "Mr. Theo Chronos"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-203",
             "longname": "Room 203"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "History checkpoint test: trade routes, timelines, and tactical memory."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "History checkpoint test: trade routes, timelines, and tactical memory."
       },
       {
         "id": 27,
@@ -1076,33 +1072,33 @@
         "endTime": 1305,
         "status": "REGULAR",
         "activityType": "LESSON",
-        "su": [
+        "info": [],
+        "changedFields": [],
+        "subjects": [
           {
             "name": "En",
             "longname": "English"
           }
         ],
-        "te": [
+        "teachers": [
           {
             "name": "PQuill",
             "longname": "Ms. Penny Quill"
           }
         ],
-        "ro": [
+        "rooms": [
           {
             "name": "R-107",
             "longname": "Room 107"
           }
         ],
-        "cl": [],
-        "sg": [],
-        "info": [],
-        "changedFields": [],
-        "suOld": [],
-        "teOld": [],
-        "roOld": [],
-        "substText": "",
-        "lstext": "Final writing sprint: a short story with one talking object."
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Final writing sprint: a short story with one talking object."
       }
     ],
     "exams": [
@@ -1126,19 +1122,19 @@
     "homework": [
       {
         "dueDate": 20260304,
-        "su": {
+        "text": "Rename one variable.",
+        "subject": {
           "name": "CS",
           "longname": "Computer Science"
-        },
-        "text": "Rename one variable."
+        }
       },
       {
         "dueDate": 20260305,
-        "su": {
+        "text": "Bring 3 plate facts.",
+        "subject": {
           "name": "Ge",
           "longname": "Geography"
-        },
-        "text": "Bring 3 plate facts."
+        }
       }
     ],
     "absences": [
@@ -1146,14 +1142,15 @@
         "date": 20260304,
         "startTime": 1040,
         "endTime": 1225,
-        "su": [
+        "reason": "Dental appointment",
+        "excused": true,
+        "subjects": [
           {
             "name": "Ar",
             "longname": "Art"
           }
         ],
-        "reason": "Dental appointment",
-        "excused": true
+        "teachers": []
       }
     ],
     "messages": [],

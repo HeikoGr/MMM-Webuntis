@@ -9,7 +9,7 @@
 (() => {
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
-  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader, getFieldDisplayName } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render homework widget for a single student
@@ -20,7 +20,7 @@
    * @param {HTMLElement} container - DOM element to append homework rows
    * @param {string} studentCellTitle - Student name for compact mode student column
    * @param {Object} studentConfig - Student-specific configuration
-   * @param {Array} homeworks - Array of homework objects (dueDate, su{name, longname}, text, remark)
+   * @param {Array} homeworks - Array of homework objects (dueDate, subject{name, longname}, text)
    * @returns {number} Number of rows added to container
    */
   function renderHomeworksForStudent(ctx, container, studentCellTitle, studentConfig, homeworks) {
@@ -39,16 +39,20 @@
     const showSubject = Boolean(widgetCtx.getConfig('showSubject'));
     const showText = Boolean(widgetCtx.getConfig('showText'));
 
-    const sorted = homeworks
-      .slice()
-      .sort(
-        (a, b) => (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) || String(a.su?.name || '').localeCompare(String(b.su?.name || ''))
+    const sorted = homeworks.slice().sort((a, b) => {
+      const aSubject = a?.subject || null;
+      const bSubject = b?.subject || null;
+      return (
+        (Number(a.dueDate) || 0) - (Number(b.dueDate) || 0) ||
+        getFieldDisplayName(aSubject, 'short').localeCompare(getFieldDisplayName(bSubject, 'short'))
       );
+    });
 
     for (const hw of sorted) {
       const due = hw?.dueDate ? formatDisplayDate(hw.dueDate, dateFormat) : '';
-      const subj = showSubject ? hw?.su?.longname || hw?.su?.name || '' : '';
-      const text = showText ? String(hw?.text || hw?.remark || '').trim() : '';
+      const subject = hw?.subject || null;
+      const subj = showSubject ? getFieldDisplayName(subject, 'long') : '';
+      const text = showText ? String(hw?.text || '').trim() : '';
 
       const left = due
         ? `<span class="wu-homework__date">${escapeHtml(due)}</span>`

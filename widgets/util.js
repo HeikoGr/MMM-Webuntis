@@ -386,29 +386,67 @@
 
   /**
    * Build a Set of field keys that changed in a lesson entry.
-   * Considers changedFields array and presence of *Old arrays (suOld, teOld, roOld).
+   * Considers changedFields array and presence of canonical previous* arrays.
    *
    * @param {Object} entry - Lesson entry object
-   * @returns {Set<string>} Set of changed field keys ('su', 'te', 'ro', ...)
+   * @returns {Set<string>} Set of changed field keys ('subject', 'teacher', 'room', ...)
    */
   function getChangedFieldSet(entry) {
-    const changed = new Set(Array.isArray(entry?.changedFields) ? entry.changedFields : []);
-    if (Array.isArray(entry?.suOld) && entry.suOld.length > 0) changed.add('su');
-    if (Array.isArray(entry?.teOld) && entry.teOld.length > 0) changed.add('te');
-    if (Array.isArray(entry?.roOld) && entry.roOld.length > 0) changed.add('ro');
+    const changed = new Set(
+      (Array.isArray(entry?.changedFields) ? entry.changedFields : []).filter(
+        (field) => typeof field === 'string' && field.trim().length > 0
+      )
+    );
+
+    if (Array.isArray(entry?.previousSubjects) && entry.previousSubjects.length > 0) changed.add('subject');
+    if (Array.isArray(entry?.previousTeachers) && entry.previousTeachers.length > 0) changed.add('teacher');
+    if (Array.isArray(entry?.previousRooms) && entry.previousRooms.length > 0) changed.add('room');
+
     return changed;
   }
 
   /**
-   * Return the display name of the first element in a field array (e.g. su, te, ro).
+   * Return first array item when available.
    *
-   * @param {Array} entries - Array of field objects with name/longname properties
+   * @param {Array} entries - Array of values
+   * @returns {*} First entry or null
+   */
+  function getPrimaryFieldEntry(entries) {
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    return entries[0] ?? null;
+  }
+
+  /**
+   * Resolve a display name from a canonical field value.
+   * Supports object values ({ name, longname }) and primitive values (string/number).
+   *
+   * @param {*} entry - Field value
+   * @param {string} format - 'short' prefers name, 'long' prefers longname
    * @returns {string} Trimmed display name or empty string
    */
-  function getFirstFieldName(entries) {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
-    const first = entries[0] || {};
-    return String(first.name || first.longname || '').trim();
+  function getFieldDisplayName(entry, format = 'short') {
+    if (entry === null || entry === undefined) return '';
+
+    if (typeof entry === 'string' || typeof entry === 'number') {
+      return String(entry).trim();
+    }
+
+    if (typeof entry !== 'object') return '';
+
+    const shortName = String(entry.name ?? '').trim();
+    const longName = String(entry.longname ?? '').trim();
+    return format === 'long' ? longName || shortName : shortName || longName;
+  }
+
+  /**
+   * Return the display name of the first element in a canonical field array.
+   *
+   * @param {Array} entries - Array of field values
+   * @param {string} format - 'short' (default) or 'long'
+   * @returns {string} Trimmed display name or empty string
+   */
+  function getFirstFieldName(entries, format = 'short') {
+    return getFieldDisplayName(getPrimaryFieldEntry(entries), format);
   }
 
   /**
@@ -424,13 +462,22 @@
   function compareByDateAndStartTime(a, b, options = {}) {
     const dateKey = options.dateKey || 'date';
     const timeKey = options.timeKey || 'startTime';
-    return (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0) || (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
+    const dateCompare = (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0);
+    if (dateCompare !== 0) return dateCompare;
+    return (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
+  }
+
+  function normalizeComparableText(value) {
+    return String(value || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
   }
 
   /**
    * Initialize widget utilities and DOM helpers
    * Returns an object with all common widget utilities to reduce boilerplate
-   * Provides safe fallbacks if any utility is missing
+   * Fails fast if required helpers are missing
    *
    * @param {Object} widgetRoot - The MMMWebuntisWidgets root object
    * @returns {Object} Object containing util and dom helper functions
@@ -438,41 +485,47 @@
   function resolveWidgetHelpers(widgetRoot) {
     const util = widgetRoot.util || {};
     const dom = widgetRoot.dom || {};
+
+    const requireFunction = (helperName, fn) => {
+      if (typeof fn !== 'function') {
+        throw new Error(`[MMM-Webuntis] Missing required helper: ${helperName}`);
+      }
+      return fn;
+    };
+
     return {
-      log: typeof util.log === 'function' ? util.log : () => {},
-      escapeHtml: typeof util.escapeHtml === 'function' ? util.escapeHtml : (s) => String(s || ''),
-      formatDisplayDate: typeof util.formatDisplayDate === 'function' ? util.formatDisplayDate : () => '',
-      formatDisplayTime: typeof util.formatDisplayTime === 'function' ? util.formatDisplayTime : () => '',
-      currentTimeAsHHMM: typeof util.currentTimeAsHHMM === 'function' ? util.currentTimeAsHHMM : () => 0,
-      toMinutesSinceMidnight: typeof util.toMinutesSinceMidnight === 'function' ? util.toMinutesSinceMidnight : () => NaN,
-      getWidgetConfig: typeof util.getWidgetConfig === 'function' ? util.getWidgetConfig : () => undefined,
-      getWidgetConfigResolved: typeof util.getWidgetConfigResolved === 'function' ? util.getWidgetConfigResolved : () => undefined,
-      addRow: typeof dom.addRow === 'function' ? dom.addRow : () => {},
-      addFullRow: typeof dom.addFullRow === 'function' ? dom.addFullRow : () => {},
-      addHeader: typeof dom.addHeader === 'function' ? dom.addHeader : () => {},
-      createElement: typeof dom.createElement === 'function' ? dom.createElement : () => document.createElement('div'),
-      createContainer: typeof dom.createContainer === 'function' ? dom.createContainer : () => document.createElement('div'),
-      createWidgetContext:
-        typeof util.createWidgetContext === 'function'
-          ? util.createWidgetContext
-          : () => ({ isVerbose: false, getConfig: () => undefined }),
-      initializeWidgetContextAndHeader:
-        typeof util.initializeWidgetContextAndHeader === 'function' ? util.initializeWidgetContextAndHeader : () => ({}),
-      buildWidgetHeaderTitle: typeof util.buildWidgetHeaderTitle === 'function' ? util.buildWidgetHeaderTitle : () => '',
+      log: requireFunction('util.log', util.log),
+      escapeHtml: requireFunction('util.escapeHtml', util.escapeHtml),
+      formatDisplayDate: requireFunction('util.formatDisplayDate', util.formatDisplayDate),
+      formatDisplayTime: requireFunction('util.formatDisplayTime', util.formatDisplayTime),
+      currentTimeAsHHMM: requireFunction('util.currentTimeAsHHMM', util.currentTimeAsHHMM),
+      toMinutesSinceMidnight: requireFunction('util.toMinutesSinceMidnight', util.toMinutesSinceMidnight),
+      getWidgetConfig: requireFunction('util.getWidgetConfig', util.getWidgetConfig),
+      getWidgetConfigResolved: requireFunction('util.getWidgetConfigResolved', util.getWidgetConfigResolved),
+      addRow: requireFunction('dom.addRow', dom.addRow),
+      addFullRow: requireFunction('dom.addFullRow', dom.addFullRow),
+      addHeader: requireFunction('dom.addHeader', dom.addHeader),
+      createElement: requireFunction('dom.createElement', dom.createElement),
+      createContainer: requireFunction('dom.createContainer', dom.createContainer),
+      createWidgetContext: requireFunction('util.createWidgetContext', util.createWidgetContext),
+      initializeWidgetContextAndHeader: requireFunction('util.initializeWidgetContextAndHeader', util.initializeWidgetContextAndHeader),
+      buildWidgetHeaderTitle: requireFunction('util.buildWidgetHeaderTitle', util.buildWidgetHeaderTitle),
       // Flexible field configuration functions
-      getTeachers: typeof util.getTeachers === 'function' ? util.getTeachers : () => [],
-      getSubject: typeof util.getSubject === 'function' ? util.getSubject : () => '',
-      getRoom: typeof util.getRoom === 'function' ? util.getRoom : () => '',
-      getClass: typeof util.getClass === 'function' ? util.getClass : () => '',
-      getStudentGroup: typeof util.getStudentGroup === 'function' ? util.getStudentGroup : () => '',
-      getInfo: typeof util.getInfo === 'function' ? util.getInfo : () => '',
-      getEmptyDayState: typeof util.getEmptyDayState === 'function' ? util.getEmptyDayState : () => null,
+      getTeachers: requireFunction('util.getTeachers', util.getTeachers),
+      getSubject: requireFunction('util.getSubject', util.getSubject),
+      getRoom: requireFunction('util.getRoom', util.getRoom),
+      getClass: requireFunction('util.getClass', util.getClass),
+      getStudentGroup: requireFunction('util.getStudentGroup', util.getStudentGroup),
+      getInfo: requireFunction('util.getInfo', util.getInfo),
+      getEmptyDayState: requireFunction('util.getEmptyDayState', util.getEmptyDayState),
       // Lesson status / change helpers
       isIrregularStatus,
       getChangedFieldSet,
+      getPrimaryFieldEntry,
+      getFieldDisplayName,
       getFirstFieldName,
-      compareByDateAndStartTime:
-        typeof util.compareByDateAndStartTime === 'function' ? util.compareByDateAndStartTime : compareByDateAndStartTime,
+      compareByDateAndStartTime: requireFunction('util.compareByDateAndStartTime', util.compareByDateAndStartTime),
+      normalizeComparableText: requireFunction('util.normalizeComparableText', util.normalizeComparableText),
     };
   }
 
@@ -692,11 +745,10 @@
 
   /**
    * Extract field value from lesson data structure
-   * Generic function to extract any field type (teacher, subject, room, class, etc.)
-   * Supports both traditional (te/su/ro) and dynamic (cl/sg) fields
+   * Generic function to extract any canonical field type (teacher, subject, room, class, etc.)
    *
    * @param {Object} lesson - Lesson object from backend
-   * @param {string} fieldType - Field type to extract (e.g., 'te', 'su', 'ro', 'cl', 'sg')
+   * @param {string} fieldType - Canonical field type to extract (e.g., 'teachers', 'subjects')
    * @param {string} format - Name format: 'short' (default) or 'long'
    * @returns {string} Field value or empty string if not found
    */
@@ -704,12 +756,7 @@
     if (!lesson) return '';
 
     const field = lesson[fieldType];
-    if (!field || !Array.isArray(field) || field.length === 0) return '';
-
-    const item = field[0];
-    if (!item) return '';
-
-    return format === 'long' ? item.longname || item.name : item.name || item.longname;
+    return getFirstFieldName(field, format);
   }
 
   /**
@@ -721,10 +768,9 @@
    * @returns {string[]} Array of teacher names (may be empty)
    */
   function getTeachers(lesson, format = 'short') {
-    if (!lesson?.te || !Array.isArray(lesson.te)) return [];
-    return lesson.te
-      .map((teacher) => (format === 'long' ? teacher.longname || teacher.name : teacher.name || teacher.longname))
-      .filter(Boolean);
+    const teachers = Array.isArray(lesson?.teachers) ? lesson.teachers : [];
+    if (teachers.length === 0) return [];
+    return teachers.map((teacher) => getFieldDisplayName(teacher, format)).filter(Boolean);
   }
 
   /**
@@ -735,7 +781,7 @@
    * @returns {string} Subject name or empty string
    */
   function getSubject(lesson, format = 'short') {
-    return getFieldValue(lesson, 'su', format);
+    return getFieldValue(lesson, 'subjects', format);
   }
 
   /**
@@ -746,7 +792,7 @@
    * @returns {string} Room name or empty string
    */
   function getRoom(lesson, format = 'short') {
-    return getFieldValue(lesson, 'ro', format);
+    return getFieldValue(lesson, 'rooms', format);
   }
 
   /**
@@ -757,7 +803,7 @@
    * @returns {string} Class name or empty string
    */
   function getClass(lesson, format = 'short') {
-    return getFieldValue(lesson, 'cl', format);
+    return getFieldValue(lesson, 'classes', format);
   }
 
   /**
@@ -768,7 +814,7 @@
    * @returns {string} Student group name or empty string
    */
   function getStudentGroup(lesson, format = 'short') {
-    return getFieldValue(lesson, 'sg', format);
+    return getFieldValue(lesson, 'studentGroups', format);
   }
 
   /**
@@ -799,8 +845,11 @@
     buildWidgetHeaderTitle,
     isIrregularStatus,
     getChangedFieldSet,
+    getPrimaryFieldEntry,
+    getFieldDisplayName,
     getFirstFieldName,
     compareByDateAndStartTime,
+    normalizeComparableText,
     getFieldValue,
     getTeachers,
     getSubject,

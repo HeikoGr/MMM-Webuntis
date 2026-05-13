@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const Module = require('node:module');
+const runtimeUtils = require('../lib/runtime-utils');
 
 function loadNodeHelper() {
   const originalLoad = Module._load;
@@ -91,4 +92,69 @@ test('createGroupWarningCollector stores one warning entry per message', () => {
     kind: 'generic',
     severity: 'warning',
   });
+});
+
+test('emit helpers preserve or override route metadata as intended', () => {
+  const emitted = [];
+  helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
+
+  helper._emitGotData({ id: 'old', sessionId: 'old-session', value: 1 }, { identifier: 'new', sessionId: 'new-session' });
+  helper._emitInitError({ id: 'old', sessionId: 'old-session', value: 2 }, { identifier: 'new', sessionId: 'new-session' });
+  helper._emitModuleInitialized({ value: 3 }, { identifier: 'new', sessionId: 'new-session' });
+
+  assert.deepEqual(emitted, [
+    {
+      name: 'GOT_DATA',
+      payload: { id: 'new', sessionId: 'new-session', value: 1 },
+    },
+    {
+      name: 'INIT_ERROR',
+      payload: { id: 'old', sessionId: 'old-session', value: 2 },
+    },
+    {
+      name: 'MODULE_INITIALIZED',
+      payload: { id: 'new', sessionId: 'new-session', value: 3 },
+    },
+  ]);
+});
+
+test('handleSessionState uses default route values for missing payload metadata', () => {
+  helper._pausedSessions = new Set();
+  helper._mmLog = () => {};
+
+  helper._handleSessionState({ state: 'paused' });
+
+  assert.equal(helper._pausedSessions.has('default:unknown'), true);
+});
+
+test('getCurrentDateContext keeps wall clock time while overriding debug date', () => {
+  const now = new Date(Date.UTC(2026, 4, 12, 14, 37, 22, 15));
+  const result = runtimeUtils.getCurrentDateContext(
+    {
+      debugDate: '2026-03-02',
+      timezone: 'UTC',
+    },
+    {
+      now,
+      defaultTimezone: 'UTC',
+    }
+  );
+
+  assert.equal(result.isDebug, true);
+  assert.equal(result.ymd, 20260302);
+  assert.equal(result.isoDate, '2026-03-02');
+  assert.equal(result.date.getHours(), 14);
+  assert.equal(result.date.getMinutes(), 37);
+  assert.equal(result.date.getSeconds(), 22);
+});
+
+test('_calculateBaseNow returns normalized debug date context', () => {
+  const baseDateContext = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
+  const baseNow = baseDateContext.date;
+
+  assert.equal(baseDateContext.isDebug, true);
+  assert.equal(baseDateContext.ymd, 20260302);
+  assert.equal(baseNow.getFullYear(), 2026);
+  assert.equal(baseNow.getMonth(), 2);
+  assert.equal(baseNow.getDate(), 2);
 });

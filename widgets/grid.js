@@ -12,8 +12,7 @@
  */
 
 /**
- * WeakMap to store now-line updater state per module instance
- * Prevents memory leaks by using WeakMap (automatic cleanup when ctx is GC'd)
+ * Uses flexible field configuration (grid.fields.primary, grid.fields.secondary, grid.fields.additional).
  */
 const nowLineStates = new WeakMap();
 
@@ -60,7 +59,17 @@ function getModuleRootElement(ctx) {
     isIrregularStatus,
     getChangedFieldSet,
     getFirstFieldName,
+    normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  function getModuleDateContext(ctx, configOverride = null) {
+    return ctx.getCurrentDateContext(configOverride || ctx.config || {});
+  }
+
+  function getCurrentDayDate(ctx) {
+    const nowContext = getModuleDateContext(ctx);
+    return new Date(nowContext.date.getFullYear(), nowContext.date.getMonth(), nowContext.date.getDate());
+  }
 
   /**
    * Determine lesson display mode based on available fields
@@ -75,11 +84,11 @@ function getModuleRootElement(ctx) {
    *   - showStudentGroup: boolean - Whether to show student group
    */
   function getLessonDisplayMode(lesson) {
-    const hasTeacher = lesson?.te && lesson.te.length > 0;
-    const hasSubject = lesson?.su && lesson.su.length > 0;
-    const hasRoom = lesson?.ro && lesson.ro.length > 0;
-    const hasClass = lesson?.cl && lesson.cl.length > 0;
-    const hasStudentGroup = lesson?.sg && lesson.sg.length > 0;
+    const hasTeacher = Array.isArray(lesson?.teachers) && lesson.teachers.length > 0;
+    const hasSubject = Array.isArray(lesson?.subjects) && lesson.subjects.length > 0;
+    const hasRoom = Array.isArray(lesson?.rooms) && lesson.rooms.length > 0;
+    const hasClass = Array.isArray(lesson?.classes) && lesson.classes.length > 0;
+    const hasStudentGroup = Array.isArray(lesson?.studentGroups) && lesson.studentGroups.length > 0;
 
     const isTeacherView = hasClass && !hasStudentGroup;
     const isStudentView = hasStudentGroup && !hasClass;
@@ -211,13 +220,6 @@ function getModuleRootElement(ctx) {
     return parts;
   }
 
-  function normalizeComparableLessonText(value) {
-    return String(value || '')
-      .trim()
-      .replace(/\s+/g, ' ')
-      .toLowerCase();
-  }
-
   /**
    * Start the now-line updater (runs every minute)
    * Updates now-line position and refreshes past lesson masks
@@ -233,29 +235,11 @@ function getModuleRootElement(ctx) {
 
     const tick = () => {
       try {
-        const nowLocal = new Date();
-        const realNowYmd = nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
-        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
-        if (!isDebugMode) {
-          if (ctx._currentTodayYmd === undefined) ctx._currentTodayYmd = realNowYmd;
-          if (realNowYmd !== ctx._currentTodayYmd) {
-            try {
-              if (typeof ctx._sendFetchData === 'function') {
-                ctx._sendFetchData('date-change');
-              } else {
-                ctx.sendSocketNotification('FETCH_DATA', ctx.config);
-              }
-            } catch {
-              return;
-            }
-            try {
-              ctx.updateDom();
-            } catch {
-              return;
-            }
-            ctx._currentTodayYmd = realNowYmd;
-          }
-        }
+        const nowContext = getModuleDateContext(ctx);
+        // Skip clock-driven updates when debugDate is active (time is frozen)
+        if (nowContext?.isDebug) return;
+
+        ctx._handleClockDrivenDayRollover(nowContext);
 
         const gridWidget = ctx._getWidgetApi()?.grid;
         const moduleRoot = getModuleRootElement(ctx);
@@ -268,7 +252,7 @@ function getModuleRootElement(ctx) {
       }
     };
 
-    const now = new Date();
+    const now = getModuleDateContext(ctx).date;
     const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
 
     state.initialTimeout = setTimeout(
@@ -346,17 +330,17 @@ function getModuleRootElement(ctx) {
         const bd = parseInt(s.substring(6, 8), 10);
         baseDate = new Date(by, bm, bd);
       } else {
-        baseDate = new Date();
+        baseDate = getCurrentDayDate(ctx);
       }
 
       const dayOfWeek = baseDate.getDay();
-      const currentHour = new Date().getHours();
-      const currentMinute = new Date().getMinutes();
+      const nowContext = getModuleDateContext(ctx);
+      const currentHour = nowContext.date.getHours();
+      const currentMinute = nowContext.date.getMinutes();
 
       let weekOffset = 0;
       if (dayOfWeek === 5) {
-        const isDebugMode = ctx.config && typeof ctx.config.debugDate === 'string' && ctx.config.debugDate;
-        if (!isDebugMode && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
+        if (ctx._usesLiveClock(nowContext) && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
           weekOffset = 1;
         }
       } else if (dayOfWeek === 6 || dayOfWeek === 0) {
@@ -656,23 +640,23 @@ function getModuleRootElement(ctx) {
         endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
         startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
         endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        subjectShort: getSubject ? getSubject(el, 'short') : el.su?.[0]?.name || el.su?.[0]?.longname || 'N/A',
-        subject: getSubject ? getSubject(el, 'long') : el.su?.[0]?.longname || el.su?.[0]?.name || 'N/A',
-        teacherInitial: getTeachers ? getTeachers(el, 'short')[0] : el.te?.[0]?.name || el.te?.[0]?.longname || 'N/A',
-        teacher: getTeachers ? getTeachers(el, 'long')[0] : el.te?.[0]?.longname || el.te?.[0]?.name || 'N/A',
-        room: getRoom ? getRoom(el, 'short') : el.ro?.[0]?.name || el.ro?.[0]?.longname || '',
-        roomLong: getRoom ? getRoom(el, 'long') : el.ro?.[0]?.longname || el.ro?.[0]?.name || '',
-        class: getClass ? getClass(el, 'short') : el.cl?.[0]?.name || el.cl?.[0]?.longname || '',
-        classLong: getClass ? getClass(el, 'long') : el.cl?.[0]?.longname || el.cl?.[0]?.name || '',
-        studentGroup: getStudentGroup ? getStudentGroup(el, 'short') : el.sg?.[0]?.name || el.sg?.[0]?.longname || '',
-        studentGroupLong: getStudentGroup ? getStudentGroup(el, 'long') : el.sg?.[0]?.longname || el.sg?.[0]?.name || '',
-        infoShort: getInfo ? getInfo(el, 'short') : el.info?.[0]?.name || el.info?.[0]?.longname || '',
-        infoLong: getInfo ? getInfo(el, 'long') : el.info?.[0]?.longname || el.info?.[0]?.name || '',
+        subjectShort: getSubject(el, 'short') || 'N/A',
+        subject: getSubject(el, 'long') || 'N/A',
+        teacherInitial: getTeachers(el, 'short')[0] || 'N/A',
+        teacher: getTeachers(el, 'long')[0] || 'N/A',
+        room: getRoom(el, 'short') || '',
+        roomLong: getRoom(el, 'long') || '',
+        class: getClass(el, 'short') || '',
+        classLong: getClass(el, 'long') || '',
+        studentGroup: getStudentGroup(el, 'short') || '',
+        studentGroupLong: getStudentGroup(el, 'long') || '',
+        infoShort: getInfo(el, 'short') || '',
+        infoLong: getInfo(el, 'long') || '',
         isTeacherView: displayMode.isTeacherView,
         isStudentView: displayMode.isStudentView,
         code: el.code || '',
-        substText: el.substText || '',
-        text: el.lstext || '',
+        substitutionText: el.substitutionText || '',
+        text: el.lessonText || '',
         lessonId: el.id ?? null,
       };
     });
@@ -964,7 +948,7 @@ function getModuleRootElement(ctx) {
       // with a more significant field (subject, class, …) keeps the blue tint.
       const changedFields = getChangedFieldSet(lesson);
       const isMinorChange =
-        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'te' || f === 'ro');
+        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'teacher' || f === 'room');
       element.classList.add(isMinorChange ? 'lesson-regular' : 'lesson-substitution');
     } else {
       element.classList.add('lesson-regular');
@@ -1011,9 +995,7 @@ function getModuleRootElement(ctx) {
 
   /**
    * Generate HTML content for lesson cell
-   * Supports two display modes:
-   * 1. Flexible field configuration (grid.fields.{primary, secondary, additional})
-   * 2. Legacy fallback (subject + teacher/class + room)
+   * Uses flexible field configuration (grid.fields.primary, grid.fields.secondary, grid.fields.additional).
    *
    * Special handling for BREAK_SUPERVISION activity type
    *
@@ -1045,116 +1027,89 @@ function getModuleRootElement(ctx) {
 
     const naText = String(lessonConfig?.grid?.naText ?? ctx?.defaults?.grid?.naText ?? 'N/A');
 
-    if (ctx) {
-      try {
-        const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
+    try {
+      const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
-        let primaryHtml;
-        if (changedFields.has('su')) {
-          const newSubject = lesson.su?.[0]?.name || '';
-          const oldSubject = getFirstFieldName(lesson.suOld);
-          if (newSubject) {
-            primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
-          } else if (oldSubject) {
-            primaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldSubject)}</span>`;
-          } else {
-            primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
-          }
+      let primaryHtml;
+      if (changedFields.has('subject')) {
+        const newSubject = lesson.subjects?.[0]?.name || '';
+        const oldSubject = getFirstFieldName(lesson.previousSubjects);
+        if (newSubject) {
+          primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
+        } else if (oldSubject) {
+          primaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldSubject)}</span>`;
         } else {
-          primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : '';
+          primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         }
+      } else {
+        primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : '';
+      }
 
-        let secondaryHtml;
-        if (changedFields.has('te')) {
-          const newTeacher = lesson.te?.[0]?.name || '';
-          const oldTeacher = getFirstFieldName(lesson.teOld);
-          if (newTeacher) {
-            secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
-          } else if (oldTeacher) {
-            secondaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldTeacher)}</span>`;
-          } else {
-            secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
-          }
+      let secondaryHtml;
+      if (changedFields.has('teacher')) {
+        const newTeacher = lesson.teachers?.[0]?.name || '';
+        const oldTeacher = getFirstFieldName(lesson.previousTeachers);
+        if (newTeacher) {
+          secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
+        } else if (oldTeacher) {
+          secondaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldTeacher)}</span>`;
         } else {
-          secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
+          secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         }
+      } else {
+        secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
+      }
 
-        let additionalHtml = '';
-        if (changedFields.has('ro')) {
-          const newRoom = lesson.ro?.[0]?.name || '';
-          const oldRoom = getFirstFieldName(lesson.roOld);
-          if (newRoom) {
-            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
-          } else if (oldRoom) {
-            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-removed'>${escapeHtml(oldRoom)}</span>)</span>`;
-          } else {
-            additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
-          }
-        } else if (displayParts.additional && displayParts.additional.length > 0) {
-          const additionalParts = displayParts.additional
-            .filter(Boolean)
-            .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
-            .join(' ');
-          if (additionalParts) {
-            additionalHtml = ` ${additionalParts}`;
-          }
-        }
-
-        if (hasUnknownChangedDetails && !additionalHtml) {
+      let additionalHtml = '';
+      if (changedFields.has('room')) {
+        const newRoom = lesson.rooms?.[0]?.name || '';
+        const oldRoom = getFirstFieldName(lesson.previousRooms);
+        if (newRoom) {
+          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
+        } else if (oldRoom) {
+          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-removed'>${escapeHtml(oldRoom)}</span>)</span>`;
+        } else {
           additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
         }
-
-        const normalizedLessonText = normalizeComparableLessonText(lesson.text);
-        const shouldShowLessonText =
-          normalizedLessonText !== '' &&
-          normalizedLessonText !== normalizeComparableLessonText(displayParts.primary) &&
-          normalizedLessonText !== normalizeComparableLessonText(displayParts.secondary) &&
-          !(
-            Array.isArray(displayParts.additional) &&
-            displayParts.additional.some((item) => normalizedLessonText === normalizeComparableLessonText(item))
-          );
-
-        const subst = lesson.substText
-          ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
-          : '';
-        const txt = shouldShowLessonText ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
-
-        const secondaryLine =
-          secondaryHtml || additionalHtml ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
-
-        return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
-      } catch {
-        void 0;
+      } else if (displayParts.additional && displayParts.additional.length > 0) {
+        const additionalParts = displayParts.additional
+          .filter(Boolean)
+          .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
+          .join(' ');
+        if (additionalParts) {
+          additionalHtml = ` ${additionalParts}`;
+        }
       }
+
+      if (hasUnknownChangedDetails && !additionalHtml) {
+        additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
+      }
+
+      const normalizedLessonText = normalizeComparableText(lesson.text);
+      const shouldShowLessonText =
+        normalizedLessonText !== '' &&
+        normalizedLessonText !== normalizeComparableText(displayParts.primary) &&
+        normalizedLessonText !== normalizeComparableText(displayParts.secondary) &&
+        !(
+          Array.isArray(displayParts.additional) &&
+          displayParts.additional.some((item) => normalizedLessonText === normalizeComparableText(item))
+        );
+
+      const subst = lesson.substitutionText
+        ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, '<br>')}</span>`
+        : '';
+      const txt = shouldShowLessonText ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+
+      const secondaryLine =
+        secondaryHtml || additionalHtml ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
+
+      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
+    } catch (err) {
+      log('error', `[grid] makeLessonInnerHTML failed for lesson ${lesson?.id ?? lesson?.lessonId ?? 'unknown'}: ${err?.message || err}`);
+      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'><span class='lesson-changed-new'>${escapeHtml(
+        naText
+      )}</span></span></div>`;
     }
-
-    const subject = escapeHtml(lesson.subjectShort || lesson.subject);
-    let secondaryInfo = '';
-    if (lesson.isTeacherView && lesson.class) {
-      secondaryInfo = escapeHtml(lesson.class);
-    } else if (lesson.teacher && lesson.teacher !== 'N/A') {
-      secondaryInfo = escapeHtml(lesson.teacherInitial || lesson.teacher);
-    }
-
-    let roomInfo = '';
-    if (lesson.room && lesson.room !== '') {
-      roomInfo = ` <span class='lesson-room'>(${escapeHtml(lesson.room)})</span>`;
-    }
-
-    const normalizedLessonText = normalizeComparableLessonText(lesson.text);
-    const shouldShowLessonText =
-      normalizedLessonText !== '' &&
-      normalizedLessonText !== normalizeComparableLessonText(lesson.subjectShort || lesson.subject) &&
-      normalizedLessonText !== normalizeComparableLessonText(lesson.teacherInitial || lesson.teacher) &&
-      normalizedLessonText !== normalizeComparableLessonText(lesson.room || lesson.roomLong);
-
-    const subst = lesson.substText
-      ? `<br><span class='lesson-substitution-text'>${escapeHtml(lesson.substText).replace(/\n/g, '<br>')}</span>`
-      : '';
-    const txt = shouldShowLessonText ? `<br><span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
-    const secondaryLine = secondaryInfo ? `<br><span class='lesson-secondary'>${secondaryInfo}${roomInfo}</span>` : '';
-
-    return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${subject}</span>${secondaryLine}${subst}${txt}</div>`;
   }
 
   /**
@@ -1188,6 +1143,84 @@ function getModuleRootElement(ctx) {
       iconContainer.classList.add('has-homework', 'has-icons');
       icons.appendChild(icon.cloneNode(true));
     }
+  }
+
+  function getVisibleTimeBlockPlacement(startMin, endMin, allStart, allEnd, totalMinutes, totalHeight, options = {}) {
+    const { minHeightPx = 0 } = options;
+    const normalizedStart = Number(startMin);
+    const normalizedEnd = Number(endMin);
+
+    if (!Number.isFinite(normalizedStart) || !Number.isFinite(normalizedEnd)) {
+      return null;
+    }
+
+    if (normalizedStart >= allEnd || normalizedEnd <= allStart) {
+      return null;
+    }
+
+    const visibleStart = Math.max(normalizedStart, allStart);
+    const visibleEnd = Math.min(normalizedEnd, allEnd);
+    if (visibleEnd <= visibleStart) {
+      return null;
+    }
+
+    const safeTotalMinutes = Math.max(1, totalMinutes);
+    const topPx = Math.round(((visibleStart - allStart) / safeTotalMinutes) * totalHeight);
+    const rawHeightPx = Math.round(((visibleEnd - visibleStart) / safeTotalMinutes) * totalHeight);
+    const heightPx = Math.max(minHeightPx, rawHeightPx);
+
+    return {
+      visibleStart,
+      visibleEnd,
+      topPx,
+      heightPx,
+    };
+  }
+
+  /**
+   * Append a lesson cell to the grid container
+   *
+   * @param {HTMLElement} container - Container element to append the cell to
+   * @param {Object} lesson - Normalized lesson object
+   * @param {Object} timeConstraints - Time constraint parameters
+   * @param {number} timeConstraints.allStart - Grid start time in minutes since midnight
+   * @param {number} timeConstraints.allEnd - Grid end time in minutes since midnight
+   * @param {number} timeConstraints.totalMinutes - Total minutes in grid range
+   * @param {number} timeConstraints.totalHeight - Total height of grid in pixels
+   * @param {Object} rendering - Rendering context and configuration
+   * @param {Object} rendering.ctx - Module context
+   * @param {Function} rendering.escapeHtml - HTML escape function
+   * @param {Object} rendering.lessonConfig - Lesson-specific configuration
+   * @param {Object} [options={}] - Optional rendering parameters
+   * @param {boolean} [options.isPast] - Whether the lesson is in the past
+   * @param {number} [options.nowYmd] - Current date as YYYYMMDD integer
+   * @param {number} [options.nowMin] - Current time in minutes since midnight
+   * @param {string[]} [options.additionalClasses] - Additional CSS classes to apply
+   * @returns {HTMLElement|null} Created lesson cell or null if not visible
+   */
+  function appendLessonCell(container, lesson, timeConstraints, rendering, options = {}) {
+    const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
+    const { ctx, escapeHtml, lessonConfig } = rendering;
+    const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
+    const placement = getVisibleTimeBlockPlacement(lesson.startMin, lesson.endMin, allStart, allEnd, totalMinutes, totalHeight, {
+      minHeightPx: 12,
+    });
+    if (!placement) return null;
+
+    const { visibleEnd, topPx, heightPx } = placement;
+    const lessonYmd = Number(lesson.dateStr) || 0;
+    const resolvedIsPast = typeof isPast === 'boolean' ? isPast : calcIsPast(lessonYmd, visibleEnd, nowYmd, nowMin);
+
+    const cell = createLessonCell(topPx, heightPx, lesson.dateStr, visibleEnd);
+    applyLessonClasses(cell, lesson, {
+      hasExam: lessonHasExam(lesson),
+      isPast: resolvedIsPast,
+      additionalClasses,
+    });
+    cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
+    if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
+    container.appendChild(cell);
+    return cell;
   }
 
   /**
@@ -1283,33 +1316,12 @@ function getModuleRootElement(ctx) {
    * @param {number} nowMin - Current time in minutes since midnight
    */
   function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, _isPast, nowYmd, nowMin, tickerData, lessonConfig) {
-    const getSubjectName = (lesson) => {
-      if (lesson.su && lesson.su.length > 0) {
-        return lesson.su[0].name || lesson.su[0].longname;
-      }
-      return null;
-    };
-
-    const getStudentGroupName = (lesson) => {
-      if (lesson.sg && lesson.sg.length > 0) {
-        return lesson.sg[0].name || lesson.sg[0].longname;
-      }
-      return null;
-    };
-
-    const getClassName = (lesson) => {
-      if (lesson.cl && lesson.cl.length > 0) {
-        return lesson.cl[0].name || lesson.cl[0].longname;
-      }
-      return null;
-    };
-
     const subjectGroups = new Map();
     for (let index = 0; index < lessons.length; index++) {
       const lesson = lessons[index];
-      const subject = getSubjectName(lesson);
-      const studentGroup = getStudentGroupName(lesson);
-      const className = getClassName(lesson);
+      const subject = getSubject(lesson, 'short') || null;
+      const studentGroup = getStudentGroup(lesson, 'short') || null;
+      const className = getClass(lesson, 'short') || null;
 
       const groupKey = `${subject || 'unknown'}_${studentGroup || className || 'noGroup'}`;
 
@@ -1560,8 +1572,8 @@ function getModuleRootElement(ctx) {
    * @returns {boolean} True when class/student-group metadata is present.
    */
   function lessonHasStudentGroupOrClassHint(lesson) {
-    const studentGroups = Array.isArray(lesson?.sg) ? lesson.sg : [];
-    const classes = Array.isArray(lesson?.cl) ? lesson.cl : [];
+    const studentGroups = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups : [];
+    const classes = Array.isArray(lesson?.classes) ? lesson.classes : [];
     const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
     const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
     return hasStudentGroup || hasClass;
@@ -1638,9 +1650,9 @@ function getModuleRootElement(ctx) {
    * @param {number|string} currentTodayYmd - Current date marker.
    * @returns {Date} Base date for grid rendering.
    */
-  function getBaseDateFromYmd(currentTodayYmd) {
+  function getBaseDateFromYmd(currentTodayYmd, ctx = null) {
     if (!currentTodayYmd) {
-      return new Date();
+      return getCurrentDayDate(ctx);
     }
 
     const raw = String(currentTodayYmd);
@@ -1847,29 +1859,20 @@ function getModuleRootElement(ctx) {
 
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
 
-    let nowYmd = ctx._currentTodayYmd;
-    if (nowYmd === undefined || nowYmd === null) {
-      const d = new Date();
-      nowYmd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-    }
-    const now = new Date();
+    const nowContext = getModuleDateContext(ctx);
+    const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
+    const now = nowContext.date;
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
     /** Render a single lesson as a standalone full-width cell at its own time position. */
     const renderSingleLesson = (lesson) => {
-      const lS = Math.max(lesson.startMin, allStart);
-      const lE = Math.min(lesson.endMin, allEnd);
-      if (lE <= lS) return;
-
-      const topPx = Math.round(((lS - allStart) / totalMinutes) * totalHeight);
-      const heightPx = Math.max(12, Math.round(((lE - lS) / totalMinutes) * totalHeight));
-      const ymd = Number(lesson.dateStr) || 0;
-
-      const cell = createLessonCell(topPx, heightPx, lesson.dateStr, lE);
-      applyLessonClasses(cell, lesson, { hasExam: lessonHasExam(lesson), isPast: calcIsPast(ymd, lE, nowYmd, nowMin) });
-      cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
-      if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
-      bothInner.appendChild(cell);
+      appendLessonCell(
+        bothInner,
+        lesson,
+        { allStart, allEnd, totalMinutes, totalHeight },
+        { ctx, escapeHtml, lessonConfig },
+        { nowYmd, nowMin }
+      );
     };
 
     const renderTickerGroup = (lessons, group) => {
@@ -1887,13 +1890,14 @@ function getModuleRootElement(ctx) {
       const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
       const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
 
-      if (tickerEnd > tickerStart) {
-        const tickerTop = Math.round(((tickerStart - allStart) / totalMinutes) * totalHeight);
-        const tickerHeight = Math.max(12, Math.round(((tickerEnd - tickerStart) / totalMinutes) * totalHeight));
+      const placement = getVisibleTimeBlockPlacement(tickerStart, tickerEnd, allStart, allEnd, totalMinutes, totalHeight, {
+        minHeightPx: 12,
+      });
+      if (placement) {
         createTickerAnimation(
           tickerCandidates,
-          tickerTop,
-          tickerHeight,
+          placement.topPx,
+          placement.heightPx,
           bothInner,
           ctx,
           escapeHtml,
@@ -1923,33 +1927,23 @@ function getModuleRootElement(ctx) {
       const isPast = calcIsPast(allLessonsYmd, groupEMin, nowYmd, nowMin);
 
       for (const repl of replacements) {
-        const rS = Math.max(repl.startMin, allStart);
-        const rE = Math.min(repl.endMin, allEnd);
-        if (rE <= rS) continue;
-        const rTop = Math.round(((rS - allStart) / totalMinutes) * totalHeight);
-        const rH = Math.max(12, Math.round(((rE - rS) / totalMinutes) * totalHeight));
-        const cell = createLessonCell(rTop, rH, repl.dateStr, rE);
-        applyLessonClasses(cell, repl, { hasExam: lessonHasExam(repl), isPast, additionalClasses: ['split-left'] });
-        cell.innerHTML = makeLessonInnerHTML(repl, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(repl)) addHomeworkIcon(cell);
-        bothInner.appendChild(cell);
+        appendLessonCell(
+          bothInner,
+          repl,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-left'] }
+        );
       }
 
       for (const cancelled of cancelledLessons) {
-        const cS = Math.max(cancelled.startMin, allStart);
-        const cE = Math.min(cancelled.endMin, allEnd);
-        if (cE <= cS) continue;
-        const cTop = Math.round(((cS - allStart) / totalMinutes) * totalHeight);
-        const cH = Math.max(12, Math.round(((cE - cS) / totalMinutes) * totalHeight));
-        const cell = createLessonCell(cTop, cH, cancelled.dateStr, cE);
-        applyLessonClasses(cell, cancelled, {
-          hasExam: lessonHasExam(cancelled),
-          isPast,
-          additionalClasses: ['split-right'],
-        });
-        cell.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(cancelled)) addHomeworkIcon(cell);
-        bothInner.appendChild(cell);
+        appendLessonCell(
+          bothInner,
+          cancelled,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-right'] }
+        );
       }
 
       for (const lesson of lessons) {
@@ -1965,29 +1959,23 @@ function getModuleRootElement(ctx) {
       const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
 
       for (const spanning of spanningLessons) {
-        const sS = Math.max(spanning.startMin, allStart);
-        const sE = Math.min(spanning.endMin, allEnd);
-        if (sE <= sS) continue;
-        const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
-        const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
-        const cell = createLessonCell(sTop, sH, spanning.dateStr, sE);
-        applyLessonClasses(cell, spanning, { hasExam: lessonHasExam(spanning), isPast, additionalClasses: ['split-left'] });
-        cell.innerHTML = makeLessonInnerHTML(spanning, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(spanning)) addHomeworkIcon(cell);
-        bothInner.appendChild(cell);
+        appendLessonCell(
+          bothInner,
+          spanning,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-left'] }
+        );
       }
 
       for (const sub of subPeriodLessons) {
-        const sS = Math.max(sub.startMin, allStart);
-        const sE = Math.min(sub.endMin, allEnd);
-        if (sE <= sS) continue;
-        const sTop = Math.round(((sS - allStart) / totalMinutes) * totalHeight);
-        const sH = Math.max(12, Math.round(((sE - sS) / totalMinutes) * totalHeight));
-        const cell = createLessonCell(sTop, sH, sub.dateStr, sE);
-        applyLessonClasses(cell, sub, { hasExam: lessonHasExam(sub), isPast, additionalClasses: ['split-right'] });
-        cell.innerHTML = makeLessonInnerHTML(sub, escapeHtml, ctx, lessonConfig);
-        if (checkHomeworkMatch(sub)) addHomeworkIcon(cell);
-        bothInner.appendChild(cell);
+        appendLessonCell(
+          bothInner,
+          sub,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-right'] }
+        );
       }
 
       for (const lesson of lessons) {
@@ -2080,25 +2068,22 @@ function getModuleRootElement(ctx) {
 
     try {
       for (const absence of dayAbsences) {
-        const startMin = ctx._toMinutes(absence?.startTime) || 0;
-        const endMin = ctx._toMinutes(absence?.endTime) || 0;
+        const placement = getVisibleTimeBlockPlacement(
+          ctx._toMinutes(absence?.startTime),
+          ctx._toMinutes(absence?.endTime),
+          allStart,
+          allEnd,
+          totalMinutes,
+          totalHeight
+        );
 
-        if (startMin >= allEnd || endMin <= allStart) {
+        if (!placement) {
           continue;
         }
 
-        const clampedStart = Math.max(startMin, allStart);
-        const clampedEnd = Math.min(endMin, allEnd);
-
-        if (clampedStart >= clampedEnd) {
-          continue;
-        }
-
-        const topPx = Math.round(((clampedStart - allStart) / totalMinutes) * totalHeight);
-        const heightPx = Math.round(((clampedEnd - clampedStart) / totalMinutes) * totalHeight);
         const dateStr = String(absence?.date || '');
 
-        const overlay = createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence);
+        const overlay = createAbsenceOverlay(ctx, placement.topPx, placement.heightPx, dateStr, absence);
         bothInner.appendChild(overlay);
       }
     } catch (e) {
@@ -2139,7 +2124,7 @@ function getModuleRootElement(ctx) {
 
     const totalMinutes = allEnd - allStart;
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
-    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd);
+    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
     const todayDateStr = formatDateKey(baseDate);
     const wrapper = document.createElement('div');
 
@@ -2207,52 +2192,41 @@ function getModuleRootElement(ctx) {
   function refreshPastMasks(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      const nowLocal = new Date();
-      const todayYmd =
-        typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd
-          ? ctx._currentTodayYmd
-          : nowLocal.getFullYear() * 10000 + (nowLocal.getMonth() + 1) * 100 + nowLocal.getDate();
+      const nowContext = getModuleDateContext(ctx);
+      const nowLocal = nowContext.date;
+      const todayYmd = typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
 
+      const getElementPastState = (element) => {
+        const dateValue = element?.getAttribute?.('data-date');
+        if (!dateValue) return null;
+        const rawEndMin = element.getAttribute('data-end-min');
+        const endMin = rawEndMin !== null && rawEndMin !== undefined ? Number(rawEndMin) : NaN;
+        return calcIsPast(Number(dateValue) || 0, endMin, todayYmd, nowMin);
+      };
+
+      const togglePastClass = (element, isPast) => {
+        if (!element?.classList || typeof isPast !== 'boolean') return;
+        if (isPast) element.classList.add('past');
+        else element.classList.remove('past');
+      };
+
       const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
       lessons.forEach((ln) => {
-        const ds = ln.getAttribute('data-date');
-        const de = ln.getAttribute('data-end-min');
-        if (!ds) return;
-        const lessonYmd = Number(ds) || 0;
-        const endMin = de !== null && de !== undefined ? Number(de) : NaN;
-        let isPast = false;
-        if (lessonYmd < todayYmd) {
-          isPast = true;
-        } else if (lessonYmd === todayYmd) {
-          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
-        }
-        if (isPast) ln.classList.add('past');
-        else ln.classList.remove('past');
+        togglePastClass(ln, getElementPastState(ln));
       });
 
       const tickers = scope.querySelectorAll('.grid-combined .lesson-ticker-wrapper');
       tickers.forEach((ticker) => {
-        const ds = ticker.getAttribute('data-date');
-        const de = ticker.getAttribute('data-end-min');
-        if (!ds) return;
-        const lessonYmd = Number(ds) || 0;
-        const endMin = de !== null && de !== undefined ? Number(de) : NaN;
-        let isPast = false;
-        if (lessonYmd < todayYmd) {
-          isPast = true;
-        } else if (lessonYmd === todayYmd) {
-          if (!Number.isNaN(endMin) && endMin <= nowMin) isPast = true;
-        }
+        const isPast = getElementPastState(ticker);
 
         // Update only top-level lesson cells within ticker.
         // Nested `.lesson-content` nodes from makeLessonInnerHTML() must not receive
         // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
         const lessonDivs = Array.from(ticker.querySelectorAll('.lesson-content')).filter((div) => div.style.position === 'absolute');
         lessonDivs.forEach((div) => {
-          if (isPast) div.classList.add('past');
-          else div.classList.remove('past');
+          togglePastClass(div, isPast);
         });
       });
     } catch (e) {
@@ -2285,7 +2259,7 @@ function getModuleRootElement(ctx) {
       }
       const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
       const inners = scope.querySelectorAll('.day-column-inner');
-      const nowLocal = new Date();
+      const nowLocal = getModuleDateContext(ctx).date;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {

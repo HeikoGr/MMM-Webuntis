@@ -24,27 +24,49 @@
     getEmptyDayState,
     isIrregularStatus,
     getChangedFieldSet,
+    getPrimaryFieldEntry,
+    getFieldDisplayName,
     getFirstFieldName,
+    normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  const LESSON_FIELD_MAP = Object.freeze({
+    subject: 'subjects',
+    teacher: 'teachers',
+    room: 'rooms',
+  });
+  const PREVIOUS_LESSON_FIELD_MAP = Object.freeze({
+    subject: 'previousSubjects',
+    teacher: 'previousTeachers',
+    room: 'previousRooms',
+  });
+
+  function getLessonField(entry, fieldKey) {
+    const canonicalKey = LESSON_FIELD_MAP[fieldKey];
+    if (!canonicalKey) return [];
+    return Array.isArray(entry?.[canonicalKey]) ? entry[canonicalKey] : [];
+  }
+
+  function getPreviousLessonField(entry, fieldKey) {
+    const canonicalKey = PREVIOUS_LESSON_FIELD_MAP[fieldKey];
+    if (!canonicalKey) return [];
+    return Array.isArray(entry?.[canonicalKey]) ? entry[canonicalKey] : [];
+  }
+
+  function getLessonText(entry) {
+    return String(entry?.lessonText ?? '').trim();
+  }
+
+  function getSubstitutionText(entry) {
+    return String(entry?.substitutionText ?? '');
+  }
 
   function hasEffectiveFieldChange(entry, fieldKey) {
     const changed = getChangedFieldSet(entry);
     if (!changed.has(fieldKey)) return false;
 
-    const currentMap = {
-      su: entry?.su,
-      te: entry?.te,
-      ro: entry?.ro,
-    };
-
-    const oldMap = {
-      su: entry?.suOld,
-      te: entry?.teOld,
-      ro: entry?.roOld,
-    };
-
-    const currentName = getFirstFieldName(currentMap[fieldKey]);
-    const oldName = getFirstFieldName(oldMap[fieldKey]);
+    const currentName = getFirstFieldName(getLessonField(entry, fieldKey));
+    const oldName = getFirstFieldName(getPreviousLessonField(entry, fieldKey));
 
     if (currentName === '' && oldName === '') return true;
     if (currentName === '' || oldName === '') return true;
@@ -53,9 +75,9 @@
   }
 
   function hasVisibleLessonChange(entry, teacherMode, showRoom) {
-    const subjectChanged = hasEffectiveFieldChange(entry, 'su');
-    const teacherChanged = hasEffectiveFieldChange(entry, 'te');
-    const roomChanged = hasEffectiveFieldChange(entry, 'ro');
+    const subjectChanged = hasEffectiveFieldChange(entry, 'subject');
+    const teacherChanged = hasEffectiveFieldChange(entry, 'teacher');
+    const roomChanged = hasEffectiveFieldChange(entry, 'room');
 
     if (subjectChanged) return true;
     if (teacherChanged && (teacherMode === 'initial' || teacherMode === 'full')) return true;
@@ -73,14 +95,7 @@
 
     if (infoLabel !== '') return infoLabel;
 
-    return String(entry?.lstext || '').trim();
-  }
-
-  function normalizeComparableLessonText(value) {
-    return String(value || '')
-      .trim()
-      .replace(/\s+/g, ' ')
-      .toLowerCase();
+    return getLessonText(entry);
   }
 
   function renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState) {
@@ -145,8 +160,9 @@
     );
 
     // Use module's computed today value when available (supports debugDate), else local now
-    const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : null);
-    const nowLocal = new Date();
+    const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
+    const nowYmd = ctx._currentTodayYmd || (typeof ctx._computeTodayYmdValue === 'function' ? ctx._computeTodayYmdValue() : nowContext.ymd);
+    const nowLocal = nowContext.date;
     const nowHm = currentTimeAsHHMM(nowLocal);
     log('debug', `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
@@ -235,14 +251,23 @@
         const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
         const isRegularLesson = !isIrregularStatus(entry) && entry.status !== 'CANCELLED';
         const changedFields = getChangedFieldSet(entry);
-        const subjectChanged = hasEffectiveFieldChange(entry, 'su');
-        const teacherChanged = hasEffectiveFieldChange(entry, 'te');
-        const roomChanged = hasEffectiveFieldChange(entry, 'ro');
+        const subjectChanged = hasEffectiveFieldChange(entry, 'subject');
+        const teacherChanged = hasEffectiveFieldChange(entry, 'teacher');
+        const roomChanged = hasEffectiveFieldChange(entry, 'room');
         const visibleChangedInLessons = entry.status === 'CHANGED' ? hasVisibleLessonChange(entry, teacherMode, showRoom) : false;
+        const subjects = getLessonField(entry, 'subject');
+        const teachers = getLessonField(entry, 'teacher');
+        const rooms = getLessonField(entry, 'room');
+        const subjectEntry = getPrimaryFieldEntry(subjects);
+        const teacherEntry = getPrimaryFieldEntry(teachers);
+        const roomEntry = getPrimaryFieldEntry(rooms);
 
         const isChangedButNotVisible = entry.status === 'CHANGED' && !showRegular && !visibleChangedInLessons;
         if ((!showRegular && isRegularLesson) || (isPast && (ctx.config.logLevel ?? 'info') !== 'debug')) {
-          log('debug', `[lessons] filter: ${entry.su?.[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
+          log(
+            'debug',
+            `[lessons] filter: ${getFieldDisplayName(subjectEntry, 'short') || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`
+          );
           continue;
         }
 
@@ -287,9 +312,9 @@
 
         const fallbackLong = getLessonDisplayFallback(entry, 'long');
         const fallbackShort = getLessonDisplayFallback(entry, 'short');
-        const hasSubject = Boolean(entry.su?.[0]);
-        const subjLong = entry.su?.[0]?.longname || entry.su?.[0]?.name || fallbackLong || 'N/A';
-        const subjShort = entry.su?.[0]?.name || entry.su?.[0]?.longname || fallbackShort || fallbackLong || 'N/A';
+        const hasSubject = Boolean(subjectEntry);
+        const subjLong = getFieldDisplayName(subjectEntry, 'long') || fallbackLong || 'N/A';
+        const subjShort = getFieldDisplayName(subjectEntry, 'short') || fallbackShort || fallbackLong || 'N/A';
         const subjectLabel = useShortSubject ? subjShort : subjLong;
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
         let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
@@ -300,7 +325,7 @@
         }
 
         if (teacherMode === 'initial') {
-          const teacherInitial = entry.te?.[0]?.name || entry.te?.[0]?.longname || '';
+          const teacherInitial = getFieldDisplayName(teacherEntry, 'short');
           if (teacherInitial !== '') {
             const teacherText = `(${escapeHtml(teacherInitial)})`;
             if (teacherChanged) {
@@ -312,7 +337,7 @@
             subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         } else if (teacherMode === 'full') {
-          const teacherFull = entry.te?.[0]?.longname || entry.te?.[0]?.name || '';
+          const teacherFull = getFieldDisplayName(teacherEntry, 'long');
           if (teacherFull !== '') {
             const teacherText = `(${escapeHtml(teacherFull)})`;
             if (teacherChanged) {
@@ -326,7 +351,7 @@
         }
 
         if (showRoom) {
-          const roomName = entry.ro?.[0]?.name || entry.ro?.[0]?.longname || '';
+          const roomName = getFieldDisplayName(roomEntry, 'short');
           if (roomName !== '') {
             const roomText = `(${escapeHtml(roomName)})`;
             if (roomChanged) {
@@ -343,17 +368,18 @@
           subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
         }
 
-        if (showSubstitution && (entry.substText || '') !== '') {
-          subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(entry.substText)}</span>`;
+        const substitutionText = getSubstitutionText(entry);
+        if (showSubstitution && substitutionText !== '') {
+          subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(substitutionText)}</span>`;
         }
 
-        const lessonText = String(entry.lstext || '').trim();
-        const normalizedLessonText = normalizeComparableLessonText(lessonText);
+        const lessonText = getLessonText(entry);
+        const normalizedLessonText = normalizeComparableText(lessonText);
         const shouldShowLessonText =
           normalizedLessonText !== '' &&
-          normalizedLessonText !== normalizeComparableLessonText(subjectLabel) &&
-          normalizedLessonText !== normalizeComparableLessonText(subjLong) &&
-          normalizedLessonText !== normalizeComparableLessonText(subjShort);
+          normalizedLessonText !== normalizeComparableText(subjectLabel) &&
+          normalizedLessonText !== normalizeComparableText(subjLong) &&
+          normalizedLessonText !== normalizeComparableText(subjShort);
 
         if (shouldShowLessonText) {
           if (subjectStr.trim() !== '') subjectStr += '<br/>';
