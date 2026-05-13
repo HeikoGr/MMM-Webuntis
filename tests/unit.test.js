@@ -148,9 +148,12 @@ test('getCurrentDateContext keeps wall clock time while overriding debug date', 
   assert.equal(result.date.getSeconds(), 22);
 });
 
-test('_calculateBaseNow uses normalized debug date context', () => {
-  const baseNow = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
+test('_calculateBaseNow returns normalized debug date context', () => {
+  const baseDateContext = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
+  const baseNow = baseDateContext.date;
 
+  assert.equal(baseDateContext.isDebug, true);
+  assert.equal(baseDateContext.ymd, 20260302);
   assert.equal(baseNow.getFullYear(), 2026);
   assert.equal(baseNow.getMonth(), 2);
   assert.equal(baseNow.getDate(), 2);

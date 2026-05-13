@@ -33,6 +33,10 @@ Module.register('MMM-Webuntis', {
       });
     }
 
+    // Fallback: Simple date context without debugDate/timezone support
+    // This should never execute in practice since runtime-utils.js is loaded via getScripts()
+    // If this fallback runs, it means the script failed to load - module will work but
+    // debugDate and timezone-aware date handling will not be available
     const now = new Date();
     return {
       date: now,
@@ -1227,6 +1231,7 @@ Module.register('MMM-Webuntis', {
    * @param {Function} appendWidgetError - Shared widget error renderer.
    */
   _renderGridWidgets(wrapper, studentTitles, appendWidgetError) {
+    let renderedCount = 0;
     for (const studentTitle of studentTitles) {
       const { studentConfig, timetable, timeUnits, absences, holidays } = this._getStudentWidgetData(studentTitle);
       if (timeUnits.length === 0 && holidays.length === 0) {
@@ -1237,11 +1242,14 @@ Module.register('MMM-Webuntis', {
         const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences);
         if (gridElem) {
           wrapper.appendChild(gridElem);
+          renderedCount += 1;
         }
       } catch (error) {
         appendWidgetError('Grid', error);
       }
     }
+
+    return renderedCount;
   },
 
   /**
@@ -1349,8 +1357,9 @@ Module.register('MMM-Webuntis', {
       if (!this.config.language && typeof config !== 'undefined' && config?.language) {
         this.config.language = config.language;
       }
-    } catch {
-      void 0;
+    } catch (err) {
+      // Language config is optional; ignore errors silently
+      this._log('debug', `[init] Failed to apply language config: ${err?.message}`);
     }
 
     const startDateContext = this.getCurrentDateContext();
@@ -1714,6 +1723,7 @@ Module.register('MMM-Webuntis', {
     const wrapper = document.createElement('div');
     wrapper.className = 'MMM-Webuntis';
     const widgets = this._getDisplayWidgets();
+    let renderedWidgetCount = 0;
     const withWarningIcon = (element, text) => {
       const icon = document.createElement('span');
       icon.className = 'wu-inline-icon wu-icon-warning';
@@ -1721,7 +1731,7 @@ Module.register('MMM-Webuntis', {
       element.replaceChildren(icon, document.createTextNode(` ${text}`));
     };
     const appendEmptyState = () => {
-      if (wrapper.hasChildNodes()) return;
+      if (renderedWidgetCount > 0) return;
       const infoDiv = document.createElement('div');
       infoDiv.className = 'wu-widget__info dimmed';
       withWarningIcon(infoDiv, this.translate('no_data'));
@@ -1741,7 +1751,10 @@ Module.register('MMM-Webuntis', {
     const renderTableWidget = (widgetLabel, renderRows) => {
       try {
         const container = this._renderWidgetTableRows(sortedStudentTitles, renderRows);
-        if (container) wrapper.appendChild(container);
+        if (container) {
+          wrapper.appendChild(container);
+          renderedWidgetCount += 1;
+        }
       } catch (error) {
         appendWidgetError(widgetLabel, error);
       }
@@ -1798,7 +1811,11 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `Unknown widget type: ${widget}`);
         continue;
       }
-      renderWidget();
+      if (widget === 'grid') {
+        renderedWidgetCount += renderWidget() || 0;
+      } else {
+        renderWidget();
+      }
     }
 
     appendEmptyState();

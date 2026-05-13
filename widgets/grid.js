@@ -1174,7 +1174,30 @@ function getModuleRootElement(ctx) {
     };
   }
 
-  function appendLessonCell(container, lesson, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, options = {}) {
+  /**
+   * Append a lesson cell to the grid container
+   *
+   * @param {HTMLElement} container - Container element to append the cell to
+   * @param {Object} lesson - Normalized lesson object
+   * @param {Object} timeConstraints - Time constraint parameters
+   * @param {number} timeConstraints.allStart - Grid start time in minutes since midnight
+   * @param {number} timeConstraints.allEnd - Grid end time in minutes since midnight
+   * @param {number} timeConstraints.totalMinutes - Total minutes in grid range
+   * @param {number} timeConstraints.totalHeight - Total height of grid in pixels
+   * @param {Object} rendering - Rendering context and configuration
+   * @param {Object} rendering.ctx - Module context
+   * @param {Function} rendering.escapeHtml - HTML escape function
+   * @param {Object} rendering.lessonConfig - Lesson-specific configuration
+   * @param {Object} [options={}] - Optional rendering parameters
+   * @param {boolean} [options.isPast] - Whether the lesson is in the past
+   * @param {number} [options.nowYmd] - Current date as YYYYMMDD integer
+   * @param {number} [options.nowMin] - Current time in minutes since midnight
+   * @param {string[]} [options.additionalClasses] - Additional CSS classes to apply
+   * @returns {HTMLElement|null} Created lesson cell or null if not visible
+   */
+  function appendLessonCell(container, lesson, timeConstraints, rendering, options = {}) {
+    const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
+    const { ctx, escapeHtml, lessonConfig } = rendering;
     const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
     const placement = getVisibleTimeBlockPlacement(lesson.startMin, lesson.endMin, allStart, allEnd, totalMinutes, totalHeight, {
       minHeightPx: 12,
@@ -1840,10 +1863,13 @@ function getModuleRootElement(ctx) {
 
     /** Render a single lesson as a standalone full-width cell at its own time position. */
     const renderSingleLesson = (lesson) => {
-      appendLessonCell(bothInner, lesson, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, {
-        nowYmd,
-        nowMin,
-      });
+      appendLessonCell(
+        bothInner,
+        lesson,
+        { allStart, allEnd, totalMinutes, totalHeight },
+        { ctx, escapeHtml, lessonConfig },
+        { nowYmd, nowMin }
+      );
     };
 
     const renderTickerGroup = (lessons, group) => {
@@ -1898,17 +1924,23 @@ function getModuleRootElement(ctx) {
       const isPast = calcIsPast(allLessonsYmd, groupEMin, nowYmd, nowMin);
 
       for (const repl of replacements) {
-        appendLessonCell(bothInner, repl, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, {
-          isPast,
-          additionalClasses: ['split-left'],
-        });
+        appendLessonCell(
+          bothInner,
+          repl,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-left'] }
+        );
       }
 
       for (const cancelled of cancelledLessons) {
-        appendLessonCell(bothInner, cancelled, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, {
-          isPast,
-          additionalClasses: ['split-right'],
-        });
+        appendLessonCell(
+          bothInner,
+          cancelled,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-right'] }
+        );
       }
 
       for (const lesson of lessons) {
@@ -1924,17 +1956,23 @@ function getModuleRootElement(ctx) {
       const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
 
       for (const spanning of spanningLessons) {
-        appendLessonCell(bothInner, spanning, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, {
-          isPast,
-          additionalClasses: ['split-left'],
-        });
+        appendLessonCell(
+          bothInner,
+          spanning,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-left'] }
+        );
       }
 
       for (const sub of subPeriodLessons) {
-        appendLessonCell(bothInner, sub, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig, {
-          isPast,
-          additionalClasses: ['split-right'],
-        });
+        appendLessonCell(
+          bothInner,
+          sub,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, escapeHtml, lessonConfig },
+          { isPast, additionalClasses: ['split-right'] }
+        );
       }
 
       for (const lesson of lessons) {

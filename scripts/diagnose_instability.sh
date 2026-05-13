@@ -30,7 +30,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 # Extract server from config (basic regex)
-SERVER=$(grep -oP "server:\s*['\"]?\K[^'\"]\w+\.webuntis\.com" "$CONFIG_FILE" | head -1)
+SERVER=$(grep -oP "server:\s*['\"]?\K[^'\"][a-zA-Z0-9-]+\.webuntis\.com" "$CONFIG_FILE" | head -1)
 if [[ -z "$SERVER" ]]; then
   echo -e "${YELLOW}Warning: Could not auto-detect server from config.js${NC}"
   echo "You can manually specify server:"

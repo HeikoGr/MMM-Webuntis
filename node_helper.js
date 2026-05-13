@@ -926,11 +926,27 @@ module.exports = NodeHelper.create({
   /**
    * Calculate current base date in configured timezone and optional debug override.
    *
-   * @param {Object} config - Module config
-   * @returns {Date} Timezone-aware base date
+   * @param {Object} [config={}] - Module config
+   * @returns {{date: Date, ymd: number, isoDate: string, isDebug: boolean, timezone: string}} Date context
    */
-  _calculateBaseNow(config) {
-    return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' }).date;
+  _calculateBaseNow(config = {}) {
+    try {
+      return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' });
+    } catch (err) {
+      // Fallback: return current date context if getCurrentDateContext fails
+      // This ensures fetchRanges can still be calculated even if config is invalid
+      this._mmLog('warn', null, `Date context calculation failed, falling back to current date/time: ${this._formatErr(err)}`);
+      const now = new Date();
+      return {
+        date: now,
+        ymd: Number(
+          String(now.getFullYear()).padStart(4, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0')
+        ),
+        isoDate: now.toISOString().split('T')[0],
+        isDebug: false,
+        timezone: 'Europe/Berlin',
+      };
+    }
   },
 
   /**
@@ -998,11 +1014,10 @@ module.exports = NodeHelper.create({
   },
 
   _deriveFallbackStudentTitle(student) {
-    return (
-      student?.title ||
-      student?.name ||
-      (student?.studentId !== undefined && student?.studentId !== null ? `Student ${student.studentId}` : 'Student')
-    );
+    if (student?.title) return student.title;
+    if (student?.name) return student.name;
+    if (student?.studentId !== undefined && student?.studentId !== null) return `Student ${student.studentId}`;
+    return 'Student';
   },
 
   _buildPayloadDisplayWidgets(student, config) {
@@ -1517,7 +1532,8 @@ module.exports = NodeHelper.create({
 
     try {
       // Create a deep copy of payload to prevent modifying the original config
-      const payloadCopy = JSON.parse(JSON.stringify(payload));
+      // Use structuredClone for proper deep cloning (handles Date, undefined, circular refs)
+      const payloadCopy = typeof structuredClone === 'function' ? structuredClone(payload) : JSON.parse(JSON.stringify(payload));
 
       // Apply legacy mappings to convert old keys to new structure
       // This ensures backwards compatibility with 25+ deprecated config keys
@@ -1874,7 +1890,8 @@ module.exports = NodeHelper.create({
 
     const effectiveDisplayMode = student.displayMode || config.displayMode;
     const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
-    const baseNow = this._calculateBaseNow(config);
+    const baseDateContext = this._calculateBaseNow(config);
+    const baseNow = baseDateContext.date;
     const dateRanges = calculateFetchRanges({
       baseNow,
       fetchPlan: {
@@ -1899,7 +1916,7 @@ module.exports = NodeHelper.create({
       },
       options: {
         gridWeekView: student.grid?.weekView,
-        debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
+        debugDateEnabled: baseDateContext.isDebug === true,
       },
     });
 

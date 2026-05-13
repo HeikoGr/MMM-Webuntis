@@ -392,7 +392,11 @@
    * @returns {Set<string>} Set of changed field keys ('subject', 'teacher', 'room', ...)
    */
   function getChangedFieldSet(entry) {
-    const changed = new Set((Array.isArray(entry?.changedFields) ? entry.changedFields : []).filter(Boolean));
+    const changed = new Set(
+      (Array.isArray(entry?.changedFields) ? entry.changedFields : []).filter(
+        (field) => typeof field === 'string' && field.trim().length > 0
+      )
+    );
 
     if (Array.isArray(entry?.previousSubjects) && entry.previousSubjects.length > 0) changed.add('subject');
     if (Array.isArray(entry?.previousTeachers) && entry.previousTeachers.length > 0) changed.add('teacher');
@@ -458,7 +462,9 @@
   function compareByDateAndStartTime(a, b, options = {}) {
     const dateKey = options.dateKey || 'date';
     const timeKey = options.timeKey || 'startTime';
-    return (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0) || (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
+    const dateCompare = (Number(a?.[dateKey]) || 0) - (Number(b?.[dateKey]) || 0);
+    if (dateCompare !== 0) return dateCompare;
+    return (Number(a?.[timeKey]) || 0) - (Number(b?.[timeKey]) || 0);
   }
 
   function normalizeComparableText(value) {
@@ -518,9 +524,8 @@
       getPrimaryFieldEntry,
       getFieldDisplayName,
       getFirstFieldName,
-      compareByDateAndStartTime:
-        typeof util.compareByDateAndStartTime === 'function' ? util.compareByDateAndStartTime : compareByDateAndStartTime,
-      normalizeComparableText: typeof util.normalizeComparableText === 'function' ? util.normalizeComparableText : normalizeComparableText,
+      compareByDateAndStartTime: requireFunction('util.compareByDateAndStartTime', util.compareByDateAndStartTime),
+      normalizeComparableText: requireFunction('util.normalizeComparableText', util.normalizeComparableText),
     };
   }
 
