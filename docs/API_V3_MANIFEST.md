@@ -1,9 +1,9 @@
-# API v3 Manifest (Target Runtime Contract)
+# API v3 Manifest (Current Runtime Contract)
 
 Status:
-- target contract for the next runtime upgrade
-- current shipped runtime remains on contract version `2`
-- this document is the design baseline for the V3 implementation, not a description of the currently emitted payload
+- current shipped runtime contract
+- runtime contract version is `3`
+- this document describes the payload currently emitted and consumed by the module
 
 Scope of this document:
 - define the intended backend -> frontend runtime contract for widget-agnostic, canonically normalized data
@@ -15,7 +15,7 @@ Out of scope:
 - historical compatibility fields
 - CSS, DOM, animation, or widget layout details
 
-For the currently shipped runtime contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For the historical V2 contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 
 ---
 

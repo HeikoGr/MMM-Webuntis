@@ -286,7 +286,7 @@ Retryable conditions:
 
 The jitter (±25%) helps prevent the "thundering herd" problem where multiple clients hammer the server simultaneously when recovering. The built-in backoff adds at most ~7 seconds total before the final failure is returned.
 
-After the third attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `FETCH_DATA` based on the configured `updateInterval`.
+After the fourth and final attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `FETCH_DATA` based on the configured `updateInterval`.
 
 ### Auth Retry in `webuntisApiService`
 

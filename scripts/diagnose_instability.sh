@@ -2,7 +2,7 @@
 
 # Diagnose script for WebUntis connection instability
 # Tests for sporadically failing server connections
-# Usage: node --run debug:diagnose (will be added to package.json)
+# Usage: npm run diagnose
 
 set -e
 

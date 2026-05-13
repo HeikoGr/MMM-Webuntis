@@ -2,8 +2,8 @@
 
 Normative transport contract for MMM-Webuntis runtime payloads.
 
-This document describes the currently shipped runtime contract.
-For the planned successor contract design, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+This document describes the historical V2 runtime contract.
+For the current V3 runtime contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
 
 Scope of this document:
 - frontend -> backend request shape used by `INIT_MODULE` and `FETCH_DATA`
@@ -22,7 +22,7 @@ For external endpoint behavior, see [API_REFERENCE.md](API_REFERENCE.md).
 ## 1. Contract Principles
 
 - Frontend and backend are shipped together.
-- Runtime contract version is fixed at `2`.
+- Runtime contract version was fixed at `2`.
 - No legacy alias fields are part of the supported contract.
 - Anything not documented here should be treated as implementation detail, not public contract.
 
