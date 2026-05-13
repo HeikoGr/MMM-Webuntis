@@ -3,6 +3,9 @@ const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getCurrentDateContext } = require('./lib/runtime-utils');
+
+const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
+const createBackendLogger = require('./lib/logger');
 const {
   DEFAULT_WARNING_META,
   createWarningMetaEntry,
@@ -10,9 +13,6 @@ const {
   createWarningMetaMap,
   mergeUniqueWarnings,
 } = require('./lib/warningUtils');
-
-const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
-const createBackendLogger = require('./lib/logger');
 const {
   AuthService,
   WebUntisClient,
@@ -23,6 +23,7 @@ const {
 } = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
+const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
 const VALID_WIDGETS = new Set(ALL_WIDGETS);
@@ -31,18 +32,6 @@ const DEFAULT_IDENTIFIER = 'default';
 const DEFAULT_SESSION_ID = 'unknown';
 const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
 const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
-const NETWORK_ERROR_CODES = new Set([
-  'ECONNREFUSED',
-  'ETIMEDOUT',
-  'ECONNRESET',
-  'EHOSTUNREACH',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'ERR_NETWORK',
-  'ERR_SOCKET_CONNECTION_TIMEOUT',
-  'ERR_CONNECTION_REFUSED',
-  'ABORT_ERR',
-]);
 const AUTH_ERROR_CODES = new Set(['AUTH_FAILED', 'SESSION_EXPIRED', 'TOKEN_INVALID']);
 
 function createEmptyApiStatusSnapshot() {
@@ -227,11 +216,13 @@ module.exports = NodeHelper.create({
    * @returns {Object[]} warningMeta array
    */
   _buildWarningMetaEntries(warnings = [], baseMeta = {}) {
-    return buildWarningMetaList(
-      Array.isArray(warnings) ? warnings.filter((message) => Boolean(message)).map((message) => String(message)) : [],
-      new Map(),
-      baseMeta
-    );
+    if (!Array.isArray(warnings)) return [];
+    return warnings
+      .filter((message) => Boolean(message))
+      .map((message) => ({
+        message: String(message),
+        ...baseMeta,
+      }));
   },
 
   /**
@@ -260,6 +251,7 @@ module.exports = NodeHelper.create({
 
     const { normalizedConfig } = applyLegacyMappings(cfg);
     const legacyUsed = Array.isArray(normalizedConfig.__legacyUsed) ? [...normalizedConfig.__legacyUsed] : [];
+    const configWarnings = [];
 
     // Normalize each student once at init, so fetch flow can treat students as canonical.
     if (Array.isArray(normalizedConfig.students)) {
@@ -282,8 +274,8 @@ module.exports = NodeHelper.create({
       try {
         const uniq = Array.from(new Set(legacyUsed));
 
-        // Generate detailed deprecation warnings
         const detailedWarnings = generateDeprecationWarnings(uniq);
+        configWarnings.push(...detailedWarnings);
 
         // Attach warnings to config.__warnings so they get sent to frontend and displayed in GUI
         normalizedConfig.__warnings = normalizedConfig.__warnings || [];
@@ -313,7 +305,156 @@ module.exports = NodeHelper.create({
       }
     }
 
-    return { normalizedConfig, legacyUsed };
+    return { normalizedConfig, legacyUsed, configWarnings };
+  },
+
+  _buildConfigWarnings(normalizedConfig, validationWarnings = []) {
+    return mergeUniqueWarnings(validationWarnings, normalizedConfig?.__warnings || []);
+  },
+
+  _resolveInitRoute(normalizedConfig, payload) {
+    const route = buildRouteMeta({
+      id: normalizedConfig.id,
+      sessionId: payload.sessionId,
+    });
+
+    return {
+      ...route,
+      initReason: payload?.reason || 'unspecified',
+    };
+  },
+
+  _storeInitSessionConfig(sessionKey, normalizedConfig) {
+    this._configsBySession.set(sessionKey, normalizedConfig);
+
+    if (normalizedConfig.debugDate) {
+      this._mmLog('debug', null, `[INIT_MODULE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
+    }
+
+    if (typeof normalizedConfig.displayMode === 'string') {
+      normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
+    }
+  },
+
+  _validateInitConfig(normalizedConfig, identifier, sessionId, configWarnings) {
+    const validatorLogger = { log: () => {} };
+    const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
+    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [...(warnings || []), ...(configWarnings || [])]);
+
+    if (valid) {
+      return { valid, combinedWarnings };
+    }
+
+    this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
+    this._emitInitError(
+      {
+        errors,
+        warnings: combinedWarnings,
+        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        severity: 'ERROR',
+        message: 'Configuration validation failed',
+      },
+      {
+        identifier,
+        sessionId,
+      }
+    );
+
+    return { valid, combinedWarnings };
+  },
+
+  async _finalizeInitModule(normalizedConfig, identifier) {
+    this._configsByIdentifier.set(identifier, normalizedConfig);
+    this.config = normalizedConfig;
+    normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
+    await this._ensureStudentsFromAppData(normalizedConfig);
+    this._studentsDiscovered = this._studentsDiscovered || {};
+    this._studentsDiscovered[identifier] = true;
+  },
+
+  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings) {
+    this._emitModuleInitialized(
+      {
+        config: normalizedConfig,
+        warnings: combinedWarnings,
+        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        students: normalizedConfig.students || [],
+      },
+      {
+        identifier,
+        sessionId,
+      }
+    );
+  },
+
+  async _triggerPostInitFetch(normalizedConfig, identifier, sessionId) {
+    await this._handleFetchData({
+      ...normalizedConfig,
+      id: identifier,
+      sessionId,
+      reason: 'post-init-auto-fetch',
+    });
+  },
+
+  _applyStudentValidationWarnings(student, warningsState) {
+    const studentValidationWarnings = this._validateStudentConfig(student);
+    if (studentValidationWarnings.length === 0) return;
+
+    studentValidationWarnings.forEach((warning) => {
+      this._mmLog('warn', student, warning);
+      warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
+    });
+  },
+
+  async _fetchStudentPayloadForGroup({ student, authSession, identifier, credKey, compactHolidays, config, sessionKey, warningsState }) {
+    this._applyStudentValidationWarnings(student, warningsState);
+
+    const studentFetchWarnings = new Set();
+    const payload = await this.fetchData({
+      authSession,
+      student,
+      identifier,
+      credKey,
+      compactHolidays,
+      config,
+      sessionKey,
+      currentFetchWarnings: studentFetchWarnings,
+    });
+
+    if (!payload) {
+      this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
+      return null;
+    }
+
+    return this._mergeGroupWarningsIntoPayload(payload, identifier, warningsState.groupWarnings, warningsState.groupWarningMetaByMessage);
+  },
+
+  _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
+    const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
+    this._mmLog('error', student, errorMsg);
+
+    const warningMsg = convertRestErrorToWarning(err, {
+      studentTitle: student.title,
+      school: student.school || config?.school,
+      server: student.server || config?.server || 'webuntis.com',
+    });
+
+    if (warningMsg) {
+      warningsState.addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
+      this._mmLog('warn', student, warningMsg);
+    }
+
+    return this._buildStudentFetchErrorPayload({
+      identifier,
+      sessionId,
+      sessionKey,
+      student,
+      config,
+      groupWarnings: warningsState.groupWarnings,
+      warningMsg,
+      groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
+      warningMetaBase: this._classifyWarningMetaFromError(err),
+    });
   },
 
   /**
@@ -926,27 +1067,11 @@ module.exports = NodeHelper.create({
   /**
    * Calculate current base date in configured timezone and optional debug override.
    *
-   * @param {Object} [config={}] - Module config
-   * @returns {{date: Date, ymd: number, isoDate: string, isDebug: boolean, timezone: string}} Date context
+   * @param {Object} config - Module config
+   * @returns {Date} Timezone-aware base date
    */
-  _calculateBaseNow(config = {}) {
-    try {
-      return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' });
-    } catch (err) {
-      // Fallback: return current date context if getCurrentDateContext fails
-      // This ensures fetchRanges can still be calculated even if config is invalid
-      this._mmLog('warn', null, `Date context calculation failed, falling back to current date/time: ${this._formatErr(err)}`);
-      const now = new Date();
-      return {
-        date: now,
-        ymd: Number(
-          String(now.getFullYear()).padStart(4, '0') + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0')
-        ),
-        isoDate: now.toISOString().split('T')[0],
-        isDebug: false,
-        timezone: 'Europe/Berlin',
-      };
-    }
+  _calculateBaseNow(config) {
+    return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' }).date;
   },
 
   /**
@@ -1014,10 +1139,11 @@ module.exports = NodeHelper.create({
   },
 
   _deriveFallbackStudentTitle(student) {
-    if (student?.title) return student.title;
-    if (student?.name) return student.name;
-    if (student?.studentId !== undefined && student?.studentId !== null) return `Student ${student.studentId}`;
-    return 'Student';
+    return (
+      student?.title ||
+      student?.name ||
+      (student?.studentId !== undefined && student?.studentId !== null ? `Student ${student.studentId}` : 'Student')
+    );
   },
 
   _buildPayloadDisplayWidgets(student, config) {
@@ -1274,65 +1400,27 @@ module.exports = NodeHelper.create({
 
     for (const student of students) {
       try {
-        const studentValidationWarnings = this._validateStudentConfig(student);
-        if (studentValidationWarnings.length > 0) {
-          studentValidationWarnings.forEach((warning) => {
-            this._mmLog('warn', student, warning);
-            warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
-          });
-        }
-
-        const studentFetchWarnings = new Set();
-
-        const payload = await this.fetchData({
-          authSession,
+        const payload = await this._fetchStudentPayloadForGroup({
           student,
+          authSession,
           identifier,
           credKey,
           compactHolidays,
           config,
           sessionKey,
-          currentFetchWarnings: studentFetchWarnings,
+          warningsState,
         });
-
-        if (!payload) {
-          this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
-          continue;
-        }
-
-        const nextPayload = this._mergeGroupWarningsIntoPayload(
-          payload,
-          identifier,
-          warningsState.groupWarnings,
-          warningsState.groupWarningMetaByMessage
-        );
-        studentPayloads.push(nextPayload);
+        if (payload) studentPayloads.push(payload);
       } catch (err) {
-        const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
-        this._mmLog('error', student, errorMsg);
-
-        const warningMsg = convertRestErrorToWarning(err, {
-          studentTitle: student.title,
-          school: student.school || config?.school,
-          server: student.server || config?.server || 'webuntis.com',
-        });
-        if (warningMsg) {
-          warningsState.addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
-          this._mmLog('warn', student, warningMsg);
-        }
-        const warningMetaBase = this._classifyWarningMetaFromError(err);
-
         studentPayloads.push(
-          this._buildStudentFetchErrorPayload({
+          this._buildStudentFetchFailurePayload({
+            err,
+            student,
             identifier,
             sessionId,
             sessionKey,
-            student,
             config,
-            groupWarnings: warningsState.groupWarnings,
-            warningMsg,
-            groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
-            warningMetaBase,
+            warningsState,
           })
         );
       }
@@ -1528,113 +1616,23 @@ module.exports = NodeHelper.create({
   async _handleInitModule(payload) {
     let normalizedConfig;
     let identifier;
-    let sessionKey;
 
     try {
-      // Create a deep copy of payload to prevent modifying the original config
-      // structuredClone is available in Node.js 17+ (devcontainer uses Node 20+)
-      const payloadCopy = structuredClone(payload);
-
-      // Apply legacy mappings to convert old keys to new structure
-      // This ensures backwards compatibility with 25+ deprecated config keys
+      const payloadCopy = JSON.parse(JSON.stringify(payload));
       const result = this._normalizeLegacyConfig(payloadCopy);
       normalizedConfig = result.normalizedConfig;
-      const legacyUsed = result.legacyUsed;
-
-      const {
-        identifier: routeIdentifier,
-        sessionId,
-        sessionKey: routeSessionKey,
-      } = buildRouteMeta({
-        id: normalizedConfig.id,
-        sessionId: payload.sessionId,
-      });
+      const { identifier: routeIdentifier, sessionId, sessionKey, initReason } = this._resolveInitRoute(normalizedConfig, payload);
       identifier = routeIdentifier;
-      const initReason = payload?.reason || 'unspecified';
-      sessionKey = routeSessionKey;
 
       this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
-      // Store config per session for isolation
-      this._configsBySession.set(sessionKey, normalizedConfig);
-      // Config stored silently
+      this._storeInitSessionConfig(sessionKey, normalizedConfig);
+      const { valid, combinedWarnings } = this._validateInitConfig(normalizedConfig, identifier, sessionId, result.configWarnings);
+      if (!valid) return;
 
-      // Log debugDate if present (for debugging time-sensitive scenarios)
-      if (normalizedConfig.debugDate) {
-        this._mmLog('debug', null, `[INIT_MODULE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
-      }
-
-      // Ensure displayMode is lowercase
-      if (typeof normalizedConfig.displayMode === 'string') {
-        normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
-      }
-
-      // Validate configuration
-      const validatorLogger = { log: () => {} }; // Silent logger - only errors are sent to frontend
-      const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
-
-      // Generate detailed deprecation warnings
-      const detailedWarnings = legacyUsed && legacyUsed.length > 0 ? generateDeprecationWarnings(legacyUsed) : [];
-      const combinedWarnings = [...(warnings || []), ...detailedWarnings];
-
-      if (!valid) {
-        this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
-        this._emitInitError(
-          {
-            errors,
-            warnings: combinedWarnings,
-            warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
-            severity: 'ERROR',
-            message: 'Configuration validation failed',
-          },
-          {
-            identifier,
-            sessionId: payload.sessionId,
-          }
-        );
-        return;
-      }
-
-      // Store validated config per identifier
-      this._configsByIdentifier.set(identifier, normalizedConfig);
-      this.config = normalizedConfig;
-
-      // Get or create AuthService for this identifier
-      normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
-
-      // Auto-discover students if needed (one-time during init)
-      // This fetches student list from parent account if students[] is empty/incomplete
-      await this._ensureStudentsFromAppData(normalizedConfig);
-
-      // Mark students as discovered for this identifier
-      this._studentsDiscovered = this._studentsDiscovered || {};
-      this._studentsDiscovered[identifier] = true;
-
-      // Module initialized successfully (no log needed)
-
-      // Send success notification to frontend
-      this._emitModuleInitialized(
-        {
-          config: normalizedConfig,
-          warnings: combinedWarnings,
-          warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
-          students: normalizedConfig.students || [],
-        },
-        {
-          identifier,
-          sessionId: payload.sessionId,
-        }
-      );
-
-      // Automatically trigger initial data fetch after successful initialization
-      // This eliminates the need for frontend (and CLI) to send FETCH_DATA immediately after MODULE_INITIALIZED
-      // Simplifies the initialization flow: INIT_MODULE -> MODULE_INITIALIZED + GOT_DATA
-      await this._handleFetchData({
-        ...normalizedConfig,
-        id: identifier,
-        sessionId: payload.sessionId,
-        reason: 'post-init-auto-fetch',
-      });
+      await this._finalizeInitModule(normalizedConfig, identifier);
+      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings);
+      await this._triggerPostInitFetch(normalizedConfig, identifier, sessionId);
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
       this._emitInitError(
@@ -1890,8 +1888,7 @@ module.exports = NodeHelper.create({
 
     const effectiveDisplayMode = student.displayMode || config.displayMode;
     const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
-    const baseDateContext = this._calculateBaseNow(config);
-    const baseNow = baseDateContext.date;
+    const baseNow = this._calculateBaseNow(config);
     const dateRanges = calculateFetchRanges({
       baseNow,
       fetchPlan: {
@@ -1916,7 +1913,7 @@ module.exports = NodeHelper.create({
       },
       options: {
         gridWeekView: student.grid?.weekView,
-        debugDateEnabled: baseDateContext.isDebug === true,
+        debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
       },
     });
 
