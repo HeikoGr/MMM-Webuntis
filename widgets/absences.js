@@ -12,7 +12,7 @@
 (() => {
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
-  const { escapeHtml, addRow, initializeWidgetContextAndHeader } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { escapeHtml, addRow, initializeWidgetContextAndHeader, getFirstFieldName } = root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render absences widget for a single student
@@ -86,8 +86,8 @@
       const et = formatDisplayTime(ab?.endTime);
       const time = st && et ? `${st}-${et}` : st || et || '';
 
-      const subjects = Array.isArray(ab?.subjects) ? ab.subjects : Array.isArray(ab?.su) ? ab.su : [];
-      const subj = subjects[0]?.longname || subjects[0]?.name || '';
+      const subjects = Array.isArray(ab?.subjects) ? ab.subjects : [];
+      const subj = getFirstFieldName(subjects, 'long');
       const reason = String(ab?.reason || '').trim();
       const isExcused = ab?.excused === true;
       const isUnexcused = ab?.excused === false;

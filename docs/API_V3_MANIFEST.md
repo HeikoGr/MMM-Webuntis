@@ -123,6 +123,9 @@ Required fields:
 - `moduleId`
 - `sessionId`
 
+Optional technical additions:
+- `apiVersion` for a human-readable transport label such as `"v3"`
+
 Allowed technical additions:
 - runtime environment details such as platform and process metadata
 - debug metadata that does not change the transport meaning

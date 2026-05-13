@@ -24,45 +24,41 @@
     getEmptyDayState,
     isIrregularStatus,
     getChangedFieldSet,
+    getPrimaryFieldEntry,
+    getFieldDisplayName,
     getFirstFieldName,
+    normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
 
+  const LESSON_FIELD_MAP = Object.freeze({
+    subject: 'subjects',
+    teacher: 'teachers',
+    room: 'rooms',
+  });
+  const PREVIOUS_LESSON_FIELD_MAP = Object.freeze({
+    subject: 'previousSubjects',
+    teacher: 'previousTeachers',
+    room: 'previousRooms',
+  });
+
   function getLessonField(entry, fieldKey) {
-    const fieldAliases = {
-      subject: ['subjects', 'su'],
-      teacher: ['teachers', 'te'],
-      room: ['rooms', 'ro'],
-    };
-
-    const keys = fieldAliases[fieldKey] || [fieldKey];
-    for (const key of keys) {
-      if (Array.isArray(entry?.[key]) && entry[key].length > 0) return entry[key];
-    }
-
-    return [];
+    const canonicalKey = LESSON_FIELD_MAP[fieldKey];
+    if (!canonicalKey) return [];
+    return Array.isArray(entry?.[canonicalKey]) ? entry[canonicalKey] : [];
   }
 
   function getPreviousLessonField(entry, fieldKey) {
-    const fieldAliases = {
-      subject: ['previousSubjects', 'suOld'],
-      teacher: ['previousTeachers', 'teOld'],
-      room: ['previousRooms', 'roOld'],
-    };
-
-    const keys = fieldAliases[fieldKey] || [fieldKey];
-    for (const key of keys) {
-      if (Array.isArray(entry?.[key]) && entry[key].length > 0) return entry[key];
-    }
-
-    return [];
+    const canonicalKey = PREVIOUS_LESSON_FIELD_MAP[fieldKey];
+    if (!canonicalKey) return [];
+    return Array.isArray(entry?.[canonicalKey]) ? entry[canonicalKey] : [];
   }
 
   function getLessonText(entry) {
-    return String(entry?.lessonText ?? entry?.lstext ?? '').trim();
+    return String(entry?.lessonText ?? '').trim();
   }
 
   function getSubstitutionText(entry) {
-    return String(entry?.substitutionText ?? entry?.substText ?? '');
+    return String(entry?.substitutionText ?? '');
   }
 
   function hasEffectiveFieldChange(entry, fieldKey) {
@@ -100,13 +96,6 @@
     if (infoLabel !== '') return infoLabel;
 
     return getLessonText(entry);
-  }
-
-  function normalizeComparableLessonText(value) {
-    return String(value || '')
-      .trim()
-      .replace(/\s+/g, ' ')
-      .toLowerCase();
   }
 
   function renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState) {
@@ -269,10 +258,16 @@
         const subjects = getLessonField(entry, 'subject');
         const teachers = getLessonField(entry, 'teacher');
         const rooms = getLessonField(entry, 'room');
+        const subjectEntry = getPrimaryFieldEntry(subjects);
+        const teacherEntry = getPrimaryFieldEntry(teachers);
+        const roomEntry = getPrimaryFieldEntry(rooms);
 
         const isChangedButNotVisible = entry.status === 'CHANGED' && !showRegular && !visibleChangedInLessons;
         if ((!showRegular && isRegularLesson) || (isPast && (ctx.config.logLevel ?? 'info') !== 'debug')) {
-          log('debug', `[lessons] filter: ${subjects[0]?.name || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`);
+          log(
+            'debug',
+            `[lessons] filter: ${getFieldDisplayName(subjectEntry, 'short') || 'N/A'} ${stNum} (past=${isPast}, status=${entry.status || 'none'})`
+          );
           continue;
         }
 
@@ -317,9 +312,9 @@
 
         const fallbackLong = getLessonDisplayFallback(entry, 'long');
         const fallbackShort = getLessonDisplayFallback(entry, 'short');
-        const hasSubject = Boolean(subjects[0]);
-        const subjLong = subjects[0]?.longname || subjects[0]?.name || fallbackLong || 'N/A';
-        const subjShort = subjects[0]?.name || subjects[0]?.longname || fallbackShort || fallbackLong || 'N/A';
+        const hasSubject = Boolean(subjectEntry);
+        const subjLong = getFieldDisplayName(subjectEntry, 'long') || fallbackLong || 'N/A';
+        const subjShort = getFieldDisplayName(subjectEntry, 'short') || fallbackShort || fallbackLong || 'N/A';
         const subjectLabel = useShortSubject ? subjShort : subjLong;
         log('debug', `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
         let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
@@ -330,7 +325,7 @@
         }
 
         if (teacherMode === 'initial') {
-          const teacherInitial = teachers[0]?.name || teachers[0]?.longname || '';
+          const teacherInitial = getFieldDisplayName(teacherEntry, 'short');
           if (teacherInitial !== '') {
             const teacherText = `(${escapeHtml(teacherInitial)})`;
             if (teacherChanged) {
@@ -342,7 +337,7 @@
             subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
           }
         } else if (teacherMode === 'full') {
-          const teacherFull = teachers[0]?.longname || teachers[0]?.name || '';
+          const teacherFull = getFieldDisplayName(teacherEntry, 'long');
           if (teacherFull !== '') {
             const teacherText = `(${escapeHtml(teacherFull)})`;
             if (teacherChanged) {
@@ -356,7 +351,7 @@
         }
 
         if (showRoom) {
-          const roomName = rooms[0]?.name || rooms[0]?.longname || '';
+          const roomName = getFieldDisplayName(roomEntry, 'short');
           if (roomName !== '') {
             const roomText = `(${escapeHtml(roomName)})`;
             if (roomChanged) {
@@ -379,12 +374,12 @@
         }
 
         const lessonText = getLessonText(entry);
-        const normalizedLessonText = normalizeComparableLessonText(lessonText);
+        const normalizedLessonText = normalizeComparableText(lessonText);
         const shouldShowLessonText =
           normalizedLessonText !== '' &&
-          normalizedLessonText !== normalizeComparableLessonText(subjectLabel) &&
-          normalizedLessonText !== normalizeComparableLessonText(subjLong) &&
-          normalizedLessonText !== normalizeComparableLessonText(subjShort);
+          normalizedLessonText !== normalizeComparableText(subjectLabel) &&
+          normalizedLessonText !== normalizeComparableText(subjLong) &&
+          normalizedLessonText !== normalizeComparableText(subjShort);
 
         if (shouldShowLessonText) {
           if (subjectStr.trim() !== '') subjectStr += '<br/>';

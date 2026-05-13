@@ -3,6 +3,13 @@ const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getCurrentDateContext } = require('./lib/runtime-utils');
+const {
+  DEFAULT_WARNING_META,
+  createWarningMetaEntry,
+  buildWarningMetaList,
+  createWarningMetaMap,
+  mergeUniqueWarnings,
+} = require('./lib/warningUtils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const createBackendLogger = require('./lib/logger');
@@ -20,6 +27,8 @@ const widgetConfigValidator = require('./lib/widgetConfigValidator');
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
 const VALID_WIDGETS = new Set(ALL_WIDGETS);
 const VALID_LOG_LEVELS = Object.freeze(['none', 'error', 'warn', 'info', 'debug']);
+const DEFAULT_IDENTIFIER = 'default';
+const DEFAULT_SESSION_ID = 'unknown';
 const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
 const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 const NETWORK_ERROR_CODES = new Set([
@@ -35,7 +44,6 @@ const NETWORK_ERROR_CODES = new Set([
   'ABORT_ERR',
 ]);
 const AUTH_ERROR_CODES = new Set(['AUTH_FAILED', 'SESSION_EXPIRED', 'TOKEN_INVALID']);
-const DEFAULT_WARNING_META = Object.freeze({ kind: 'generic', severity: 'warning' });
 
 function createEmptyApiStatusSnapshot() {
   return {
@@ -47,35 +55,14 @@ function createEmptyApiStatusSnapshot() {
   };
 }
 
-function createWarningMetaEntry(message, meta = DEFAULT_WARNING_META) {
+function buildRouteMeta(payload = {}) {
+  const identifier = payload.id || DEFAULT_IDENTIFIER;
+  const sessionId = payload.sessionId || DEFAULT_SESSION_ID;
   return {
-    message,
-    ...meta,
+    identifier,
+    sessionId,
+    sessionKey: `${identifier}:${sessionId}`,
   };
-}
-
-function buildWarningMetaList(messages, warningMetaByMessage, fallbackMeta = DEFAULT_WARNING_META) {
-  return messages.map((message) => warningMetaByMessage.get(message) || createWarningMetaEntry(message, fallbackMeta));
-}
-
-function createWarningMetaMap(entries = []) {
-  const warningMetaByMessage = new Map();
-  entries.forEach((entry) => {
-    if (!entry?.message) return;
-    warningMetaByMessage.set(String(entry.message), { ...entry });
-  });
-  return warningMetaByMessage;
-}
-
-function mergeUniqueWarnings(...warningGroups) {
-  return Array.from(
-    new Set(
-      warningGroups.flatMap((group) => {
-        if (Array.isArray(group)) return group.filter(Boolean);
-        return group ? [group] : [];
-      })
-    )
-  );
 }
 
 module.exports = NodeHelper.create({
@@ -240,13 +227,11 @@ module.exports = NodeHelper.create({
    * @returns {Object[]} warningMeta array
    */
   _buildWarningMetaEntries(warnings = [], baseMeta = {}) {
-    if (!Array.isArray(warnings)) return [];
-    return warnings
-      .filter((message) => Boolean(message))
-      .map((message) => ({
-        message: String(message),
-        ...baseMeta,
-      }));
+    return buildWarningMetaList(
+      Array.isArray(warnings) ? warnings.filter((message) => Boolean(message)).map((message) => String(message)) : [],
+      new Map(),
+      baseMeta
+    );
   },
 
   /**
@@ -1030,10 +1015,12 @@ module.exports = NodeHelper.create({
 
   _buildBaseStudentPayload({ identifier, sessionId, student, config, fetchFlags }) {
     return {
-      contractVersion: 2,
+      contractVersion: 3,
       id: identifier,
       sessionId,
       meta: {
+        apiVersion: 'v3',
+        moduleVersion: 'unknown',
         moduleId: identifier,
         sessionId,
         generatedAt: new Date().toISOString(),
@@ -1058,6 +1045,7 @@ module.exports = NodeHelper.create({
       data: {
         timeUnits: [],
         lessons: [],
+        dayNotices: [],
         exams: [],
         homework: [],
         absences: [],
@@ -1445,13 +1433,7 @@ module.exports = NodeHelper.create({
    * @param {string} [route.sessionId] - Session ID
    */
   _emitGotData(payload, route = {}) {
-    if (!payload || typeof payload !== 'object') return;
-
-    const nextPayload = { ...payload };
-    if (route.identifier) nextPayload.id = route.identifier;
-    if (route.sessionId) nextPayload.sessionId = route.sessionId;
-
-    this.sendSocketNotification('GOT_DATA', nextPayload);
+    this._emitSocketNotification('GOT_DATA', payload, route, { preserveExistingRoute: false });
   },
 
   /**
@@ -1463,13 +1445,7 @@ module.exports = NodeHelper.create({
    * @param {string} [route.sessionId] - Session ID
    */
   _emitInitError(payload, route = {}) {
-    if (!payload || typeof payload !== 'object') return;
-
-    const nextPayload = { ...payload };
-    if (route.identifier && !nextPayload.id) nextPayload.id = route.identifier;
-    if (route.sessionId && !nextPayload.sessionId) nextPayload.sessionId = route.sessionId;
-
-    this.sendSocketNotification('INIT_ERROR', nextPayload);
+    this._emitSocketNotification('INIT_ERROR', payload, route, { preserveExistingRoute: true });
   },
 
   /**
@@ -1481,13 +1457,23 @@ module.exports = NodeHelper.create({
    * @param {string} [route.sessionId] - Session ID
    */
   _emitModuleInitialized(payload, route = {}) {
+    this._emitSocketNotification('MODULE_INITIALIZED', payload, route, { preserveExistingRoute: true });
+  },
+
+  _emitSocketNotification(notification, payload, route = {}, options = {}) {
     if (!payload || typeof payload !== 'object') return;
 
+    const { preserveExistingRoute = false } = options;
     const nextPayload = { ...payload };
-    if (route.identifier && !nextPayload.id) nextPayload.id = route.identifier;
-    if (route.sessionId && !nextPayload.sessionId) nextPayload.sessionId = route.sessionId;
 
-    this.sendSocketNotification('MODULE_INITIALIZED', nextPayload);
+    if (route.identifier && (!preserveExistingRoute || !nextPayload.id)) {
+      nextPayload.id = route.identifier;
+    }
+    if (route.sessionId && (!preserveExistingRoute || !nextPayload.sessionId)) {
+      nextPayload.sessionId = route.sessionId;
+    }
+
+    this.sendSocketNotification(notification, nextPayload);
   },
 
   /**
@@ -1497,11 +1483,9 @@ module.exports = NodeHelper.create({
    * @param {Object} payload - Session state payload ({id, sessionId, state, reason})
    */
   _handleSessionState(payload = {}) {
-    const identifier = payload.id || 'default';
-    const sessionId = payload.sessionId || 'unknown';
+    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
     const state = payload.state === 'active' ? 'active' : 'paused';
     const reason = payload.reason || 'unspecified';
-    const sessionKey = `${identifier}:${sessionId}`;
 
     if (state === 'paused') {
       this._pausedSessions.add(sessionKey);
@@ -1541,11 +1525,17 @@ module.exports = NodeHelper.create({
       normalizedConfig = result.normalizedConfig;
       const legacyUsed = result.legacyUsed;
 
-      identifier = normalizedConfig.id || 'default';
-      const sessionId = payload.sessionId || 'unknown';
+      const {
+        identifier: routeIdentifier,
+        sessionId,
+        sessionKey: routeSessionKey,
+      } = buildRouteMeta({
+        id: normalizedConfig.id,
+        sessionId: payload.sessionId,
+      });
+      identifier = routeIdentifier;
       const initReason = payload?.reason || 'unspecified';
-      // Session key format: "identifier:sessionId" for complete browser-window isolation
-      sessionKey = `${identifier}:${sessionId}`;
+      sessionKey = routeSessionKey;
 
       this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
@@ -1661,10 +1651,8 @@ module.exports = NodeHelper.create({
    * @returns {Promise<void>}
    */
   async _handleFetchData(payload) {
-    const identifier = payload.id || 'default';
-    const sessionId = payload.sessionId || 'unknown';
+    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
     const fetchReason = payload?.reason || 'unspecified';
-    const sessionKey = `${identifier}:${sessionId}`;
 
     this._mmLog('debug', null, `[FETCH_DATA] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
 

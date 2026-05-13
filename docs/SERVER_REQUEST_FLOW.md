@@ -135,7 +135,7 @@ sequenceDiagram
     API->>RC: callRestAPI()
 
     loop Internal REST retry, max 3 attempts total
-        RC->>FC: request(timeout=15000)
+        RC->>FC: request(timeout=25000)
         FC->>WU: HTTPS GET endpoint
         alt HTTP 2xx
             WU-->>FC: response
@@ -270,21 +270,21 @@ Homework is additionally filtered by the configured past/next-day window after t
 
 ### Internal REST Retry in `restClient`
 
-`restClient.callRestAPI()` retries up to `3` total attempts.
+`restClient.callRestAPI()` retries up to `4` total attempts with **exponential backoff + jitter**.
 
 Retryable conditions:
-- HTTP `429`
-- HTTP `5xx`
-- network errors such as `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`, `EHOSTUNREACH`, `ENOTFOUND`, `EAI_AGAIN`
-- `ERR_NETWORK`, `ERR_SOCKET_CONNECTION_TIMEOUT`, `ERR_CONNECTION_REFUSED`, `ABORT_ERR`
-- textual fallbacks such as `fetch failed`, `network error`, `timeout`
+- HTTP `429`, `500`, `502`, `503`, `504` (server errors, excluding `501`)
+- HTTP `5xx` (except `501 Not Implemented`)
+- network errors such as `ECONNREFUSED`, `ETIMEDOUT`, `ECONNRESET`, `EHOSTUNREACH`, `ENOTFOUND`, `EAI_AGAIN`, `ERR_NETWORK`, `ERR_SOCKET_CONNECTION_TIMEOUT`, `ERR_CONNECTION_REFUSED`, `ERR_HTTP_REQUEST_TIMEOUT`, `ABORT_ERR`
+- textual fallbacks such as `fetch failed`, `network error`, `timeout`, `connection reset`
 
-Backoff:
-- after attempt 1 failure: wait `5000ms`
-- after attempt 2 failure: wait `15000ms`
-- attempt 3 is final
+**Backoff Strategy** (exponential with ±25% jitter):
+- after attempt 1 failure: wait ~1000ms (±250ms)
+- after attempt 2 failure: wait ~2000ms (±500ms)
+- after attempt 3 failure: wait ~4000ms (±1000ms)
+- attempt 4 is final
 
-That means the built-in backoff now adds at most `20000ms` before the last failure is returned.
+The jitter (±25%) helps prevent the "thundering herd" problem where multiple clients hammer the server simultaneously when recovering. The built-in backoff adds at most ~7 seconds total before the final failure is returned.
 
 After the third attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `FETCH_DATA` based on the configured `updateInterval`.
 

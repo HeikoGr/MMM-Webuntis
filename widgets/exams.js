@@ -9,7 +9,8 @@
 (() => {
   const root = window.MMMWebuntisWidgets || {};
   window.MMMWebuntisWidgets = root;
-  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM } = root.util?.resolveWidgetHelpers?.(root) || {};
+  const { log, escapeHtml, addRow, initializeWidgetContextAndHeader, currentTimeAsHHMM, getFirstFieldName } =
+    root.util?.resolveWidgetHelpers?.(root) || {};
 
   /**
    * Render exams widget for a single student
@@ -67,7 +68,7 @@
           }
 
           if (showTeacher) {
-            const teacher = Array.isArray(exam.teachers) && exam.teachers.length > 0 ? exam.teachers[0] : '';
+            const teacher = getFirstFieldName(exam.teachers, 'short');
             if (teacher) nameCell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
           }
 

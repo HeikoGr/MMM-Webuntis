@@ -94,6 +94,39 @@ test('createGroupWarningCollector stores one warning entry per message', () => {
   });
 });
 
+test('emit helpers preserve or override route metadata as intended', () => {
+  const emitted = [];
+  helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
+
+  helper._emitGotData({ id: 'old', sessionId: 'old-session', value: 1 }, { identifier: 'new', sessionId: 'new-session' });
+  helper._emitInitError({ id: 'old', sessionId: 'old-session', value: 2 }, { identifier: 'new', sessionId: 'new-session' });
+  helper._emitModuleInitialized({ value: 3 }, { identifier: 'new', sessionId: 'new-session' });
+
+  assert.deepEqual(emitted, [
+    {
+      name: 'GOT_DATA',
+      payload: { id: 'new', sessionId: 'new-session', value: 1 },
+    },
+    {
+      name: 'INIT_ERROR',
+      payload: { id: 'old', sessionId: 'old-session', value: 2 },
+    },
+    {
+      name: 'MODULE_INITIALIZED',
+      payload: { id: 'new', sessionId: 'new-session', value: 3 },
+    },
+  ]);
+});
+
+test('handleSessionState uses default route values for missing payload metadata', () => {
+  helper._pausedSessions = new Set();
+  helper._mmLog = () => {};
+
+  helper._handleSessionState({ state: 'paused' });
+
+  assert.equal(helper._pausedSessions.has('default:unknown'), true);
+});
+
 test('getCurrentDateContext keeps wall clock time while overriding debug date', () => {
   const now = new Date(Date.UTC(2026, 4, 12, 14, 37, 22, 15));
   const result = runtimeUtils.getCurrentDateContext(
