@@ -247,6 +247,10 @@ After timetable succeeds, the remaining enabled endpoints run in parallel:
 
 Homework is additionally filtered by the configured past/next-day window after the endpoint returns.
 
+Teacher-target note:
+- For `TEACHER` targets, the runtime skips `exams`, `homework`, and `absences` because the currently integrated REST wrappers are student-scoped and may otherwise return server-side 5xx errors.
+- `messages of day` remains enabled for teacher targets because it is not student-scoped.
+
 ## 5. Timeout Model
 
 ### Effective WebUntis Timeouts
