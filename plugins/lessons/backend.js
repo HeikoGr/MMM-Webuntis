@@ -1,13 +1,6 @@
-const DEFAULT_CONFIG = Object.freeze({});
+const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
-function createIssue(message, severity = 'warning') {
-  return {
-    message,
-    severity,
-    kind: 'config',
-    pluginId: 'lessons',
-  };
-}
+const DEFAULT_CONFIG = Object.freeze({});
 
 module.exports = {
   id: 'lessons',
@@ -20,11 +13,16 @@ module.exports = {
       },
 
       validateConfig(pluginConfig) {
-        if (pluginConfig === undefined || pluginConfig === null) return [];
-        if (typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
-          return [createIssue('lessons plugin config must be an object.')];
-        }
-        return [];
+        const issues = validateConfigObject('lessons', pluginConfig, 'lessons');
+        if (issues.length > 0) return issues;
+
+        validateNonNegativeField(issues, 'lessons', 'lessons', pluginConfig, 'nextDays', {
+          upperCondition: (value) => value > 14,
+          upperMessage: (value, path) => `${path} is very large (${value}). Typical values: 1-7.`,
+        });
+        validateNonNegativeField(issues, 'lessons', 'lessons', pluginConfig, 'pastDays');
+
+        return issues;
       },
 
       getCapabilities() {

@@ -1,13 +1,6 @@
-const DEFAULT_CONFIG = Object.freeze({});
+const { validateConfigObject, validateMinimumField, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
-function createIssue(message, severity = 'warning') {
-  return {
-    message,
-    severity,
-    kind: 'config',
-    pluginId: 'absences',
-  };
-}
+const DEFAULT_CONFIG = Object.freeze({});
 
 module.exports = {
   id: 'absences',
@@ -20,11 +13,23 @@ module.exports = {
       },
 
       validateConfig(pluginConfig) {
-        if (pluginConfig === undefined || pluginConfig === null) return [];
-        if (typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
-          return [createIssue('absences plugin config must be an object.')];
-        }
-        return [];
+        const issues = validateConfigObject('absences', pluginConfig, 'absences');
+        if (issues.length > 0) return issues;
+
+        validateNonNegativeField(issues, 'absences', 'absences', pluginConfig, 'nextDays', {
+          upperCondition: (value) => value > 90,
+          upperMessage: (value, path) => `${path} is very large (${value}). Typical values: 7-30.`,
+        });
+        validateNonNegativeField(issues, 'absences', 'absences', pluginConfig, 'pastDays', {
+          upperCondition: (value) => value > 90,
+          upperMessage: (value, path) => `${path} is very large (${value}). Consider reducing.`,
+        });
+        validateMinimumField(issues, 'absences', 'absences', pluginConfig, 'maxItems', 1, {
+          upperCondition: (value) => value > 100,
+          upperMessage: (value, path) => `${path} is very large (${value}). Consider reducing for readability.`,
+        });
+
+        return issues;
       },
 
       getCapabilities() {

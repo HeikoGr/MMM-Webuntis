@@ -1,13 +1,6 @@
-const DEFAULT_CONFIG = Object.freeze({});
+const { validateConfigObject } = require('../../lib/pluginValidationUtils');
 
-function createIssue(message, severity = 'warning') {
-  return {
-    message,
-    severity,
-    kind: 'config',
-    pluginId: 'messagesofday',
-  };
-}
+const DEFAULT_CONFIG = Object.freeze({});
 
 module.exports = {
   id: 'messagesofday',
@@ -20,11 +13,7 @@ module.exports = {
       },
 
       validateConfig(pluginConfig) {
-        if (pluginConfig === undefined || pluginConfig === null) return [];
-        if (typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
-          return [createIssue('messagesofday plugin config must be an object.')];
-        }
-        return [];
+        return validateConfigObject('messagesofday', pluginConfig, 'messagesofday');
       },
 
       getCapabilities() {

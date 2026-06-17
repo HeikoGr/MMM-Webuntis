@@ -1,13 +1,6 @@
-const DEFAULT_CONFIG = Object.freeze({});
+const { validateConfigObject, validateNonNegativeField, validatePositiveNumberField } = require('../../lib/pluginValidationUtils');
 
-function createIssue(message, severity = 'warning') {
-  return {
-    message,
-    severity,
-    kind: 'config',
-    pluginId: 'grid',
-  };
-}
+const DEFAULT_CONFIG = Object.freeze({});
 
 module.exports = {
   id: 'grid',
@@ -20,11 +13,35 @@ module.exports = {
       },
 
       validateConfig(pluginConfig) {
-        if (pluginConfig === undefined || pluginConfig === null) return [];
-        if (typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
-          return [createIssue('grid plugin config must be an object.')];
-        }
-        return [];
+        const issues = validateConfigObject('grid', pluginConfig, 'grid');
+        if (issues.length > 0) return issues;
+
+        validateNonNegativeField(issues, 'grid', 'grid', pluginConfig, 'nextDays', {
+          upperCondition: (value) => value > 30,
+          upperMessage: (value, path) => `${path} is very large (${value}). Consider reducing for better performance.`,
+          upperSeverity: 'error',
+        });
+        validateNonNegativeField(issues, 'grid', 'grid', pluginConfig, 'pastDays', {
+          upperCondition: (value) => value > 14,
+          upperMessage: (value, path) => `${path} is very large (${value}). Consider reducing.`,
+        });
+        validateNonNegativeField(issues, 'grid', 'grid', pluginConfig, 'mergeGap', {
+          upperCondition: (value) => value > 60,
+          upperMessage: (value, path) => `${path} is very large (${value} minutes). Typical values: 0-30.`,
+        });
+        validateNonNegativeField(issues, 'grid', 'grid', pluginConfig, 'maxLessons', {
+          upperCondition: (value) => value > 20 && value !== 0,
+          upperMessage: (value, path) => `${path} is very large (${value}). Consider reducing for readability.`,
+        });
+        validatePositiveNumberField(issues, 'grid', 'grid', pluginConfig, 'pxPerMinute', {
+          invalidMessage: (rawValue, path) => `${path} must be a positive number. Value: ${rawValue}`,
+          lowerCondition: (value) => value < 0.2,
+          lowerMessage: (value, path) => `${path} is very small (${value}). Grid may be too compact to read.`,
+          upperCondition: (value) => value > 5,
+          upperMessage: (value, path) => `${path} is very large (${value}). Grid may exceed screen height.`,
+        });
+
+        return issues;
       },
 
       getCapabilities() {

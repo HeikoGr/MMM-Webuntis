@@ -22,10 +22,10 @@ const {
   normalizeTimeToHHMM,
 } = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
-const widgetConfigValidator = require('./lib/widgetConfigValidator');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
 const { buildFetchFlagsFromCapabilities } = require('./lib/pluginCapabilityResolver');
+const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
 const VALID_WIDGETS = new Set(ALL_WIDGETS);
@@ -283,6 +283,51 @@ module.exports = NodeHelper.create({
       }));
   },
 
+  _collectPluginValidationIssues(config = {}) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+    const warnings = [];
+    const errors = [];
+    const warningMeta = [];
+
+    pluginDescriptors.forEach((pluginDescriptor) => {
+      const validateConfig = pluginDescriptor?.instance?.validateConfig;
+      if (typeof validateConfig !== 'function') return;
+
+      const pluginId = pluginDescriptor.id;
+      const pluginConfig = pluginConfigMap?.[pluginId]?.config;
+      const issues = validateConfig(pluginConfig, { config, pluginId });
+      if (!Array.isArray(issues) || issues.length === 0) return;
+
+      issues.forEach((issue) => {
+        const message = typeof issue === 'string' ? issue : issue?.message;
+        if (!message) return;
+
+        const severity = typeof issue === 'object' && issue?.severity ? String(issue.severity).toLowerCase() : 'warning';
+        const kind = typeof issue === 'object' && issue?.kind ? issue.kind : 'config';
+        const meta = {
+          message: String(message),
+          kind,
+          severity,
+          pluginId: typeof issue === 'object' && issue?.pluginId ? String(issue.pluginId) : pluginId,
+        };
+
+        warningMeta.push(meta);
+        warnings.push(meta.message);
+
+        if (severity === 'error' || severity === 'critical') {
+          errors.push(meta.message);
+        }
+      });
+    });
+
+    return {
+      warnings: Array.from(new Set(warnings)),
+      errors: Array.from(new Set(errors)),
+      warningMeta,
+    };
+  },
+
   /**
    * Get or create AuthService instance for a specific module identifier
    * Each module instance gets its own AuthService to prevent cache cross-contamination
@@ -483,18 +528,29 @@ module.exports = NodeHelper.create({
   _validateInitConfig(normalizedConfig, identifier, sessionId, configWarnings) {
     const validatorLogger = { log: () => {} };
     const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
-    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [...(warnings || []), ...(configWarnings || [])]);
+    const pluginValidation = this._collectPluginValidationIssues(normalizedConfig);
+    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [
+      ...(warnings || []),
+      ...(configWarnings || []),
+      ...pluginValidation.warnings,
+    ]);
+    const combinedErrors = this._collectValidationWarnings(errors, pluginValidation.errors);
+    const combinedWarningMeta = [
+      ...this._buildWarningMetaEntries(warnings || [], { kind: 'config', severity: 'warning' }),
+      ...this._buildWarningMetaEntries(configWarnings || [], { kind: 'config', severity: 'warning' }),
+      ...pluginValidation.warningMeta,
+    ];
 
-    if (valid) {
-      return { valid, combinedWarnings };
+    if (valid && combinedErrors.length === 0) {
+      return { valid, combinedWarnings, combinedWarningMeta };
     }
 
     this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
     this._emitInitError(
       {
-        errors,
+        errors: this._collectValidationWarnings(errors, pluginValidation.errors),
         warnings: combinedWarnings,
-        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        warningMeta: combinedWarningMeta,
         severity: 'ERROR',
         message: 'Configuration validation failed',
       },
@@ -504,7 +560,7 @@ module.exports = NodeHelper.create({
       }
     );
 
-    return { valid, combinedWarnings };
+    return { valid: false, combinedWarnings, combinedWarningMeta };
   },
 
   async _finalizeInitModule(normalizedConfig, identifier) {
@@ -516,14 +572,20 @@ module.exports = NodeHelper.create({
     this._studentsDiscovered[identifier] = true;
   },
 
-  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings) {
+  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta = []) {
     const pluginWarnings = Array.isArray(this._pluginWarnings) ? this._pluginWarnings : [];
     const warnings = mergeUniqueWarnings(combinedWarnings, pluginWarnings);
+    const mergedWarningMetaByMessage = createWarningMetaMap(combinedWarningMeta);
+    this._buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }).forEach((entry) => {
+      if (!mergedWarningMetaByMessage.has(entry.message)) {
+        mergedWarningMetaByMessage.set(entry.message, entry);
+      }
+    });
     this._emitModuleInitialized(
       {
         config: normalizedConfig,
         warnings,
-        warningMeta: this._buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }),
+        warningMeta: buildWarningMetaList(warnings, mergedWarningMetaByMessage),
         students: normalizedConfig.students || [],
         plugins: this._buildFrontendPluginRegistry(normalizedConfig),
       },
@@ -1291,10 +1353,9 @@ module.exports = NodeHelper.create({
    * Validate student credentials and configuration before attempting fetch
    */
   _validateStudentConfig(student) {
-    return this._collectValidationWarnings(
-      widgetConfigValidator.validateStudentCredentials(student),
-      widgetConfigValidator.validateAllWidgets(student)
-    );
+    const warnings = this._collectValidationWarnings(validateStudentCredentials(student));
+    const pluginValidation = this._collectPluginValidationIssues(student);
+    return this._collectValidationWarnings(warnings, pluginValidation.warnings);
   },
 
   /**
@@ -1318,7 +1379,8 @@ module.exports = NodeHelper.create({
       warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${VALID_LOG_LEVELS.join(', ')}`);
     }
 
-    return this._collectValidationWarnings(warnings, widgetConfigValidator.validateAllWidgets(config));
+    const pluginValidation = this._collectPluginValidationIssues(config);
+    return this._collectValidationWarnings(warnings, pluginValidation.warnings);
   },
 
   _deriveFallbackStudentTitle(student) {
@@ -1815,11 +1877,16 @@ module.exports = NodeHelper.create({
       this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
       this._storeInitSessionConfig(sessionKey, normalizedConfig);
-      const { valid, combinedWarnings } = this._validateInitConfig(normalizedConfig, identifier, sessionId, result.configWarnings);
+      const { valid, combinedWarnings, combinedWarningMeta } = this._validateInitConfig(
+        normalizedConfig,
+        identifier,
+        sessionId,
+        result.configWarnings
+      );
       if (!valid) return;
 
       await this._finalizeInitModule(normalizedConfig, identifier);
-      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings);
+      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta);
       await this._triggerPostInitFetch(normalizedConfig, identifier, sessionId);
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);

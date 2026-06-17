@@ -10,6 +10,7 @@ Module.register('MMM-Webuntis', {
    */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
     if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
+      return null;
     }
 
     return globalThis.MMModuleRuntimeUtils.createLevelLogger({
@@ -1919,6 +1920,19 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `  - ${warn}`);
       });
     }
+
+    const errorWarnings = Array.isArray(payload.errors) ? payload.errors : [];
+    const errorWarningMeta = errorWarnings.map((message) => ({
+      message: String(message),
+      kind: 'config',
+      severity: 'critical',
+    }));
+    this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: 'config', severity: 'critical' });
+
+    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
+    }
+
     this._initialized = false;
     this._initRequested = false;
     if (this._initWatchdogTimer) {
