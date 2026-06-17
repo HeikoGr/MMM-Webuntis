@@ -1,6 +1,6 @@
 # messagesofday Plugin
 
-Reference first-party widget plugin for the planned MMM-Webuntis plugin host.
+Reference first-party widget plugin for the current MMM-Webuntis plugin host.
 
 Contents:
 
@@ -11,6 +11,5 @@ Contents:
 
 Current status:
 
-- infrastructure pilot only
-- loaded by the future plugin host during initialization
-- does not replace the current built-in `widgets/messagesofday.js` path yet
+- active first-party plugin loaded by the current host during initialization
+- still coexists with legacy host-side fallback rendering in `MMM-Webuntis.js`

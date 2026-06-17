@@ -25,7 +25,7 @@ This document focuses on the runtime request flow:
 It complements, but does not replace:
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [API_REFERENCE.md](API_REFERENCE.md)
-- [API_V2_MANIFEST.md](API_V2_MANIFEST.md)
+- [API_V3_MANIFEST.md](API_V3_MANIFEST.md)
 
 ## 1. End-to-End Flow
 

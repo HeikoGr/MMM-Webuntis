@@ -10,8 +10,9 @@ This directory is organized by source of truth. Each topic should have one canon
 | Configuration keys and auth shapes | [CONFIG.md](CONFIG.md) | Every supported config key, auth pattern, examples |
 | External WebUntis API behavior | [API_REFERENCE.md](API_REFERENCE.md) | Endpoints, auth headers, normalization inputs |
 | Runtime fetch and retry behavior | [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md) | Timetable-first flow, retries, timeouts, skip rules |
-| Frontend/backend payload contract | [API_V2_MANIFEST.md](API_V2_MANIFEST.md) | Canonical runtime payload fields and stability rules |
+| Frontend/backend payload contract | [API_V3_MANIFEST.md](API_V3_MANIFEST.md) | Canonical runtime payload fields and stability rules |
 | High-level structure | [ARCHITECTURE.md](ARCHITECTURE.md) | Module boundaries, responsibilities, extension points |
+| Plugin system | [PLUGINS.md](PLUGINS.md) | Manifest format, host APIs, plugin config, capability model |
 | Styling and theming | [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md) | CSS variables, classes, accessibility, legacy theme |
 | Grid-specific renderer internals | [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md) | Grid rendering decisions and special cases |
 | CLI usage | [CLI.md](CLI.md) | Commands, options, outputs, troubleshooting |
@@ -22,10 +23,11 @@ This directory is organized by source of truth. Each topic should have one canon
 ## Core Docs
 
 - [CONFIG.md](CONFIG.md)
-- [API_V2_MANIFEST.md](API_V2_MANIFEST.md)
+- [API_V3_MANIFEST.md](API_V3_MANIFEST.md)
 - [API_REFERENCE.md](API_REFERENCE.md)
 - [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
+- [PLUGINS.md](PLUGINS.md)
 - [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)
 - [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md)
 - [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)

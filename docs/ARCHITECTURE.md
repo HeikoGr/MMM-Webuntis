@@ -10,11 +10,8 @@ Use this document for:
 - seeing how frontend, adapter, and WebUntis core fit together
 
 For runtime request behavior, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md).
-For the current payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
-For the target widget-agnostic V3 contract redesign, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
-For the target plugin widget architecture, see [PLUGIN_WIDGET_CONTRACT.md](PLUGIN_WIDGET_CONTRACT.md).
-For the concrete plugin host API and manifest schema, see [PLUGIN_WIDGET_API.md](PLUGIN_WIDGET_API.md).
-For the staged migration plan, see [PLUGIN_WIDGET_MIGRATION_PLAN.md](PLUGIN_WIDGET_MIGRATION_PLAN.md).
+For the current payload contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+For the plugin runtime contract, manifest model, and host APIs, see [PLUGINS.md](PLUGINS.md).
 
 ## System Boundaries
 
@@ -22,16 +19,24 @@ For the staged migration plan, see [PLUGIN_WIDGET_MIGRATION_PLAN.md](PLUGIN_WIDG
 flowchart LR
     MM[MagicMirror Core]
     FE[MMM-Webuntis.js]
-    W[widgets/*.js]
+    PH[lib/pluginHostFrontend.js]
+    P[plugins/* frontend]
+    FS[lib/frontendShared.js]
     NH[node_helper.js]
+    PB[lib/pluginHostBackend.js]
+    PL[lib/pluginLoader.js]
     FACADE[lib/webuntisClient.js]
     CORE[lib/webuntis/*]
     BUILD[lib/mmm-adapter/*]
     API[WebUntis REST and JSON-RPC]
 
     MM --> FE
-    FE --> W
+    FE --> PH
+    FE --> FS
+    PH --> P
     FE <--> NH
+    NH --> PL
+    NH --> PB
     NH --> FACADE
     FACADE --> CORE
     FACADE --> BUILD
@@ -45,14 +50,17 @@ flowchart LR
 
 Files:
 - `MMM-Webuntis.js`
-- `widgets/*.js`
-- `widgets/util.js`
+- `lib/pluginHostFrontend.js`
+- `lib/frontendShared.js`
+- `plugins/*/frontend.js`
+- `plugins/*/native.js`
 - `MMM-Webuntis.css`
 
 Responsibilities:
 - send `INIT_MODULE` and `FETCH_DATA`
 - receive `MODULE_INITIALIZED`, `INIT_ERROR`, and `GOT_DATA`
-- render the configured widgets
+- load frontend plugin assets and register plugin instances
+- render active plugins and keep legacy fallback renderers for compatibility
 - format already-normalized data for display
 
 The frontend should not know WebUntis endpoint details.
@@ -61,6 +69,9 @@ The frontend should not know WebUntis endpoint details.
 
 Files:
 - `node_helper.js`
+- `lib/pluginLoader.js`
+- `lib/pluginHostBackend.js`
+- `lib/pluginCapabilityResolver.js`
 - `lib/webuntisClient.js`
 - `lib/configValidator.js`
 - `lib/widgetConfigValidator.js`
@@ -68,7 +79,10 @@ Files:
 
 Responsibilities:
 - validate and normalize module config
+- discover plugin manifests and backend entrypoints
+- normalize legacy `displayMode` and namespaced widget config into canonical `plugins.<id>` config
 - manage session identifiers and lifecycle
+- derive fetch capabilities from active plugins
 - coordinate fetches per configured module instance
 - compose WebUntis core results with the MMM payload adapter
 - convert backend results into MagicMirror socket notifications
@@ -122,7 +136,13 @@ This layer separates transport data from frontend-facing runtime data.
 4. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
 5. `lib/webuntisClient.js` maps the normalized bundle into the `GOT_DATA` payload.
 6. `node_helper.js` emits `GOT_DATA`.
-7. Frontend widgets render the normalized result.
+7. Frontend plugin renderers consume the normalized result.
+
+Current compatibility note:
+
+- `displayMode` remains a valid public config option.
+- The backend normalizes `displayMode` and top-level widget namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
+- The frontend still contains host-side fallback renderers for built-in widgets while plugin migration finishes.
 
 ## Key Architectural Rules
 
@@ -139,7 +159,7 @@ This layer separates transport data from frontend-facing runtime data.
 
 ### Contract Rules
 
-- The frontend relies on the normalized runtime contract documented in [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+- The frontend relies on the normalized runtime contract documented in [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
 - `lib/webuntis/webuntisClient.js` must not import `lib/mmm-adapter/*`; payload mapping belongs to the public adapter facade.
 - Debug dumps can be richer than the runtime payload and are not a public contract.
 
@@ -154,8 +174,8 @@ This layer separates transport data from frontend-facing runtime data.
 | --- | --- |
 | Config key or auth shape | [CONFIG.md](CONFIG.md) and the validators |
 | Endpoint or auth bug | [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md) and `lib/webuntis/*` |
-| Payload field or frontend/backend contract | [API_V2_MANIFEST.md](API_V2_MANIFEST.md) |
-| Widget rendering issue | `widgets/*.js` and [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md) for grid-specific logic |
+| Payload field or frontend/backend contract | [API_V3_MANIFEST.md](API_V3_MANIFEST.md) |
+| Widget rendering issue | `plugins/*` plus [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md) for grid-specific logic |
 | Styling or accessibility | [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md) |
 
 ## Related Docs
@@ -163,9 +183,7 @@ This layer separates transport data from frontend-facing runtime data.
 - [CONFIG.md](CONFIG.md)
 - [API_REFERENCE.md](API_REFERENCE.md)
 - [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md)
-- [API_V2_MANIFEST.md](API_V2_MANIFEST.md)
-- [PLUGIN_WIDGET_CONTRACT.md](PLUGIN_WIDGET_CONTRACT.md)
-- [PLUGIN_WIDGET_API.md](PLUGIN_WIDGET_API.md)
-- [PLUGIN_WIDGET_MIGRATION_PLAN.md](PLUGIN_WIDGET_MIGRATION_PLAN.md)
+- [API_V3_MANIFEST.md](API_V3_MANIFEST.md)
+- [PLUGINS.md](PLUGINS.md)
 - [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)
 - [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md)

@@ -98,6 +98,13 @@ The canonical defaults live in the `defaults` object in `MMM-Webuntis.js`. Globa
 
 `list` remains a supported alias for `lessons, exams`.
 
+Advanced compatibility note:
+
+- `displayMode` remains the recommended public activation option.
+- Internally, the backend normalizes activation into `plugins.<id>.enabled`.
+- Top-level widget namespaces such as `lessons`, `grid`, or `exams` are merged into `plugins.<id>.config` during normalization.
+- Explicit `plugins.<id>.config` and `students[].plugins.<id>.config` are supported, but they are primarily the canonical internal runtime shape.
+
 ## Timetable Fetch Range
 
 | Option | Type | Default | Description |

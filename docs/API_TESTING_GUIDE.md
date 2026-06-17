@@ -620,7 +620,7 @@ date -d "2026-03-17" +"%A"  # Should be a weekday
 ## Related Documentation
 
 - [API_REFERENCE.md](API_REFERENCE.md) - Full WebUntis API reference
-- [API_V2_MANIFEST.md](API_V2_MANIFEST.md) - Internal payload format
+- [API_V3_MANIFEST.md](API_V3_MANIFEST.md) - Internal payload format
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture
 - [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md) - Runtime fetch and retry behavior
 

@@ -268,15 +268,15 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Get global widget API object
-   * The widget API is populated by widget scripts (widgets/*.js) at load time
-   * Provides access to widget rendering functions and utilities
+   * Get the shared frontend helper API.
    *
-   * @returns {Object|null} Widget API object or null if not available
+   * Provides access to rendering helpers used by both the host and frontend plugins.
+   *
+   * @returns {Object|null} Shared frontend helper API or null if not available
    */
   _getWidgetApi() {
     try {
-      return window.MMMWebuntisWidgets || window.MMMWebuntisFrontendShared || null;
+      return window.MMMWebuntisFrontendShared || null;
     } catch {
       return null;
     }
@@ -1334,7 +1334,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render grid widget for a student
-   * Delegates to grid widget script (widgets/grid.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {string} studentTitle - Student name/title
    * @param {Object} studentConfig - Student configuration
@@ -1355,7 +1355,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render lessons list widget for a student
-   * Delegates to lessons widget script (widgets/lessons.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {HTMLElement} container - Container element to render into
    * @param {string} studentLabel - Student label string (or empty if header added)
@@ -1382,7 +1382,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render exams widget for a student
-   * Delegates to exams widget script (widgets/exams.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {HTMLElement} container - Container element to render into
    * @param {string} studentLabel - Student label string
@@ -1396,7 +1396,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render homework widget for a student
-   * Delegates to homework widget script (widgets/homework.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {HTMLElement} container - Container element to render into
    * @param {string} studentLabel - Student label string
@@ -1410,7 +1410,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render absences widget for a student
-   * Delegates to absences widget script (widgets/absences.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {HTMLElement} container - Container element to render into
    * @param {string} studentLabel - Student label string
@@ -1424,7 +1424,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Render messages of day widget for a student
-   * Delegates to messagesofday widget script (widgets/messagesofday.js)
+   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
    *
    * @param {HTMLElement} container - Container element to render into
    * @param {string} studentLabel - Student label string
