@@ -741,7 +741,6 @@
 }
 
 /* Shared list-widget detail text */
-.MMM-Webuntis .wu-exam__description,
 .MMM-Webuntis .wu-absence__reason,
 .MMM-Webuntis .wu-absence__status {
   display: inline-block;
@@ -750,19 +749,8 @@
   font-weight: var(--wu-widget-detail-font-weight);
 }
 
-.MMM-Webuntis .wu-exam__description,
 .MMM-Webuntis .wu-absence__reason {
   margin-top: var(--wu-widget-detail-margin-top);
-}
-
-/* Exams Widget */
-.MMM-Webuntis .examRow,
-.MMM-Webuntis .examRowEmpty {
-  color: var(--wu-legacy-exam-row-color);
-}
-
-.MMM-Webuntis .wu-exam__description {
-  color: var(--wu-exam-description-color);
 }
 
 /* Absences Widget */
@@ -797,73 +785,22 @@
   font-style: italic;
 }
 
-/* Messages of day */
-.MMM-Webuntis .message-subject,
-.MMM-Webuntis .message-text {
-  display: block;
-}
-
-.MMM-Webuntis .message-subject {
-  font-weight: 700;
-  font-size: 1rem;
-  margin-bottom: 4px;
-}
-
-.MMM-Webuntis .message-text {
-  font-size: 0.9rem;
-  color: var(--wu-message-text);
-}
-
-.MMM-Webuntis .messages-grid {
-  columns: var(--wu-messages-max-cols) var(--wu-messages-min-width);
-  column-gap: var(--wu-message-card-gap);
-  column-fill: balance;
-  margin-bottom: var(--wu-message-card-gap);
-  grid-column: 1 / -1; /* Ensure it spans full width of widget container */
-  width: 100%;
-}
-
-.MMM-Webuntis.messagesofday {
-  max-width: 100%;
-}
-
-.MMM-Webuntis .messages-grid .messageRow {
-  display: flex; /* Override display: contents from .wu-row */
-  background-color: var(--wu-message-card-bg);
-  border-left: 3px solid var(--wu-message-card-border);
-  border-radius: var(--wu-message-card-radius);
-  flex-direction: column;
-  line-height: 1.1;
-}
-
-.MMM-Webuntis .messages-grid .messageRowEmpty {
-  display: block; /* Override display: contents */
-  color: var(--wu-muted-text);
-  font-style: italic;
-}
-
-.MMM-Webuntis .messages-grid .messageRow,
-.MMM-Webuntis .messages-grid .messageRowEmpty {
-  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
-  width: 100%;
-  margin-bottom: var(--wu-message-card-gap);
-  break-inside: avoid-column;
-}
-
-.MMM-Webuntis .messages-grid .wu-col-full-width {
-  width: 100%;
-}
-
 /* Warnings / utility / legacy shims */
 .MMM-Webuntis .widget-error {
   grid-column: 1 / -1;
+  justify-self: start;
+  width: fit-content;
+  max-width: min(100%, 36rem);
+  display: inline-block;
   padding: 0.5rem 0.75rem;
   margin: 0.5rem 0 0.5rem 0;
   background-color: var(--wu-error-bg);
   border-left: 4px solid var(--wu-error-border);
   border-radius: 2px;
   color: var(--wu-error-text);
-  font-weight: 500;
+  font-size: 0.9em;
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .MMM-Webuntis .widget-error.dimmed {
@@ -874,24 +811,32 @@
 .MMM-Webuntis .mmm-webuntis-warning {
   margin-bottom: var(--wu-widget-stack-gap);
   border-left: 3px solid var(--wu-warning-color);
+  width: fit-content;
+  max-width: min(100%, 36rem);
 }
 
 .MMM-Webuntis .absences-unavailable-info {
   padding: 0.5rem;
+  font-size: 0.9em;
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .MMM-Webuntis .mmm-webuntis-warning {
+  display: inline-block;
   padding: 0.4rem 0.6rem;
   background-color: var(--wu-warning-bg-soft);
   color: var(--wu-warning-color);
-  font-weight: 600;
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
 .MMM-Webuntis .mmm-webuntis-warning.critical {
   border-left-color: var(--wu-critical-color);
   background-color: var(--wu-critical-bg);
   color: var(--wu-critical-color);
-  font-weight: 700;
+  font-weight: 600;
   animation: pulse-warning 2s ease-in-out infinite;
 }
 

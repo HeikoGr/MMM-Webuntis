@@ -284,8 +284,8 @@ Field naming rule for V3 lesson data:
 
 Implementation warning for the `changedFields[]` rename:
 Renaming the values inside `changedFields[]` is not an adapter-internal change. Two frontend files embed the V2 abbreviation strings as literal lookup values:
-- `widgets/util.js#getChangedFieldSet()` synthesizes the change set from `suOld`/`teOld`/`roOld` presence and explicitly adds the strings `'su'`, `'te'`, `'ro'`
-- `widgets/grid.js` checks `changedFields.has('su')`, `.has('te')`, `.has('ro')` and uses string literals `'te'` and `'ro'` in a filter expression at multiple call sites
+- `lib/frontendShared.js#getChangedFieldSet()` synthesizes the change set from `suOld`/`teOld`/`roOld` presence and explicitly adds the strings `'su'`, `'te'`, `'ro'`
+- `plugins/grid/native.js` checks `changedFields.has('su')`, `.has('te')`, `.has('ro')` and uses string literals `'te'` and `'ro'` in a filter expression at multiple call sites
 
 Both files must be updated in the same change that renames the transport values. If only the adapter emits the new names while these callers still expect the old abbreviations, change rendering in both the grid and lessons widgets will break silently.
 
@@ -475,11 +475,11 @@ Recommended implementation order:
 Atomic deployment requirement:
 The field renames inside `data.*` cannot be staged independently. Current widgets and frontend helpers read the old field names directly. Therefore the following files must all change in a single coordinated update:
 - `lib/mmm-adapter/mmmPayloadMapper.js` - adapter schema field renames + `contractVersion: 3`
-- `widgets/util.js#getChangedFieldSet()` - rename the synthesized strings `'su'`, `'te'`, `'ro'` to `'subject'`, `'teacher'`, `'room'`
-- `widgets/grid.js` - update all `changedFields.has('su'|'te'|'ro')` and the filter expression using these strings, update `el.substText` -> `el.substitutionText`, `el.lstext` -> `el.lessonText`, `el.suOld` -> `el.previousSubjects`, `el.teOld` -> `el.previousTeachers`, `el.roOld` -> `el.previousRooms`, and the `su`/`te`/`ro`/`cl`/`sg` field accesses
-- `widgets/lessons.js` - update `su`/`te`/`ro`/`suOld`/`teOld`/`roOld`/`substText`/`lstext` field accesses
-- `widgets/absences.js` - update `su`/`te` field accesses to canonical absence field names
-- `widgets/homework.js` - update `su` field access to the canonical homework field name
+- `lib/frontendShared.js#getChangedFieldSet()` - rename the synthesized strings `'su'`, `'te'`, `'ro'` to `'subject'`, `'teacher'`, `'room'`
+- `plugins/grid/native.js` - update all `changedFields.has('su'|'te'|'ro')` and the filter expression using these strings, update `el.substText` -> `el.substitutionText`, `el.lstext` -> `el.lessonText`, `el.suOld` -> `el.previousSubjects`, `el.teOld` -> `el.previousTeachers`, `el.roOld` -> `el.previousRooms`, and the `su`/`te`/`ro`/`cl`/`sg` field accesses
+- `plugins/lessons/native.js` - update `su`/`te`/`ro`/`suOld`/`teOld`/`roOld`/`substText`/`lstext` field accesses
+- `plugins/absences/frontend.js` - update frontend absence field access to canonical absence field names
+- `plugins/homework/frontend.js` - update frontend homework field access to the canonical homework field name
 - `MMM-Webuntis.js` - update `contractVersion` check from `2` to `3`
 
 Explicitly deferred:

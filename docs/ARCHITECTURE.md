@@ -12,6 +12,9 @@ Use this document for:
 For runtime request behavior, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md).
 For the current payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 For the target widget-agnostic V3 contract redesign, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+For the target plugin widget architecture, see [PLUGIN_WIDGET_CONTRACT.md](PLUGIN_WIDGET_CONTRACT.md).
+For the concrete plugin host API and manifest schema, see [PLUGIN_WIDGET_API.md](PLUGIN_WIDGET_API.md).
+For the staged migration plan, see [PLUGIN_WIDGET_MIGRATION_PLAN.md](PLUGIN_WIDGET_MIGRATION_PLAN.md).
 
 ## System Boundaries
 
@@ -161,5 +164,8 @@ This layer separates transport data from frontend-facing runtime data.
 - [API_REFERENCE.md](API_REFERENCE.md)
 - [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md)
 - [API_V2_MANIFEST.md](API_V2_MANIFEST.md)
+- [PLUGIN_WIDGET_CONTRACT.md](PLUGIN_WIDGET_CONTRACT.md)
+- [PLUGIN_WIDGET_API.md](PLUGIN_WIDGET_API.md)
+- [PLUGIN_WIDGET_MIGRATION_PLAN.md](PLUGIN_WIDGET_MIGRATION_PLAN.md)
 - [CSS_CUSTOMIZATION.md](CSS_CUSTOMIZATION.md)
 - [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md)

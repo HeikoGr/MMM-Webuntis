@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mmm-webuntis.local/schemas/plugin-widget-manifest.schema.json",
+  "title": "MMM-Webuntis Widget Plugin Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "title", "type", "entry", "capabilities", "compatibility"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "const": "widget"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frontend"],
+      "properties": {
+        "frontend": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "backend": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "styles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "slots": {
+      "type": "array",
+      "items": {
+        "enum": ["main"]
+      },
+      "uniqueItems": true,
+      "default": ["main"]
+    },
+    "order": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1000
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "lessons",
+          "timeUnits",
+          "exams",
+          "homework",
+          "absences",
+          "messages",
+          "holidays",
+          "dayNotices",
+          "studentContext",
+          "runtimeState",
+          "pluginDerivedData"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "configNamespace": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabledByDefault": {
+          "type": "boolean",
+          "default": false
+        },
+        "displayAliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "hostApiVersion"],
+      "properties": {
+        "contractVersion": {
+          "const": 3
+        },
+        "hostApiVersion": {
+          "const": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//).+"
+    }
+  }
+}

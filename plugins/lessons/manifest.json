@@ -1,0 +1,23 @@
+{
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
+  "id": "lessons",
+  "version": "1.0.0",
+  "title": "Lessons",
+  "type": "widget",
+  "entry": {
+    "frontend": "native.js",
+    "backend": "backend.js"
+  },
+  "slots": ["main"],
+  "order": 200,
+  "capabilities": ["lessons", "holidays", "dayNotices", "studentContext"],
+  "configNamespace": "lessons",
+  "activation": {
+    "enabledByDefault": false,
+    "displayAliases": ["lessons", "lesson", "list"]
+  },
+  "compatibility": {
+    "contractVersion": 3,
+    "hostApiVersion": 1
+  }
+}

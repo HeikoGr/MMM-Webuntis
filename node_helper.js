@@ -24,6 +24,8 @@ const {
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const widgetConfigValidator = require('./lib/widgetConfigValidator');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
+const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
+const { buildFetchFlagsFromCapabilities } = require('./lib/pluginCapabilityResolver');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
 const VALID_WIDGETS = new Set(ALL_WIDGETS);
@@ -77,6 +79,62 @@ module.exports = NodeHelper.create({
     this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     this._studentsDiscovered = {};
+    this._pluginHost = initializeBackendPluginHost({
+      moduleRoot: __dirname,
+      logger: this._mmLog.bind(this),
+    });
+    this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
+    if (this._pluginWarnings.length > 0) {
+      this._pluginWarnings.forEach((warning) => {
+        this._mmLog('warn', null, warning);
+      });
+    }
+  },
+
+  _getConfiguredDisplayTokens(config = {}) {
+    const raw = config?.displayMode;
+    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
+    if (displayMode === 'grid') return ['grid'];
+    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
+    const parts = displayMode
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    return parts.length > 0 ? parts : ['lessons', 'exams'];
+  },
+
+  _buildFrontendPluginRegistry(config = {}) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+
+    return pluginDescriptors.map((pluginDescriptor) => {
+      const manifest = pluginDescriptor.manifest || {};
+      const aliases =
+        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
+          ? manifest.activation.displayAliases.slice()
+          : [manifest.id];
+      const explicitPluginConfig = pluginConfigMap?.[manifest.id];
+      const active = explicitPluginConfig?.enabled === true;
+
+      const frontendPath = path.relative(__dirname, pluginDescriptor.entryPaths.frontend).split(path.sep).join('/');
+      const stylePaths = Array.isArray(pluginDescriptor.entryPaths.styles)
+        ? pluginDescriptor.entryPaths.styles.map((stylePath) => path.relative(__dirname, stylePath).split(path.sep).join('/'))
+        : [];
+
+      return {
+        id: manifest.id,
+        title: manifest.title,
+        order: manifest.order || 1000,
+        configNamespace: manifest.configNamespace || manifest.id,
+        aliases,
+        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
+        active,
+        entry: {
+          frontend: frontendPath,
+          styles: stylePaths,
+        },
+      };
+    });
   },
 
   /**
@@ -270,6 +328,15 @@ module.exports = NodeHelper.create({
       normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
     }
 
+    normalizedConfig.plugins = this._buildCanonicalPluginsConfig(normalizedConfig);
+
+    if (Array.isArray(normalizedConfig.students)) {
+      normalizedConfig.students = normalizedConfig.students.map((student) => ({
+        ...student,
+        plugins: this._buildCanonicalPluginsConfig(student, normalizedConfig.plugins),
+      }));
+    }
+
     if (legacyUsed.length > 0) {
       try {
         const uniq = Array.from(new Set(legacyUsed));
@@ -306,6 +373,83 @@ module.exports = NodeHelper.create({
     }
 
     return { normalizedConfig, legacyUsed, configWarnings };
+  },
+
+  _getLegacyDisplayTokens(config = {}) {
+    const raw = config?.displayMode;
+    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
+    if (displayMode === 'grid') return ['grid'];
+    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
+    return displayMode
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+  },
+
+  _getKnownPluginDefinitions() {
+    const definitions = new Map();
+
+    const discoveredPlugins = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    discoveredPlugins.forEach((pluginRecord) => {
+      const manifest = pluginRecord?.manifest;
+      if (!manifest?.id) return;
+      const aliases =
+        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
+          ? manifest.activation.displayAliases.slice()
+          : [manifest.id];
+
+      definitions.set(manifest.id, {
+        id: manifest.id,
+        configNamespace: manifest.configNamespace || manifest.id,
+        aliases,
+        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
+      });
+    });
+
+    return definitions;
+  },
+
+  _buildCanonicalPluginsConfig(config = {}, inheritedPlugins = null) {
+    const knownDefinitions = this._getKnownPluginDefinitions();
+    const displayTokens = new Set(this._getLegacyDisplayTokens(config));
+    const explicitPlugins = config?.plugins && typeof config.plugins === 'object' && !Array.isArray(config.plugins) ? config.plugins : {};
+    const inherited = inheritedPlugins && typeof inheritedPlugins === 'object' && !Array.isArray(inheritedPlugins) ? inheritedPlugins : {};
+    const result = {};
+
+    knownDefinitions.forEach((definition, pluginId) => {
+      const explicitEntry = explicitPlugins?.[pluginId] && typeof explicitPlugins[pluginId] === 'object' ? explicitPlugins[pluginId] : {};
+      const inheritedEntry = inherited?.[pluginId] && typeof inherited[pluginId] === 'object' ? inherited[pluginId] : {};
+      const namespace = definition.configNamespace || pluginId;
+      const legacyWidgetConfig =
+        config?.[namespace] && typeof config[namespace] === 'object' && !Array.isArray(config[namespace]) ? config[namespace] : {};
+      const enabledFromLegacy = definition.aliases.some((alias) => displayTokens.has(alias));
+      const enabled =
+        typeof explicitEntry.enabled === 'boolean' ? explicitEntry.enabled : enabledFromLegacy || inheritedEntry.enabled === true;
+
+      result[pluginId] = {
+        enabled,
+        config: {
+          ...(inheritedEntry.config || {}),
+          ...legacyWidgetConfig,
+          ...(explicitEntry.config || {}),
+        },
+      };
+    });
+
+    Object.keys(explicitPlugins).forEach((pluginId) => {
+      if (result[pluginId]) return;
+      const explicitEntry = explicitPlugins[pluginId];
+      if (!explicitEntry || typeof explicitEntry !== 'object') return;
+      result[pluginId] = {
+        enabled: explicitEntry.enabled === true,
+        config:
+          explicitEntry.config && typeof explicitEntry.config === 'object' && !Array.isArray(explicitEntry.config)
+            ? { ...explicitEntry.config }
+            : {},
+      };
+    });
+
+    return result;
   },
 
   _buildConfigWarnings(normalizedConfig, validationWarnings = []) {
@@ -373,12 +517,15 @@ module.exports = NodeHelper.create({
   },
 
   _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings) {
+    const pluginWarnings = Array.isArray(this._pluginWarnings) ? this._pluginWarnings : [];
+    const warnings = mergeUniqueWarnings(combinedWarnings, pluginWarnings);
     this._emitModuleInitialized(
       {
         config: normalizedConfig,
-        warnings: combinedWarnings,
-        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        warnings,
+        warningMeta: this._buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }),
         students: normalizedConfig.students || [],
+        plugins: this._buildFrontendPluginRegistry(normalizedConfig),
       },
       {
         identifier,
@@ -1040,7 +1187,43 @@ module.exports = NodeHelper.create({
    * @returns {Object} Widget and fetch flags
    */
   _buildFetchFlags(displayMode) {
-    const wants = (name) => this._wantsWidget(name, displayMode);
+    const legacyDisplayMode =
+      displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode) ? displayMode.displayMode : displayMode;
+
+    if (displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode)) {
+      const config = displayMode;
+      const pluginsConfig = config.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+      const definitions = this._getKnownPluginDefinitions();
+      const activePluginIds = Object.entries(pluginsConfig)
+        .filter(([, entry]) => entry?.enabled === true)
+        .map(([pluginId]) => pluginId);
+
+      if (activePluginIds.length > 0) {
+        const activeDefinitions = activePluginIds.map((pluginId) => definitions.get(pluginId)).filter(Boolean);
+        const capabilities = Array.from(
+          new Set(activeDefinitions.flatMap((definition) => (Array.isArray(definition.capabilities) ? definition.capabilities : [])))
+        );
+        const capabilityFlags = buildFetchFlagsFromCapabilities(capabilities);
+        const activeSet = new Set(activePluginIds);
+
+        return {
+          wantsGridWidget: activeSet.has('grid'),
+          wantsLessonsWidget: activeSet.has('lessons'),
+          wantsExamsWidget: activeSet.has('exams'),
+          wantsHomeworkWidget: activeSet.has('homework'),
+          wantsAbsencesWidget: activeSet.has('absences'),
+          wantsMessagesOfDayWidget: activeSet.has('messagesofday'),
+          fetchTimegrid: Boolean(capabilityFlags.fetchTimegrid || capabilityFlags.fetchTimetable),
+          fetchTimetable: Boolean(capabilityFlags.fetchTimetable),
+          fetchExams: Boolean(capabilityFlags.fetchExams),
+          fetchHomeworks: Boolean(capabilityFlags.fetchHomeworks),
+          fetchAbsences: Boolean(capabilityFlags.fetchAbsences),
+          fetchMessagesOfDay: Boolean(capabilityFlags.fetchMessagesOfDay),
+        };
+      }
+    }
+
+    const wants = (name) => this._wantsWidget(name, legacyDisplayMode);
     const wantsGridWidget = wants('grid');
     const wantsLessonsWidget = wants('lessons');
     const wantsExamsWidget = wants('exams');
@@ -1267,8 +1450,13 @@ module.exports = NodeHelper.create({
     warningFallbackMeta,
     includeApiSnapshot,
   }) {
-    const effectiveDisplayMode = student?.displayMode || config?.displayMode;
-    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const effectiveConfig = {
+      ...config,
+      ...(student || {}),
+      displayMode: student?.displayMode || config?.displayMode,
+      plugins: student?.plugins || config?.plugins,
+    };
+    const fetchFlags = this._buildFetchFlags(effectiveConfig);
     const basePayload = this._buildBaseStudentPayload({
       identifier,
       sessionId,
@@ -1479,7 +1667,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config?.displayMode);
+      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
 
       const studentPayloads = await this._collectStudentPayloadsForGroup({
@@ -1886,8 +2074,13 @@ module.exports = NodeHelper.create({
       throw new Error('fetchData requires authSession, student, identifier, credKey, config, and sessionKey');
     }
 
-    const effectiveDisplayMode = student.displayMode || config.displayMode;
-    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const effectiveConfig = {
+      ...config,
+      ...student,
+      displayMode: student.displayMode || config.displayMode,
+      plugins: student.plugins || config.plugins,
+    };
+    const fetchFlags = this._buildFetchFlags(effectiveConfig);
     const baseNow = this._calculateBaseNow(config);
     const dateRanges = calculateFetchRanges({
       baseNow,

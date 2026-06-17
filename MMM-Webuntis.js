@@ -10,7 +10,6 @@ Module.register('MMM-Webuntis', {
    */
   _createFrontendLogger(moduleName = 'MMM-Webuntis') {
     if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
-      return null;
     }
 
     return globalThis.MMModuleRuntimeUtils.createLevelLogger({
@@ -250,23 +249,7 @@ Module.register('MMM-Webuntis', {
   getScripts() {
     window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
-    const scripts = [this.file('lib/runtime-utils.js'), this.file('widgets/util.js')];
-
-    const widgetScriptMap = {
-      lessons: 'widgets/lessons.js',
-      exams: 'widgets/exams.js',
-      homework: 'widgets/homework.js',
-      absences: 'widgets/absences.js',
-      grid: 'widgets/grid.js',
-      messagesofday: 'widgets/messagesofday.js',
-    };
-
-    const widgets = Array.from(new Set(this._getDisplayWidgets()));
-    for (const widget of widgets) {
-      const scriptPath = widgetScriptMap[widget];
-      if (!scriptPath) continue;
-      scripts.push(this.file(scriptPath));
-    }
+    const scripts = [this.file('lib/runtime-utils.js'), this.file('lib/pluginHostFrontend.js'), this.file('lib/frontendShared.js')];
 
     return scripts;
   },
@@ -293,10 +276,239 @@ Module.register('MMM-Webuntis', {
    */
   _getWidgetApi() {
     try {
-      return window.MMMWebuntisWidgets || null;
+      return window.MMMWebuntisWidgets || window.MMMWebuntisFrontendShared || null;
     } catch {
       return null;
     }
+  },
+
+  _getPluginHost() {
+    try {
+      return globalThis.MMMWebuntisPluginHost || null;
+    } catch {
+      return null;
+    }
+  },
+
+  _setPluginRegistry(pluginEntries = []) {
+    this._pluginRegistryById = new Map();
+    const entries = Array.isArray(pluginEntries) ? pluginEntries : [];
+    entries.forEach((entry) => {
+      const pluginId = String(entry?.id || '').trim();
+      if (!pluginId) return;
+      this._pluginRegistryById.set(pluginId, entry);
+    });
+  },
+
+  _getPluginRegistryEntry(pluginId) {
+    return this._pluginRegistryById?.get(String(pluginId || '').trim()) || null;
+  },
+
+  _getLegacyDisplayTokens(configSource = this.config || {}) {
+    const raw = configSource?.displayMode;
+    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
+    if (displayMode === 'grid') return ['grid'];
+    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
+    return displayMode
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+  },
+
+  _isPluginActive(pluginId) {
+    return this._getPluginRegistryEntry(pluginId)?.active === true;
+  },
+
+  _ensurePluginAssetState(pluginId) {
+    if (!this._pluginAssetStateById) {
+      this._pluginAssetStateById = new Map();
+    }
+    const normalizedPluginId = String(pluginId || '').trim();
+    if (!this._pluginAssetStateById.has(normalizedPluginId)) {
+      this._pluginAssetStateById.set(normalizedPluginId, {
+        loaded: false,
+        failed: false,
+        promise: null,
+        errorMessage: '',
+      });
+    }
+    return this._pluginAssetStateById.get(normalizedPluginId);
+  },
+
+  _loadPluginStyles(pluginEntry) {
+    const styles = Array.isArray(pluginEntry?.entry?.styles) ? pluginEntry.entry.styles : [];
+    styles.forEach((stylePath) => {
+      const href = this.file(stylePath);
+      if (document.querySelector(`link[data-wu-plugin-style="${href}"]`)) return;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.dataset.wuPluginStyle = href;
+      document.head.appendChild(link);
+    });
+  },
+
+  _loadPluginScript(pluginEntry) {
+    return new Promise((resolve, reject) => {
+      const scriptPath = pluginEntry?.entry?.frontend;
+      if (!scriptPath) {
+        reject(new Error(`Plugin ${pluginEntry?.id || 'unknown'} is missing a frontend entry.`));
+        return;
+      }
+
+      const src = this.file(scriptPath);
+      const existing = document.querySelector(`script[data-wu-plugin-script="${src}"]`);
+      if (existing) {
+        if (existing.dataset.wuPluginLoaded === 'true') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      script.dataset.wuPluginScript = src;
+      script.addEventListener(
+        'load',
+        () => {
+          script.dataset.wuPluginLoaded = 'true';
+          resolve();
+        },
+        { once: true }
+      );
+      script.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+      document.head.appendChild(script);
+    });
+  },
+
+  _initializeActivePlugins(pluginEntries = []) {
+    const entries = Array.isArray(pluginEntries) ? pluginEntries.filter((entry) => entry?.active === true) : [];
+    const loadTasks = entries.map((pluginEntry) => {
+      const state = this._ensurePluginAssetState(pluginEntry.id);
+      if (state.loaded) return Promise.resolve();
+      if (state.promise) return state.promise;
+
+      state.promise = Promise.resolve()
+        .then(() => {
+          this._loadPluginStyles(pluginEntry);
+          return this._loadPluginScript(pluginEntry);
+        })
+        .then(() => {
+          state.loaded = true;
+          state.failed = false;
+          state.errorMessage = '';
+        })
+        .catch((error) => {
+          state.failed = true;
+          state.errorMessage = error?.message || String(error);
+          this._log('error', `[plugins] ${pluginEntry.id}: ${state.errorMessage}`);
+        })
+        .finally(() => {
+          state.promise = null;
+        });
+
+      return state.promise;
+    });
+
+    return Promise.all(loadTasks).then(() => {
+      this.updateDom();
+    });
+  },
+
+  _buildPluginStudentRuntimeSlices(studentTitles = []) {
+    return studentTitles.map((studentTitle) => ({
+      student: {
+        id: null,
+        title: studentTitle,
+      },
+      context: {
+        config: this.configByStudent?.[studentTitle] || this.config || {},
+      },
+      data: {
+        lessons: this.timetableByStudent?.[studentTitle] || [],
+        exams: this.examsByStudent?.[studentTitle] || [],
+        homework: this.homeworksByStudent?.[studentTitle] || [],
+        absences: this.absencesByStudent?.[studentTitle] || [],
+        messages: this.messagesOfDayByStudent?.[studentTitle] || [],
+        holidays: {
+          ranges: this.holidaysByStudent?.[studentTitle] || [],
+        },
+        dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
+      },
+      state: {
+        warnings: this.runtimeWarningsByStudent?.[studentTitle] ? Array.from(this.runtimeWarningsByStudent[studentTitle]) : [],
+      },
+      plugins: {},
+    }));
+  },
+
+  _createFrontendPluginContext(pluginEntry) {
+    return {
+      pluginId: pluginEntry.id,
+      hostApiVersion: this._getPluginHost()?.hostApiVersion || 1,
+      manifest: pluginEntry,
+      translate: (key, fallback, replacements) => {
+        const translated = replacements ? this.translate(key, replacements) : this.translate(key);
+        return translated && translated !== key ? translated : fallback || key;
+      },
+      log: (level, message, meta = null) => {
+        if (meta) {
+          this._log(level, `[plugin:${pluginEntry.id}] ${message}`, meta);
+          return;
+        }
+        this._log(level, `[plugin:${pluginEntry.id}] ${message}`);
+      },
+      dom: {},
+      time: {},
+      formatting: {},
+      shared: {},
+    };
+  },
+
+  _renderFrontendPluginWidget(pluginId, studentTitles = []) {
+    const pluginEntry = this._getPluginRegistryEntry(pluginId);
+    if (pluginEntry?.active !== true) return null;
+
+    const state = this._ensurePluginAssetState(pluginId);
+    if (state.failed) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'wu-widget__error widget-error dimmed';
+      errorDiv.textContent = state.errorMessage || `Plugin ${pluginId} failed to load`;
+      return errorDiv;
+    }
+
+    const pluginHost = this._getPluginHost();
+    if (!state.loaded || !pluginHost?.hasFrontendPlugin?.(pluginId)) {
+      const loadingDiv = document.createElement('div');
+      loadingDiv.className = 'wu-widget__info dimmed';
+      loadingDiv.textContent = `${pluginEntry.title || pluginId} plugin is loading...`;
+      return loadingDiv;
+    }
+
+    if (!this._frontendPluginInstancesById) {
+      this._frontendPluginInstancesById = new Map();
+    }
+
+    let pluginInstance = this._frontendPluginInstancesById.get(pluginId);
+    if (!pluginInstance) {
+      pluginInstance = pluginHost.createFrontendPluginInstance(pluginId, this._createFrontendPluginContext(pluginEntry));
+      this._frontendPluginInstancesById.set(pluginId, pluginInstance);
+    }
+
+    const renderContext = {
+      moduleId: this.identifier,
+      mode: this.config?.mode || 'verbose',
+      pluginConfig: this.config?.[pluginEntry.configNamespace || pluginId] || {},
+      students: this._buildPluginStudentRuntimeSlices(studentTitles),
+      warnings: this._getRuntimeWarnings(),
+      runtime: {},
+    };
+
+    return typeof pluginInstance?.render === 'function' ? pluginInstance.render(renderContext) : null;
   },
 
   /**
@@ -437,46 +649,67 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of enabled widget names (lowercase, canonical form)
    */
   _getDisplayWidgets() {
-    const raw = this?.config?.displayMode;
-    const s = raw === undefined || raw === null ? '' : String(raw);
-    const lower = s.toLowerCase().trim();
+    const displayTokens = this._getLegacyDisplayTokens(this.config || {});
 
-    if (lower === 'grid') return ['grid'];
-    if (lower === 'list') return ['lessons', 'exams'];
+    if (this._pluginRegistryById && this._pluginRegistryById.size > 0 && displayTokens.length > 0) {
+      const pluginEntries = Array.from(this._pluginRegistryById.values()).filter((entry) => entry?.active === true);
+      const enabledFromDisplayMode = [];
 
-    const parts = lower
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
+      for (const token of displayTokens) {
+        const matches = pluginEntries
+          .filter((entry) => {
+            const aliases = Array.isArray(entry?.aliases) && entry.aliases.length > 0 ? entry.aliases : [entry?.id];
+            return aliases.includes(token);
+          })
+          .sort((left, right) => {
+            const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
+            if (orderDelta !== 0) return orderDelta;
+            return String(left?.id || '').localeCompare(String(right?.id || ''));
+          });
 
-    const map = {
-      grid: 'grid',
-      list: 'list',
-      lessons: 'lessons',
-      lesson: 'lessons',
-      exams: 'exams',
-      exam: 'exams',
-      homework: 'homework',
-      homeworks: 'homework',
-      absences: 'absences',
-      absence: 'absences',
-      messagesofday: 'messagesofday',
-      messages: 'messagesofday',
-    };
-
-    const out = [];
-    for (const p of parts) {
-      const w = map[p];
-      if (!w) continue;
-      if (w === 'list') {
-        if (!out.includes('lessons')) out.push('lessons');
-        if (!out.includes('exams')) out.push('exams');
-        continue;
+        for (const match of matches) {
+          const pluginId = String(match?.id || '');
+          if (!pluginId || enabledFromDisplayMode.includes(pluginId)) continue;
+          enabledFromDisplayMode.push(pluginId);
+        }
       }
-      if (!out.includes(w)) out.push(w);
+
+      if (enabledFromDisplayMode.length > 0) return enabledFromDisplayMode;
     }
 
-    return out.length > 0 ? out : ['lessons', 'exams'];
+    if (this._pluginRegistryById && this._pluginRegistryById.size > 0) {
+      const activePlugins = Array.from(this._pluginRegistryById.values())
+        .filter((entry) => entry?.active === true)
+        .sort((left, right) => {
+          const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
+          if (orderDelta !== 0) return orderDelta;
+          return String(left?.id || '').localeCompare(String(right?.id || ''));
+        })
+        .map((entry) => String(entry.id));
+      if (activePlugins.length > 0) return activePlugins;
+    }
+
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+    const explicitEnabled = Object.entries(explicitPlugins)
+      .filter(([, entry]) => entry?.enabled === true)
+      .map(([pluginId]) => pluginId);
+    if (explicitEnabled.length > 0) {
+      return explicitEnabled;
+    }
+
+    const enabled = [];
+    for (const token of displayTokens) {
+      if (token === 'list') {
+        if (!enabled.includes('lessons')) enabled.push('lessons');
+        if (!enabled.includes('exams')) enabled.push('exams');
+        continue;
+      }
+      if (['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'].includes(token) && !enabled.includes(token)) {
+        enabled.push(token);
+      }
+    }
+    return enabled.length > 0 ? enabled : ['lessons', 'exams'];
   },
 
   /**
@@ -661,6 +894,10 @@ Module.register('MMM-Webuntis', {
   _buildSendConfig() {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
     const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins)
+        ? this.config.plugins
+        : undefined;
 
     const sendConfig = {
       ...this.defaults,
@@ -669,6 +906,10 @@ Module.register('MMM-Webuntis', {
       id: this.identifier,
       sessionId: this._sessionId,
     };
+
+    if (explicitPlugins) {
+      sendConfig.plugins = explicitPlugins;
+    }
 
     widgetKeys.forEach((widget) => {
       sendConfig[widget] = {
@@ -1284,39 +1525,117 @@ Module.register('MMM-Webuntis', {
   _createWidgetRenderers(wrapper, studentTitles, renderTableWidget, appendWidgetError, withWarningIcon) {
     return {
       grid: () => {
+        if (this._isPluginActive('grid')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('grid', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Grid', error);
+            return 0;
+          }
+        }
         this._renderGridWidgets(wrapper, studentTitles, appendWidgetError);
+        return 0;
       },
       lessons: () => {
+        if (this._isPluginActive('lessons')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('lessons', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Lessons', error);
+            return 0;
+          }
+        }
         renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
           const { timetable, startTimesMap, holidays } = this._getStudentWidgetData(studentTitle);
           return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
         });
+        return 0;
       },
       exams: () => {
+        if (this._isPluginActive('exams')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('exams', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Exams', error);
+            return 0;
+          }
+        }
         renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
           const { exams } = this._getStudentWidgetData(studentTitle);
           if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
           return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
         });
+        return 0;
       },
       homework: () => {
+        if (this._isPluginActive('homework')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('homework', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Homework', error);
+            return 0;
+          }
+        }
         renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
           const { homeworks } = this._getStudentWidgetData(studentTitle);
           return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
         });
+        return 0;
       },
       absences: () => {
+        if (this._isPluginActive('absences')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('absences', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Absences', error);
+            return 0;
+          }
+        }
         this._appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon);
         renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
           const { absences } = this._getStudentWidgetData(studentTitle);
           return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
         });
+        return 0;
       },
       messagesofday: () => {
+        if (this._isPluginActive('messagesofday')) {
+          try {
+            const pluginElement = this._renderFrontendPluginWidget('messagesofday', studentTitles);
+            if (pluginElement) {
+              wrapper.appendChild(pluginElement);
+              return 1;
+            }
+          } catch (error) {
+            appendWidgetError('Messages of Day', error);
+            return 0;
+          }
+        }
         renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
           const { messagesOfDay } = this._getStudentWidgetData(studentTitle);
           return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
         });
+        return 0;
       },
     };
   },
@@ -1388,6 +1707,9 @@ Module.register('MMM-Webuntis', {
     this.runtimeWarningsByStudent = {};
     this._runtimeWarningStreakByStudent = {};
     this._runtimeWarningsLogged = new Set();
+    this._pluginRegistryById = new Map();
+    this._pluginAssetStateById = new Map();
+    this._frontendPluginInstancesById = new Map();
 
     this._updateDomTimer = null;
     this._initialized = false;
@@ -1806,11 +2128,7 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `Unknown widget type: ${widget}`);
         continue;
       }
-      if (widget === 'grid') {
-        renderedWidgetCount += renderWidget() || 0;
-      } else {
-        renderWidget();
-      }
+      renderedWidgetCount += renderWidget() || 0;
     }
 
     appendEmptyState();
@@ -1910,6 +2228,11 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `Init warning: ${w}`);
       });
     }
+
+    this._setPluginRegistry(payload?.plugins || []);
+    this._initializeActivePlugins(payload?.plugins || []).catch((error) => {
+      this._log('error', `[plugins] initialization failed: ${error?.message || String(error)}`);
+    });
 
     this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
     this._startFetchTimer();

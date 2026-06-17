@@ -1,0 +1,23 @@
+{
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
+  "id": "homework",
+  "version": "1.0.0",
+  "title": "Homework",
+  "type": "widget",
+  "entry": {
+    "frontend": "frontend.js",
+    "backend": "backend.js"
+  },
+  "slots": ["main"],
+  "order": 400,
+  "capabilities": ["homework", "studentContext"],
+  "configNamespace": "homework",
+  "activation": {
+    "enabledByDefault": false,
+    "displayAliases": ["homework", "homeworks"]
+  },
+  "compatibility": {
+    "contractVersion": 3,
+    "hostApiVersion": 1
+  }
+}

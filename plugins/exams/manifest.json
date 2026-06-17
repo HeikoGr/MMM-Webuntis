@@ -1,0 +1,24 @@
+{
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
+  "id": "exams",
+  "version": "1.0.0",
+  "title": "Exams",
+  "type": "widget",
+  "entry": {
+    "frontend": "frontend.js",
+    "backend": "backend.js",
+    "styles": ["styles.css"]
+  },
+  "slots": ["main"],
+  "order": 300,
+  "capabilities": ["exams", "studentContext"],
+  "configNamespace": "exams",
+  "activation": {
+    "enabledByDefault": false,
+    "displayAliases": ["exams", "exam", "list"]
+  },
+  "compatibility": {
+    "contractVersion": 3,
+    "hostApiVersion": 1
+  }
+}

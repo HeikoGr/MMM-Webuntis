@@ -36,9 +36,35 @@ function getModuleRootElement(ctx) {
   return document.getElementById(id);
 }
 
-(() => {
-  const root = window.MMMWebuntisWidgets || {};
-  window.MMMWebuntisWidgets = root;
+(function registerGridPlugin(globalRoot) {
+  const host = globalRoot.MMMWebuntisPluginHost;
+  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+    return;
+  }
+
+  const root = globalRoot.MMMWebuntisFrontendShared || {};
+  const DEFAULT_GRID_CONFIG = Object.freeze({
+    nextDays: 4,
+    pastDays: 0,
+    weekView: false,
+    dateFormat: 'EEE dd.MM.',
+    showNowLine: true,
+    mergeGap: 15,
+    maxLessons: 0,
+    naText: 'N/A',
+    fields: {
+      primary: 'subject',
+      secondary: 'teacher',
+      additional: ['room'],
+      format: {
+        subject: 'long',
+        teacher: 'long',
+        class: 'short',
+        room: 'short',
+        studentGroup: 'short',
+      },
+    },
+  });
   const {
     log,
     escapeHtml,
@@ -61,6 +87,187 @@ function getModuleRootElement(ctx) {
     getFirstFieldName,
     normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  function getCurrentDateContext(config) {
+    const runtimeUtils = globalRoot.MMModuleRuntimeUtils;
+    if (runtimeUtils && typeof runtimeUtils.getCurrentDateContext === 'function') {
+      return runtimeUtils.getCurrentDateContext(config || {}, {
+        defaultTimezone: 'Europe/Berlin',
+      });
+    }
+
+    const date = new Date();
+    return {
+      date,
+      ymd: date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate(),
+      isoDate: '',
+      isDebug: false,
+      timezone: 'Europe/Berlin',
+    };
+  }
+
+  function translate(pluginContext, key, fallback, replacements) {
+    if (typeof pluginContext?.translate !== 'function') return fallback;
+    const translated = pluginContext.translate(key, fallback, replacements);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function resolveStudentConfig(studentSlice) {
+    const config = studentSlice?.context?.config;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    return config;
+  }
+
+  function resolveGridConfig(studentConfig, renderContextPluginConfig) {
+    const pluginConfig =
+      studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === 'object'
+        ? studentConfig.plugins.grid.config
+        : {};
+    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
+
+    return {
+      ...DEFAULT_GRID_CONFIG,
+      ...renderConfig,
+      ...pluginConfig,
+      fields: {
+        ...DEFAULT_GRID_CONFIG.fields,
+        ...(renderConfig?.fields || {}),
+        ...(pluginConfig?.fields || {}),
+        format: {
+          ...DEFAULT_GRID_CONFIG.fields.format,
+          ...(renderConfig?.fields?.format || {}),
+          ...(pluginConfig?.fields?.format || {}),
+        },
+      },
+    };
+  }
+
+  function buildGroupedRawLessons(lessons) {
+    const grouped = {};
+    (Array.isArray(lessons) ? lessons : []).forEach((lesson) => {
+      const key = lesson?.date != null ? String(lesson.date) : '';
+      if (!key) return;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(lesson);
+    });
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort((left, right) => (left?.startTime || 0) - (right?.startTime || 0));
+    });
+    return grouped;
+  }
+
+  function buildHolidayMapFromRanges(holidays) {
+    if (!Array.isArray(holidays) || holidays.length === 0) return {};
+
+    const map = {};
+    holidays.forEach((holiday) => {
+      const startNum = Number(holiday?.startDate);
+      const endNum = Number(holiday?.endDate);
+      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
+
+      const startY = Math.floor(startNum / 10000);
+      const startM = Math.floor((startNum % 10000) / 100) - 1;
+      const startD = startNum % 100;
+      const endY = Math.floor(endNum / 10000);
+      const endM = Math.floor((endNum % 10000) / 100) - 1;
+      const endD = endNum % 100;
+      const cursor = new Date(startY, startM, startD);
+      const endDate = new Date(endY, endM, endD);
+
+      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
+
+      while (cursor <= endDate) {
+        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
+        map[ymd] = holiday;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+
+    return map;
+  }
+
+  function buildDayNoticeMap(dayNotices) {
+    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
+
+    return dayNotices.reduce((map, notice) => {
+      const ymd = Number(notice?.date);
+      if (!Number.isFinite(ymd) || ymd <= 0) return map;
+      map[ymd] = notice;
+      return map;
+    }, {});
+  }
+
+  function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig, gridConfig) {
+    const effectiveConfig = {
+      ...studentConfig,
+      language:
+        studentConfig?.language ||
+        (typeof globalThis.config !== 'undefined' && globalThis.config?.language ? globalThis.config.language : undefined),
+      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
+      grid: gridConfig,
+    };
+    const dateContext = getCurrentDateContext(effectiveConfig);
+    const studentTitle = String(studentSlice?.student?.title || '').trim();
+    const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+    const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+
+    return {
+      identifier: `${renderContext?.moduleId || 'mmm-webuntis'}-grid-plugin`,
+      config: effectiveConfig,
+      defaults: {
+        grid: {
+          ...DEFAULT_GRID_CONFIG,
+          fields: {
+            ...DEFAULT_GRID_CONFIG.fields,
+            format: { ...DEFAULT_GRID_CONFIG.fields.format },
+          },
+        },
+      },
+      studentConfig: effectiveConfig,
+      holidayMapByStudent: {
+        [studentTitle]: buildHolidayMapFromRanges(holidays),
+      },
+      dayNoticeMapByStudent: {
+        [studentTitle]: buildDayNoticeMap(dayNotices),
+      },
+      preprocessedByStudent: {
+        [studentTitle]: {
+          rawGroupedByDate: buildGroupedRawLessons(studentSlice?.data?.lessons),
+        },
+      },
+      _currentTodayYmd: dateContext.ymd,
+      _paused: false,
+      _hasWidget(name) {
+        return (
+          String(name || '')
+            .trim()
+            .toLowerCase() === 'grid'
+        );
+      },
+      _getWidgetApi() {
+        return root || null;
+      },
+      _usesLiveClock(nowContext = this.getCurrentDateContext()) {
+        return nowContext?.isDebug !== true;
+      },
+      _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+        const nextTodayYmd = Number(nowContext?.ymd);
+        if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+        if (nextTodayYmd === this._currentTodayYmd) return false;
+        this._currentTodayYmd = nextTodayYmd;
+        return true;
+      },
+      _toMinutes(value) {
+        return toMinutesSinceMidnight(value);
+      },
+      getCurrentDateContext(configOverride = null) {
+        return getCurrentDateContext(configOverride || effectiveConfig);
+      },
+      translate(key, replacements) {
+        return translate(pluginContext, key, key, replacements);
+      },
+    };
+  }
 
   function getModuleDateContext(ctx, configOverride = null) {
     return ctx.getCurrentDateContext(configOverride || ctx.config || {});
@@ -2290,10 +2497,63 @@ function getModuleRootElement(ctx) {
   }
 
   root.grid = {
-    renderGridForStudent,
     refreshPastMasks,
     updateNowLinesAll,
     startNowLineUpdater,
     stopNowLineUpdater,
   };
-})();
+
+  host.registerFrontendPlugin({
+    id: 'grid',
+    hostApiVersion: 1,
+
+    create(pluginContext) {
+      return {
+        render(renderContext) {
+          const section = document.createElement('section');
+          section.className = 'wu-plugin wu-plugin-grid';
+          const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
+          let renderedContainers = 0;
+
+          for (const studentSlice of students) {
+            const studentConfig = resolveStudentConfig(studentSlice);
+            const gridConfig = resolveGridConfig(studentConfig, renderContext?.pluginConfig);
+            const lessons = Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [];
+            const timeUnits = Array.isArray(studentSlice?.data?.timeUnits) ? studentSlice.data.timeUnits : [];
+            const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
+            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+            const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+
+            if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
+              continue;
+            }
+
+            const pluginRuntimeContext = createGridPluginRuntimeContext(
+              pluginContext,
+              renderContext,
+              studentSlice,
+              studentConfig,
+              gridConfig
+            );
+            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const gridElement = renderGridForStudent(
+              pluginRuntimeContext,
+              studentTitle,
+              { ...studentConfig, grid: gridConfig },
+              lessons,
+              timeUnits,
+              absences
+            );
+
+            if (gridElement) {
+              section.appendChild(gridElement);
+              renderedContainers += 1;
+            }
+          }
+
+          return renderedContainers > 0 ? section : null;
+        },
+      };
+    },
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);

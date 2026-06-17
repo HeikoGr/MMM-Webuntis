@@ -18,10 +18,10 @@ Status: open
   - Done: 2026-03-09 - API_TIMEOUT_MS (15 seconds) constant introduced in all 4 files
 
 - [x] Deduplicate widget initialization (DRY)
-  - Files: widgets/lessons.js, widgets/exams.js, widgets/homework.js, widgets/absences.js, widgets/messagesofday.js, widgets/grid.js, widgets/util.js
+  - Files: plugins/lessons/native.js, plugins/grid/native.js, lib/frontendShared.js, frontend plugin list renderers
   - Task: Introduce a shared helper for createWidgetContext/Header/Label.
   - Acceptance: Repeated initialization blocks in widgets removed.
-  - Done: 2026-03-09 - initializeWidgetContextAndHeader() helper introduced in util.js and used in 5 widgets (exams, homework, absences, messagesofday, lessons; grid keeps special structure)
+  - Done: 2026-03-09 - initializeWidgetContextAndHeader() helper introduced in util.js and used in list widgets at the time; exams/messagesofday legacy renderers were later removed during plugin migration
 
 - [x] Extract duplicated debug dump logic in auth service
   - Files: lib/webuntis/authService.js
@@ -38,16 +38,16 @@ Status: open
   - Done: 2026-03-10 - Central dateUtils.js introduced and formatter usage unified in the three files
 
 - [x] Unify sort comparator in widgets
-  - Files: widgets/absences.js, widgets/exams.js, optional other widgets
-  - Task: Introduce a shared comparator helper in widgets/util.js.
+  - Files: optional frontend widget/plugin renderers
+  - Task: Introduce a shared comparator helper in lib/frontendShared.js.
   - Acceptance: Unified sorting logic in all list widgets.
-  - Done: 2026-03-10 - compareByDateAndStartTime() introduced in util.js and used in absences/exams
+  - Done: 2026-03-10 - compareByDateAndStartTime() introduced in util.js and used in absences plus the former exams widget before plugin migration
 
 - [x] Encapsulate HHMM time calculation as utility
-  - Files: widgets/lessons.js, widgets/exams.js, widgets/util.js
+  - Files: plugins/lessons/native.js, lib/frontendShared.js
   - Task: Use utility for nowHm calculation (e.g., currentTimeAsHHMM).
   - Acceptance: No getHours()*100 + getMinutes() in widgets.
-  - Done: 2026-03-10 - currentTimeAsHHMM() introduced in util.js and used in lessons/exams
+  - Done: 2026-03-10 - currentTimeAsHHMM() introduced in util.js and used in lessons plus the former exams widget before plugin migration
 
 - [x] Move HTTP status text mapping out of callRestAPI
   - Files: lib/webuntis/restClient.js
@@ -58,19 +58,19 @@ Status: open
 ## Low Priority
 
 - [x] Remove commented/dead code
-  - Files: lib/mmm-adapter/mmmPayloadMapper.js, widgets/exams.js
+  - Files: lib/mmm-adapter/mmmPayloadMapper.js
   - Task: Delete outdated, commented-out blocks.
   - Acceptance: No dead comment-code paths remain in these files.
-  - Done: 2026-03-10 - Removed outdated comment block in exams and cleaned unnecessary eslint-disable comment paths in MMM adapter
+  - Done: 2026-03-10 - Removed outdated comment blocks in the former exams widget and cleaned unnecessary eslint-disable comment paths in MMM adapter
 
 - [x] Unify logger signature
-  - Files: lib/webuntis/errorUtils.js, optionally widgets/util.js
+  - Files: lib/webuntis/errorUtils.js, optionally lib/frontendShared.js
   - Task: Define a unified logger API and reduce fallback paths.
   - Acceptance: No try/catch fallbacks solely due to signature differences.
   - Done: 2026-03-10 - Logger signature in errorUtils unified via arity normalization (3/2/1 args), signature fallback try/catch removed
 
 - [x] Consolidate naming for date variables
-  - Files: multiple (especially widgets/grid.js, widgets/lessons.js, lib/webuntis/*)
+  - Files: multiple (especially plugins/grid/native.js, plugins/lessons/native.js, lib/webuntis/*)
   - Task: Define a convention (e.g., ymd for integer, date for Date object).
   - Acceptance: New/updated code follows the convention.
   - Done: 2026-03-10 - Date/ymd naming consolidated in lessons/grid/dataOrchestration (entryYmdStr/dayYmdStr/entryDate/dateValue)

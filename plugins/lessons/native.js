@@ -1,5 +1,5 @@
 /**
- * Lessons Widget
+ * Lessons Plugin
  * Renders upcoming lessons for students with support for:
  * - Time-based lesson display (past/future days configurable)
  * - Holiday detection and display
@@ -7,9 +7,24 @@
  * - Configurable date formats and student group filtering
  * - Exam detection within lesson entries
  */
-(() => {
-  const root = window.MMMWebuntisWidgets || {};
-  window.MMMWebuntisWidgets = root;
+(function registerLessonsPlugin(globalRoot) {
+  const host = globalRoot.MMMWebuntisPluginHost;
+  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+    return;
+  }
+
+  const root = globalRoot.MMMWebuntisFrontendShared || {};
+  const DEFAULT_LESSONS_CONFIG = Object.freeze({
+    nextDays: 2,
+    dateFormat: 'EEE',
+    showStartTime: false,
+    showRegular: false,
+    useShortSubject: false,
+    showTeacherMode: 'full',
+    showRoom: false,
+    showSubstitution: false,
+    naText: 'N/A',
+  });
   const LESSON_ACTIVITY_TYPE = Object.freeze({
     EXAM: 'EXAM',
   });
@@ -29,6 +44,136 @@
     getFirstFieldName,
     normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  function getCurrentDateContext(config) {
+    const runtimeUtils = globalRoot.MMModuleRuntimeUtils;
+    if (runtimeUtils && typeof runtimeUtils.getCurrentDateContext === 'function') {
+      return runtimeUtils.getCurrentDateContext(config || {}, {
+        defaultTimezone: 'Europe/Berlin',
+      });
+    }
+
+    const date = new Date();
+    return {
+      date,
+      ymd: date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate(),
+      isoDate: '',
+      isDebug: false,
+      timezone: 'Europe/Berlin',
+    };
+  }
+
+  function translate(pluginContext, key, fallback, replacements) {
+    if (typeof pluginContext?.translate !== 'function') return fallback;
+    const translated = pluginContext.translate(key, fallback, replacements);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function buildHolidayMapFromRanges(holidays) {
+    if (!Array.isArray(holidays) || holidays.length === 0) return {};
+
+    const map = {};
+    holidays.forEach((holiday) => {
+      const startNum = Number(holiday?.startDate);
+      const endNum = Number(holiday?.endDate);
+      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
+
+      const startY = Math.floor(startNum / 10000);
+      const startM = Math.floor((startNum % 10000) / 100) - 1;
+      const startD = startNum % 100;
+      const endY = Math.floor(endNum / 10000);
+      const endM = Math.floor((endNum % 10000) / 100) - 1;
+      const endD = endNum % 100;
+      const cursor = new Date(startY, startM, startD);
+      const endDate = new Date(endY, endM, endD);
+
+      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
+
+      while (cursor <= endDate) {
+        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
+        map[ymd] = holiday;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+
+    return map;
+  }
+
+  function buildDayNoticeMap(dayNotices) {
+    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
+
+    return dayNotices.reduce((map, notice) => {
+      const ymd = Number(notice?.date);
+      if (!Number.isFinite(ymd) || ymd <= 0) return map;
+      map[ymd] = notice;
+      return map;
+    }, {});
+  }
+
+  function buildStartTimesMap(timeUnits) {
+    const map = {};
+    const units = Array.isArray(timeUnits) ? timeUnits : [];
+    units.forEach((unit) => {
+      if (unit?.startTime === undefined || unit?.startTime === null) return;
+      map[unit.startTime] = unit.name ?? unit.label;
+    });
+    return map;
+  }
+
+  function resolveStudentConfig(studentSlice) {
+    const config = studentSlice?.context?.config;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    return config;
+  }
+
+  function resolveLessonsConfig(studentConfig, renderContextPluginConfig) {
+    const pluginConfig =
+      studentConfig?.plugins?.lessons?.config && typeof studentConfig.plugins.lessons.config === 'object'
+        ? studentConfig.plugins.lessons.config
+        : {};
+    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
+
+    return {
+      ...DEFAULT_LESSONS_CONFIG,
+      ...renderConfig,
+      ...pluginConfig,
+    };
+  }
+
+  function buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig, lessonsConfig) {
+    const studentTitle = String(studentSlice?.student?.title || '').trim();
+    const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+    const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+    const effectiveConfig = {
+      ...studentConfig,
+      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
+      lessons: lessonsConfig,
+    };
+    const dateContext = getCurrentDateContext(effectiveConfig);
+
+    return {
+      config: effectiveConfig,
+      defaults: {
+        lessons: { ...DEFAULT_LESSONS_CONFIG },
+      },
+      holidayMapByStudent: {
+        [studentTitle]: buildHolidayMapFromRanges(holidays),
+      },
+      dayNoticeMapByStudent: {
+        [studentTitle]: buildDayNoticeMap(dayNotices),
+      },
+      _currentTodayYmd: dateContext.ymd,
+      getCurrentDateContext(configOverride = null) {
+        return getCurrentDateContext(configOverride || effectiveConfig);
+      },
+      _computeTodayYmdValue() {
+        return this._currentTodayYmd || this.getCurrentDateContext().ymd;
+      },
+      translate(key, replacements) {
+        return translate(pluginContext, key, key, replacements);
+      },
+    };
+  }
 
   const LESSON_FIELD_MAP = Object.freeze({
     subject: 'subjects',
@@ -410,7 +555,53 @@
     return addedRows;
   }
 
-  root.lessons = {
-    renderLessonsForStudent,
-  };
-})();
+  host.registerFrontendPlugin({
+    id: 'lessons',
+    hostApiVersion: 1,
+
+    create(pluginContext) {
+      return {
+        render(renderContext) {
+          const wrapper = document.createElement('section');
+          wrapper.className = 'wu-plugin wu-plugin-lessons';
+          const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
+          let renderedContainers = 0;
+
+          for (const studentSlice of students) {
+            const studentConfig = resolveStudentConfig(studentSlice);
+            const lessonsConfig = resolveLessonsConfig(studentConfig, renderContext?.pluginConfig);
+            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const container = document.createElement('div');
+            container.className = 'wu-widget-container bright small light';
+            const startTimesMap = buildStartTimesMap(studentSlice?.data?.timeUnits);
+            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+            const pluginRuntimeContext = buildPluginRuntimeContext(
+              pluginContext,
+              renderContext,
+              studentSlice,
+              studentConfig,
+              lessonsConfig
+            );
+            const count = renderLessonsForStudent(
+              pluginRuntimeContext,
+              container,
+              studentTitle,
+              studentTitle,
+              { ...studentConfig, lessons: lessonsConfig },
+              Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [],
+              startTimesMap,
+              holidays
+            );
+
+            if (count > 0) {
+              wrapper.appendChild(container);
+              renderedContainers += 1;
+            }
+          }
+
+          return renderedContainers > 0 ? wrapper : null;
+        },
+      };
+    },
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);
