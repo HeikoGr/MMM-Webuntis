@@ -269,7 +269,6 @@ Supported instance hooks are:
 ## Runtime Boundaries
 
 The plugin system is current production architecture, but two boundaries still matter:
-- built-in fallback renderers still exist in `MMM-Webuntis.js`
 - central widget validation still exists in `lib/widgetConfigValidator.js`
 
 These are current implementation details, not separate legacy documentation targets.

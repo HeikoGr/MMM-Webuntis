@@ -750,73 +750,9 @@ Module.register('MMM-Webuntis', {
     }
   },
 
-  _getDomHelper() {
-    const helper = this._getWidgetApi()?.dom || null;
-    if (!helper) {
-      this._log('warn', 'MMM-Webuntis dom helper not available, widget container helpers will be skipped.');
-    }
-    return helper;
-  },
-
-  _createWidgetContainer() {
-    const helper = this._getDomHelper();
-    if (helper && typeof helper.createContainer === 'function') {
-      return helper.createContainer();
-    }
-    const container = document.createElement('div');
-    container.className = 'wu-widget-container bright small light';
-    return container;
-  },
-
-  _shouldRenderStudentHeader(studentConfig) {
-    const mode = studentConfig?.mode ?? this.config.mode;
-    return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
-  },
-
-  _prepareStudentLabel(container, studentTitle, studentConfig) {
-    if (this._shouldRenderStudentHeader(studentConfig)) {
-      const helper = this._getDomHelper();
-      if (helper && typeof helper.addHeader === 'function') {
-        helper.addHeader(container, studentTitle);
-      }
-      return '';
-    }
-    return studentTitle;
-  },
-
   _getSortedStudentTitles() {
     if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
     return Object.keys(this.timetableByStudent).sort();
-  },
-
-  _invokeWidgetRenderer(widgetKey, methodName, ...args) {
-    const api = this._getWidgetApi();
-    const fn = api?.[widgetKey]?.[methodName];
-    if (typeof fn !== 'function') {
-      this._log('warn', `${widgetKey} widget script not loaded`);
-      return 0;
-    }
-    return fn(this, ...args);
-  },
-
-  _renderWidgetTableRows(studentTitles, renderRow) {
-    const frag = document.createDocumentFragment();
-
-    for (const studentTitle of studentTitles) {
-      const studentConfig = this.configByStudent?.[studentTitle] || this.config;
-      const container = this._createWidgetContainer();
-      const studentLabel = this._prepareStudentLabel(container, studentTitle, studentConfig);
-      try {
-        const count = renderRow(studentTitle, studentLabel, studentConfig, container);
-        if (count > 0) {
-          frag.appendChild(container);
-        }
-      } catch (err) {
-        this._log('error', `Error rendering widget for ${studentTitle}:`, err);
-      }
-    }
-
-    return frag.hasChildNodes() ? frag : null;
   },
 
   _computeTodayYmdValue() {
@@ -1333,167 +1269,6 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Render grid widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {string} studentTitle - Student name/title
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} timetable - Filtered timetable entries
-   * @param {Array} timeUnits - Time slots (periods)
-   * @param {Array} absences - Absence entries
-   * @returns {HTMLElement|null} Grid DOM element or null if widget not loaded
-   */
-  _renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences) {
-    const api = this._getWidgetApi();
-    const fn = api?.grid?.renderGridForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'grid widget script not loaded');
-      return null;
-    }
-    return fn(this, studentTitle, studentConfig, timetable, timeUnits, absences);
-  },
-
-  /**
-   * Render lessons list widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string (or empty if header added)
-   * @param {string} studentTitle - Student name/title
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} timetable - Filtered timetable entries
-   * @param {Map} startTimesMap - Map of time units for formatting
-   * @param {Array} holidays - Holiday entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
-    return this._invokeWidgetRenderer(
-      'lessons',
-      'renderLessonsForStudent',
-      container,
-      studentLabel,
-      studentTitle,
-      studentConfig,
-      timetable,
-      startTimesMap,
-      holidays
-    );
-  },
-
-  /**
-   * Render exams widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} exams - Exam entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderExamsForStudent(container, studentLabel, studentConfig, exams) {
-    return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', container, studentLabel, studentConfig, exams);
-  },
-
-  /**
-   * Render homework widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} homeworks - Homework entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks) {
-    return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', container, studentLabel, studentConfig, homeworks);
-  },
-
-  /**
-   * Render absences widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} absences - Absence entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderAbsencesForStudent(container, studentLabel, studentConfig, absences) {
-    return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', container, studentLabel, studentConfig, absences);
-  },
-
-  /**
-   * Render messages of day widget for a student
-   * Delegates to the shared frontend helper API used by the built-in fallback renderer.
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} messagesOfDay - Message entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay) {
-    return this._invokeWidgetRenderer(
-      'messagesofday',
-      'renderMessagesOfDayForStudent',
-      container,
-      studentLabel,
-      studentConfig,
-      messagesOfDay
-    );
-  },
-
-  /**
-   * Collect all widget-relevant student data in one normalized object.
-   *
-   * @param {string} studentTitle - Student key/title.
-   * @returns {Object} Aggregated widget data for the student.
-   */
-  _getStudentWidgetData(studentTitle) {
-    return {
-      studentConfig: this.configByStudent?.[studentTitle] || this.config,
-      timetable: this.timetableByStudent?.[studentTitle] || [],
-      dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
-      timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
-      homeworks: this.homeworksByStudent?.[studentTitle] || [],
-      exams: this.examsByStudent?.[studentTitle] || [],
-      absences: this.absencesByStudent?.[studentTitle] || [],
-      holidays: this.holidaysByStudent?.[studentTitle] || [],
-      messagesOfDay: this.messagesOfDayByStudent?.[studentTitle] || [],
-      startTimesMap: this.periodNamesByStudent?.[studentTitle] || {},
-    };
-  },
-
-  /**
-   * Render all grid widgets for the current student set.
-   *
-   * @param {HTMLElement} wrapper - Module wrapper element.
-   * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} appendWidgetError - Shared widget error renderer.
-   */
-  _renderGridWidgets(wrapper, studentTitles, appendWidgetError) {
-    let renderedCount = 0;
-    for (const studentTitle of studentTitles) {
-      const { studentConfig, timetable, timeUnits, absences, holidays } = this._getStudentWidgetData(studentTitle);
-      if (timeUnits.length === 0 && holidays.length === 0) {
-        continue;
-      }
-
-      try {
-        const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences);
-        if (gridElem) {
-          wrapper.appendChild(gridElem);
-          renderedCount += 1;
-        }
-      } catch (error) {
-        appendWidgetError('Grid', error);
-      }
-    }
-
-    return renderedCount;
-  },
-
-  /**
    * Render the parent-account limitation notice for absences when needed.
    *
    * @param {HTMLElement} wrapper - Module wrapper element.
@@ -1517,126 +1292,38 @@ Module.register('MMM-Webuntis', {
    *
    * @param {HTMLElement} wrapper - Module wrapper element.
    * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} renderTableWidget - Shared table widget renderer.
    * @param {Function} appendWidgetError - Shared widget error renderer.
    * @param {Function} withWarningIcon - Warning icon helper.
    * @returns {Object<string, Function>} Widget render functions by display key.
    */
-  _createWidgetRenderers(wrapper, studentTitles, renderTableWidget, appendWidgetError, withWarningIcon) {
+  _createWidgetRenderers(wrapper, studentTitles, appendWidgetError, withWarningIcon) {
+    const renderPluginWidget = (pluginId, widgetLabel) => {
+      if (!this._isPluginActive(pluginId)) {
+        this._log('warn', `[plugins] ${pluginId} is not active; skipping ${widgetLabel} render path.`);
+        return 0;
+      }
+      try {
+        const pluginElement = this._renderFrontendPluginWidget(pluginId, studentTitles);
+        if (pluginElement) {
+          wrapper.appendChild(pluginElement);
+          return 1;
+        }
+      } catch (error) {
+        appendWidgetError(widgetLabel, error);
+      }
+      return 0;
+    };
+
     return {
-      grid: () => {
-        if (this._isPluginActive('grid')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('grid', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Grid', error);
-            return 0;
-          }
-        }
-        this._renderGridWidgets(wrapper, studentTitles, appendWidgetError);
-        return 0;
-      },
-      lessons: () => {
-        if (this._isPluginActive('lessons')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('lessons', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Lessons', error);
-            return 0;
-          }
-        }
-        renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
-          const { timetable, startTimesMap, holidays } = this._getStudentWidgetData(studentTitle);
-          return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
-        });
-        return 0;
-      },
-      exams: () => {
-        if (this._isPluginActive('exams')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('exams', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Exams', error);
-            return 0;
-          }
-        }
-        renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
-          const { exams } = this._getStudentWidgetData(studentTitle);
-          if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
-          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
-        });
-        return 0;
-      },
-      homework: () => {
-        if (this._isPluginActive('homework')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('homework', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Homework', error);
-            return 0;
-          }
-        }
-        renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
-          const { homeworks } = this._getStudentWidgetData(studentTitle);
-          return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
-        });
-        return 0;
-      },
+      grid: () => renderPluginWidget('grid', 'Grid'),
+      lessons: () => renderPluginWidget('lessons', 'Lessons'),
+      exams: () => renderPluginWidget('exams', 'Exams'),
+      homework: () => renderPluginWidget('homework', 'Homework'),
       absences: () => {
-        if (this._isPluginActive('absences')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('absences', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Absences', error);
-            return 0;
-          }
-        }
         this._appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon);
-        renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
-          const { absences } = this._getStudentWidgetData(studentTitle);
-          return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
-        });
-        return 0;
+        return renderPluginWidget('absences', 'Absences');
       },
-      messagesofday: () => {
-        if (this._isPluginActive('messagesofday')) {
-          try {
-            const pluginElement = this._renderFrontendPluginWidget('messagesofday', studentTitles);
-            if (pluginElement) {
-              wrapper.appendChild(pluginElement);
-              return 1;
-            }
-          } catch (error) {
-            appendWidgetError('Messages of Day', error);
-            return 0;
-          }
-        }
-        renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
-          const { messagesOfDay } = this._getStudentWidgetData(studentTitle);
-          return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
-        });
-        return 0;
-      },
+      messagesofday: () => renderPluginWidget('messagesofday', 'Messages of Day'),
     };
   },
 
@@ -2070,18 +1757,6 @@ Module.register('MMM-Webuntis', {
       wrapper.appendChild(errorDiv);
     };
 
-    const renderTableWidget = (widgetLabel, renderRows) => {
-      try {
-        const container = this._renderWidgetTableRows(sortedStudentTitles, renderRows);
-        if (container) {
-          wrapper.appendChild(container);
-          renderedWidgetCount += 1;
-        }
-      } catch (error) {
-        appendWidgetError(widgetLabel, error);
-      }
-    };
-
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
       const warnContainer = document.createDocumentFragment();
       for (const w of Array.from(this.moduleWarningsSet)) {
@@ -2114,13 +1789,7 @@ Module.register('MMM-Webuntis', {
       wrapper.appendChild(runtimeContainer);
     }
 
-    const widgetRenderers = this._createWidgetRenderers(
-      wrapper,
-      sortedStudentTitles,
-      renderTableWidget,
-      appendWidgetError,
-      withWarningIcon
-    );
+    const widgetRenderers = this._createWidgetRenderers(wrapper, sortedStudentTitles, appendWidgetError, withWarningIcon);
 
     for (const widget of widgets) {
       const renderWidget = widgetRenderers[widget];

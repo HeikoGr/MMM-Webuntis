@@ -17,7 +17,6 @@
     "node_helper.js",
     "lib/",
     "plugins/",
-    "widgets/",
     "config/",
     "translations/"
   ],

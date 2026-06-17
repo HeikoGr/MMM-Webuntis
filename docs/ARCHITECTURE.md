@@ -60,7 +60,7 @@ Responsibilities:
 - send `INIT_MODULE` and `FETCH_DATA`
 - receive `MODULE_INITIALIZED`, `INIT_ERROR`, and `GOT_DATA`
 - load frontend plugin assets and register plugin instances
-- render active plugins and keep legacy fallback renderers for compatibility
+- render active plugins through the frontend plugin host
 - format already-normalized data for display
 
 The frontend should not know WebUntis endpoint details.
@@ -142,7 +142,7 @@ Current compatibility note:
 
 - `displayMode` remains a valid public config option.
 - The backend normalizes `displayMode` and top-level widget namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
-- The frontend still contains host-side fallback renderers for built-in widgets while plugin migration finishes.
+- The frontend render path is plugin-only.
 
 ## Key Architectural Rules
 

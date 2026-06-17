@@ -12,4 +12,3 @@ Contents:
 Current status:
 
 - active first-party plugin loaded by the current host during initialization
-- still coexists with legacy host-side fallback rendering in `MMM-Webuntis.js`
