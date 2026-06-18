@@ -164,15 +164,21 @@ Module.register('MMM-Webuntis', {
     //   },
     // ],
 
-    // === WIDGET NAMESPACED CONFIG OVERRIDES ===
-    // Canonical widget defaults are now plugin-owned (plugins/*/backend.js getDefaultConfig).
-    // These namespaces remain for user overrides in config.js.
+    // === WIDGET NAMESPACED CONFIG OVERRIDES (legacy-compatible) ===
+    // These namespaces are still accepted from config.js.
+    // Canonical runtime config should use plugins.<pluginId>.config.
     lessons: {},
     grid: {},
     exams: {},
     homework: {},
     absences: {},
     messagesofday: {},
+
+    // === CANONICAL PLUGIN CONFIG ===
+    // Plugin-local defaults live in the plugin frontend/backend implementations.
+    // User configuration should be provided via plugins.<pluginId>.config and
+    // optional students[].plugins.<pluginId>.config overrides.
+    plugins: {},
   },
 
   /**
@@ -210,6 +216,86 @@ Module.register('MMM-Webuntis', {
       en: 'translations/en.json',
       de: 'translations/de.json',
     };
+  },
+
+  _getPluginTranslationEntry(pluginId, key) {
+    const translations = this._pluginTranslationsById?.get(String(pluginId || '').trim());
+    if (!translations || typeof translations !== 'object') return undefined;
+    return Object.hasOwn(translations, key) ? translations[key] : undefined;
+  },
+
+  _applyTranslationReplacements(template, replacements) {
+    const source = String(template ?? '');
+    if (!replacements || typeof replacements !== 'object' || Array.isArray(replacements)) {
+      return source;
+    }
+
+    return source.replace(/\{([^}]+)\}/g, (match, key) => {
+      return Object.hasOwn(replacements, key) ? String(replacements[key]) : match;
+    });
+  },
+
+  _translatePluginKey(pluginId, key, fallback, replacements) {
+    const pluginValue = this._getPluginTranslationEntry(pluginId, key);
+    if (pluginValue !== undefined) {
+      return this._applyTranslationReplacements(pluginValue, replacements);
+    }
+
+    const translated = replacements ? this.translate(key, replacements) : this.translate(key);
+    return translated && translated !== key ? translated : fallback || key;
+  },
+
+  _getPluginTranslationLoadOrder() {
+    const configuredLanguage = String(globalThis.config?.language || this.config?.language || navigator?.language || 'en').trim();
+    const normalizedLanguage = configuredLanguage || 'en';
+    const baseLanguage = normalizedLanguage.split('-')[0];
+    return Array.from(new Set(['en', baseLanguage, normalizedLanguage].filter(Boolean)));
+  },
+
+  async _loadPluginTranslations(pluginEntry) {
+    const pluginId = String(pluginEntry?.id || '').trim();
+    if (!pluginId) return;
+
+    if (!this._pluginTranslationsById) {
+      this._pluginTranslationsById = new Map();
+    }
+    if (this._pluginTranslationsById.has(pluginId)) return;
+
+    const frontendEntry = String(pluginEntry?.entry?.frontend || '').trim();
+    const lastSlash = frontendEntry.lastIndexOf('/');
+    const pluginRoot = lastSlash === -1 ? '' : frontendEntry.slice(0, lastSlash);
+    if (!pluginRoot) {
+      this._pluginTranslationsById.set(pluginId, {});
+      return;
+    }
+
+    const mergedTranslations = {};
+    const languages = this._getPluginTranslationLoadOrder();
+    for (const language of languages) {
+      const relativePath = `${pluginRoot}/translations/${language}.json`;
+      const url = this.file(relativePath);
+
+      try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (response.status === 404) continue;
+        if (!response.ok) {
+          this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath} (${response.status})`);
+          continue;
+        }
+
+        const json = await response.json();
+        if (!json || typeof json !== 'object' || Array.isArray(json)) {
+          this._log('warn', `[plugins] ${pluginId}: ignoring non-object translations in ${relativePath}`);
+          continue;
+        }
+
+        Object.assign(mergedTranslations, json);
+      } catch (error) {
+        this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath}: ${error?.message || error}`);
+      }
+    }
+
+    this._pluginTranslationsById.set(pluginId, mergedTranslations);
   },
 
   /**
@@ -340,6 +426,9 @@ Module.register('MMM-Webuntis', {
       state.promise = Promise.resolve()
         .then(() => {
           this._loadPluginStyles(pluginEntry);
+          return this._loadPluginTranslations(pluginEntry);
+        })
+        .then(() => {
           return this._loadPluginScript(pluginEntry);
         })
         .then(() => {
@@ -397,8 +486,7 @@ Module.register('MMM-Webuntis', {
       hostApiVersion: this._getPluginHost()?.hostApiVersion || 1,
       manifest: pluginEntry,
       translate: (key, fallback, replacements) => {
-        const translated = replacements ? this.translate(key, replacements) : this.translate(key);
-        return translated && translated !== key ? translated : fallback || key;
+        return this._translatePluginKey(pluginEntry.id, key, fallback, replacements);
       },
       log: (level, message, meta = null) => {
         if (meta) {
@@ -447,7 +535,6 @@ Module.register('MMM-Webuntis', {
     const renderContext = {
       moduleId: this.identifier,
       mode: this.config?.mode || 'verbose',
-      pluginConfig: this.config?.[pluginEntry.configNamespace || pluginId] || {},
       students: this._buildPluginStudentRuntimeSlices(studentTitles),
       warnings: this._getRuntimeWarnings(),
       runtime: {},
@@ -1214,34 +1301,14 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Render the parent-account limitation notice for absences when needed.
-   *
-   * @param {HTMLElement} wrapper - Module wrapper element.
-   * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} withWarningIcon - Warning icon helper.
-   */
-  _appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon) {
-    const hasUnavailableAbsences = studentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
-    if (!hasUnavailableAbsences) {
-      return;
-    }
-
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'dimmed small wu-absence__unavailable-info absences-unavailable-info';
-    withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
-    wrapper.appendChild(infoDiv);
-  },
-
-  /**
    * Build the widget renderer map used by getDom().
    *
    * @param {HTMLElement} wrapper - Module wrapper element.
    * @param {string[]} studentTitles - Sorted student titles.
    * @param {Function} appendWidgetError - Shared widget error renderer.
-   * @param {Function} withWarningIcon - Warning icon helper.
    * @returns {Object<string, Function>} Widget render functions by display key.
    */
-  _createWidgetRenderers(wrapper, studentTitles, appendWidgetError, withWarningIcon) {
+  _createWidgetRenderers(wrapper, studentTitles, appendWidgetError) {
     const renderPluginWidget = (pluginId, widgetLabel) => {
       if (!this._isPluginActive(pluginId)) {
         this._log('warn', `[plugins] ${pluginId} is not active; skipping ${widgetLabel} render path.`);
@@ -1264,10 +1331,7 @@ Module.register('MMM-Webuntis', {
       lessons: () => renderPluginWidget('lessons', 'Lessons'),
       exams: () => renderPluginWidget('exams', 'Exams'),
       homework: () => renderPluginWidget('homework', 'Homework'),
-      absences: () => {
-        this._appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon);
-        return renderPluginWidget('absences', 'Absences');
-      },
+      absences: () => renderPluginWidget('absences', 'Absences'),
       messagesofday: () => renderPluginWidget('messagesofday', 'Messages of Day'),
     };
   },
@@ -1680,7 +1744,7 @@ Module.register('MMM-Webuntis', {
     let renderedWidgetCount = 0;
     const withWarningIcon = (element, text) => {
       const icon = document.createElement('span');
-      icon.className = 'wu-inline-icon wu-icon-warning';
+      icon.className = 'wu-inline-icon wu-inline-icon--warning';
       icon.setAttribute('aria-hidden', 'true');
       element.replaceChildren(icon, document.createTextNode(` ${text}`));
     };
@@ -1734,7 +1798,7 @@ Module.register('MMM-Webuntis', {
       wrapper.appendChild(runtimeContainer);
     }
 
-    const widgetRenderers = this._createWidgetRenderers(wrapper, sortedStudentTitles, appendWidgetError, withWarningIcon);
+    const widgetRenderers = this._createWidgetRenderers(wrapper, sortedStudentTitles, appendWidgetError);
 
     for (const widget of widgets) {
       const renderWidget = widgetRenderers[widget];

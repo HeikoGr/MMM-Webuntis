@@ -120,52 +120,51 @@
     return map;
   }
 
-  function buildDerivedStartTimesMap(lessons) {
-    const map = {};
-    const normalizedStarts = Array.from(
-      new Set(
-        (Array.isArray(lessons) ? lessons : [])
-          .map((entry) => Number(entry?.startTime))
-          .filter((value) => Number.isFinite(value) && value > 0)
-      )
-    ).sort((left, right) => left - right);
-
-    normalizedStarts.forEach((startTime, index) => {
-      map[startTime] = String(index + 1);
-      map[String(startTime)] = String(index + 1);
-    });
-
-    return map;
-  }
-
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
     if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
     return config;
   }
 
-  function resolveLessonsConfig(studentConfig, renderContextPluginConfig) {
+  function resolveLessonsConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.lessons?.config && typeof studentConfig.plugins.lessons.config === 'object'
         ? studentConfig.plugins.lessons.config
         : {};
-    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
 
     return {
       ...DEFAULT_LESSONS_CONFIG,
-      ...renderConfig,
       ...pluginConfig,
     };
   }
 
-  function buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig, lessonsConfig) {
+  function buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig) {
+    const plugins =
+      studentConfig?.plugins && typeof studentConfig.plugins === 'object' && !Array.isArray(studentConfig.plugins)
+        ? studentConfig.plugins
+        : {};
+    const lessonsPlugin = plugins?.lessons && typeof plugins.lessons === 'object' && !Array.isArray(plugins.lessons) ? plugins.lessons : {};
+
+    return {
+      ...studentConfig,
+      lessons: lessonsConfig,
+      plugins: {
+        ...plugins,
+        lessons: {
+          ...lessonsPlugin,
+          config: lessonsConfig,
+        },
+      },
+    };
+  }
+
+  function buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
     const studentTitle = String(studentSlice?.student?.title || '').trim();
     const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
     const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
     const effectiveConfig = {
       ...studentConfig,
       logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
-      lessons: lessonsConfig,
     };
     const dateContext = getCurrentDateContext(effectiveConfig);
 
@@ -587,29 +586,20 @@
 
           for (const studentSlice of students) {
             const studentConfig = resolveStudentConfig(studentSlice);
-            const lessonsConfig = resolveLessonsConfig(studentConfig, renderContext?.pluginConfig);
+            const lessonsConfig = resolveLessonsConfig(studentConfig);
+            const effectiveStudentConfig = buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig);
             const studentTitle = String(studentSlice?.student?.title || '').trim();
             const container = document.createElement('div');
             container.className = 'wu-widget-container bright small light';
-            const startTimesMapFromTimeUnits = buildStartTimesMap(studentSlice?.data?.timeUnits);
-            const startTimesMap =
-              Object.keys(startTimesMapFromTimeUnits).length > 0
-                ? startTimesMapFromTimeUnits
-                : buildDerivedStartTimesMap(studentSlice?.data?.lessons);
+            const startTimesMap = buildStartTimesMap(studentSlice?.data?.timeUnits);
             const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
-            const pluginRuntimeContext = buildPluginRuntimeContext(
-              pluginContext,
-              renderContext,
-              studentSlice,
-              studentConfig,
-              lessonsConfig
-            );
+            const pluginRuntimeContext = buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, effectiveStudentConfig);
             const count = renderLessonsForStudent(
               pluginRuntimeContext,
               container,
               studentTitle,
               studentTitle,
-              { ...studentConfig, lessons: lessonsConfig },
+              effectiveStudentConfig,
               Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [],
               startTimesMap,
               holidays

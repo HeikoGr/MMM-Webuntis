@@ -136,7 +136,8 @@ Each entry in `students[]` must contain:
 Practical notes:
 - Use `studentId` when you want to customize a single child discovered through a parent account.
 - `server` is optional on student objects when a top-level value already exists.
-- Per-student widget namespaces can override top-level widget namespaces.
+- Per-student plugin config under `students[].plugins.<id>.config` overrides module-level `plugins.<id>.config`.
+- Top-level widget namespaces such as `lessons` or `grid` remain compatibility input only.
 
 ## Parent Account Support
 
@@ -162,21 +163,25 @@ If you want to customize only one discovered child, add a `students[]` entry wit
 
 ## Widget-Specific Options
 
-Widget options must be configured as nested objects, not with dot notation.
+Canonical widget options live under `plugins.<id>.config`.
+Top-level namespaces such as `lessons: { ... }` are still accepted as legacy compatibility input, but new configuration should use the plugin path.
 
 Correct:
 
 ```javascript
-lessons: { dateFormat: 'EEEE' }
-grid: { maxLessons: 8 }
+plugins: {
+  lessons: { config: { dateFormat: 'EEEE' } },
+  grid: { config: { maxLessons: 8 } }
+}
 ```
 
 Incorrect:
 
 ```javascript
-// Invalid JavaScript syntax
-lessons.dateFormat: 'EEEE'
+plugins.lessons.config.dateFormat: 'EEEE'
 ```
+
+The option names in the following tables refer to keys inside each plugin-local `config` object.
 
 ### Lessons Widget Options
 

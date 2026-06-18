@@ -141,16 +141,14 @@
     return config;
   }
 
-  function resolveExamConfig(studentConfig, renderContextPluginConfig) {
+  function resolveExamConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.exams?.config && typeof studentConfig.plugins.exams.config === 'object'
         ? studentConfig.plugins.exams.config
         : {};
-    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
 
     return {
       ...DEFAULT_EXAMS_CONFIG,
-      ...renderConfig,
       ...pluginConfig,
     };
   }
@@ -201,7 +199,7 @@
             }
 
             const studentConfig = resolveStudentConfig(studentSlice);
-            const examConfig = resolveExamConfig(studentConfig, renderContext?.pluginConfig);
+            const examConfig = resolveExamConfig(studentConfig);
             if (normalizeDays(examConfig?.nextDays, DEFAULT_EXAMS_CONFIG.nextDays) <= 0) {
               continue;
             }

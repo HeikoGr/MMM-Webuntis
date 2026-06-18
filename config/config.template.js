@@ -4,7 +4,8 @@
  * credentials/settings as needed.
  *
  * For detailed option documentation, see:
- * - MMM-Webuntis.js (defaults object)
+ * - MMM-Webuntis.js (module-level defaults)
+ * - plugin frontend.js files under plugins/ (plugin-local defaults)
  * - README.md (Configuration options section)
  */
 const config = {
@@ -73,74 +74,35 @@ const config = {
           // },
         ],
 
-        // === WIDGET NAMESPACED DEFAULTS ===
-        // Per-widget configuration namespaces
-        lessons: {
-          nextDays: 4, // widget-specific days ahead
-          dateFormat: 'EEE', // format for lesson dates
-          showStartTime: false, // show lesson start time instead of timeunit
-          showRegular: false, // show also regular lessons
-          useShortSubject: false, // use short subject names
-          showTeacherMode: 'full', // 'off'|'initial'|'full'
-          showRoom: false, // show room in lessons widget
-          showSubstitution: false, // show substitution info
-          naText: 'N/A', // placeholder for changed fields with no current value
-        },
-
-        grid: {
-          nextDays: 2, // widget-specific days ahead
-          pastDays: 0, // widget-specific days past
-          weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
-          dateFormat: 'EEE dd.MM.', // format for grid dates
-          showNowLine: true, // show current time line
-          mergeGap: 15, // minutes gap to merge adjacent lessons
-          maxLessons: 0, // max lessons per day (0 = no limit)
-          pxPerMinute: 0.8, // pixels per minute — controls the vertical scale of the grid (default: 0.8)
-          naText: 'N/A', // placeholder for changed fields with no current value
-
-          // === FLEXIBLE FIELD DISPLAY ===
-          // Optional: customize which fields to show in grid cells
-          // (defaults are defined in MMM-Webuntis.js)
-          // fields: {
-          //   primary: 'subject',    // Main field (first line)
-          //   secondary: 'teacher',  // Secondary field (second line)
-          //   additional: ['room'],  // Additional fields shown as badges/parentheses
-          //   format: {              // Display format: 'short' (abbreviation) or 'long' (full name)
-          //     subject: 'long',
-          //     teacher: 'short',
-          //     class: 'short',
-          //     room: 'short',
-          //     studentGroup: 'short',
+        // === CANONICAL PLUGIN CONFIG ===
+        // Configure widgets under plugins.<id>.config.
+        // Top-level widget namespaces remain compatibility input only.
+        plugins: {
+          lessons: {
+            enabled: true,
+            config: {
+              nextDays: 4,
+              dateFormat: 'EEEE',
+            },
+          },
+          exams: {
+            enabled: true,
+            config: {
+              nextDays: 21,
+            },
+          },
+          // grid: {
+          //   enabled: true,
+          //   config: {
+          //     weekView: false,
+          //     fields: {
+          //       primary: 'subject',
+          //       secondary: 'teacher',
+          //       additional: ['room'],
+          //     },
           //   },
           // },
         },
-
-        exams: {
-          nextDays: 21, // widget-specific days ahead
-          dateFormat: 'EEE dd.MM.', // format for exam dates
-          showSubject: true, // show subject name with exam
-          showTeacher: true, // show teacher name with exam
-        },
-
-        homework: {
-          nextDays: 28, // widget-specific days ahead
-          pastDays: 0, // widget-specific days past
-          dateFormat: 'EEE dd.MM.', // format for homework dates
-          showSubject: true, // show subject name with homework
-          showText: true, // show homework description/text
-        },
-
-        absences: {
-          pastDays: 21, // days in the past to show
-          nextDays: 7, // days in the future to show
-          dateFormat: 'EEE dd.MM.', // format for absence dates
-          showDate: true, // show absence date
-          showExcused: true, // show excused/unexcused status
-          showReason: true, // show reason for absence
-          maxItems: null, // max number of absence entries to show (null = no limit)
-        },
-
-        messagesofday: {}, // no specific defaults yet
       },
     },
   ],

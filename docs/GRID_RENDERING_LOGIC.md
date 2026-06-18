@@ -1,6 +1,6 @@
 # Grid Widget Rendering Logic
 
-This document describes the **current** rendering logic of the Grid widget in `plugins/grid/native.js`.
+This document describes the **current** rendering logic of the Grid widget in `plugins/grid/frontend.js`.
 
 ## Overview
 
@@ -124,6 +124,6 @@ flowchart TD
 
 ## References
 
-- `plugins/grid/native.js` (source of truth)
+- `plugins/grid/frontend.js` (source of truth)
 - `docs/ARCHITECTURE.md`
 - `docs/CONFIG.md`

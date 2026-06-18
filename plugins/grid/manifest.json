@@ -5,8 +5,9 @@
   "title": "Timetable",
   "type": "widget",
   "entry": {
-    "frontend": "native.js",
-    "backend": "backend.js"
+    "frontend": "frontend.js",
+    "backend": "backend.js",
+    "styles": ["styles.css"]
   },
   "slots": ["main"],
   "order": 100,

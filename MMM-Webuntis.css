@@ -1,3 +1,4 @@
+/* Shared: theme variables */
 .MMM-Webuntis {
   /* Theme: neutral base */
   --wu-bg: rgba(var(--wu-rgb-black), var(--wu-alpha-subtle));
@@ -141,13 +142,14 @@
   text-align: left;
 }
 
+/* Shared: global box model */
 .MMM-Webuntis *,
 .MMM-Webuntis *::before,
 .MMM-Webuntis *::after {
   box-sizing: inherit;
 }
 
-/* Shared layout / grid base */
+/* Shared: container and grid primitives */
 .MMM-Webuntis .wu-widget-container {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -161,7 +163,7 @@
   margin-bottom: 0;
 }
 
-/* Shared row and column primitives */
+/* Shared: row and column primitives */
 .MMM-Webuntis .wu-row {
   display: contents;
   /* Makes row transparent, cols become direct grid items */
@@ -211,465 +213,12 @@
   grid-column: 1 / -1;
 }
 
-.MMM-Webuntis .grid-timecell {
-  padding: 0.1rem 0.4rem 0.1rem 0;
-  border-bottom: 1px dotted var(--wu-border-muted);
-  white-space: pre-line;
-  vertical-align: top;
-}
-
-.MMM-Webuntis .grid-days-header {
-  margin-bottom: 0.25rem;
-  align-items: center;
-  display: grid;
-}
-
-/* Grid widget */
-.MMM-Webuntis .grid-combined {
-  display: grid;
-  grid-template-columns: minmax(5.625rem, auto) 1fr;
-  gap: 0.125rem;
-  background: var(--wu-bg);
-  border-radius: var(--wu-lesson-radius);
-  overflow: hidden;
-  position: relative;
-}
-
-/* Shared absolute positioning within the timetable */
-.MMM-Webuntis .grid-combined .grid-lesson,
-.MMM-Webuntis .grid-combined .no-lesson,
-.MMM-Webuntis .grid-hourline,
-.MMM-Webuntis .grid-nowline {
-  position: absolute;
-  left: 0;
-  right: 0;
-}
-
-.MMM-Webuntis .grid-combined .grid-lesson::after {
-  position: absolute;
-  inset: 0;
-}
-
-.MMM-Webuntis .grid-combined .grid-timecell {
-  border-bottom: 1px dotted var(--wu-border-muted);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  font-size: 0.9rem;
-  color: var(--wu-time-color);
-  padding: 0.1rem 0.4rem 0.1rem 0;
-}
-
-.MMM-Webuntis .grid-combined .grid-timecell > div {
-  line-height: 1;
-  font-size: 0.78rem;
-}
-
-.MMM-Webuntis .grid-combined .day-column-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.MMM-Webuntis .grid-combined .grid-lesson {
-  border-radius: var(--wu-lesson-radius);
-  padding: var(--wu-lesson-padding);
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  z-index: 1;
-  border: 1px solid var(--wu-lesson-outline);
-  background: var(--wu-lesson-surface);
-  line-height: 1;
-}
-
-.MMM-Webuntis .grid-combined .grid-lesson.has-exam {
-  border-left: var(--wu-exam-border-width) solid var(--wu-exam-bar);
-  padding-left: var(--wu-homework-padding);
-}
-
-.MMM-Webuntis .day-column-inner.is-today {
-  --wu-replacement-bg: var(--wu-today-replacement-bg);
-  --wu-replacement-text: var(--wu-today-replacement-text);
-  --wu-cancelled-bg: var(--wu-today-cancelled-bg);
-  --wu-cancelled-text: var(--wu-today-cancelled-text);
-  --wu-regular-bg: var(--wu-today-regular-bg);
-  --wu-regular-text: var(--wu-today-regular-text);
-  --wu-lesson-border: var(--wu-today-lesson-border);
-}
-
-.MMM-Webuntis .grid-combined .no-lesson {
-  background-color: var(--wu-no-lesson-bg);
-  padding: 0.313rem;
-  color: var(--wu-no-lesson-text);
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.MMM-Webuntis .grid-combined .grid-more-badge {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  z-index: 30;
-  padding: 2px 6px;
-  background: var(--wu-grid-more-bg);
-  color: var(--wu-text-on-dark);
-  border-radius: 4px;
-  font-size: 0.85em;
-  cursor: default;
-}
-
-.MMM-Webuntis .lesson-content {
-  position: relative;
-  border-radius: var(--wu-lesson-radius);
-  padding: 1px var(--wu-lesson-padding);
-  padding-right: var(--wu-lesson-padding);
-  box-sizing: border-box;
-  overflow: hidden;
-  line-height: 1.1;
-}
-
-.MMM-Webuntis .grid-combined .grid-lesson > .lesson-content {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
-}
-
-.MMM-Webuntis .lesson-content.has-icons {
-  padding-right: calc(var(--wu-homework-padding) + 30px);
-}
-
-.MMM-Webuntis .grid-combined .lesson-content {
-  font-size: 0.7rem;
-}
-
-/* Common styling for lessons in grid and ticker */
-.MMM-Webuntis .grid-combined .lesson-substitution,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-substitution {
-  background-color: var(--wu-replacement-bg);
-  color: var(--wu-replacement-text);
-}
-
-/* Split view: generic layout — any status can appear in either half */
-.MMM-Webuntis .grid-combined .split-left {
-  left: 0;
-  right: auto;
-  width: 50%;
-  border-right: 1px solid var(--wu-split-divider);
-  overflow: hidden;
-}
-.MMM-Webuntis .grid-combined .split-right {
-  left: auto;
-  right: 0;
-  width: 50%;
-}
-
-/* Cancelled lesson in split-right always gets cancelled styling */
-.MMM-Webuntis .grid-combined .lesson-cancelled.split-right {
-  background-color: var(--wu-cancelled-bg);
-  color: var(--wu-cancelled-text);
-}
-
-.MMM-Webuntis .grid-combined .lesson-cancelled,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-cancelled {
-  background-color: var(--wu-cancelled-bg);
-  color: var(--wu-cancelled-text);
-}
-
-.MMM-Webuntis .grid-combined .lesson-regular,
-.MMM-Webuntis .ticker-item .lesson-content.lesson-regular {
-  background-color: var(--wu-regular-bg);
-  color: var(--wu-regular-text);
-}
-
-.MMM-Webuntis .grid-combined .lesson-break-supervision,
-.MMM-Webuntis .grid-combined .lesson-content.break-supervision,
-.MMM-Webuntis .ticker-item .lesson-content.break-supervision {
-  background-color: var(--wu-break-supervision-bg);
-  color: var(--wu-break-supervision-text);
-  font-weight: 500;
-}
-
-/* List widgets: lessons, exams, homework, absences */
-.MMM-Webuntis .lesson-primary {
-  font-weight: 600;
-  font-size: 0.75rem;
-  display: block;
-}
-
-.MMM-Webuntis .lesson-secondary {
-  font-size: 0.69rem;
-  color: var(--wu-secondary-text);
-  display: block;
-  line-height: 1.15;
-  max-width: 100%;
-}
-
-/* Ensure inner content fills the parent cell for consistent visuals */
-.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  overflow: hidden;
-  font-size: 0.8em;
-  line-height: 1.1;
-}
-
-/* Override lesson-primary and lesson-secondary styles within break-supervision */
-.MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-primary,
-.MMM-Webuntis .grid-combined .lesson-content.break-supervision .lesson-secondary {
-  position: static;
-  color: var(--wu-break-supervision-text);
-  font-size: 9px;
-  line-height: 1;
-}
-
-.MMM-Webuntis .grid-combined .lesson-regular {
-  border-color: var(--wu-lesson-border);
-  padding: var(--wu-lesson-padding);
-}
-
-/* Overlay for past lessons; opacity is toggled to fade in stripes */
-.MMM-Webuntis .grid-combined .grid-lesson::after {
-  content: "";
-  background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
-  opacity: 0;
-  pointer-events: none;
-  border-radius: var(--wu-lesson-radius);
-  transition: opacity 360ms ease-in-out;
-}
-
-.MMM-Webuntis .grid-combined .grid-lesson.past::after {
-  opacity: 0.72;
-}
-
-.MMM-Webuntis .grid-combined .lesson {
-  border: 1px solid var(--wu-lesson-outline);
-  border-radius: var(--wu-lesson-radius);
-  text-align: left;
-}
-
-.MMM-Webuntis .grid-combined .homework-icon,
-.MMM-Webuntis .lesson-content .homework-icon {
-  font-size: var(--wu-icon-glyph-size-emoji);
-  color: var(--wu-icon-homework-color);
-  overflow: hidden;
-}
-
-.MMM-Webuntis .homework-icon::before {
-  content: var(--wu-icon-homework);
-}
-
-/* Absence Overlay - Vertical bar on right side, ~1/3 width */
-.MMM-Webuntis .grid-combined .grid-absence-overlay {
-  position: absolute;
-  right: 0;
-  width: 66%;
-  min-width: 40px;
-  border-radius: var(--wu-lesson-radius) 0 0 var(--wu-lesson-radius);
-  background: var(--wu-absence-overlay-bg);
-  border-left: 2px solid var(--wu-absence-overlay-border);
-  z-index: 2;
-  cursor: default;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.MMM-Webuntis .grid-combined .day-column-inner.is-today .grid-absence-overlay {
-  background: var(--wu-absence-overlay-today-bg);
-  border-left-color: var(--wu-absence-overlay-today-border);
-}
-
-/* Absence overlay icon and text */
-.MMM-Webuntis .grid-combined .grid-absence-overlay .absence-icon {
-  font-size: 1.2em;
-  line-height: 1;
-  margin-bottom: 4px;
-  filter: drop-shadow(0 0 2px var(--wu-absence-icon-shadow));
-}
-
-.MMM-Webuntis .grid-combined .grid-absence-overlay .absence-icon::before {
-  content: var(--wu-icon-absence);
-}
-
-.MMM-Webuntis .grid-combined .grid-absence-overlay .absence-reason {
-  font-size: 0.7em;
-  font-weight: 600;
-  color: var(--wu-absence-reason-color);
-  text-shadow: 0 0 2px var(--wu-absence-reason-shadow);
-  text-align: center;
-  word-break: break-word;
-  padding: 2px 4px;
-  line-height: 1.2;
-}
-
-.MMM-Webuntis .holiday-notice {
-  color: var(--wu-holiday-notice-color);
-  font-weight: 600;
-  padding-left: 0.25rem;
-}
-
-.MMM-Webuntis .grid-hourline {
-  height: 1px;
-  background: var(--wu-hourline-color);
-  z-index: 0;
-}
-
-.MMM-Webuntis .grid-nowline {
-  height: 2px;
-  background: linear-gradient(90deg, var(--wu-nowline-start), var(--wu-nowline-end));
-  box-shadow: 0 0 6px var(--wu-nowline-glow);
-  z-index: 3;
-  pointer-events: none;
-}
-
-/* Grid ticker for overlapping lessons */
-.MMM-Webuntis .lesson-ticker-wrapper {
-  overflow: hidden;
-  /* No border, no padding - items have their own styling */
-}
-
-.MMM-Webuntis .ticker-track {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  height: 100%;
-  align-items: stretch;
-  gap: var(--wu-ticker-item-gap);
-  /* Horizontal spacing between ticker items */
-}
-
-.MMM-Webuntis .ticker-item {
-  flex-shrink: 0;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  /* Align content to left, not center */
-  justify-content: flex-start;
-  /* Align content to top, not center */
-  /* Left-align text like normal lessons */
-  line-height: 1;
-  overflow: hidden;
-}
-
-/* Ticker items with stacked lesson-content */
-.MMM-Webuntis .ticker-item:has(.lesson-content) {
-  gap: var(--wu-ticker-stack-gap);
-  /* Gap between stacked lessons */
-}
-
-/* Lesson content within ticker items (for stacked lessons) */
-.MMM-Webuntis .ticker-item .lesson-content {
-  border-radius: var(--wu-lesson-radius);
-  width: 100%;
-  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
-  /* For absolute positioning of homework icon */
-}
-
-@keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-/* Apply styling to ticker items based on lesson type */
-.MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
-  opacity: 0.72;
-  pointer-events: none;
-  border-radius: var(--wu-lesson-radius);
-}
-
-.MMM-Webuntis .lesson-ticker-wrapper .ticker-item.has-exam::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--wu-exam-bar);
-}
-
-.MMM-Webuntis .teacher-name,
-.MMM-Webuntis .lesson-room-name {
-  color: var(--wu-secondary-text);
-}
-
-.MMM-Webuntis .lesson-substitution-text,
-.MMM-Webuntis .lesson-info-text {
-  font-size: 0.75rem;
-  font-style: italic;
-  display: block;
-}
-
-.MMM-Webuntis .lesson-substitution-text {
-  color: var(--wu-substitution-accent);
-  font-weight: 500;
-}
-
-.MMM-Webuntis .lesson-info-text {
-  color: var(--wu-muted-text);
-}
-
-.MMM-Webuntis .lesson-changed-new {
-  color: var(--wu-changed-highlight);
-  font-weight: 700;
-}
-
-.MMM-Webuntis .lesson-changed-removed {
-  color: var(--wu-changed-highlight);
-  font-weight: 500;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-}
-
-.MMM-Webuntis .lesson-changed-generic-badge {
-  font-size: var(--wu-icon-glyph-size);
-  color: var(--wu-changed-highlight);
-}
-
-.MMM-Webuntis .lesson-changed-generic-badge::before {
-  content: var(--wu-icon-changed);
-}
-
-.MMM-Webuntis .lesson-moved-badge {
-  font-size: var(--wu-icon-glyph-size);
-  color: var(--wu-icon-moved-color);
-}
-
-.MMM-Webuntis .lesson-moved-badge::before {
-  content: var(--wu-icon-moved);
-}
-
-.MMM-Webuntis .lesson-inline-icon {
+/* Shared: icon utilities */
+.MMM-Webuntis .wu-inline-icon--lesson {
   margin-right: 0.2rem;
+  vertical-align: middle;
 }
 
-.MMM-Webuntis .grid-combined .homework-icon,
-.MMM-Webuntis .lesson-changed-generic-badge,
-.MMM-Webuntis .lesson-moved-badge,
-.MMM-Webuntis .lesson-inline-icon,
 .MMM-Webuntis .wu-inline-icon {
   display: inline-flex;
   width: var(--wu-icon-chip-size);
@@ -684,108 +233,22 @@
   box-shadow:
     inset 0 0 0 1px var(--wu-icon-chip-border),
     0 1px 1px var(--wu-icon-chip-shadow);
-}
-
-.MMM-Webuntis .grid-combined .homework-icon,
-.MMM-Webuntis .lesson-inline-icon,
-.MMM-Webuntis .wu-inline-icon {
   font-size: var(--wu-icon-glyph-size-emoji);
 }
 
-.MMM-Webuntis .lesson-changed-generic-badge,
-.MMM-Webuntis .lesson-moved-badge,
-.MMM-Webuntis .lesson-inline-icon {
-  vertical-align: middle;
-}
-
-.MMM-Webuntis .lesson-inline-icon-holiday::before,
-.MMM-Webuntis .day-notice-icon-holiday::before {
+.MMM-Webuntis .wu-inline-icon--holiday::before {
   content: var(--wu-icon-holiday);
 }
 
-.MMM-Webuntis .wu-inline-icon-no-lessons::before {
+.MMM-Webuntis .wu-inline-icon--no-lessons::before {
   content: var(--wu-icon-no-lessons);
 }
 
-.MMM-Webuntis .lesson-break-supervision-icon::before {
-  content: var(--wu-icon-break-supervision);
-}
-
-.MMM-Webuntis .day-notice-icon {
-  display: block;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.MMM-Webuntis .day-notice-icon-no-lessons::before {
-  content: var(--wu-icon-no-lessons);
-}
-
-.MMM-Webuntis .day-notice-icon-timetable-restricted::before {
+.MMM-Webuntis .wu-inline-icon--warning::before {
   content: var(--wu-icon-warning);
 }
 
-.MMM-Webuntis .wu-icon-warning::before {
-  content: var(--wu-icon-warning);
-}
-
-.MMM-Webuntis .lesson-icons {
-  position: absolute;
-  right: var(--wu-homework-icon-right);
-  top: var(--wu-homework-icon-top);
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  z-index: 3;
-  min-width: 14px;
-}
-
-/* Shared list-widget detail text */
-.MMM-Webuntis .wu-absence__reason,
-.MMM-Webuntis .wu-absence__status {
-  display: inline-block;
-  font-size: var(--wu-widget-detail-font-size);
-  line-height: var(--wu-widget-detail-line-height);
-  font-weight: var(--wu-widget-detail-font-weight);
-}
-
-.MMM-Webuntis .wu-absence__reason {
-  margin-top: var(--wu-widget-detail-margin-top);
-}
-
-/* Absences Widget */
-.MMM-Webuntis .absence-excused {
-  color: var(--wu-absence-excused-color);
-}
-
-.MMM-Webuntis .absence-unexcused {
-  color: var(--wu-absence-unexcused-color);
-  font-weight: 600;
-}
-
-.MMM-Webuntis .wu-absence__reason {
-  color: var(--wu-secondary-text);
-}
-
-.MMM-Webuntis .wu-absence__status {
-  white-space: nowrap;
-}
-
-.MMM-Webuntis .wu-absence__status.absence-excused {
-  color: var(--wu-absence-excused-color);
-}
-
-.MMM-Webuntis .wu-absence__status.absence-unexcused {
-  color: var(--wu-absence-unexcused-color);
-}
-
-.MMM-Webuntis .absences-unavailable-info {
-  padding: 0.5rem;
-  background-color: var(--wu-warning-bg-strong);
-  font-style: italic;
-}
-
-/* Warnings / utility / legacy shims */
+/* Shared: warning and error surfaces */
 .MMM-Webuntis .widget-error {
   grid-column: 1 / -1;
   justify-self: start;
@@ -807,19 +270,11 @@
   opacity: 0.7;
 }
 
-.MMM-Webuntis .absences-unavailable-info,
 .MMM-Webuntis .mmm-webuntis-warning {
   margin-bottom: var(--wu-widget-stack-gap);
   border-left: 3px solid var(--wu-warning-color);
   width: fit-content;
   max-width: min(100%, 36rem);
-}
-
-.MMM-Webuntis .absences-unavailable-info {
-  padding: 0.5rem;
-  font-size: 0.9em;
-  font-weight: 400;
-  line-height: 1.3;
 }
 
 .MMM-Webuntis .mmm-webuntis-warning {
@@ -849,8 +304,4 @@
   50% {
     opacity: 0.7;
   }
-}
-
-.MMM-Webuntis .cancelled {
-  text-decoration: line-through;
 }

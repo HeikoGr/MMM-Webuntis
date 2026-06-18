@@ -106,16 +106,14 @@
     return config;
   }
 
-  function resolveHomeworkConfig(studentConfig, renderContextPluginConfig) {
+  function resolveHomeworkConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.homework?.config && typeof studentConfig.plugins.homework.config === 'object'
         ? studentConfig.plugins.homework.config
         : {};
-    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
 
     return {
       ...DEFAULT_HOMEWORK_CONFIG,
-      ...renderConfig,
       ...pluginConfig,
     };
   }
@@ -153,7 +151,7 @@
           for (const studentSlice of students) {
             const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
             const studentConfig = resolveStudentConfig(studentSlice);
-            const homeworkConfig = resolveHomeworkConfig(studentConfig, renderContext?.pluginConfig);
+            const homeworkConfig = resolveHomeworkConfig(studentConfig);
             const studentTitle = String(studentSlice?.student?.title || '').trim();
             const verboseMode = isVerboseMode(studentConfig);
             const studentLabelText = verboseMode ? '' : escapeHtml(studentTitle);

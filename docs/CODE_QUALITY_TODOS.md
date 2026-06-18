@@ -18,7 +18,7 @@ Status: open
   - Done: 2026-03-09 - API_TIMEOUT_MS (15 seconds) constant introduced in all 4 files
 
 - [x] Deduplicate widget initialization (DRY)
-  - Files: plugins/lessons/native.js, plugins/grid/native.js, lib/frontendShared.js, frontend plugin list renderers
+  - Files: plugins/lessons/frontend.js, plugins/grid/frontend.js, lib/frontendShared.js, frontend plugin list renderers
   - Task: Introduce a shared helper for createWidgetContext/Header/Label.
   - Acceptance: Repeated initialization blocks in widgets removed.
   - Done: 2026-03-09 - initializeWidgetContextAndHeader() helper introduced in util.js and used in list widgets at the time; exams/messagesofday legacy renderers were later removed during plugin migration
@@ -44,7 +44,7 @@ Status: open
   - Done: 2026-03-10 - compareByDateAndStartTime() introduced in util.js and used in absences plus the former exams widget before plugin migration
 
 - [x] Encapsulate HHMM time calculation as utility
-  - Files: plugins/lessons/native.js, lib/frontendShared.js
+  - Files: plugins/lessons/frontend.js, lib/frontendShared.js
   - Task: Use utility for nowHm calculation (e.g., currentTimeAsHHMM).
   - Acceptance: No getHours()*100 + getMinutes() in widgets.
   - Done: 2026-03-10 - currentTimeAsHHMM() introduced in util.js and used in lessons plus the former exams widget before plugin migration
@@ -70,7 +70,7 @@ Status: open
   - Done: 2026-03-10 - Logger signature in errorUtils unified via arity normalization (3/2/1 args), signature fallback try/catch removed
 
 - [x] Consolidate naming for date variables
-  - Files: multiple (especially plugins/grid/native.js, plugins/lessons/native.js, lib/webuntis/*)
+  - Files: multiple (especially plugins/grid/frontend.js, plugins/lessons/frontend.js, lib/webuntis/*)
   - Task: Define a convention (e.g., ymd for integer, date for Date object).
   - Acceptance: New/updated code follows the convention.
   - Done: 2026-03-10 - Date/ymd naming consolidated in lessons/grid/dataOrchestration (entryYmdStr/dayYmdStr/entryDate/dateValue)

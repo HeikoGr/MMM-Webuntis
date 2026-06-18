@@ -149,16 +149,14 @@
     return config;
   }
 
-  function resolveAbsencesConfig(studentConfig, renderContextPluginConfig) {
+  function resolveAbsencesConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.absences?.config && typeof studentConfig.plugins.absences.config === 'object'
         ? studentConfig.plugins.absences.config
         : {};
-    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
 
     return {
       ...DEFAULT_ABSENCES_CONFIG,
-      ...renderConfig,
       ...pluginConfig,
     };
   }
@@ -184,7 +182,7 @@
 
   function createWarningInfo(pluginContext) {
     const infoDiv = createElement('div', 'dimmed small wu-absence__unavailable-info absences-unavailable-info');
-    const icon = createElement('span', 'wu-inline-icon wu-icon-warning');
+    const icon = createElement('span', 'wu-inline-icon wu-inline-icon--warning');
     icon.setAttribute('aria-hidden', 'true');
     infoDiv.replaceChildren(
       icon,
@@ -213,7 +211,7 @@
           for (const studentSlice of students) {
             const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
             const studentConfig = resolveStudentConfig(studentSlice);
-            const absencesConfig = resolveAbsencesConfig(studentConfig, renderContext?.pluginConfig);
+            const absencesConfig = resolveAbsencesConfig(studentConfig);
             const studentTitle = String(studentSlice?.student?.title || '').trim();
             const verboseMode = isVerboseMode(studentConfig);
             const studentLabelText = verboseMode ? '' : escapeHtml(studentTitle);

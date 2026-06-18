@@ -7,6 +7,10 @@
   color: var(--wu-legacy-exam-row-color);
 }
 
+.wu-plugin-exams .teacher-name {
+  color: var(--wu-secondary-text);
+}
+
 .wu-plugin-exams .wu-exam__description {
   display: inline-block;
   font-size: var(--wu-widget-detail-font-size);

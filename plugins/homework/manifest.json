@@ -6,7 +6,8 @@
   "type": "widget",
   "entry": {
     "frontend": "frontend.js",
-    "backend": "backend.js"
+    "backend": "backend.js",
+    "styles": ["styles.css"]
   },
   "slots": ["main"],
   "order": 400,

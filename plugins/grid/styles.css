@@ -1,0 +1,484 @@
+.wu-plugin-grid {
+  width: 100%;
+}
+
+.wu-plugin-grid .grid-timecell {
+  padding: 0.1rem 0.4rem 0.1rem 0;
+  border-bottom: 1px dotted var(--wu-border-muted);
+  white-space: pre-line;
+  vertical-align: top;
+}
+
+.wu-plugin-grid .grid-days-header {
+  margin-bottom: 0.25rem;
+  align-items: center;
+  display: grid;
+}
+
+.wu-plugin-grid .grid-combined {
+  display: grid;
+  grid-template-columns: minmax(5.625rem, auto) 1fr;
+  gap: 0.125rem;
+  background: var(--wu-bg);
+  border-radius: var(--wu-lesson-radius);
+  overflow: hidden;
+  position: relative;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson,
+.wu-plugin-grid .grid-combined .no-lesson,
+.wu-plugin-grid .grid-hourline,
+.wu-plugin-grid .grid-nowline {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson::after {
+  position: absolute;
+  inset: 0;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell {
+  border-bottom: 1px dotted var(--wu-border-muted);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 0.9rem;
+  color: var(--wu-time-color);
+  padding: 0.1rem 0.4rem 0.1rem 0;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell > div {
+  line-height: 1;
+  font-size: 0.78rem;
+}
+
+.wu-plugin-grid .grid-combined .day-column-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson {
+  border-radius: var(--wu-lesson-radius);
+  padding: var(--wu-lesson-padding);
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  z-index: 1;
+  border: 1px solid var(--wu-lesson-outline);
+  background: var(--wu-lesson-surface);
+  line-height: 1;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson.has-exam {
+  border-left: var(--wu-exam-border-width) solid var(--wu-exam-bar);
+  padding-left: var(--wu-homework-padding);
+}
+
+.wu-plugin-grid .day-column-inner.is-today {
+  --wu-replacement-bg: var(--wu-today-replacement-bg);
+  --wu-replacement-text: var(--wu-today-replacement-text);
+  --wu-cancelled-bg: var(--wu-today-cancelled-bg);
+  --wu-cancelled-text: var(--wu-today-cancelled-text);
+  --wu-regular-bg: var(--wu-today-regular-bg);
+  --wu-regular-text: var(--wu-today-regular-text);
+  --wu-lesson-border: var(--wu-today-lesson-border);
+}
+
+.wu-plugin-grid .grid-combined .no-lesson {
+  background-color: var(--wu-no-lesson-bg);
+  padding: 0.313rem;
+  color: var(--wu-no-lesson-text);
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.wu-plugin-grid .grid-combined .grid-more-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 30;
+  padding: 2px 6px;
+  background: var(--wu-grid-more-bg);
+  color: var(--wu-text-on-dark);
+  border-radius: 4px;
+  font-size: 0.85em;
+  cursor: default;
+}
+
+.wu-plugin-grid .lesson-content {
+  position: relative;
+  border-radius: var(--wu-lesson-radius);
+  padding: 1px var(--wu-lesson-padding);
+  padding-right: var(--wu-lesson-padding);
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.1;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson > .lesson-content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.wu-plugin-grid .lesson-content.has-icons {
+  padding-right: calc(var(--wu-homework-padding) + 30px);
+}
+
+.wu-plugin-grid .grid-combined .lesson-content {
+  font-size: 0.7rem;
+}
+
+.wu-plugin-grid .grid-combined .lesson-substitution,
+.wu-plugin-grid .ticker-item .lesson-content.lesson-substitution {
+  background-color: var(--wu-replacement-bg);
+  color: var(--wu-replacement-text);
+}
+
+.wu-plugin-grid .grid-combined .split-left {
+  left: 0;
+  right: auto;
+  width: 50%;
+  border-right: 1px solid var(--wu-split-divider);
+  overflow: hidden;
+}
+
+.wu-plugin-grid .grid-combined .split-right {
+  left: auto;
+  right: 0;
+  width: 50%;
+}
+
+.wu-plugin-grid .grid-combined .lesson-cancelled.split-right {
+  background-color: var(--wu-cancelled-bg);
+  color: var(--wu-cancelled-text);
+}
+
+.wu-plugin-grid .grid-combined .lesson-cancelled,
+.wu-plugin-grid .ticker-item .lesson-content.lesson-cancelled {
+  background-color: var(--wu-cancelled-bg);
+  color: var(--wu-cancelled-text);
+}
+
+.wu-plugin-grid .grid-combined .lesson-regular,
+.wu-plugin-grid .ticker-item .lesson-content.lesson-regular {
+  background-color: var(--wu-regular-bg);
+  color: var(--wu-regular-text);
+}
+
+.wu-plugin-grid .grid-combined .lesson-break-supervision,
+.wu-plugin-grid .grid-combined .lesson-content.break-supervision,
+.wu-plugin-grid .ticker-item .lesson-content.break-supervision {
+  background-color: var(--wu-break-supervision-bg);
+  color: var(--wu-break-supervision-text);
+  font-weight: 500;
+}
+
+.wu-plugin-grid .lesson-primary {
+  font-weight: 600;
+  font-size: 0.75rem;
+  display: block;
+}
+
+.wu-plugin-grid .lesson-secondary {
+  font-size: 0.69rem;
+  color: var(--wu-secondary-text);
+  display: block;
+  line-height: 1.15;
+  max-width: 100%;
+}
+
+.wu-plugin-grid .lesson-substitution-text,
+.wu-plugin-grid .lesson-info-text {
+  font-size: 0.75rem;
+  font-style: italic;
+  display: block;
+}
+
+.wu-plugin-grid .lesson-substitution-text {
+  color: var(--wu-substitution-accent);
+  font-weight: 500;
+}
+
+.wu-plugin-grid .lesson-info-text {
+  color: var(--wu-muted-text);
+}
+
+.wu-plugin-grid .lesson-changed-new {
+  color: var(--wu-changed-highlight);
+  font-weight: 700;
+}
+
+.wu-plugin-grid .lesson-changed-removed {
+  color: var(--wu-changed-highlight);
+  font-weight: 500;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  overflow: hidden;
+  font-size: 0.8em;
+  line-height: 1.1;
+}
+
+.wu-plugin-grid .grid-combined .lesson-content.break-supervision .lesson-primary,
+.wu-plugin-grid .grid-combined .lesson-content.break-supervision .lesson-secondary {
+  position: static;
+  color: var(--wu-break-supervision-text);
+  font-size: 9px;
+  line-height: 1;
+}
+
+.wu-plugin-grid .grid-combined .lesson-regular {
+  border-color: var(--wu-lesson-border);
+  padding: var(--wu-lesson-padding);
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson::after {
+  content: "";
+  background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: var(--wu-lesson-radius);
+  transition: opacity 360ms ease-in-out;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson.past::after {
+  opacity: 0.72;
+}
+
+.wu-plugin-grid .grid-combined .lesson {
+  border: 1px solid var(--wu-lesson-outline);
+  border-radius: var(--wu-lesson-radius);
+  text-align: left;
+}
+
+.wu-plugin-grid .grid-combined .homework-icon,
+.wu-plugin-grid .lesson-content .homework-icon {
+  font-size: var(--wu-icon-glyph-size-emoji);
+  color: var(--wu-icon-homework-color);
+  overflow: hidden;
+}
+
+.wu-plugin-grid .homework-icon::before {
+  content: var(--wu-icon-homework);
+}
+
+.wu-plugin-grid .grid-combined .grid-absence-overlay {
+  position: absolute;
+  right: 0;
+  width: 66%;
+  min-width: 40px;
+  border-radius: var(--wu-lesson-radius) 0 0 var(--wu-lesson-radius);
+  background: var(--wu-absence-overlay-bg);
+  border-left: 2px solid var(--wu-absence-overlay-border);
+  z-index: 2;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.wu-plugin-grid .grid-combined .day-column-inner.is-today .grid-absence-overlay {
+  background: var(--wu-absence-overlay-today-bg);
+  border-left-color: var(--wu-absence-overlay-today-border);
+}
+
+.wu-plugin-grid .grid-combined .grid-absence-overlay .absence-icon {
+  font-size: 1.2em;
+  line-height: 1;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 0 2px var(--wu-absence-icon-shadow));
+}
+
+.wu-plugin-grid .grid-combined .grid-absence-overlay .absence-icon::before {
+  content: var(--wu-icon-absence);
+}
+
+.wu-plugin-grid .grid-combined .grid-absence-overlay .absence-reason {
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--wu-absence-reason-color);
+  text-shadow: 0 0 2px var(--wu-absence-reason-shadow);
+  text-align: center;
+  word-break: break-word;
+  padding: 2px 4px;
+  line-height: 1.2;
+}
+
+.wu-plugin-grid .grid-hourline {
+  height: 1px;
+  background: var(--wu-hourline-color);
+  z-index: 0;
+}
+
+.wu-plugin-grid .grid-nowline {
+  height: 2px;
+  background: linear-gradient(90deg, var(--wu-nowline-start), var(--wu-nowline-end));
+  box-shadow: 0 0 6px var(--wu-nowline-glow);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.wu-plugin-grid .lesson-ticker-wrapper {
+  overflow: hidden;
+}
+
+.wu-plugin-grid .ticker-track {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  height: 100%;
+  align-items: stretch;
+  gap: var(--wu-ticker-item-gap);
+}
+
+.wu-plugin-grid .ticker-item {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.wu-plugin-grid .ticker-item:has(.lesson-content) {
+  gap: var(--wu-ticker-stack-gap);
+}
+
+.wu-plugin-grid .ticker-item .lesson-content {
+  border-radius: var(--wu-lesson-radius);
+  width: 100%;
+  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.wu-plugin-grid .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: repeating-linear-gradient(135deg, var(--wu-stripe-light) 0 8px, var(--wu-stripe-dark) 8px 18px);
+  opacity: 0.72;
+  pointer-events: none;
+  border-radius: var(--wu-lesson-radius);
+}
+
+.wu-plugin-grid .lesson-ticker-wrapper .ticker-item.has-exam::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--wu-exam-bar);
+}
+
+.wu-plugin-grid .lesson-changed-generic-badge {
+  font-size: var(--wu-icon-glyph-size);
+  color: var(--wu-changed-highlight);
+}
+
+.wu-plugin-grid .lesson-changed-generic-badge::before {
+  content: var(--wu-icon-changed);
+}
+
+.wu-plugin-grid .lesson-moved-badge {
+  font-size: var(--wu-icon-glyph-size);
+  color: var(--wu-icon-moved-color);
+}
+
+.wu-plugin-grid .lesson-moved-badge::before {
+  content: var(--wu-icon-moved);
+}
+
+.wu-plugin-grid .grid-combined .homework-icon,
+.wu-plugin-grid .lesson-content .homework-icon,
+.wu-plugin-grid .lesson-changed-generic-badge,
+.wu-plugin-grid .lesson-moved-badge {
+  display: inline-flex;
+  width: var(--wu-icon-chip-size);
+  height: var(--wu-icon-chip-size);
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: var(--wu-icon-chip-radius);
+  background: var(--wu-icon-chip-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--wu-icon-chip-border),
+    0 1px 1px var(--wu-icon-chip-shadow);
+}
+
+.wu-plugin-grid .grid-combined .homework-icon,
+.wu-plugin-grid .lesson-content .homework-icon {
+  font-size: var(--wu-icon-glyph-size-emoji);
+}
+
+.wu-plugin-grid .lesson-changed-generic-badge,
+.wu-plugin-grid .lesson-moved-badge {
+  vertical-align: middle;
+}
+
+.wu-plugin-grid .lesson-break-supervision-icon::before {
+  content: var(--wu-icon-break-supervision);
+}
+
+.wu-plugin-grid .day-notice-icon {
+  display: block;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.wu-plugin-grid .day-notice-icon-holiday::before {
+  content: var(--wu-icon-holiday);
+}
+
+.wu-plugin-grid .day-notice-icon-no-lessons::before {
+  content: var(--wu-icon-no-lessons);
+}
+
+.wu-plugin-grid .day-notice-icon-timetable-restricted::before {
+  content: var(--wu-icon-warning);
+}
+
+.wu-plugin-grid .lesson-icons {
+  position: absolute;
+  right: var(--wu-homework-icon-right);
+  top: var(--wu-homework-icon-top);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 3;
+  min-width: 14px;
+}

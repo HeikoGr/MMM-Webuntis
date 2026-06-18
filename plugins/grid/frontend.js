@@ -118,25 +118,41 @@ function getModuleRootElement(ctx) {
     return config;
   }
 
-  function resolveGridConfig(studentConfig, renderContextPluginConfig) {
+  function resolveGridConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === 'object'
         ? studentConfig.plugins.grid.config
         : {};
-    const renderConfig = renderContextPluginConfig && typeof renderContextPluginConfig === 'object' ? renderContextPluginConfig : {};
 
     return {
       ...DEFAULT_GRID_CONFIG,
-      ...renderConfig,
       ...pluginConfig,
       fields: {
         ...DEFAULT_GRID_CONFIG.fields,
-        ...(renderConfig?.fields || {}),
         ...(pluginConfig?.fields || {}),
         format: {
           ...DEFAULT_GRID_CONFIG.fields.format,
-          ...(renderConfig?.fields?.format || {}),
           ...(pluginConfig?.fields?.format || {}),
+        },
+      },
+    };
+  }
+
+  function buildEffectiveGridStudentConfig(studentConfig, gridConfig) {
+    const plugins =
+      studentConfig?.plugins && typeof studentConfig.plugins === 'object' && !Array.isArray(studentConfig.plugins)
+        ? studentConfig.plugins
+        : {};
+    const gridPlugin = plugins?.grid && typeof plugins.grid === 'object' && !Array.isArray(plugins.grid) ? plugins.grid : {};
+
+    return {
+      ...studentConfig,
+      grid: gridConfig,
+      plugins: {
+        ...plugins,
+        grid: {
+          ...gridPlugin,
+          config: gridConfig,
         },
       },
     };
@@ -197,14 +213,13 @@ function getModuleRootElement(ctx) {
     }, {});
   }
 
-  function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig, gridConfig) {
+  function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
     const effectiveConfig = {
       ...studentConfig,
       language:
         studentConfig?.language ||
         (typeof globalThis.config !== 'undefined' && globalThis.config?.language ? globalThis.config.language : undefined),
       logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
-      grid: gridConfig,
     };
     const dateContext = getCurrentDateContext(effectiveConfig);
     const studentTitle = String(studentSlice?.student?.title || '').trim();
@@ -634,52 +649,6 @@ function getModuleRootElement(ctx) {
     }
 
     return { allStart, allEnd };
-  }
-
-  function minutesToHHMM(minutes) {
-    if (!Number.isFinite(minutes)) return null;
-    const hh = Math.floor(minutes / 60);
-    const mm = minutes % 60;
-    return hh * 100 + mm;
-  }
-
-  function deriveTimeUnitsFromLessons(timetable, ctx) {
-    const lessons = Array.isArray(timetable) ? timetable : [];
-    if (lessons.length === 0) return [];
-
-    const starts = new Set();
-    const maxEndByStart = new Map();
-
-    lessons.forEach((lesson) => {
-      const startMin = ctx._toMinutes(lesson?.startTime);
-      const endMin = lesson?.endTime ? ctx._toMinutes(lesson.endTime) : null;
-      if (!Number.isFinite(startMin)) return;
-
-      starts.add(startMin);
-      if (Number.isFinite(endMin)) {
-        const prev = maxEndByStart.get(startMin);
-        if (!Number.isFinite(prev) || endMin > prev) {
-          maxEndByStart.set(startMin, endMin);
-        }
-      }
-    });
-
-    const sortedStarts = Array.from(starts).sort((left, right) => left - right);
-    if (sortedStarts.length === 0) return [];
-
-    return sortedStarts.map((startMin, index) => {
-      const nextStart = sortedStarts[index + 1];
-      const candidateEnd = maxEndByStart.get(startMin);
-      const endMin = Number.isFinite(nextStart) ? nextStart : Number.isFinite(candidateEnd) ? candidateEnd : startMin + 45;
-
-      return {
-        name: String(index + 1),
-        startMin,
-        endMin,
-        startTime: minutesToHHMM(startMin),
-        endTime: minutesToHHMM(endMin),
-      };
-    });
   }
 
   /**
@@ -1263,7 +1232,7 @@ function getModuleRootElement(ctx) {
       const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
       const supervisedArea = lesson.room || lesson.roomLong || '';
       const displayText = supervisedArea ? `${shortLabel} (${supervisedArea})` : shortLabel;
-      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='lesson-inline-icon lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
+      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
     }
 
     // Build change-diff indicators for CHANGED lessons.
@@ -2371,10 +2340,9 @@ function getModuleRootElement(ctx) {
    */
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, timeUnits, absences) {
     const config = validateAndExtractGridConfig(ctx, studentConfig);
-    const effectiveTimeUnits = Array.isArray(timeUnits) && timeUnits.length > 0 ? timeUnits : deriveTimeUnitsFromLessons(timetable, ctx);
-    const timeRange = calculateTimeRange(timetable, effectiveTimeUnits, ctx);
+    const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
     let { allStart, allEnd } = timeRange;
-    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, effectiveTimeUnits);
+    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
 
     const totalMinutes = allEnd - allStart;
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
@@ -2404,7 +2372,7 @@ function getModuleRootElement(ctx) {
     const grid = document.createElement('div');
     grid.className = 'grid-combined';
     grid.style.gridTemplateColumns = gridTemplateColumns;
-    const timeAxis = createTimeAxis(effectiveTimeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
+    const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
 
     for (let d = 0; d < config.totalDisplayDays; d++) {
@@ -2414,7 +2382,7 @@ function getModuleRootElement(ctx) {
         studentTitle,
         studentConfig,
         timetable,
-        timeUnits: effectiveTimeUnits,
+        timeUnits,
         absences,
         baseDate,
         todayDateStr,
@@ -2564,7 +2532,8 @@ function getModuleRootElement(ctx) {
 
           for (const studentSlice of students) {
             const studentConfig = resolveStudentConfig(studentSlice);
-            const gridConfig = resolveGridConfig(studentConfig, renderContext?.pluginConfig);
+            const gridConfig = resolveGridConfig(studentConfig);
+            const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
             const lessons = Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [];
             const timeUnits = Array.isArray(studentSlice?.data?.timeUnits) ? studentSlice.data.timeUnits : [];
             const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
@@ -2575,18 +2544,12 @@ function getModuleRootElement(ctx) {
               continue;
             }
 
-            const pluginRuntimeContext = createGridPluginRuntimeContext(
-              pluginContext,
-              renderContext,
-              studentSlice,
-              studentConfig,
-              gridConfig
-            );
+            const pluginRuntimeContext = createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, effectiveStudentConfig);
             const studentTitle = String(studentSlice?.student?.title || '').trim();
             const gridElement = renderGridForStudent(
               pluginRuntimeContext,
               studentTitle,
-              { ...studentConfig, grid: gridConfig },
+              effectiveStudentConfig,
               lessons,
               timeUnits,
               absences
