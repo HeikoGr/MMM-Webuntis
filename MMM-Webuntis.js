@@ -51,42 +51,6 @@ Module.register('MMM-Webuntis', {
     return nowContext?.isDebug !== true;
   },
 
-  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
-    if (!this._usesLiveClock(nowContext)) return false;
-
-    const nextTodayYmd = Number(nowContext?.ymd);
-    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
-
-    if (this._currentTodayYmd === undefined || this._currentTodayYmd === null) {
-      this._currentTodayYmd = nextTodayYmd;
-      return false;
-    }
-
-    if (nextTodayYmd === this._currentTodayYmd) return false;
-
-    const previousTodayYmd = this._currentTodayYmd;
-
-    try {
-      if (typeof this._sendFetchData === 'function') {
-        this._sendFetchData('date-change');
-      } else {
-        this.sendSocketNotification('FETCH_DATA', this.config);
-      }
-    } catch {
-      return false;
-    }
-
-    try {
-      this.updateDom();
-    } catch {
-      return false;
-    }
-
-    this._currentTodayYmd = nextTodayYmd;
-    this._log('debug', `[clock] Detected day change: ${previousTodayYmd || 'unset'} -> ${nextTodayYmd}`);
-    return true;
-  },
-
   /**
    * Generate a random session identifier.
    * Uses a cryptographically secure random number generator when available.
@@ -336,6 +300,11 @@ Module.register('MMM-Webuntis', {
   },
 
   _getLegacyDisplayTokens(configSource = this.config || {}) {
+    const parseDisplayModeTokens = globalThis.MMModuleRuntimeUtils?.parseDisplayModeTokens;
+    if (typeof parseDisplayModeTokens === 'function') {
+      return parseDisplayModeTokens(configSource?.displayMode);
+    }
+
     const raw = configSource?.displayMode;
     const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
     if (displayMode === 'grid') return ['grid'];
@@ -660,16 +629,6 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Check if a specific widget is enabled in the current displayMode
-   *
-   * @param {string} name - Widget name to check (e.g., 'grid', 'lessons')
-   * @returns {boolean} True if widget is enabled
-   */
-  _hasWidget(name) {
-    return this._getDisplayWidgets().includes(String(name).toLowerCase());
-  },
-
-  /**
    * Parse displayMode config and return array of enabled widgets
    * Handles special cases:
    *   - 'grid' → ['grid']
@@ -785,22 +744,6 @@ Module.register('MMM-Webuntis', {
   _getSortedStudentTitles() {
     if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
     return Object.keys(this.timetableByStudent).sort();
-  },
-
-  _computeTodayYmdValue() {
-    if (this._currentTodayYmd) return this._currentTodayYmd;
-    return this.getCurrentDateContext().ymd;
-  },
-
-  _shiftYmd(baseYmd, deltaDays = 0) {
-    const num = Number(baseYmd);
-    if (!Number.isFinite(num)) return null;
-    const year = Math.floor(num / 10000);
-    const month = Math.floor((num % 10000) / 100) - 1;
-    const day = num % 100;
-    const date = new Date(year, month, day);
-    date.setDate(date.getDate() + deltaDays);
-    return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
   },
 
   /**
@@ -1391,7 +1334,6 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent = {};
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
-    this.absencesUnavailableByStudent = {};
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.holidayMapByStudent = {};
@@ -2139,9 +2081,6 @@ Module.register('MMM-Webuntis', {
       ) {
         target[title] = parsedArray;
         dataChanged = true;
-        if (target === this.absencesByStudent) {
-          this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(status));
-        }
       }
     });
 

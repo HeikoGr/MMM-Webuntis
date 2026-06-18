@@ -2,7 +2,7 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getCurrentDateContext } = require('./lib/runtime-utils');
+const { getCurrentDateContext, parseDisplayModeTokens } = require('./lib/runtime-utils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const createBackendLogger = require('./lib/logger');
@@ -13,14 +13,7 @@ const {
   createWarningMetaMap,
   mergeUniqueWarnings,
 } = require('./lib/warningUtils');
-const {
-  AuthService,
-  WebUntisClient,
-  formatError,
-  convertRestErrorToWarning,
-  normalizeDateToInteger,
-  normalizeTimeToHHMM,
-} = require('./lib/webuntisClient');
+const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, normalizeTimeToHHMM } = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
@@ -28,8 +21,6 @@ const { buildFetchFlagsFromCapabilities } = require('./lib/pluginCapabilityResol
 const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
-const VALID_WIDGETS = new Set(ALL_WIDGETS);
-const VALID_LOG_LEVELS = Object.freeze(['none', 'error', 'warn', 'info', 'debug']);
 const DEFAULT_IDENTIFIER = 'default';
 const DEFAULT_SESSION_ID = 'unknown';
 const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
@@ -89,18 +80,6 @@ module.exports = NodeHelper.create({
         this._mmLog('warn', null, warning);
       });
     }
-  },
-
-  _getConfiguredDisplayTokens(config = {}) {
-    const raw = config?.displayMode;
-    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
-    if (displayMode === 'grid') return ['grid'];
-    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
-    const parts = displayMode
-      .split(',')
-      .map((part) => part.trim())
-      .filter(Boolean);
-    return parts.length > 0 ? parts : ['lessons', 'exams'];
   },
 
   _buildFrontendPluginRegistry(config = {}) {
@@ -421,14 +400,7 @@ module.exports = NodeHelper.create({
   },
 
   _getLegacyDisplayTokens(config = {}) {
-    const raw = config?.displayMode;
-    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
-    if (displayMode === 'grid') return ['grid'];
-    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
-    return displayMode
-      .split(',')
-      .map((part) => part.trim())
-      .filter(Boolean);
+    return parseDisplayModeTokens(config?.displayMode);
   },
 
   _getKnownPluginDefinitions() {
@@ -1153,31 +1125,6 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Compact holidays data from WebUntis API
-   * Handles both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-   * Normalizes all dates to YYYYMMDD integer format
-   *
-   * @param {Array} rawHolidays - Raw holidays data from API
-   * @returns {Array} Compacted holidays array with {id, name, longName, startDate, endDate}
-   */
-  _compactHolidays(rawHolidays) {
-    if (!Array.isArray(rawHolidays)) return [];
-    return rawHolidays.map((h) => {
-      // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-      const startDate = h.startDate ?? normalizeDateToInteger(h.start);
-      const endDate = h.endDate ?? normalizeDateToInteger(h.end);
-
-      return {
-        id: h.id ?? null,
-        name: h.name ?? h.longName ?? '',
-        longName: h.longName ?? h.name ?? '',
-        startDate: startDate ?? null,
-        endDate: endDate ?? null,
-      };
-    });
-  },
-
-  /**
    * Extract and compact holidays from authSession.appData.
    * This is called once per credential group to avoid redundant processing.
    * @param {Object} authSession - Authenticated session with appData
@@ -1376,31 +1323,6 @@ module.exports = NodeHelper.create({
     return this._collectValidationWarnings(warnings, pluginValidation.warnings);
   },
 
-  /**
-   * Validate module configuration for common issues
-   */
-  _validateModuleConfig(config) {
-    const warnings = [];
-
-    if (config.displayMode && typeof config.displayMode === 'string') {
-      const widgets = config.displayMode
-        .split(',')
-        .map((w) => w.trim())
-        .filter(Boolean);
-      const invalid = widgets.filter((w) => !VALID_WIDGETS.has(w.toLowerCase()));
-      if (invalid.length > 0) {
-        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${ALL_WIDGETS.join(', ')}`);
-      }
-    }
-
-    if (config.logLevel && !VALID_LOG_LEVELS.includes(config.logLevel.toLowerCase())) {
-      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${VALID_LOG_LEVELS.join(', ')}`);
-    }
-
-    const pluginValidation = this._collectPluginValidationIssues(config);
-    return this._collectValidationWarnings(warnings, pluginValidation.warnings);
-  },
-
   _deriveFallbackStudentTitle(student) {
     return (
       student?.title ||
@@ -1410,11 +1332,7 @@ module.exports = NodeHelper.create({
   },
 
   _buildPayloadDisplayWidgets(student, config) {
-    return String(student?.displayMode || config?.displayMode || 'lessons,exams')
-      .toLowerCase()
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    return parseDisplayModeTokens(student?.displayMode || config?.displayMode, ['lessons', 'exams']);
   },
 
   _buildBaseStudentPayload({ identifier, sessionId, student, config, fetchFlags }) {

@@ -53,7 +53,6 @@ Files:
 - `lib/pluginHostFrontend.js`
 - `lib/frontendShared.js`
 - `plugins/*/frontend.js`
-- `plugins/*/native.js`
 - `MMM-Webuntis.css`
 
 Responsibilities:
