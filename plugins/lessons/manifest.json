@@ -10,7 +10,7 @@
   },
   "slots": ["main"],
   "order": 200,
-  "capabilities": ["lessons", "holidays", "dayNotices", "studentContext"],
+  "capabilities": ["lessons", "timeUnits", "holidays", "dayNotices", "studentContext"],
   "configNamespace": "lessons",
   "activation": {
     "enabledByDefault": false,

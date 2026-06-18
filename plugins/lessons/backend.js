@@ -1,6 +1,16 @@
 const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
-const DEFAULT_CONFIG = Object.freeze({});
+const DEFAULT_CONFIG = Object.freeze({
+  nextDays: 2,
+  dateFormat: 'EEE',
+  showStartTime: false,
+  showRegular: false,
+  useShortSubject: false,
+  showTeacherMode: 'full',
+  showRoom: false,
+  showSubstitution: false,
+  naText: 'N/A',
+});
 
 module.exports = {
   id: 'lessons',
@@ -26,7 +36,7 @@ module.exports = {
       },
 
       getCapabilities() {
-        return ['lessons', 'holidays', 'dayNotices', 'studentContext'];
+        return ['lessons', 'timeUnits', 'holidays', 'dayNotices', 'studentContext'];
       },
 
       deriveStudentData() {

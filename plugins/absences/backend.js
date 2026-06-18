@@ -1,6 +1,14 @@
 const { validateConfigObject, validateMinimumField, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
-const DEFAULT_CONFIG = Object.freeze({});
+const DEFAULT_CONFIG = Object.freeze({
+  pastDays: 21,
+  nextDays: 7,
+  dateFormat: 'EEE dd.MM.',
+  showDate: true,
+  showExcused: true,
+  showReason: true,
+  maxItems: null,
+});
 
 module.exports = {
   id: 'absences',

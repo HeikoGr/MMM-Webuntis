@@ -120,6 +120,24 @@
     return map;
   }
 
+  function buildDerivedStartTimesMap(lessons) {
+    const map = {};
+    const normalizedStarts = Array.from(
+      new Set(
+        (Array.isArray(lessons) ? lessons : [])
+          .map((entry) => Number(entry?.startTime))
+          .filter((value) => Number.isFinite(value) && value > 0)
+      )
+    ).sort((left, right) => left - right);
+
+    normalizedStarts.forEach((startTime, index) => {
+      map[startTime] = String(index + 1);
+      map[String(startTime)] = String(index + 1);
+    });
+
+    return map;
+  }
+
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
     if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
@@ -573,7 +591,11 @@
             const studentTitle = String(studentSlice?.student?.title || '').trim();
             const container = document.createElement('div');
             container.className = 'wu-widget-container bright small light';
-            const startTimesMap = buildStartTimesMap(studentSlice?.data?.timeUnits);
+            const startTimesMapFromTimeUnits = buildStartTimesMap(studentSlice?.data?.timeUnits);
+            const startTimesMap =
+              Object.keys(startTimesMapFromTimeUnits).length > 0
+                ? startTimesMapFromTimeUnits
+                : buildDerivedStartTimesMap(studentSlice?.data?.lessons);
             const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
             const pluginRuntimeContext = buildPluginRuntimeContext(
               pluginContext,

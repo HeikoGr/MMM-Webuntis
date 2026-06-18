@@ -1,6 +1,27 @@
 const { validateConfigObject, validateNonNegativeField, validatePositiveNumberField } = require('../../lib/pluginValidationUtils');
 
-const DEFAULT_CONFIG = Object.freeze({});
+const DEFAULT_CONFIG = Object.freeze({
+  nextDays: 4,
+  pastDays: 0,
+  weekView: false,
+  dateFormat: 'EEE dd.MM.',
+  showNowLine: true,
+  mergeGap: 15,
+  maxLessons: 0,
+  naText: 'N/A',
+  fields: {
+    primary: 'subject',
+    secondary: 'teacher',
+    additional: ['room'],
+    format: {
+      subject: 'long',
+      teacher: 'long',
+      class: 'short',
+      room: 'short',
+      studentGroup: 'short',
+    },
+  },
+});
 
 module.exports = {
   id: 'grid',

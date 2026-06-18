@@ -636,6 +636,52 @@ function getModuleRootElement(ctx) {
     return { allStart, allEnd };
   }
 
+  function minutesToHHMM(minutes) {
+    if (!Number.isFinite(minutes)) return null;
+    const hh = Math.floor(minutes / 60);
+    const mm = minutes % 60;
+    return hh * 100 + mm;
+  }
+
+  function deriveTimeUnitsFromLessons(timetable, ctx) {
+    const lessons = Array.isArray(timetable) ? timetable : [];
+    if (lessons.length === 0) return [];
+
+    const starts = new Set();
+    const maxEndByStart = new Map();
+
+    lessons.forEach((lesson) => {
+      const startMin = ctx._toMinutes(lesson?.startTime);
+      const endMin = lesson?.endTime ? ctx._toMinutes(lesson.endTime) : null;
+      if (!Number.isFinite(startMin)) return;
+
+      starts.add(startMin);
+      if (Number.isFinite(endMin)) {
+        const prev = maxEndByStart.get(startMin);
+        if (!Number.isFinite(prev) || endMin > prev) {
+          maxEndByStart.set(startMin, endMin);
+        }
+      }
+    });
+
+    const sortedStarts = Array.from(starts).sort((left, right) => left - right);
+    if (sortedStarts.length === 0) return [];
+
+    return sortedStarts.map((startMin, index) => {
+      const nextStart = sortedStarts[index + 1];
+      const candidateEnd = maxEndByStart.get(startMin);
+      const endMin = Number.isFinite(nextStart) ? nextStart : Number.isFinite(candidateEnd) ? candidateEnd : startMin + 45;
+
+      return {
+        name: String(index + 1),
+        startMin,
+        endMin,
+        startTime: minutesToHHMM(startMin),
+        endTime: minutesToHHMM(endMin),
+      };
+    });
+  }
+
   /**
    * Apply max lessons limit to time range cutoff
    * Limits visible time range to first N periods (respects time unit boundaries)
@@ -2325,9 +2371,10 @@ function getModuleRootElement(ctx) {
    */
   function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, timeUnits, absences) {
     const config = validateAndExtractGridConfig(ctx, studentConfig);
-    const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
+    const effectiveTimeUnits = Array.isArray(timeUnits) && timeUnits.length > 0 ? timeUnits : deriveTimeUnitsFromLessons(timetable, ctx);
+    const timeRange = calculateTimeRange(timetable, effectiveTimeUnits, ctx);
     let { allStart, allEnd } = timeRange;
-    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
+    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, effectiveTimeUnits);
 
     const totalMinutes = allEnd - allStart;
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
@@ -2357,7 +2404,7 @@ function getModuleRootElement(ctx) {
     const grid = document.createElement('div');
     grid.className = 'grid-combined';
     grid.style.gridTemplateColumns = gridTemplateColumns;
-    const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
+    const timeAxis = createTimeAxis(effectiveTimeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
 
     for (let d = 0; d < config.totalDisplayDays; d++) {
@@ -2367,7 +2414,7 @@ function getModuleRootElement(ctx) {
         studentTitle,
         studentConfig,
         timetable,
-        timeUnits,
+        timeUnits: effectiveTimeUnits,
         absences,
         baseDate,
         todayDateStr,

@@ -1,6 +1,11 @@
 const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
-const DEFAULT_CONFIG = Object.freeze({});
+const DEFAULT_CONFIG = Object.freeze({
+  nextDays: 21,
+  dateFormat: 'EEE dd.MM.',
+  showSubject: true,
+  showTeacher: true,
+});
 
 module.exports = {
   id: 'exams',

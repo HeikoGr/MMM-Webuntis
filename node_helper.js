@@ -454,6 +454,22 @@ module.exports = NodeHelper.create({
     return definitions;
   },
 
+  _getBackendPluginDefaultConfig(pluginId) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const descriptor = pluginDescriptors.find((entry) => entry?.id === pluginId);
+    const getDefaultConfig = descriptor?.instance?.getDefaultConfig;
+    if (typeof getDefaultConfig !== 'function') return {};
+
+    try {
+      const value = getDefaultConfig();
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      return { ...value };
+    } catch (error) {
+      this._mmLog('warn', null, `[plugins] Failed to read default config for plugin "${pluginId}": ${this._formatErr(error)}`);
+      return {};
+    }
+  },
+
   _buildCanonicalPluginsConfig(config = {}, inheritedPlugins = null) {
     const knownDefinitions = this._getKnownPluginDefinitions();
     const displayTokens = new Set(this._getLegacyDisplayTokens(config));
@@ -467,6 +483,7 @@ module.exports = NodeHelper.create({
       const namespace = definition.configNamespace || pluginId;
       const legacyWidgetConfig =
         config?.[namespace] && typeof config[namespace] === 'object' && !Array.isArray(config[namespace]) ? config[namespace] : {};
+      const pluginDefaultConfig = this._getBackendPluginDefaultConfig(pluginId);
       const enabledFromLegacy = definition.aliases.some((alias) => displayTokens.has(alias));
       const enabled =
         typeof explicitEntry.enabled === 'boolean' ? explicitEntry.enabled : enabledFromLegacy || inheritedEntry.enabled === true;
@@ -474,6 +491,7 @@ module.exports = NodeHelper.create({
       result[pluginId] = {
         enabled,
         config: {
+          ...pluginDefaultConfig,
           ...(inheritedEntry.config || {}),
           ...legacyWidgetConfig,
           ...(explicitEntry.config || {}),

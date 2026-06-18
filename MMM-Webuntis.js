@@ -164,71 +164,15 @@ Module.register('MMM-Webuntis', {
     //   },
     // ],
 
-    // === WIDGET NAMESPACED DEFAULTS ===
-    // Per-widget configuration namespaces
-    lessons: {
-      nextDays: 2, // widget-specific days ahead
-      dateFormat: 'EEE', // format for lesson dates
-      showStartTime: false, // show lesson start time instead of timeunit
-      showRegular: false, // show also regular lessons
-      useShortSubject: false, // use short subject names
-      showTeacherMode: 'full', // 'off'|'initial'|'full'
-      showRoom: false, // show room in lessons widget
-      showSubstitution: false, // show substitution info
-      naText: 'N/A', // placeholder for changed fields with no current value
-    },
-
-    grid: {
-      nextDays: 4, // widget-specific days ahead
-      pastDays: 0, // widget-specific days past
-      weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
-      dateFormat: 'EEE dd.MM.', // format for grid dates
-      showNowLine: true, // show current time line
-      mergeGap: 15, // minutes gap to merge adjacent lessons
-      maxLessons: 0, // max lessons per day (0 = no limit)
-      naText: 'N/A', // placeholder for changed fields with no current value
-
-      // Flexible field display configuration
-      fields: {
-        primary: 'subject', // Primary field to display (subject, teacher, room, class, studentGroup)
-        secondary: 'teacher', // Secondary field to display
-        additional: ['room'], // Array of additional fields to show as badges
-        format: {
-          subject: 'long', // 'short' or 'long' name format
-          teacher: 'long',
-          class: 'short',
-          room: 'short',
-          studentGroup: 'short',
-        },
-      },
-    },
-
-    exams: {
-      nextDays: 21, // widget-specific days ahead
-      dateFormat: 'EEE dd.MM.', // format for exam dates
-      showSubject: true, // show subject name with exam
-      showTeacher: true, // show teacher name with exam
-    },
-
-    homework: {
-      nextDays: 28, // widget-specific days ahead
-      pastDays: 0, // widget-specific days past
-      dateFormat: 'EEE dd.MM.', // format for homework dates
-      showSubject: true, // show subject name with homework
-      showText: true, // show homework description/text
-    },
-
-    absences: {
-      pastDays: 21, // days in the past to show
-      nextDays: 7, // days in the future to show
-      dateFormat: 'EEE dd.MM.', // format for absence dates
-      showDate: true, // show absence date
-      showExcused: true, // show excused/unexcused status
-      showReason: true, // show reason for absence
-      maxItems: null, // max number of absence entries to show (null = no limit)
-    },
-
-    messagesofday: {}, // no specific defaults yet
+    // === WIDGET NAMESPACED CONFIG OVERRIDES ===
+    // Canonical widget defaults are now plugin-owned (plugins/*/backend.js getDefaultConfig).
+    // These namespaces remain for user overrides in config.js.
+    lessons: {},
+    grid: {},
+    exams: {},
+    homework: {},
+    absences: {},
+    messagesofday: {},
   },
 
   /**
