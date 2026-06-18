@@ -2,7 +2,9 @@ const { validateConfigObject, validateNonNegativeField } = require('../../lib/pl
 
 const DEFAULT_CONFIG = Object.freeze({
   nextDays: 2,
+  pastDays: 0,
   dateFormat: 'EEE',
+  hideWeekends: false,
   showStartTime: false,
   showRegular: false,
   useShortSubject: false,

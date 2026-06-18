@@ -5,6 +5,7 @@ const DEFAULT_CONFIG = Object.freeze({
   pastDays: 0,
   weekView: false,
   dateFormat: 'EEE dd.MM.',
+  hideWeekends: false,
   showNowLine: true,
   mergeGap: 15,
   maxLessons: 0,

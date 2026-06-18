@@ -48,6 +48,7 @@ function getModuleRootElement(ctx) {
     pastDays: 0,
     weekView: false,
     dateFormat: 'EEE dd.MM.',
+    hideWeekends: false,
     showNowLine: true,
     mergeGap: 15,
     maxLessons: 0,
@@ -534,6 +535,7 @@ function getModuleRootElement(ctx) {
     const configuredNext = getGridConfig('nextDays');
     const configuredPast = getGridConfig('pastDays');
     const gridDateFormat = getGridConfig('dateFormat');
+    const hideWeekends = Boolean(getGridConfig('hideWeekends'));
     const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig('maxLessons') ?? 0)));
     const rawPxPerMinute = getGridConfig('pxPerMinute');
     const pxPerMinute =
@@ -589,6 +591,7 @@ function getModuleRootElement(ctx) {
       gridDateFormat,
       maxGridLessons,
       pxPerMinute,
+      hideWeekends,
       weekView,
     };
   }
@@ -722,12 +725,12 @@ function getModuleRootElement(ctx) {
    * @param {Object} util - Utility object with formatDisplayDate function
    * @returns {Object} Object with header element and gridTemplateColumns string
    */
-  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDisplayDate }) {
+  function createGridHeader(displayDates, gridDateFormat, ctx, { formatDisplayDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
 
     const cols = ['minmax(80px,auto)'];
-    for (let d = 0; d < totalDisplayDays; d++) {
+    for (let d = 0; d < displayDates.length; d++) {
       cols.push('1fr');
     }
     header.style.gridTemplateColumns = cols.join(' ');
@@ -736,9 +739,8 @@ function getModuleRootElement(ctx) {
     emptyHeader.className = 'grid-days-header-empty';
     header.appendChild(emptyHeader);
 
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
+    for (let d = 0; d < displayDates.length; d++) {
+      const dayDate = displayDates[d];
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
 
@@ -1894,6 +1896,59 @@ function getModuleRootElement(ctx) {
     return `${date.getFullYear()}${(`0${date.getMonth() + 1}`).slice(-2)}${(`0${date.getDate()}`).slice(-2)}`;
   }
 
+  function cloneDayDate(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function isWeekendDay(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function buildRollingDisplayDates(baseDate, config, hasLessonsForDate) {
+    const shouldIncludeDate = (date) => {
+      if (!config.hideWeekends) return true;
+      if (!isWeekendDay(date)) return true;
+      return hasLessonsForDate(formatDateKey(date));
+    };
+
+    const displayDates = [];
+    const visiblePastDates = [];
+    let pastOffset = 1;
+    while (visiblePastDates.length < config.pastDays && pastOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - pastOffset);
+      if (shouldIncludeDate(dayDate)) {
+        visiblePastDates.push(dayDate);
+      }
+      pastOffset += 1;
+    }
+
+    for (const date of visiblePastDates.reverse()) {
+      displayDates.push(date);
+    }
+
+    let extraFutureDays = 0;
+    if (shouldIncludeDate(baseDate)) {
+      displayDates.push(cloneDayDate(baseDate));
+    } else {
+      extraFutureDays = 1;
+    }
+
+    const futureDaysNeeded = config.daysToShow + extraFutureDays;
+    let futureDaysAdded = 0;
+    let futureOffset = 1;
+    while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
+      if (shouldIncludeDate(dayDate)) {
+        displayDates.push(dayDate);
+        futureDaysAdded += 1;
+      }
+      futureOffset += 1;
+    }
+
+    return displayDates;
+  }
+
   function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
     const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
     if (groupedRaw?.[dayYmdStr]) {
@@ -1993,26 +2048,25 @@ function getModuleRootElement(ctx) {
     timetable,
     timeUnits,
     absences,
-    baseDate,
+    targetDate,
     todayDateStr,
-    config,
     allStart,
     allEnd,
     totalMinutes,
     totalHeight,
-    dayOffset,
+    dayIndex,
+    maxGridLessons,
   }) {
-    const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
     const dayYmdStr = formatDateKey(targetDate);
     const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr);
 
     let dayLessons = extractDayLessons(sourceForDay, ctx);
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
+    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
     const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
     const hiddenCount = dayLessons.length - lessonsToRender.length;
-    const col = 2 + dayOffset - config.startOffset;
+    const col = 2 + dayIndex;
     const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
 
     grid.appendChild(bothWrap);
@@ -2348,6 +2402,13 @@ function getModuleRootElement(ctx) {
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
     const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
     const todayDateStr = formatDateKey(baseDate);
+    const hasLessonsForDate = (dateKey) => getSourceLessonsForDay(ctx, studentTitle, timetable, dateKey).length > 0;
+    const displayDates = config.weekView
+      ? Array.from({ length: config.totalDisplayDays }, (_, index) => {
+          const dayOffset = config.startOffset + index;
+          return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
+        })
+      : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
     const wrapper = document.createElement('div');
 
     const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {}, ctx);
@@ -2358,14 +2419,11 @@ function getModuleRootElement(ctx) {
       wrapper.appendChild(headerContainer);
     }
 
-    const { header, gridTemplateColumns } = createGridHeader(
-      config.totalDisplayDays,
-      baseDate,
-      config.startOffset,
-      config.gridDateFormat,
-      ctx,
-      { formatDisplayDate, formatDisplayTime, toMinutesSinceMidnight }
-    );
+    const { header, gridTemplateColumns } = createGridHeader(displayDates, config.gridDateFormat, ctx, {
+      formatDisplayDate,
+      formatDisplayTime,
+      toMinutesSinceMidnight,
+    });
 
     wrapper.appendChild(header);
 
@@ -2375,7 +2433,7 @@ function getModuleRootElement(ctx) {
     const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
 
-    for (let d = 0; d < config.totalDisplayDays; d++) {
+    displayDates.forEach((targetDate, dayIndex) => {
       renderGridDayColumn({
         grid,
         ctx,
@@ -2384,16 +2442,16 @@ function getModuleRootElement(ctx) {
         timetable,
         timeUnits,
         absences,
-        baseDate,
+        targetDate,
         todayDateStr,
-        config,
         allStart,
         allEnd,
         totalMinutes,
         totalHeight,
-        dayOffset: config.startOffset + d,
+        dayIndex,
+        maxGridLessons: config.maxGridLessons,
       });
-    }
+    });
 
     wrapper.appendChild(grid);
 

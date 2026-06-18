@@ -68,9 +68,23 @@ MMM-Webuntis supports these canonical config shapes:
 }
 ```
 
+### Module-level QR code with auto-discovery
+
+```javascript
+{
+  module: 'MMM-Webuntis',
+  position: 'top_right',
+  config: {
+    qrcode: 'untis://setschool?url=example.webuntis.com&school=example&user=parent&key=ABC123',
+    students: [],
+  },
+}
+```
+
 Notes:
 - QR code is the preferred option for SSO-backed accounts.
 - `students: []` is the switch that enables parent-account auto-discovery.
+- A module-level `qrcode` is supported for parent or guardian accounts.
 - Mixed credentials are supported across `students[]`.
 
 ## Global Options
@@ -85,6 +99,8 @@ The canonical defaults live in the `defaults` object in `MMM-Webuntis.js`. Globa
 | `timezone` | string | `'Europe/Berlin'` | Timezone used for date calculations and debug-date handling. |
 | `debugDate` | string\|null | `null` | Freeze the calendar day for testing (`YYYY-MM-DD`) while keeping the live clock time. |
 | `demoDataFile` | string\|null | `null` | Relative path to a local fixture JSON for frontend-only demo mode. |
+| `initRetryTimeout` | int | `5000` | Watchdog timeout in milliseconds before the frontend retries `INIT_MODULE`. |
+| `initRetryMaxAttempts` | int | `4` | Maximum automatic `INIT_MODULE` retries before waiting for the next trigger. |
 | `dumpBackendPayloads` | bool | `false` | Write backend payload snapshots to `debug_dumps/`. |
 | `dumpRawApiResponses` | bool | `false` | Write raw REST responses to `debug_dumps/raw_api_*.json`. |
 | `useClassTimetable` | bool | `false` | Use class timetable instead of personal timetable where required. |
@@ -109,7 +125,7 @@ Advanced compatibility note:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `nextDays` | int | `0` | Global fallback for days ahead. Widget-specific values have priority. |
+| `nextDays` | int | `2` | Global fallback for days ahead. Widget-specific values have priority. |
 | `pastDays` | int | `0` | Global fallback for past days. Widget-specific values have priority. |
 
 Range calculation is today-inclusive.
@@ -131,12 +147,17 @@ Each entry in `students[]` must contain:
 | `school` | string | auth-dependent | School name for direct login. |
 | `server` | string | no | WebUntis server hostname. Top-level value may be reused. |
 | `studentId` | number | no | Used for parent-account mode and child-specific overrides. |
+| `displayMode` | string | no | Per-student widget selection override. Same format as the module-level `displayMode`. |
+| `nextDays` | int | no | Per-student override for the global timetable lookahead fallback. |
+| `pastDays` | int | no | Per-student override for the global timetable lookback fallback. |
+| `plugins` | object | no | Per-student plugin overrides under `students[].plugins.<id>`. |
 | `useClassTimetable` | bool | no | Override the timetable source for this student. |
 
 Practical notes:
 - Use `studentId` when you want to customize a single child discovered through a parent account.
 - `server` is optional on student objects when a top-level value already exists.
 - Per-student plugin config under `students[].plugins.<id>.config` overrides module-level `plugins.<id>.config`.
+- Per-student `students[].plugins.<id>.enabled` is also supported.
 - Top-level widget namespaces such as `lessons` or `grid` remain compatibility input only.
 
 ## Parent Account Support
@@ -145,6 +166,7 @@ Use top-level parent credentials to access multiple children's data.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `qrcode` | string | - | Optional parent or guardian QR code as an alternative to username/password auth. |
 | `username` | string | - | Parent account email or username. |
 | `password` | string | - | Parent account password. |
 | `school` | string | - | School name. |
@@ -183,11 +205,18 @@ plugins.lessons.config.dateFormat: 'EEEE'
 
 The option names in the following tables refer to keys inside each plugin-local `config` object.
 
+Plugin object shape:
+- `plugins.<id>.enabled`: optional boolean widget activation override. If omitted, activation is derived from `displayMode` and legacy aliases.
+- `plugins.<id>.config`: optional object with widget-specific options.
+
 ### Lessons Widget Options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `lessons.nextDays` | int | `2` | Days ahead to display. Today is always included unless hidden as an empty weekend. |
+| `lessons.pastDays` | int | `0` | Days in the past to display before today. |
 | `lessons.dateFormat` | string | `'EEE'` | Date format. |
+| `lessons.hideWeekends` | bool | `false` | Hide empty Saturday/Sunday rows. Weekend days with lessons remain visible. |
 | `lessons.showStartTime` | bool | `false` | Show start time instead of lesson number. |
 | `lessons.showRegular` | bool | `false` | Show regular lessons, not only changes. |
 | `lessons.useShortSubject` | bool | `false` | Use short subject names when available. |
@@ -206,6 +235,7 @@ The option names in the following tables refer to keys inside each plugin-local 
 | `grid.pxPerMinute` | number | `0.8` | Vertical scaling factor. |
 | `grid.showNowLine` | bool | `true` | Show current time line in the grid. |
 | `grid.weekView` | bool | `false` | Show the current school week instead of `pastDays`/`nextDays`. |
+| `grid.hideWeekends` | bool | `false` | Hide empty Saturday/Sunday columns in rolling mode. Weekend days with lessons remain visible. |
 | `grid.nextDays` | int | `4` | Days ahead to display when `weekView` is off. |
 | `grid.pastDays` | int | `0` | Days past to display when `weekView` is off. |
 | `grid.naText` | string | `'N/A'` | Placeholder for removed values without a replacement. |
@@ -238,6 +268,7 @@ Valid field names:
 | --- | --- | --- | --- |
 | `exams.dateFormat` | string | `'EEE dd.MM.'` | Date format for exam dates. |
 | `exams.nextDays` | int | `21` | Days ahead to fetch exams. |
+| `exams.pastDays` | int | `global pastDays` (`0`) | Optional past-days override for fetching older exams. |
 | `exams.showSubject` | bool | `true` | Show subject for exams. |
 | `exams.showTeacher` | bool | `true` | Show teacher for exams. |
 
@@ -319,6 +350,10 @@ Notes:
 ### Timetable Source
 
 `useClassTimetable` is a top-level option with default `false`. It can also be overridden per student when only some students need class timetable mode.
+
+### Carousel Scope
+
+`carouselId` is an optional top-level config field without a built-in default. When set, it is used as an additional scope key for auth/cache grouping, which is useful when the same credentials are shown in different carousel contexts.
 
 ## Related Docs
 

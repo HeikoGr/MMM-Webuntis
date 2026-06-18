@@ -2109,6 +2109,8 @@ module.exports = NodeHelper.create({
       },
       options: {
         gridWeekView: student.grid?.weekView,
+        gridHideWeekends: student.grid?.hideWeekends,
+        lessonsHideWeekends: student.lessons?.hideWeekends,
         debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
       },
     });

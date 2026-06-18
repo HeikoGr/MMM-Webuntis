@@ -16,7 +16,9 @@
   const root = globalRoot.MMMWebuntisFrontendShared || {};
   const DEFAULT_LESSONS_CONFIG = Object.freeze({
     nextDays: 2,
+    pastDays: 0,
     dateFormat: 'EEE',
+    hideWeekends: false,
     showStartTime: false,
     showRegular: false,
     useShortSubject: false,
@@ -118,6 +120,64 @@
       map[unit.startTime] = unit.name ?? unit.label;
     });
     return map;
+  }
+
+  function cloneDayDate(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function getDayYmd(date) {
+    return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+  }
+
+  function isWeekendDay(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function buildDisplayDates(baseDate, { pastDays, daysToShow, hideWeekends, lessonsByDate }) {
+    const shouldIncludeDate = (date) => {
+      if (!hideWeekends) return true;
+      if (!isWeekendDay(date)) return true;
+      const dateYmd = getDayYmd(date);
+      return Array.isArray(lessonsByDate?.[dateYmd]) && lessonsByDate[dateYmd].length > 0;
+    };
+
+    const displayDates = [];
+    const visiblePastDates = [];
+    let pastOffset = 1;
+    while (visiblePastDates.length < pastDays && pastOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - pastOffset);
+      if (shouldIncludeDate(dayDate)) {
+        visiblePastDates.push(dayDate);
+      }
+      pastOffset += 1;
+    }
+
+    for (const date of visiblePastDates.reverse()) {
+      displayDates.push(date);
+    }
+
+    let extraFutureDays = 0;
+    if (shouldIncludeDate(baseDate)) {
+      displayDates.push(cloneDayDate(baseDate));
+    } else {
+      extraFutureDays = 1;
+    }
+
+    const futureDaysNeeded = daysToShow + extraFutureDays;
+    let futureDaysAdded = 0;
+    let futureOffset = 1;
+    while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
+      if (shouldIncludeDate(dayDate)) {
+        displayDates.push(dayDate);
+        futureDaysAdded += 1;
+      }
+      futureOffset += 1;
+    }
+
+    return displayDates;
   }
 
   function resolveStudentConfig(studentSlice) {
@@ -342,7 +402,6 @@
     // Determine display window (aligns with grid behavior: past + today + future)
     const daysToShow = Math.max(1, parseInt(configuredNext, 10));
     const pastDays = Math.max(0, parseInt(getLessonsConfig('pastDays') ?? 0, 10));
-    const startOffset = -pastDays;
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
@@ -354,6 +413,7 @@
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
     const teacherMode = getLessonsConfig('showTeacherMode');
+    const hideWeekends = Boolean(getLessonsConfig('hideWeekends'));
     const showSubstitution = Boolean(getLessonsConfig('showSubstitution'));
     const showRoom = Boolean(getLessonsConfig('showRoom'));
     const showRegular = Boolean(getLessonsConfig('showRegular'));
@@ -372,14 +432,16 @@
       baseDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
     }
 
+    const displayDates = buildDisplayDates(baseDate, {
+      pastDays,
+      daysToShow,
+      hideWeekends,
+      lessonsByDate,
+    });
+
     // Iterate display days in order and render lessons or holiday notices
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
-      const y = dayDate.getFullYear();
-      const m = `0${dayDate.getMonth() + 1}`.slice(-2);
-      const dd = `0${dayDate.getDate()}`.slice(-2);
-      const dateYmd = Number(`${y}${m}${dd}`);
+    for (const dayDate of displayDates) {
+      const dateYmd = getDayYmd(dayDate);
 
       const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => {
         const aTime = Number(a.startTime) || 0;

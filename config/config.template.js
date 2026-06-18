@@ -83,6 +83,7 @@ const config = {
             config: {
               nextDays: 4,
               dateFormat: 'EEEE',
+              hideWeekends: false,
             },
           },
           exams: {
@@ -95,6 +96,7 @@ const config = {
           //   enabled: true,
           //   config: {
           //     weekView: false,
+          //     hideWeekends: false,
           //     fields: {
           //       primary: 'subject',
           //       secondary: 'teacher',
