@@ -1,11 +1,11 @@
 const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
 const DEFAULT_CONFIG = Object.freeze({
-  nextDays: 28,
-  pastDays: 0,
-  dateFormat: 'EEE dd.MM.',
-  showSubject: true,
-  showText: true,
+  nextDays: 28, // Future days to include in homework list.
+  pastDays: 0, // Past days to keep visible.
+  dateFormat: 'EEE dd.MM.', // Due-date display format.
+  showSubject: true, // Show homework subject label.
+  showText: true, // Show homework description text.
 });
 
 module.exports = {

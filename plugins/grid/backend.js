@@ -1,25 +1,25 @@
 const { validateConfigObject, validateNonNegativeField, validatePositiveNumberField } = require('../../lib/pluginValidationUtils');
 
 const DEFAULT_CONFIG = Object.freeze({
-  nextDays: 4,
-  pastDays: 0,
-  weekView: false,
-  dateFormat: 'EEE dd.MM.',
-  hideWeekends: false,
-  showNowLine: true,
-  mergeGap: 15,
-  maxLessons: 0,
-  naText: 'N/A',
+  nextDays: 4, // Future days to include in the grid window.
+  pastDays: 0, // Past days to include before today.
+  weekView: false, // Force Monday-Friday week layout.
+  dateFormat: 'EEE dd.MM.', // Day header date format.
+  hideWeekends: false, // Hide weekend columns when possible.
+  showNowLine: true, // Show the live "current time" marker.
+  mergeGap: 15, // Merge nearby lessons when gap <= minutes.
+  maxLessons: 0, // Max visible periods (0 = unlimited).
+  naText: 'N/A', // Fallback text for missing values.
   fields: {
-    primary: 'subject',
-    secondary: 'teacher',
-    additional: ['room'],
+    primary: 'subject', // Main line field in a lesson cell.
+    secondary: 'teacher', // Second line field in a lesson cell.
+    additional: ['room'], // Extra fields appended in brackets.
     format: {
-      subject: 'long',
-      teacher: 'long',
-      class: 'short',
-      room: 'short',
-      studentGroup: 'short',
+      subject: 'long', // Subject label format.
+      teacher: 'long', // Teacher label format.
+      class: 'short', // Class label format.
+      room: 'short', // Room label format.
+      studentGroup: 'short', // Student-group label format.
     },
   },
 });

@@ -34,6 +34,11 @@
   right: 0;
 }
 
+.wu-plugin-grid .grid-combined .day-column-inner .grid-hourline {
+  left: 4px;
+  right: 4px;
+}
+
 .wu-plugin-grid .grid-combined .grid-lesson::after {
   position: absolute;
   inset: 0;
@@ -42,16 +47,68 @@
 .wu-plugin-grid .grid-combined .grid-timecell {
   border-bottom: 1px dotted var(--wu-border-muted);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
   font-size: 0.9rem;
   color: var(--wu-time-color);
-  padding: 0.1rem 0.4rem 0.1rem 0;
+  padding: 0 0.4rem 0 0;
 }
 
 .wu-plugin-grid .grid-combined .grid-timecell > div {
   line-height: 1;
   font-size: 0.78rem;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label {
+  color: var(--wu-time-color);
+  text-align: left;
+  line-height: 1.05;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+  transform: translateY(2px);
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-period {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-time {
+  font-size: 0.64rem;
+  color: var(--wu-muted-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-tight {
+  gap: 0;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-tight .grid-timeunit-period {
+  display: none;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-tight .grid-timeunit-time {
+  font-size: 0.6rem;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-compact {
+  gap: 0;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-compact .grid-timeunit-period {
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-compact .grid-timeunit-time {
+  font-size: 0.6rem;
+}
+
+.wu-plugin-grid .grid-combined .grid-timecell .grid-timeunit-label.is-roomy {
+  gap: 1px;
 }
 
 .wu-plugin-grid .grid-combined .day-column-inner {
@@ -72,6 +129,16 @@
   border: 1px solid var(--wu-lesson-outline);
   background: var(--wu-lesson-surface);
   line-height: 1;
+  cursor: pointer;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson:focus-visible {
+  outline: 2px solid var(--wu-accent-blue);
+  outline-offset: 1px;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson:hover {
+  box-shadow: inset 0 0 0 1px rgba(47, 128, 237, 0.38);
 }
 
 .wu-plugin-grid .grid-combined .grid-lesson.has-exam {

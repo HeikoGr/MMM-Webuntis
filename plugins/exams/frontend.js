@@ -4,13 +4,6 @@
     return;
   }
 
-  const DEFAULT_EXAMS_CONFIG = Object.freeze({
-    nextDays: 21,
-    dateFormat: 'EEE dd.MM.',
-    showSubject: true,
-    showTeacher: true,
-  });
-
   function appendClassName(element, className) {
     const normalized = String(className || '').trim();
     if (!normalized) return element;
@@ -147,10 +140,7 @@
         ? studentConfig.plugins.exams.config
         : {};
 
-    return {
-      ...DEFAULT_EXAMS_CONFIG,
-      ...pluginConfig,
-    };
+    return { ...pluginConfig };
   }
 
   function isVerboseMode(studentConfig) {
@@ -170,7 +160,7 @@
   function buildHeaderTitle(pluginContext, studentName, examConfig) {
     const title = escapeHtml(translate(pluginContext, 'exams', 'Exams'));
     const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
-    const nextDays = normalizeDays(examConfig?.nextDays, DEFAULT_EXAMS_CONFIG.nextDays);
+    const nextDays = normalizeDays(examConfig?.nextDays, 0);
     const filterLabel = `+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || '').trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -200,7 +190,7 @@
 
             const studentConfig = resolveStudentConfig(studentSlice);
             const examConfig = resolveExamConfig(studentConfig);
-            if (normalizeDays(examConfig?.nextDays, DEFAULT_EXAMS_CONFIG.nextDays) <= 0) {
+            if (normalizeDays(examConfig?.nextDays, 0) <= 0) {
               continue;
             }
 
@@ -235,7 +225,7 @@
 
             for (const exam of visibleExams) {
               const examYmd = Number(exam?.examDate) || 0;
-              const formattedDate = formatDisplayDateValue(examYmd, examConfig?.dateFormat || DEFAULT_EXAMS_CONFIG.dateFormat);
+              const formattedDate = formatDisplayDateValue(examYmd, examConfig?.dateFormat);
               const dateTimeCell = formattedDate ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>` : '';
 
               let nameCell = `<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;

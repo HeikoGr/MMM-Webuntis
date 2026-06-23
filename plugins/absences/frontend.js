@@ -4,16 +4,6 @@
     return;
   }
 
-  const DEFAULT_ABSENCES_CONFIG = Object.freeze({
-    pastDays: 21,
-    nextDays: 7,
-    dateFormat: 'EEE dd.MM.',
-    showDate: true,
-    showExcused: true,
-    showReason: true,
-    maxItems: null,
-  });
-
   function appendClassName(element, className) {
     const normalized = String(className || '').trim();
     if (!normalized) return element;
@@ -155,10 +145,7 @@
         ? studentConfig.plugins.absences.config
         : {};
 
-    return {
-      ...DEFAULT_ABSENCES_CONFIG,
-      ...pluginConfig,
-    };
+    return { ...pluginConfig };
   }
 
   function isVerboseMode(studentConfig) {
@@ -172,8 +159,8 @@
   function buildHeaderTitle(pluginContext, studentName, absencesConfig) {
     const title = escapeHtml(translate(pluginContext, 'absences', 'Absences'));
     const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
-    const nextDays = normalizeDays(absencesConfig?.nextDays, DEFAULT_ABSENCES_CONFIG.nextDays);
-    const pastDays = normalizeDays(absencesConfig?.pastDays, DEFAULT_ABSENCES_CONFIG.pastDays);
+    const nextDays = normalizeDays(absencesConfig?.nextDays, 0);
+    const pastDays = normalizeDays(absencesConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || '').trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -236,7 +223,7 @@
             const nowYmd = Number(nowContext?.ymd) || 0;
             const pastDays = absencesConfig?.pastDays;
             const nextDays = absencesConfig?.nextDays;
-            const dateFormat = absencesConfig?.dateFormat || DEFAULT_ABSENCES_CONFIG.dateFormat;
+            const dateFormat = absencesConfig?.dateFormat;
 
             const sorted = absences
               .slice()

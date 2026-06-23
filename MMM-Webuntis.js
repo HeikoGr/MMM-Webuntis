@@ -98,7 +98,7 @@ Module.register('MMM-Webuntis', {
     timezone: 'Europe/Berlin', // timezone for date calculations
 
     // === DEBUG OPTIONS ===
-    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
+    logLevel: 'none', // Logging level: none, error, warn, info, debug.
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     initRetryTimeout: 5000, // timeout for INIT_MODULE -> MODULE_INITIALIZED watchdog (milliseconds)
@@ -109,9 +109,9 @@ Module.register('MMM-Webuntis', {
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
-    displayMode: 'lessons, exams',
+    displayMode: 'lessons, exams', // Legacy widget activation string.
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
-    useClassTimetable: false,
+    useClassTimetable: false, // Prefer class timetable endpoints when available.
 
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
@@ -131,18 +131,18 @@ Module.register('MMM-Webuntis', {
     // === WIDGET NAMESPACED CONFIG OVERRIDES (legacy-compatible) ===
     // These namespaces are still accepted from config.js.
     // Canonical runtime config should use plugins.<pluginId>.config.
-    lessons: {},
-    grid: {},
-    exams: {},
-    homework: {},
-    absences: {},
-    messagesofday: {},
+    lessons: {}, // Legacy overrides for lessons plugin.
+    grid: {}, // Legacy overrides for grid plugin.
+    exams: {}, // Legacy overrides for exams plugin.
+    homework: {}, // Legacy overrides for homework plugin.
+    absences: {}, // Legacy overrides for absences plugin.
+    messagesofday: {}, // Legacy overrides for messagesofday plugin.
 
     // === CANONICAL PLUGIN CONFIG ===
-    // Plugin-local defaults live in the plugin frontend/backend implementations.
+    // Plugin-local defaults live in backend plugin implementations.
     // User configuration should be provided via plugins.<pluginId>.config and
     // optional students[].plugins.<pluginId>.config overrides.
-    plugins: {},
+    plugins: {}, // Canonical plugin config map by plugin id.
   },
 
   /**
@@ -433,6 +433,7 @@ Module.register('MMM-Webuntis', {
       },
       data: {
         lessons: this.timetableByStudent?.[studentTitle] || [],
+        timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
         exams: this.examsByStudent?.[studentTitle] || [],
         homework: this.homeworksByStudent?.[studentTitle] || [],
         absences: this.absencesByStudent?.[studentTitle] || [],

@@ -4,14 +4,6 @@
     return;
   }
 
-  const DEFAULT_HOMEWORK_CONFIG = Object.freeze({
-    nextDays: 28,
-    pastDays: 0,
-    dateFormat: 'EEE dd.MM.',
-    showSubject: true,
-    showText: true,
-  });
-
   function appendClassName(element, className) {
     const normalized = String(className || '').trim();
     if (!normalized) return element;
@@ -112,10 +104,7 @@
         ? studentConfig.plugins.homework.config
         : {};
 
-    return {
-      ...DEFAULT_HOMEWORK_CONFIG,
-      ...pluginConfig,
-    };
+    return { ...pluginConfig };
   }
 
   function isVerboseMode(studentConfig) {
@@ -129,8 +118,8 @@
   function buildHeaderTitle(pluginContext, studentName, homeworkConfig) {
     const title = escapeHtml(translate(pluginContext, 'homework', 'Homework'));
     const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
-    const nextDays = normalizeDays(homeworkConfig?.nextDays, DEFAULT_HOMEWORK_CONFIG.nextDays);
-    const pastDays = normalizeDays(homeworkConfig?.pastDays, DEFAULT_HOMEWORK_CONFIG.pastDays);
+    const nextDays = normalizeDays(homeworkConfig?.nextDays, 0);
+    const pastDays = normalizeDays(homeworkConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || '').trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -170,7 +159,7 @@
 
             const showSubject = Boolean(homeworkConfig?.showSubject);
             const showText = Boolean(homeworkConfig?.showText);
-            const dateFormat = homeworkConfig?.dateFormat || DEFAULT_HOMEWORK_CONFIG.dateFormat;
+            const dateFormat = homeworkConfig?.dateFormat;
 
             const sorted = homeworks.slice().sort((left, right) => {
               const leftSubject = left?.subject || null;

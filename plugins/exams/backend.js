@@ -1,10 +1,10 @@
 const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
 const DEFAULT_CONFIG = Object.freeze({
-  nextDays: 21,
-  dateFormat: 'EEE dd.MM.',
-  showSubject: true,
-  showTeacher: true,
+  nextDays: 21, // Future days to include in exam list.
+  dateFormat: 'EEE dd.MM.', // Exam date display format.
+  showSubject: true, // Show subject label before exam name.
+  showTeacher: true, // Show primary teacher in exam row.
 });
 
 module.exports = {

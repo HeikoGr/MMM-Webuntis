@@ -1,13 +1,13 @@
 const { validateConfigObject, validateMinimumField, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
 const DEFAULT_CONFIG = Object.freeze({
-  pastDays: 21,
-  nextDays: 7,
-  dateFormat: 'EEE dd.MM.',
-  showDate: true,
-  showExcused: true,
-  showReason: true,
-  maxItems: null,
+  pastDays: 21, // Past days to include in absence list.
+  nextDays: 7, // Future days to include in absence list.
+  dateFormat: 'EEE dd.MM.', // Absence date display format.
+  showDate: true, // Show date column.
+  showExcused: true, // Show excused/unexcused state.
+  showReason: true, // Show absence reason text.
+  maxItems: null, // Optional row limit (null = no limit).
 });
 
 module.exports = {

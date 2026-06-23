@@ -1,17 +1,17 @@
 const { validateConfigObject, validateNonNegativeField } = require('../../lib/pluginValidationUtils');
 
 const DEFAULT_CONFIG = Object.freeze({
-  nextDays: 2,
-  pastDays: 0,
-  dateFormat: 'EEE',
-  hideWeekends: false,
-  showStartTime: false,
-  showRegular: false,
-  useShortSubject: false,
-  showTeacherMode: 'full',
-  showRoom: false,
-  showSubstitution: false,
-  naText: 'N/A',
+  nextDays: 2, // Future days to show in lessons list.
+  pastDays: 0, // Past days to keep visible.
+  dateFormat: 'EEE', // Date label format per day.
+  hideWeekends: false, // Skip weekend rows when possible.
+  showStartTime: false, // Show clock time instead of period labels.
+  showRegular: false, // Include regular lessons (not only irregular).
+  useShortSubject: false, // Prefer short subject names.
+  showTeacherMode: 'full', // Teacher display mode: off/initial/full.
+  showRoom: false, // Show room information.
+  showSubstitution: false, // Show substitution text/details.
+  naText: 'N/A', // Fallback text for missing values.
 });
 
 module.exports = {

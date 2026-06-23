@@ -1,6 +1,8 @@
 const { validateConfigObject } = require('../../lib/pluginValidationUtils');
 
-const DEFAULT_CONFIG = Object.freeze({});
+const DEFAULT_CONFIG = Object.freeze({
+  // No plugin-specific config options yet.
+});
 
 module.exports = {
   id: 'messagesofday',

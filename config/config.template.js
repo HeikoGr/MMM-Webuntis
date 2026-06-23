@@ -5,7 +5,7 @@
  *
  * For detailed option documentation, see:
  * - MMM-Webuntis.js (module-level defaults)
- * - plugin frontend.js files under plugins/ (plugin-local defaults)
+ * - plugin backend.js files under plugins/ (plugin-local defaults)
  * - README.md (Configuration options section)
  */
 const config = {

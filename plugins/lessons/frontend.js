@@ -14,19 +14,6 @@
   }
 
   const root = globalRoot.MMMWebuntisFrontendShared || {};
-  const DEFAULT_LESSONS_CONFIG = Object.freeze({
-    nextDays: 2,
-    pastDays: 0,
-    dateFormat: 'EEE',
-    hideWeekends: false,
-    showStartTime: false,
-    showRegular: false,
-    useShortSubject: false,
-    showTeacherMode: 'full',
-    showRoom: false,
-    showSubstitution: false,
-    naText: 'N/A',
-  });
   const LESSON_ACTIVITY_TYPE = Object.freeze({
     EXAM: 'EXAM',
   });
@@ -112,12 +99,37 @@
     }, {});
   }
 
+  function normalizeHHMMValue(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    if (/^\d{1,4}$/.test(raw)) {
+      const numeric = Number.parseInt(raw, 10);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+
+    const hours = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return hours * 100 + minutes;
+  }
+
   function buildStartTimesMap(timeUnits) {
     const map = {};
     const units = Array.isArray(timeUnits) ? timeUnits : [];
     units.forEach((unit) => {
-      if (unit?.startTime === undefined || unit?.startTime === null) return;
-      map[unit.startTime] = unit.name ?? unit.label;
+      const start = normalizeHHMMValue(unit?.startTime ?? unit?.start);
+      if (start === null) return;
+      const label = unit.name ?? unit.label;
+      map[start] = label;
+      map[String(start)] = label;
     });
     return map;
   }
@@ -192,10 +204,7 @@
         ? studentConfig.plugins.lessons.config
         : {};
 
-    return {
-      ...DEFAULT_LESSONS_CONFIG,
-      ...pluginConfig,
-    };
+    return { ...pluginConfig };
   }
 
   function buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig) {
@@ -230,9 +239,6 @@
 
     return {
       config: effectiveConfig,
-      defaults: {
-        lessons: { ...DEFAULT_LESSONS_CONFIG },
-      },
       holidayMapByStudent: {
         [studentTitle]: buildHolidayMapFromRanges(holidays),
       },
@@ -506,14 +512,17 @@
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
-        const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
-        const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
+        const startNumeric = normalizeHHMMValue(entry.startTime);
+        const endNumeric = normalizeHHMMValue(entry.endTime);
+        const startKey = startNumeric !== null ? String(startNumeric) : '';
+        const startLabel = startNumeric !== null ? (startTimesMap?.[startNumeric] ?? startTimesMap?.[startKey]) : undefined;
 
         let endPeriodLabel = startLabel;
-        if (startLabel && entry.endTime) {
+        if (startLabel && startNumeric !== null && endNumeric !== null) {
           const sortedStarts = Object.keys(startTimesMap)
             .map(Number)
-            .filter((t) => t > entry.startTime && t < entry.endTime)
+            .filter(Number.isFinite)
+            .filter((t) => t > startNumeric && t < endNumeric)
             .sort((a, b) => b - a);
 
           if (sortedStarts.length > 0) {
