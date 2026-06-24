@@ -137,10 +137,11 @@
     const getLessonsConfig = (key, optionsOrFallback) => widgetCtx.getConfig(key, optionsOrFallback);
 
     const configuredNext = getLessonsConfig('nextDays');
+    const nextDays = Math.max(0, Number.parseInt(configuredNext, 10) || 0);
     log('debug', `[LESSONS-DEBUG] ${effectiveStudentTitle}: configuredNext=${configuredNext}`);
-    if (!configuredNext || Number(configuredNext) <= 0) {
-      log('debug', `[LESSONS-DEBUG] ${effectiveStudentTitle}: skipped - nextDays not configured`);
-      log('debug', `[lessons] skipped: nextDays not configured for "${effectiveStudentTitle}"`);
+    if (configuredNext === undefined || configuredNext === null) {
+      log('debug', `[LESSONS-DEBUG] ${effectiveStudentTitle}: skipped - nextDays missing`);
+      log('debug', `[lessons] skipped: nextDays missing for "${effectiveStudentTitle}"`);
       return 0;
     }
 
@@ -178,7 +179,7 @@
     log('debug', `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
 
     // Determine display window (aligns with grid behavior: past + today + future)
-    const daysToShow = Math.max(1, parseInt(configuredNext, 10));
+    const daysToShow = nextDays;
     const pastDays = Math.max(0, parseInt(getLessonsConfig('pastDays') ?? 0, 10));
     const startOffset = -pastDays;
     const totalDisplayDays = pastDays + 1 + daysToShow;

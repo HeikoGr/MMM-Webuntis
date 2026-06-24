@@ -1295,7 +1295,7 @@ Module.register('MMM-Webuntis', {
       exams: () => {
         renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
           const { exams } = this._getStudentWidgetData(studentTitle);
-          if (!Array.isArray(exams) || Number(studentConfig?.exams?.nextDays ?? 0) <= 0) return 0;
+          if (!Array.isArray(exams)) return 0;
           return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
         });
       },

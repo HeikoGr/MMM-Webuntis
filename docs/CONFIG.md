@@ -160,8 +160,10 @@ Widget options must be configured as nested objects, not with dot notation.
 Correct:
 
 ```javascript
-lessons: { dateFormat: 'EEEE' }
-grid: { maxLessons: 8 }
+{
+  lessons: { dateFormat: 'EEEE' },
+  grid: { maxLessons: 8 },
+}
 ```
 
 Incorrect:
@@ -175,11 +177,13 @@ lessons.dateFormat: 'EEEE'
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `lessons.nextDays` | int | `2` | Days ahead to display. `0` shows only today. |
+| `lessons.pastDays` | int | `0` | Days in the past to display in addition to today. |
 | `lessons.dateFormat` | string | `'EEE'` | Date format. |
 | `lessons.showStartTime` | bool | `false` | Show start time instead of lesson number. |
 | `lessons.showRegular` | bool | `false` | Show regular lessons, not only changes. |
 | `lessons.useShortSubject` | bool | `false` | Use short subject names when available. |
-| `lessons.showTeacherMode` | string | `'full'` | Teacher display: `full`, `initial`, or falsy. |
+| `lessons.showTeacherMode` | string | `'full'` | Teacher display: `full`, `initial`, or `off`. |
 | `lessons.showRoom` | bool | `false` | Show room in lessons rows. |
 | `lessons.showSubstitution` | bool | `false` | Show substitution text and notes. |
 | `lessons.naText` | string | `'N/A'` | Placeholder for removed values without a replacement. |
@@ -225,7 +229,7 @@ Valid field names:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `exams.dateFormat` | string | `'EEE dd.MM.'` | Date format for exam dates. |
-| `exams.nextDays` | int | `21` | Days ahead to fetch exams. |
+| `exams.nextDays` | int | `21` | Days ahead to display. `0` shows only today's exams. |
 | `exams.showSubject` | bool | `true` | Show subject for exams. |
 | `exams.showTeacher` | bool | `true` | Show teacher for exams. |
 

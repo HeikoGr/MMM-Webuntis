@@ -76,7 +76,7 @@ const config = {
         // === WIDGET NAMESPACED DEFAULTS ===
         // Per-widget configuration namespaces
         lessons: {
-          nextDays: 4, // widget-specific days ahead
+          nextDays: 2, // widget-specific days ahead
           dateFormat: 'EEE', // format for lesson dates
           showStartTime: false, // show lesson start time instead of timeunit
           showRegular: false, // show also regular lessons
@@ -88,7 +88,7 @@ const config = {
         },
 
         grid: {
-          nextDays: 2, // widget-specific days ahead
+          nextDays: 4, // widget-specific days ahead
           pastDays: 0, // widget-specific days past
           weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
           dateFormat: 'EEE dd.MM.', // format for grid dates
@@ -107,7 +107,7 @@ const config = {
           //   additional: ['room'],  // Additional fields shown as badges/parentheses
           //   format: {              // Display format: 'short' (abbreviation) or 'long' (full name)
           //     subject: 'long',
-          //     teacher: 'short',
+          //     teacher: 'long',
           //     class: 'short',
           //     room: 'short',
           //     studentGroup: 'short',
