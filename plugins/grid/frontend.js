@@ -36,9 +36,13 @@ function getModuleRootElement(ctx) {
   return document.getElementById(id);
 }
 
-(() => {
-  const root = window.MMMWebuntisWidgets || {};
-  window.MMMWebuntisWidgets = root;
+(function registerGridPlugin(globalRoot) {
+  const host = globalRoot.MMMWebuntisPluginHost;
+  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+    return;
+  }
+
+  const root = globalRoot.MMMWebuntisFrontendShared || {};
   const {
     log,
     escapeHtml,
@@ -61,6 +65,209 @@ function getModuleRootElement(ctx) {
     getFirstFieldName,
     normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  let sharedLessonPopover = null;
+
+  function getSharedLessonPopoverController() {
+    if (sharedLessonPopover) return sharedLessonPopover;
+    const createPopoverController = root?.util?.createPopoverController;
+    if (typeof createPopoverController !== 'function') return null;
+    sharedLessonPopover = createPopoverController({
+      baseClassName: 'wu-shared-popover wu-shared-popover--grid',
+      presentation: 'modal',
+    });
+    return sharedLessonPopover;
+  }
+
+  function getCurrentDateContext(config) {
+    const runtimeUtils = globalRoot.MMModuleRuntimeUtils;
+    if (runtimeUtils && typeof runtimeUtils.getCurrentDateContext === 'function') {
+      return runtimeUtils.getCurrentDateContext(config || {}, {
+        defaultTimezone: 'Europe/Berlin',
+      });
+    }
+
+    const date = new Date();
+    return {
+      date,
+      ymd: date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate(),
+      isoDate: '',
+      isDebug: false,
+      timezone: 'Europe/Berlin',
+    };
+  }
+
+  function translate(pluginContext, key, fallback, replacements) {
+    if (typeof pluginContext?.translate !== 'function') return fallback;
+    const translated = pluginContext.translate(key, fallback, replacements);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function resolveStudentConfig(studentSlice) {
+    const config = studentSlice?.context?.config;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    return config;
+  }
+
+  function resolveGridConfig(studentConfig) {
+    const pluginConfig =
+      studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === 'object'
+        ? studentConfig.plugins.grid.config
+        : {};
+
+    const pluginFields =
+      pluginConfig?.fields && typeof pluginConfig.fields === 'object' && !Array.isArray(pluginConfig.fields) ? pluginConfig.fields : {};
+
+    const pluginFormat =
+      pluginFields?.format && typeof pluginFields.format === 'object' && !Array.isArray(pluginFields.format) ? pluginFields.format : {};
+
+    return {
+      ...pluginConfig,
+      fields: {
+        ...pluginFields,
+        format: {
+          ...pluginFormat,
+        },
+      },
+    };
+  }
+
+  function buildEffectiveGridStudentConfig(studentConfig, gridConfig) {
+    const plugins =
+      studentConfig?.plugins && typeof studentConfig.plugins === 'object' && !Array.isArray(studentConfig.plugins)
+        ? studentConfig.plugins
+        : {};
+    const gridPlugin = plugins?.grid && typeof plugins.grid === 'object' && !Array.isArray(plugins.grid) ? plugins.grid : {};
+
+    return {
+      ...studentConfig,
+      grid: gridConfig,
+      plugins: {
+        ...plugins,
+        grid: {
+          ...gridPlugin,
+          config: gridConfig,
+        },
+      },
+    };
+  }
+
+  function buildGroupedRawLessons(lessons) {
+    const grouped = {};
+    (Array.isArray(lessons) ? lessons : []).forEach((lesson) => {
+      const key = lesson?.date != null ? String(lesson.date) : '';
+      if (!key) return;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(lesson);
+    });
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort((left, right) => (left?.startTime || 0) - (right?.startTime || 0));
+    });
+    return grouped;
+  }
+
+  function buildHolidayMapFromRanges(holidays) {
+    if (!Array.isArray(holidays) || holidays.length === 0) return {};
+
+    const map = {};
+    holidays.forEach((holiday) => {
+      const startNum = Number(holiday?.startDate);
+      const endNum = Number(holiday?.endDate);
+      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
+
+      const startY = Math.floor(startNum / 10000);
+      const startM = Math.floor((startNum % 10000) / 100) - 1;
+      const startD = startNum % 100;
+      const endY = Math.floor(endNum / 10000);
+      const endM = Math.floor((endNum % 10000) / 100) - 1;
+      const endD = endNum % 100;
+      const cursor = new Date(startY, startM, startD);
+      const endDate = new Date(endY, endM, endD);
+
+      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
+
+      while (cursor <= endDate) {
+        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
+        map[ymd] = holiday;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+
+    return map;
+  }
+
+  function buildDayNoticeMap(dayNotices) {
+    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
+
+    return dayNotices.reduce((map, notice) => {
+      const ymd = Number(notice?.date);
+      if (!Number.isFinite(ymd) || ymd <= 0) return map;
+      map[ymd] = notice;
+      return map;
+    }, {});
+  }
+
+  function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
+    const effectiveConfig = {
+      ...studentConfig,
+      language:
+        studentConfig?.language ||
+        (typeof globalThis.config !== 'undefined' && globalThis.config?.language ? globalThis.config.language : undefined),
+      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
+    };
+    const dateContext = getCurrentDateContext(effectiveConfig);
+    const studentTitle = String(studentSlice?.student?.title || '').trim();
+    const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+    const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+
+    return {
+      identifier: `${renderContext?.moduleId || 'mmm-webuntis'}-grid-plugin`,
+      config: effectiveConfig,
+      studentConfig: effectiveConfig,
+      holidayMapByStudent: {
+        [studentTitle]: buildHolidayMapFromRanges(holidays),
+      },
+      dayNoticeMapByStudent: {
+        [studentTitle]: buildDayNoticeMap(dayNotices),
+      },
+      preprocessedByStudent: {
+        [studentTitle]: {
+          rawGroupedByDate: buildGroupedRawLessons(studentSlice?.data?.lessons),
+        },
+      },
+      _currentTodayYmd: dateContext.ymd,
+      _paused: false,
+      _hasWidget(name) {
+        return (
+          String(name || '')
+            .trim()
+            .toLowerCase() === 'grid'
+        );
+      },
+      _getWidgetApi() {
+        return root || null;
+      },
+      _usesLiveClock(nowContext = this.getCurrentDateContext()) {
+        return nowContext?.isDebug !== true;
+      },
+      _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+        const nextTodayYmd = Number(nowContext?.ymd);
+        if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+        if (nextTodayYmd === this._currentTodayYmd) return false;
+        this._currentTodayYmd = nextTodayYmd;
+        return true;
+      },
+      _toMinutes(value) {
+        return toMinutesSinceMidnight(value);
+      },
+      getCurrentDateContext(configOverride = null) {
+        return getCurrentDateContext(configOverride || effectiveConfig);
+      },
+      translate(key, replacements) {
+        return translate(pluginContext, key, key, replacements);
+      },
+    };
+  }
 
   function getModuleDateContext(ctx, configOverride = null) {
     return ctx.getCurrentDateContext(configOverride || ctx.config || {});
@@ -117,9 +324,20 @@ function getModuleRootElement(ctx) {
    * @param {Object} config - Student configuration object
    * @returns {Object} Resolved field configuration
    */
-  function resolveFieldConfig(config, ctx) {
+  function resolveFieldConfig(config) {
     const gridConfig = config?.grid?.fields || {};
-    const defaultFields = ctx?.defaults?.grid?.fields || {};
+    const defaultFields = {
+      primary: 'subject',
+      secondary: 'teacher',
+      additional: ['room'],
+      format: {
+        subject: 'long',
+        teacher: 'long',
+        class: 'short',
+        room: 'short',
+        studentGroup: 'short',
+      },
+    };
     const validFieldTypes = ['subject', 'teacher', 'room', 'class', 'studentGroup', 'info', 'none'];
     const validFormats = ['short', 'long'];
 
@@ -200,9 +418,8 @@ function getModuleRootElement(ctx) {
    *   - additional: string[] - Additional field values (deduplicated)
    */
   function buildFlexibleLessonDisplay(lesson, config, options = {}) {
-    const { includeAdditional = true, ctx = null } = options;
-    const fieldConfig = resolveFieldConfig(config, ctx);
-
+    const { includeAdditional = true } = options;
+    const fieldConfig = resolveFieldConfig(config);
     const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
     const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
 
@@ -312,6 +529,7 @@ function getModuleRootElement(ctx) {
     const configuredNext = getGridConfig('nextDays');
     const configuredPast = getGridConfig('pastDays');
     const gridDateFormat = getGridConfig('dateFormat');
+    const hideWeekends = Boolean(getGridConfig('hideWeekends'));
     const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig('maxLessons') ?? 0)));
     const rawPxPerMinute = getGridConfig('pxPerMinute');
     const pxPerMinute =
@@ -367,6 +585,7 @@ function getModuleRootElement(ctx) {
       gridDateFormat,
       maxGridLessons,
       pxPerMinute,
+      hideWeekends,
       weekView,
     };
   }
@@ -500,12 +719,12 @@ function getModuleRootElement(ctx) {
    * @param {Object} util - Utility object with formatDisplayDate function
    * @returns {Object} Object with header element and gridTemplateColumns string
    */
-  function createGridHeader(totalDisplayDays, baseDate, startOffset, gridDateFormat, ctx, { formatDisplayDate }) {
+  function createGridHeader(displayDates, gridDateFormat, ctx, { formatDisplayDate }) {
     const header = document.createElement('div');
     header.className = 'grid-days-header';
 
     const cols = ['minmax(80px,auto)'];
-    for (let d = 0; d < totalDisplayDays; d++) {
+    for (let d = 0; d < displayDates.length; d++) {
       cols.push('1fr');
     }
     header.style.gridTemplateColumns = cols.join(' ');
@@ -514,9 +733,8 @@ function getModuleRootElement(ctx) {
     emptyHeader.className = 'grid-days-header-empty';
     header.appendChild(emptyHeader);
 
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
+    for (let d = 0; d < displayDates.length; d++) {
+      const dayDate = displayDates[d];
       const dayLabel = document.createElement('div');
       dayLabel.className = 'grid-daylabel';
 
@@ -531,6 +749,24 @@ function getModuleRootElement(ctx) {
     }
 
     return { header, gridTemplateColumns: cols.join(' ') };
+  }
+
+  function formatAxisTime(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+
+    const padded = digits.padStart(4, '0');
+    return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
+  }
+
+  function resolveAxisLabelMode(unitHeightPx) {
+    if (!Number.isFinite(unitHeightPx) || unitHeightPx <= 0) return 'compact';
+    if (unitHeightPx < 18) return 'tight';
+    if (unitHeightPx < 34) return 'compact';
+    return 'roomy';
   }
 
   /**
@@ -565,22 +801,50 @@ function getModuleRootElement(ctx) {
         lab.style.top = `${top}px`;
         lab.style.left = '4px';
         lab.style.zIndex = 2;
-        lab.style.fontSize = '0.85em';
-        lab.style.color = '#666';
-        lab.style.textAlign = 'left';
+        lab.className = 'grid-timeunit-label';
 
-        const periodLabel = ctx.translate('period') || '';
-        const periodSuffix = periodLabel ? `${periodLabel}` : '';
-        lab.innerText = `${u.name}.${periodSuffix}\n${String(u.startTime)
-          .padStart(4, '0')
-          .replace(/(\d{2})(\d{2})/, '$1:$2')}`;
+        const unitHeightPx =
+          Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
+            ? Math.round(((lineMin - startMin) / totalMinutes) * totalHeight)
+            : null;
+        const labelMode = resolveAxisLabelMode(unitHeightPx);
+        lab.classList.add(`is-${labelMode}`);
+
+        const unitName = String(u?.name ?? '').trim();
+        const startText = formatAxisTime(u?.startTime);
+        const endText = formatAxisTime(u?.endTime);
+
+        if (unitName) {
+          const periodText = formatTimeUnitPeriodText(unitName, ctx);
+          if (labelMode === 'tight') {
+            lab.innerHTML = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
+          } else if (labelMode === 'compact') {
+            const compactTime = startText || endText;
+            lab.innerHTML = compactTime
+              ? `<span class='grid-timeunit-period'>${periodText}</span><span class='grid-timeunit-time'>${compactTime}</span>`
+              : `<span class='grid-timeunit-period'>${periodText}</span>`;
+          } else {
+            const fullTime = startText && endText ? `${startText}-${endText}` : startText || endText;
+            lab.innerHTML = fullTime
+              ? `<span class='grid-timeunit-period'>${periodText}</span><span class='grid-timeunit-time'>${fullTime}</span>`
+              : `<span class='grid-timeunit-period'>${periodText}</span>`;
+          }
+
+          if (startText || endText) {
+            lab.title = startText && endText ? `${startText}-${endText}` : startText || endText;
+          }
+        } else {
+          const fallbackTime = startText || endText || '';
+          lab.innerHTML = `<span class='grid-timeunit-time'>${fallbackTime}</span>`;
+          if (fallbackTime) lab.title = fallbackTime;
+        }
         timeInner.appendChild(lab);
 
         if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
           const lineTop = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
           const tline = document.createElement('div');
           tline.className = 'grid-hourline';
-          tline.style.top = `${lineTop - 2}px`;
+          tline.style.top = `${lineTop}px`;
           timeInner.appendChild(tline);
         }
       }
@@ -610,6 +874,36 @@ function getModuleRootElement(ctx) {
     timeAxis.style.gridColumn = '1';
 
     return timeAxis;
+  }
+
+  function formatEnglishOrdinal(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number <= 0) return String(value || '');
+    const mod100 = number % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
+    const mod10 = number % 10;
+    if (mod10 === 1) return `${number}st`;
+    if (mod10 === 2) return `${number}nd`;
+    if (mod10 === 3) return `${number}rd`;
+    return `${number}th`;
+  }
+
+  function formatTimeUnitPeriodText(unitName, ctx) {
+    const normalizedUnitName = String(unitName || '').trim();
+    if (!normalizedUnitName) return '';
+
+    const language = String(ctx?.config?.language || '')
+      .trim()
+      .toLowerCase();
+    const isEnglish = language === 'en' || language.startsWith('en-');
+
+    if (isEnglish) {
+      const periodUnit = translate(ctx, 'period_unit', 'period');
+      return `${formatEnglishOrdinal(normalizedUnitName)} ${periodUnit}`.trim();
+    }
+
+    const periodSuffix = translate(ctx, 'period_suffix', ctx?.translate?.('period') || '').trim();
+    return periodSuffix ? `${normalizedUnitName}.${periodSuffix}` : normalizedUnitName;
   }
 
   /**
@@ -814,6 +1108,125 @@ function getModuleRootElement(ctx) {
     return lessonHasDisplayIcon(lesson, 'MOVED');
   }
 
+  function getPopoverFieldDisplayName(entry, format = 'short') {
+    if (entry === null || entry === undefined) return '';
+    if (typeof entry === 'string' || typeof entry === 'number') return String(entry).trim();
+    if (typeof entry !== 'object') return '';
+    const shortName = String(entry.name ?? '').trim();
+    const longName = String(entry.longname ?? '').trim();
+    return format === 'long' ? longName || shortName : shortName || longName;
+  }
+
+  function joinNamedEntries(entries, format = 'long') {
+    if (!Array.isArray(entries) || entries.length === 0) return '';
+    return entries
+      .map((entry) => getPopoverFieldDisplayName(entry, format))
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  function joinStringList(values) {
+    if (!Array.isArray(values) || values.length === 0) return '';
+    return values
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  function describeLessonStatus(lesson, ctx) {
+    const status = String(lesson?.status || '')
+      .trim()
+      .toUpperCase();
+    if (!status) return '';
+
+    const key = `lesson_status_${status.toLowerCase()}`;
+    const translated = ctx?.translate?.(key);
+    if (translated && translated !== key) return translated;
+
+    return status
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function buildLessonPopoverSections(lesson, ctx) {
+    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)].filter(Boolean).join(' - ');
+
+    const displayIcons = joinStringList(lesson?.displayIcons);
+    const changedFields = joinStringList(lesson?.changedFields);
+
+    return [
+      {
+        title: translate(ctx, 'popover_section_general', 'General'),
+        entries: [
+          { label: translate(ctx, 'popover_date', 'Date'), value: formatDisplayDate(lesson?.date, 'EEEE, dd.MM.yyyy') },
+          { label: translate(ctx, 'popover_time', 'Time'), value: timeLabel },
+          { label: translate(ctx, 'popover_period', 'Period'), value: lesson?.periodText || '' },
+          { label: translate(ctx, 'popover_status', 'Status'), value: describeLessonStatus(lesson, ctx) },
+          { label: translate(ctx, 'popover_activity', 'Activity'), value: lesson?.activityType || '' },
+          { label: translate(ctx, 'popover_icons', 'Icons'), value: displayIcons },
+        ],
+      },
+      {
+        title: translate(ctx, 'popover_section_people', 'People & Context'),
+        entries: [
+          { label: translate(ctx, 'popover_subject', 'Subject'), value: joinNamedEntries(lesson?.subjects, 'long') },
+          { label: translate(ctx, 'popover_teacher', 'Teacher'), value: joinNamedEntries(lesson?.teachers, 'long') },
+          { label: translate(ctx, 'popover_room', 'Room'), value: joinNamedEntries(lesson?.rooms, 'long') },
+          { label: translate(ctx, 'popover_class', 'Class'), value: joinNamedEntries(lesson?.classes, 'long') },
+          { label: translate(ctx, 'popover_student_group', 'Student Group'), value: joinNamedEntries(lesson?.studentGroups, 'long') },
+          { label: translate(ctx, 'popover_info', 'Info'), value: joinNamedEntries(lesson?.info, 'long') },
+        ],
+      },
+      {
+        title: translate(ctx, 'popover_section_changes', 'Changes'),
+        entries: [
+          { label: translate(ctx, 'popover_changed_fields', 'Changed Fields'), value: changedFields },
+          {
+            label: translate(ctx, 'popover_previous_subject', 'Previous Subject'),
+            value: joinNamedEntries(lesson?.previousSubjects, 'long'),
+          },
+          {
+            label: translate(ctx, 'popover_previous_teacher', 'Previous Teacher'),
+            value: joinNamedEntries(lesson?.previousTeachers, 'long'),
+          },
+          { label: translate(ctx, 'popover_previous_room', 'Previous Room'), value: joinNamedEntries(lesson?.previousRooms, 'long') },
+          { label: translate(ctx, 'popover_substitution_text', 'Substitution Text'), value: lesson?.substitutionText || '' },
+          { label: translate(ctx, 'popover_lesson_text', 'Lesson Text'), value: lesson?.lessonText || lesson?.text || '' },
+        ],
+      },
+    ];
+  }
+
+  function openLessonPopover(anchorEl, lesson, ctx) {
+    const popover = getSharedLessonPopoverController();
+    if (!popover || !lesson || !anchorEl) return;
+
+    const primaryTitle =
+      getSubject(lesson, 'long') ||
+      getClass(lesson, 'long') ||
+      getStudentGroup(lesson, 'long') ||
+      describeLessonStatus(lesson, ctx) ||
+      translate(ctx, 'popover_lesson_fallback_title', 'Lesson');
+
+    const dateLabel = formatDisplayDate(lesson?.date, 'EEE dd.MM.yyyy');
+    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)].filter(Boolean).join(' - ');
+    const subtitle = [dateLabel, timeLabel].filter(Boolean).join(' • ');
+
+    popover.toggle({
+      anchorEl,
+      toggleKey: `${lesson?.id ?? lesson?.lessonId ?? 'noid'}_${lesson?.date ?? ''}_${lesson?.startTime ?? ''}_${lesson?.endTime ?? ''}`,
+      title: primaryTitle,
+      subtitle,
+      sections: buildLessonPopoverSections(lesson, ctx),
+      rawData: lesson,
+      rawLabel: translate(ctx, 'popover_raw_payload', 'Raw lesson payload'),
+      emptyLabel: translate(ctx, 'popover_empty', 'No details available.'),
+      closeLabel: translate(ctx, 'popover_close', 'Close details'),
+      className: 'wu-shared-popover--grid',
+    });
+  }
+
   /**
    * Add horizontal grid lines to day column
    * Renders either time unit boundaries or hourly lines
@@ -836,7 +1249,7 @@ function getModuleRootElement(ctx) {
           const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
           const line = document.createElement('div');
           line.className = 'grid-hourline';
-          line.style.top = `${top - 2}px`;
+          line.style.top = `${top}px`;
           inner.appendChild(line);
         }
       } else {
@@ -1010,7 +1423,7 @@ function getModuleRootElement(ctx) {
       const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
       const supervisedArea = lesson.room || lesson.roomLong || '';
       const displayText = supervisedArea ? `${shortLabel} (${supervisedArea})` : shortLabel;
-      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='lesson-inline-icon lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
+      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
     }
 
     // Build change-diff indicators for CHANGED lessons.
@@ -1025,7 +1438,7 @@ function getModuleRootElement(ctx) {
     const iconsHtml = movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : '';
     const lessonContentClass = movedBadge || changedBadge ? 'lesson-content has-icons' : 'lesson-content';
 
-    const naText = String(lessonConfig?.grid?.naText ?? ctx?.defaults?.grid?.naText ?? 'N/A');
+    const naText = String(lessonConfig?.grid?.naText ?? 'N/A');
 
     try {
       const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
@@ -1218,6 +1631,19 @@ function getModuleRootElement(ctx) {
       additionalClasses,
     });
     cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
+    cell.tabIndex = 0;
+    cell.setAttribute('role', 'button');
+    cell.setAttribute('aria-label', `${getSubject(lesson, 'long') || 'Lesson'} details`);
+    cell.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openLessonPopover(cell, lesson, ctx);
+    });
+    cell.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openLessonPopover(cell, lesson, ctx);
+    });
     if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
     container.appendChild(cell);
     return cell;
@@ -1672,6 +2098,59 @@ function getModuleRootElement(ctx) {
     return `${date.getFullYear()}${(`0${date.getMonth() + 1}`).slice(-2)}${(`0${date.getDate()}`).slice(-2)}`;
   }
 
+  function cloneDayDate(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function isWeekendDay(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function buildRollingDisplayDates(baseDate, config, hasLessonsForDate) {
+    const shouldIncludeDate = (date) => {
+      if (!config.hideWeekends) return true;
+      if (!isWeekendDay(date)) return true;
+      return hasLessonsForDate(formatDateKey(date));
+    };
+
+    const displayDates = [];
+    const visiblePastDates = [];
+    let pastOffset = 1;
+    while (visiblePastDates.length < config.pastDays && pastOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - pastOffset);
+      if (shouldIncludeDate(dayDate)) {
+        visiblePastDates.push(dayDate);
+      }
+      pastOffset += 1;
+    }
+
+    for (const date of visiblePastDates.reverse()) {
+      displayDates.push(date);
+    }
+
+    let extraFutureDays = 0;
+    if (shouldIncludeDate(baseDate)) {
+      displayDates.push(cloneDayDate(baseDate));
+    } else {
+      extraFutureDays = 1;
+    }
+
+    const futureDaysNeeded = config.daysToShow + extraFutureDays;
+    let futureDaysAdded = 0;
+    let futureOffset = 1;
+    while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
+      if (shouldIncludeDate(dayDate)) {
+        displayDates.push(dayDate);
+        futureDaysAdded += 1;
+      }
+      futureOffset += 1;
+    }
+
+    return displayDates;
+  }
+
   function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
     const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
     if (groupedRaw?.[dayYmdStr]) {
@@ -1771,26 +2250,25 @@ function getModuleRootElement(ctx) {
     timetable,
     timeUnits,
     absences,
-    baseDate,
+    targetDate,
     todayDateStr,
-    config,
     allStart,
     allEnd,
     totalMinutes,
     totalHeight,
-    dayOffset,
+    dayIndex,
+    maxGridLessons,
   }) {
-    const targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
     const dayYmdStr = formatDateKey(targetDate);
     const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr);
 
     let dayLessons = extractDayLessons(sourceForDay, ctx);
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, config.maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
+    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
     const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
     const hiddenCount = dayLessons.length - lessonsToRender.length;
-    const col = 2 + dayOffset - config.startOffset;
+    const col = 2 + dayIndex;
     const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
 
     grid.appendChild(bothWrap);
@@ -2126,6 +2604,13 @@ function getModuleRootElement(ctx) {
     const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
     const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
     const todayDateStr = formatDateKey(baseDate);
+    const hasLessonsForDate = (dateKey) => getSourceLessonsForDay(ctx, studentTitle, timetable, dateKey).length > 0;
+    const displayDates = config.weekView
+      ? Array.from({ length: config.totalDisplayDays }, (_, index) => {
+          const dayOffset = config.startOffset + index;
+          return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
+        })
+      : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
     const wrapper = document.createElement('div');
 
     const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {}, ctx);
@@ -2136,14 +2621,11 @@ function getModuleRootElement(ctx) {
       wrapper.appendChild(headerContainer);
     }
 
-    const { header, gridTemplateColumns } = createGridHeader(
-      config.totalDisplayDays,
-      baseDate,
-      config.startOffset,
-      config.gridDateFormat,
-      ctx,
-      { formatDisplayDate, formatDisplayTime, toMinutesSinceMidnight }
-    );
+    const { header, gridTemplateColumns } = createGridHeader(displayDates, config.gridDateFormat, ctx, {
+      formatDisplayDate,
+      formatDisplayTime,
+      toMinutesSinceMidnight,
+    });
 
     wrapper.appendChild(header);
 
@@ -2153,7 +2635,7 @@ function getModuleRootElement(ctx) {
     const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
 
-    for (let d = 0; d < config.totalDisplayDays; d++) {
+    displayDates.forEach((targetDate, dayIndex) => {
       renderGridDayColumn({
         grid,
         ctx,
@@ -2162,16 +2644,16 @@ function getModuleRootElement(ctx) {
         timetable,
         timeUnits,
         absences,
-        baseDate,
+        targetDate,
         todayDateStr,
-        config,
         allStart,
         allEnd,
         totalMinutes,
         totalHeight,
-        dayOffset: config.startOffset + d,
+        dayIndex,
+        maxGridLessons: config.maxGridLessons,
       });
-    }
+    });
 
     wrapper.appendChild(grid);
 
@@ -2290,10 +2772,58 @@ function getModuleRootElement(ctx) {
   }
 
   root.grid = {
-    renderGridForStudent,
     refreshPastMasks,
     updateNowLinesAll,
     startNowLineUpdater,
     stopNowLineUpdater,
   };
-})();
+
+  host.registerFrontendPlugin({
+    id: 'grid',
+    hostApiVersion: 1,
+
+    create(pluginContext) {
+      return {
+        render(renderContext) {
+          const section = document.createElement('section');
+          section.className = 'wu-plugin wu-plugin-grid';
+          const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
+          let renderedContainers = 0;
+
+          for (const studentSlice of students) {
+            const studentConfig = resolveStudentConfig(studentSlice);
+            const gridConfig = resolveGridConfig(studentConfig);
+            const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
+            const lessons = Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [];
+            const timeUnits = Array.isArray(studentSlice?.data?.timeUnits) ? studentSlice.data.timeUnits : [];
+            const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
+            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+            const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+
+            if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
+              continue;
+            }
+
+            const pluginRuntimeContext = createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, effectiveStudentConfig);
+            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const gridElement = renderGridForStudent(
+              pluginRuntimeContext,
+              studentTitle,
+              effectiveStudentConfig,
+              lessons,
+              timeUnits,
+              absences
+            );
+
+            if (gridElement) {
+              section.appendChild(gridElement);
+              renderedContainers += 1;
+            }
+          }
+
+          return renderedContainers > 0 ? section : null;
+        },
+      };
+    },
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);

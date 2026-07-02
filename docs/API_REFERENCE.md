@@ -12,8 +12,8 @@ Out of scope:
 - frontend/backend transport contract
 - detailed retry, timeout, and skip behavior
 
-For the currently shipped internal socket payload contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
-For the planned widget-agnostic V3 successor contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+For the currently shipped internal socket payload contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+For the archived historical transport contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 For runtime fetch order, retries, timeouts, and skip rules, see [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md).
 
 **Related Documentation**:
@@ -312,4 +312,4 @@ The exact internal range object is an implementation detail and is therefore not
 | Messages | REST news widget endpoint | Normalized to internal `messages` |
 | Holidays | REST `app/data` | Derived from school-year and app-data payload |
 
-For transport-contract details and field names after normalization, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
+For transport-contract details and field names after normalization, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).

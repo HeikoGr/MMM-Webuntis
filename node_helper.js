@@ -2,7 +2,7 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getCurrentDateContext } = require('./lib/runtime-utils');
+const { getCurrentDateContext, parseDisplayModeTokens } = require('./lib/runtime-utils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
 const createBackendLogger = require('./lib/logger');
@@ -13,21 +13,14 @@ const {
   createWarningMetaMap,
   mergeUniqueWarnings,
 } = require('./lib/warningUtils');
-const {
-  AuthService,
-  WebUntisClient,
-  formatError,
-  convertRestErrorToWarning,
-  normalizeDateToInteger,
-  normalizeTimeToHHMM,
-} = require('./lib/webuntisClient');
+const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, normalizeTimeToHHMM } = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
-const widgetConfigValidator = require('./lib/widgetConfigValidator');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
+const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
+const { buildFetchFlagsFromCapabilities } = require('./lib/pluginCapabilityResolver');
+const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
-const VALID_WIDGETS = new Set(ALL_WIDGETS);
-const VALID_LOG_LEVELS = Object.freeze(['none', 'error', 'warn', 'info', 'debug']);
 const DEFAULT_IDENTIFIER = 'default';
 const DEFAULT_SESSION_ID = 'unknown';
 const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
@@ -77,6 +70,50 @@ module.exports = NodeHelper.create({
     this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     this._studentsDiscovered = {};
+    this._pluginHost = initializeBackendPluginHost({
+      moduleRoot: __dirname,
+      logger: this._mmLog.bind(this),
+    });
+    this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
+    if (this._pluginWarnings.length > 0) {
+      this._pluginWarnings.forEach((warning) => {
+        this._mmLog('warn', null, warning);
+      });
+    }
+  },
+
+  _buildFrontendPluginRegistry(config = {}) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+
+    return pluginDescriptors.map((pluginDescriptor) => {
+      const manifest = pluginDescriptor.manifest || {};
+      const aliases =
+        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
+          ? manifest.activation.displayAliases.slice()
+          : [manifest.id];
+      const explicitPluginConfig = pluginConfigMap?.[manifest.id];
+      const active = explicitPluginConfig?.enabled === true;
+
+      const frontendPath = path.relative(__dirname, pluginDescriptor.entryPaths.frontend).split(path.sep).join('/');
+      const stylePaths = Array.isArray(pluginDescriptor.entryPaths.styles)
+        ? pluginDescriptor.entryPaths.styles.map((stylePath) => path.relative(__dirname, stylePath).split(path.sep).join('/'))
+        : [];
+
+      return {
+        id: manifest.id,
+        title: manifest.title,
+        order: manifest.order || 1000,
+        configNamespace: manifest.configNamespace || manifest.id,
+        aliases,
+        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
+        active,
+        entry: {
+          frontend: frontendPath,
+          styles: stylePaths,
+        },
+      };
+    });
   },
 
   /**
@@ -225,6 +262,51 @@ module.exports = NodeHelper.create({
       }));
   },
 
+  _collectPluginValidationIssues(config = {}) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+    const warnings = [];
+    const errors = [];
+    const warningMeta = [];
+
+    pluginDescriptors.forEach((pluginDescriptor) => {
+      const validateConfig = pluginDescriptor?.instance?.validateConfig;
+      if (typeof validateConfig !== 'function') return;
+
+      const pluginId = pluginDescriptor.id;
+      const pluginConfig = pluginConfigMap?.[pluginId]?.config;
+      const issues = validateConfig(pluginConfig, { config, pluginId });
+      if (!Array.isArray(issues) || issues.length === 0) return;
+
+      issues.forEach((issue) => {
+        const message = typeof issue === 'string' ? issue : issue?.message;
+        if (!message) return;
+
+        const severity = typeof issue === 'object' && issue?.severity ? String(issue.severity).toLowerCase() : 'warning';
+        const kind = typeof issue === 'object' && issue?.kind ? issue.kind : 'config';
+        const meta = {
+          message: String(message),
+          kind,
+          severity,
+          pluginId: typeof issue === 'object' && issue?.pluginId ? String(issue.pluginId) : pluginId,
+        };
+
+        warningMeta.push(meta);
+        warnings.push(meta.message);
+
+        if (severity === 'error' || severity === 'critical') {
+          errors.push(meta.message);
+        }
+      });
+    });
+
+    return {
+      warnings: Array.from(new Set(warnings)),
+      errors: Array.from(new Set(errors)),
+      warningMeta,
+    };
+  },
+
   /**
    * Get or create AuthService instance for a specific module identifier
    * Each module instance gets its own AuthService to prevent cache cross-contamination
@@ -270,6 +352,15 @@ module.exports = NodeHelper.create({
       normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
     }
 
+    normalizedConfig.plugins = this._buildCanonicalPluginsConfig(normalizedConfig);
+
+    if (Array.isArray(normalizedConfig.students)) {
+      normalizedConfig.students = normalizedConfig.students.map((student) => ({
+        ...student,
+        plugins: this._buildCanonicalPluginsConfig(student, normalizedConfig.plugins),
+      }));
+    }
+
     if (legacyUsed.length > 0) {
       try {
         const uniq = Array.from(new Set(legacyUsed));
@@ -308,6 +399,94 @@ module.exports = NodeHelper.create({
     return { normalizedConfig, legacyUsed, configWarnings };
   },
 
+  _getLegacyDisplayTokens(config = {}) {
+    return parseDisplayModeTokens(config?.displayMode);
+  },
+
+  _getKnownPluginDefinitions() {
+    const definitions = new Map();
+
+    const discoveredPlugins = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    discoveredPlugins.forEach((pluginRecord) => {
+      const manifest = pluginRecord?.manifest;
+      if (!manifest?.id) return;
+      const aliases =
+        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
+          ? manifest.activation.displayAliases.slice()
+          : [manifest.id];
+
+      definitions.set(manifest.id, {
+        id: manifest.id,
+        configNamespace: manifest.configNamespace || manifest.id,
+        aliases,
+        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
+      });
+    });
+
+    return definitions;
+  },
+
+  _getBackendPluginDefaultConfig(pluginId) {
+    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
+    const descriptor = pluginDescriptors.find((entry) => entry?.id === pluginId);
+    const getDefaultConfig = descriptor?.instance?.getDefaultConfig;
+    if (typeof getDefaultConfig !== 'function') return {};
+
+    try {
+      const value = getDefaultConfig();
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+      return { ...value };
+    } catch (error) {
+      this._mmLog('warn', null, `[plugins] Failed to read default config for plugin "${pluginId}": ${this._formatErr(error)}`);
+      return {};
+    }
+  },
+
+  _buildCanonicalPluginsConfig(config = {}, inheritedPlugins = null) {
+    const knownDefinitions = this._getKnownPluginDefinitions();
+    const displayTokens = new Set(this._getLegacyDisplayTokens(config));
+    const explicitPlugins = config?.plugins && typeof config.plugins === 'object' && !Array.isArray(config.plugins) ? config.plugins : {};
+    const inherited = inheritedPlugins && typeof inheritedPlugins === 'object' && !Array.isArray(inheritedPlugins) ? inheritedPlugins : {};
+    const result = {};
+
+    knownDefinitions.forEach((definition, pluginId) => {
+      const explicitEntry = explicitPlugins?.[pluginId] && typeof explicitPlugins[pluginId] === 'object' ? explicitPlugins[pluginId] : {};
+      const inheritedEntry = inherited?.[pluginId] && typeof inherited[pluginId] === 'object' ? inherited[pluginId] : {};
+      const namespace = definition.configNamespace || pluginId;
+      const legacyWidgetConfig =
+        config?.[namespace] && typeof config[namespace] === 'object' && !Array.isArray(config[namespace]) ? config[namespace] : {};
+      const pluginDefaultConfig = this._getBackendPluginDefaultConfig(pluginId);
+      const enabledFromLegacy = definition.aliases.some((alias) => displayTokens.has(alias));
+      const enabled =
+        typeof explicitEntry.enabled === 'boolean' ? explicitEntry.enabled : enabledFromLegacy || inheritedEntry.enabled === true;
+
+      result[pluginId] = {
+        enabled,
+        config: {
+          ...pluginDefaultConfig,
+          ...(inheritedEntry.config || {}),
+          ...legacyWidgetConfig,
+          ...(explicitEntry.config || {}),
+        },
+      };
+    });
+
+    Object.keys(explicitPlugins).forEach((pluginId) => {
+      if (result[pluginId]) return;
+      const explicitEntry = explicitPlugins[pluginId];
+      if (!explicitEntry || typeof explicitEntry !== 'object') return;
+      result[pluginId] = {
+        enabled: explicitEntry.enabled === true,
+        config:
+          explicitEntry.config && typeof explicitEntry.config === 'object' && !Array.isArray(explicitEntry.config)
+            ? { ...explicitEntry.config }
+            : {},
+      };
+    });
+
+    return result;
+  },
+
   _buildConfigWarnings(normalizedConfig, validationWarnings = []) {
     return mergeUniqueWarnings(validationWarnings, normalizedConfig?.__warnings || []);
   },
@@ -339,18 +518,29 @@ module.exports = NodeHelper.create({
   _validateInitConfig(normalizedConfig, identifier, sessionId, configWarnings) {
     const validatorLogger = { log: () => {} };
     const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
-    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [...(warnings || []), ...(configWarnings || [])]);
+    const pluginValidation = this._collectPluginValidationIssues(normalizedConfig);
+    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [
+      ...(warnings || []),
+      ...(configWarnings || []),
+      ...pluginValidation.warnings,
+    ]);
+    const combinedErrors = this._collectValidationWarnings(errors, pluginValidation.errors);
+    const combinedWarningMeta = [
+      ...this._buildWarningMetaEntries(warnings || [], { kind: 'config', severity: 'warning' }),
+      ...this._buildWarningMetaEntries(configWarnings || [], { kind: 'config', severity: 'warning' }),
+      ...pluginValidation.warningMeta,
+    ];
 
-    if (valid) {
-      return { valid, combinedWarnings };
+    if (valid && combinedErrors.length === 0) {
+      return { valid, combinedWarnings, combinedWarningMeta };
     }
 
     this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
     this._emitInitError(
       {
-        errors,
+        errors: this._collectValidationWarnings(errors, pluginValidation.errors),
         warnings: combinedWarnings,
-        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        warningMeta: combinedWarningMeta,
         severity: 'ERROR',
         message: 'Configuration validation failed',
       },
@@ -360,7 +550,7 @@ module.exports = NodeHelper.create({
       }
     );
 
-    return { valid, combinedWarnings };
+    return { valid: false, combinedWarnings, combinedWarningMeta };
   },
 
   async _finalizeInitModule(normalizedConfig, identifier) {
@@ -372,13 +562,22 @@ module.exports = NodeHelper.create({
     this._studentsDiscovered[identifier] = true;
   },
 
-  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings) {
+  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta = []) {
+    const pluginWarnings = Array.isArray(this._pluginWarnings) ? this._pluginWarnings : [];
+    const warnings = mergeUniqueWarnings(combinedWarnings, pluginWarnings);
+    const mergedWarningMetaByMessage = createWarningMetaMap(combinedWarningMeta);
+    this._buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }).forEach((entry) => {
+      if (!mergedWarningMetaByMessage.has(entry.message)) {
+        mergedWarningMetaByMessage.set(entry.message, entry);
+      }
+    });
     this._emitModuleInitialized(
       {
         config: normalizedConfig,
-        warnings: combinedWarnings,
-        warningMeta: this._buildWarningMetaEntries(combinedWarnings, { kind: 'config', severity: 'warning' }),
+        warnings,
+        warningMeta: buildWarningMetaList(warnings, mergedWarningMetaByMessage),
         students: normalizedConfig.students || [],
+        plugins: this._buildFrontendPluginRegistry(normalizedConfig),
       },
       {
         identifier,
@@ -926,31 +1125,6 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Compact holidays data from WebUntis API
-   * Handles both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-   * Normalizes all dates to YYYYMMDD integer format
-   *
-   * @param {Array} rawHolidays - Raw holidays data from API
-   * @returns {Array} Compacted holidays array with {id, name, longName, startDate, endDate}
-   */
-  _compactHolidays(rawHolidays) {
-    if (!Array.isArray(rawHolidays)) return [];
-    return rawHolidays.map((h) => {
-      // Handle both appData format (start/end ISO timestamps) and legacy format (startDate/endDate YYYYMMDD)
-      const startDate = h.startDate ?? normalizeDateToInteger(h.start);
-      const endDate = h.endDate ?? normalizeDateToInteger(h.end);
-
-      return {
-        id: h.id ?? null,
-        name: h.name ?? h.longName ?? '',
-        longName: h.longName ?? h.name ?? '',
-        startDate: startDate ?? null,
-        endDate: endDate ?? null,
-      };
-    });
-  },
-
-  /**
    * Extract and compact holidays from authSession.appData.
    * This is called once per credential group to avoid redundant processing.
    * @param {Object} authSession - Authenticated session with appData
@@ -1040,7 +1214,43 @@ module.exports = NodeHelper.create({
    * @returns {Object} Widget and fetch flags
    */
   _buildFetchFlags(displayMode) {
-    const wants = (name) => this._wantsWidget(name, displayMode);
+    const legacyDisplayMode =
+      displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode) ? displayMode.displayMode : displayMode;
+
+    if (displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode)) {
+      const config = displayMode;
+      const pluginsConfig = config.plugins && typeof config.plugins === 'object' ? config.plugins : {};
+      const definitions = this._getKnownPluginDefinitions();
+      const activePluginIds = Object.entries(pluginsConfig)
+        .filter(([, entry]) => entry?.enabled === true)
+        .map(([pluginId]) => pluginId);
+
+      if (activePluginIds.length > 0) {
+        const activeDefinitions = activePluginIds.map((pluginId) => definitions.get(pluginId)).filter(Boolean);
+        const capabilities = Array.from(
+          new Set(activeDefinitions.flatMap((definition) => (Array.isArray(definition.capabilities) ? definition.capabilities : [])))
+        );
+        const capabilityFlags = buildFetchFlagsFromCapabilities(capabilities);
+        const activeSet = new Set(activePluginIds);
+
+        return {
+          wantsGridWidget: activeSet.has('grid'),
+          wantsLessonsWidget: activeSet.has('lessons'),
+          wantsExamsWidget: activeSet.has('exams'),
+          wantsHomeworkWidget: activeSet.has('homework'),
+          wantsAbsencesWidget: activeSet.has('absences'),
+          wantsMessagesOfDayWidget: activeSet.has('messagesofday'),
+          fetchTimegrid: Boolean(capabilityFlags.fetchTimegrid || capabilityFlags.fetchTimetable),
+          fetchTimetable: Boolean(capabilityFlags.fetchTimetable),
+          fetchExams: Boolean(capabilityFlags.fetchExams),
+          fetchHomeworks: Boolean(capabilityFlags.fetchHomeworks),
+          fetchAbsences: Boolean(capabilityFlags.fetchAbsences),
+          fetchMessagesOfDay: Boolean(capabilityFlags.fetchMessagesOfDay),
+        };
+      }
+    }
+
+    const wants = (name) => this._wantsWidget(name, legacyDisplayMode);
     const wantsGridWidget = wants('grid');
     const wantsLessonsWidget = wants('lessons');
     const wantsExamsWidget = wants('exams');
@@ -1108,34 +1318,9 @@ module.exports = NodeHelper.create({
    * Validate student credentials and configuration before attempting fetch
    */
   _validateStudentConfig(student) {
-    return this._collectValidationWarnings(
-      widgetConfigValidator.validateStudentCredentials(student),
-      widgetConfigValidator.validateAllWidgets(student)
-    );
-  },
-
-  /**
-   * Validate module configuration for common issues
-   */
-  _validateModuleConfig(config) {
-    const warnings = [];
-
-    if (config.displayMode && typeof config.displayMode === 'string') {
-      const widgets = config.displayMode
-        .split(',')
-        .map((w) => w.trim())
-        .filter(Boolean);
-      const invalid = widgets.filter((w) => !VALID_WIDGETS.has(w.toLowerCase()));
-      if (invalid.length > 0) {
-        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${ALL_WIDGETS.join(', ')}`);
-      }
-    }
-
-    if (config.logLevel && !VALID_LOG_LEVELS.includes(config.logLevel.toLowerCase())) {
-      warnings.push(`Invalid logLevel "${config.logLevel}". Use: ${VALID_LOG_LEVELS.join(', ')}`);
-    }
-
-    return this._collectValidationWarnings(warnings, widgetConfigValidator.validateAllWidgets(config));
+    const warnings = this._collectValidationWarnings(validateStudentCredentials(student));
+    const pluginValidation = this._collectPluginValidationIssues(student);
+    return this._collectValidationWarnings(warnings, pluginValidation.warnings);
   },
 
   _deriveFallbackStudentTitle(student) {
@@ -1147,11 +1332,7 @@ module.exports = NodeHelper.create({
   },
 
   _buildPayloadDisplayWidgets(student, config) {
-    return String(student?.displayMode || config?.displayMode || 'lessons,exams')
-      .toLowerCase()
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    return parseDisplayModeTokens(student?.displayMode || config?.displayMode, ['lessons', 'exams']);
   },
 
   _buildBaseStudentPayload({ identifier, sessionId, student, config, fetchFlags }) {
@@ -1267,8 +1448,13 @@ module.exports = NodeHelper.create({
     warningFallbackMeta,
     includeApiSnapshot,
   }) {
-    const effectiveDisplayMode = student?.displayMode || config?.displayMode;
-    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const effectiveConfig = {
+      ...config,
+      ...(student || {}),
+      displayMode: student?.displayMode || config?.displayMode,
+      plugins: student?.plugins || config?.plugins,
+    };
+    const fetchFlags = this._buildFetchFlags(effectiveConfig);
     const basePayload = this._buildBaseStudentPayload({
       identifier,
       sessionId,
@@ -1479,7 +1665,7 @@ module.exports = NodeHelper.create({
         return;
       }
 
-      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config?.displayMode);
+      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config);
       const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
 
       const studentPayloads = await this._collectStudentPayloadsForGroup({
@@ -1627,11 +1813,16 @@ module.exports = NodeHelper.create({
       this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
       this._storeInitSessionConfig(sessionKey, normalizedConfig);
-      const { valid, combinedWarnings } = this._validateInitConfig(normalizedConfig, identifier, sessionId, result.configWarnings);
+      const { valid, combinedWarnings, combinedWarningMeta } = this._validateInitConfig(
+        normalizedConfig,
+        identifier,
+        sessionId,
+        result.configWarnings
+      );
       if (!valid) return;
 
       await this._finalizeInitModule(normalizedConfig, identifier);
-      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings);
+      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta);
       await this._triggerPostInitFetch(normalizedConfig, identifier, sessionId);
     } catch (error) {
       this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
@@ -1886,8 +2077,20 @@ module.exports = NodeHelper.create({
       throw new Error('fetchData requires authSession, student, identifier, credKey, config, and sessionKey');
     }
 
-    const effectiveDisplayMode = student.displayMode || config.displayMode;
-    const fetchFlags = this._buildFetchFlags(effectiveDisplayMode);
+    const effectiveConfig = {
+      ...config,
+      ...student,
+      displayMode: student.displayMode || config.displayMode,
+      plugins: student.plugins || config.plugins,
+    };
+    const fetchFlags = this._buildFetchFlags(effectiveConfig);
+    const pluginConfigMap =
+      student?.plugins && typeof student.plugins === 'object' && !Array.isArray(student.plugins) ? student.plugins : {};
+    const gridConfig = pluginConfigMap.grid?.config || student.grid || {};
+    const lessonsConfig = pluginConfigMap.lessons?.config || student.lessons || {};
+    const examsConfig = pluginConfigMap.exams?.config || student.exams || {};
+    const absencesConfig = pluginConfigMap.absences?.config || student.absences || {};
+    const homeworkConfig = pluginConfigMap.homework?.config || student.homework || {};
     const baseNow = this._calculateBaseNow(config);
     const dateRanges = calculateFetchRanges({
       baseNow,
@@ -1900,19 +2103,21 @@ module.exports = NodeHelper.create({
       days: {
         globalPastDays: student.pastDays,
         globalNextDays: student.nextDays,
-        gridPastDays: student.grid?.pastDays,
-        gridNextDays: student.grid?.nextDays,
-        lessonsPastDays: student.lessons?.pastDays,
-        lessonsNextDays: student.lessons?.nextDays,
-        examsPastDays: student.exams?.pastDays ?? student.pastDays,
-        examsNextDays: student.exams?.nextDays,
-        absencesPastDays: student.absences?.pastDays,
-        absencesNextDays: student.absences?.nextDays,
-        homeworkPastDays: student.homework?.pastDays,
-        homeworkNextDays: student.homework?.nextDays,
+        gridPastDays: gridConfig.pastDays,
+        gridNextDays: gridConfig.nextDays,
+        lessonsPastDays: lessonsConfig.pastDays,
+        lessonsNextDays: lessonsConfig.nextDays,
+        examsPastDays: examsConfig.pastDays ?? student.pastDays,
+        examsNextDays: examsConfig.nextDays,
+        absencesPastDays: absencesConfig.pastDays,
+        absencesNextDays: absencesConfig.nextDays,
+        homeworkPastDays: homeworkConfig.pastDays,
+        homeworkNextDays: homeworkConfig.nextDays,
       },
       options: {
-        gridWeekView: student.grid?.weekView,
+        gridWeekView: gridConfig.weekView,
+        gridHideWeekends: gridConfig.hideWeekends,
+        lessonsHideWeekends: lessonsConfig.hideWeekends,
         debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
       },
     });

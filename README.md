@@ -96,6 +96,8 @@ Set `displayMode` to a comma-separated list:
 
 `list` remains a supported alias for `lessons, exams`.
 
+Internally, MMM-Webuntis normalizes these legacy-facing display settings into canonical plugin activation and plugin config. `displayMode` remains a supported public config option.
+
 ## Styling
 
 The module uses a semantic color system:
@@ -138,7 +140,7 @@ node --run test:auth:curl
 Start with [docs/README.md](docs/README.md).
 
 - [docs/CONFIG.md](docs/CONFIG.md) - canonical configuration reference
-- [docs/API_V2_MANIFEST.md](docs/API_V2_MANIFEST.md) - backend/frontend payload contract
+- [docs/API_V3_MANIFEST.md](docs/API_V3_MANIFEST.md) - backend/frontend payload contract
 - [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - external WebUntis endpoints and normalization
 - [docs/SERVER_REQUEST_FLOW.md](docs/SERVER_REQUEST_FLOW.md) - runtime fetch, retry, and status behavior
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - high-level module structure and responsibilities

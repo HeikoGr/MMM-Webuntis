@@ -1,0 +1,55 @@
+.wu-plugin-messagesofday {
+  width: 100%;
+}
+
+.wu-plugin-messagesofday .message-subject,
+.wu-plugin-messagesofday .message-text {
+  display: block;
+}
+
+.wu-plugin-messagesofday .message-subject {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.wu-plugin-messagesofday .message-text {
+  font-size: 0.9rem;
+  color: var(--wu-message-text);
+}
+
+.wu-plugin-messagesofday .messages-grid {
+  columns: var(--wu-messages-max-cols) var(--wu-messages-min-width);
+  column-gap: var(--wu-message-card-gap);
+  column-fill: balance;
+  margin-bottom: var(--wu-message-card-gap);
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.wu-plugin-messagesofday .messages-grid .messageRow {
+  display: flex;
+  background-color: var(--wu-message-card-bg);
+  border-left: 3px solid var(--wu-message-card-border);
+  border-radius: var(--wu-message-card-radius);
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.wu-plugin-messagesofday .messages-grid .messageRowEmpty {
+  display: block;
+  color: var(--wu-muted-text);
+  font-style: italic;
+}
+
+.wu-plugin-messagesofday .messages-grid .messageRow,
+.wu-plugin-messagesofday .messages-grid .messageRowEmpty {
+  padding: var(--wu-message-card-padding-block) var(--wu-message-card-padding-inline);
+  width: 100%;
+  margin-bottom: var(--wu-message-card-gap);
+  break-inside: avoid-column;
+}
+
+.wu-plugin-messagesofday .messages-grid .wu-col-full-width {
+  width: 100%;
+}

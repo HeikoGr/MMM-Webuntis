@@ -78,7 +78,7 @@ MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
 
 ### ⚠️ Known Pitfall: extractDayLessons() — Whitelist Trap
 
-`widgets/grid.js#extractDayLessons()` maps raw payload lesson objects into the internal grid lesson shape. It uses `...el` (spread) as a base, then overrides specific keys. **If you add a new field to `schemas.lesson` in `mmm-adapter/mmmPayloadMapper.js`, it is automatically forwarded** — no change to `extractDayLessons` needed.
+`plugins/grid/frontend.js#extractDayLessons()` maps raw payload lesson objects into the internal grid lesson shape. It uses `...el` (spread) as a base, then overrides specific keys. **If you add a new field to `schemas.lesson` in `mmm-adapter/mmmPayloadMapper.js`, it is automatically forwarded** — no change to `extractDayLessons` needed.
 
 This was NOT always the case. Previously it whitelisted explicit field names, causing any new field (e.g. `changedFields`, `teOld`) to be silently dropped in the frontend. If a new field from the payload is missing in the widget despite appearing correctly in debug dumps, check whether `extractDayLessons` needs updating.
 
@@ -88,7 +88,7 @@ webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → mmm-adapter/mmmPayloadMapper.js#schemas.lesson – declares field for compaction
     → mmm-adapter/mmmPayloadMapper.js#compactArray() – compacts lessons
       → socket GOT_DATA payload               – field present in data.lessons[]
-        → widgets/grid.js#extractDayLessons()    – spread: auto-forwarded ✅
+        → plugins/grid/frontend.js#extractDayLessons() – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
 ```
 
@@ -119,8 +119,8 @@ console.warn('[feature] Warning:', error);
 - `lib/webuntis/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
 - `lib/webuntis/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
 - `lib/configValidator.js` - Config schema + 25 legacy key mappings
-- `widgets/*.js` - 6 renderer modules (lessons, grid, exams, homework, absences, messagesofday)
-- `widgets/util.js` - Flexible field utilities (getTeachers, getSubject, getRoom, getClass, getStudentGroup, buildFlexibleLessonDisplay)
+- `plugins/*/*.js` - first-party frontend/backend plugin implementations for all built-in widgets
+- `lib/frontendShared.js` - Shared frontend utilities and DOM helpers used by the module and plugins
 - `config/config.template.js` - Config schema with 90+ options (includes grid.fields for flexible display)
 - `tests/unit.test.js` - Jest tests (currently 0% coverage)
 
@@ -411,7 +411,7 @@ Security note:
 - Error handling & logging
 
 **Frontend** (requires browser/display):
-- Widget rendering (widgets/*.js)
+- Widget rendering (`plugins/*/*.js`, plus `lib/frontendShared.js` for shared helpers)
 - CSS styling (MMM-Webuntis.css, custom.css)
 - Socket message handling (MMM-Webuntis.js)
 - Browser console errors

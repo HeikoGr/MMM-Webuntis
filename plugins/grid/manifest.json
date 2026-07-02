@@ -1,0 +1,24 @@
+{
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
+  "id": "grid",
+  "version": "1.0.0",
+  "title": "Timetable",
+  "type": "widget",
+  "entry": {
+    "frontend": "frontend.js",
+    "backend": "backend.js",
+    "styles": ["styles.css"]
+  },
+  "slots": ["main"],
+  "order": 100,
+  "capabilities": ["lessons", "timeUnits", "absences", "holidays", "dayNotices", "studentContext", "runtimeState"],
+  "configNamespace": "grid",
+  "activation": {
+    "enabledByDefault": false,
+    "displayAliases": ["grid"]
+  },
+  "compatibility": {
+    "contractVersion": 3,
+    "hostApiVersion": 1
+  }
+}

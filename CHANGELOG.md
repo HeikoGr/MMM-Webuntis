@@ -2,7 +2,52 @@
 
 ## Unreleased
 
-Current package version: 0.7.5
+Current package version: 0.8.1
+
+### 🔌 Plugin Architecture
+
+- Introduced a first-party `messagesofday` plugin with dedicated frontend and backend entrypoints under `plugins/messagesofday/`.
+- Continued the widgets-to-plugins transition without removing `displayMode` as a supported public config option.
+
+### 📚 Documentation
+
+- Consolidated plugin documentation into a single current-state reference at `docs/PLUGINS.md`.
+- Updated architecture, configuration, and API docs to describe the current plugin runtime instead of the earlier migration target state.
+- Corrected payload-contract documentation so V3 is documented as the currently shipped frontend/backend contract and V2 is treated as archived history.
+
+## 0.7.6 - 0.7.13
+
+Historical changelog catch-up for the previously undocumented range between `0.7.5` and `0.7.13`.
+
+### 🧱 Architecture & Runtime
+
+- Added the CLI wrapper and expanded local diagnostics around `node --run debug`, `node --run check`, and related maintenance scripts.
+- Migrated linting and formatting to Biome and cleaned up repository automation around hooks, tasks, and devcontainer workflows.
+- Introduced `require-devcontainer` task integration and simplified Docker/devcontainer bootstrap behavior.
+- Centralized date handling, logger behavior, transport constants, and parts of widget data shaping to reduce duplication across the stack.
+
+### 🌐 API & Data Handling
+
+- Improved REST error handling, retry behavior, and timeout handling across the transport layer.
+- Added endpoint-discovery and API-service tooling, plus better diagnostics for low-level API investigation.
+- Implemented day-notice handling and updated translations for timetable restrictions.
+- Improved teacher-target fetching and error-message context for backend fetch flows.
+
+### 🖥️ Widgets & Frontend
+
+- Refined lesson visibility, lesson text normalization, and grid/widget data consumption around `displayIcons` and related lesson markers.
+- Continued cleanup of widget data structures so frontend rendering depends more consistently on normalized backend data.
+
+### ⚠️ Validation, Security & Sanitization
+
+- Strengthened configuration validation and warning handling in `node_helper.js`.
+- Addressed multiple code-scanning findings, including sanitization and path-handling issues.
+- Improved payload processing and related logging around runtime error conditions.
+
+### 📚 Documentation & Tooling
+
+- Consolidated configuration and CSS customization docs, refreshed API documentation, and improved usage guidance for diagnostics and testing tools.
+- Updated development dependencies such as `Biome`, `cspell`, `lint-staged`, and `sanitize-html` across the release line.
 
 ## 0.7.5
 

@@ -1,0 +1,46 @@
+.wu-plugin-lessons {
+  width: 100%;
+}
+
+.wu-plugin-lessons .holiday-notice {
+  color: var(--wu-holiday-notice-color);
+  font-weight: 600;
+  padding-left: 0.25rem;
+}
+
+.wu-plugin-lessons .cancelled {
+  text-decoration: line-through;
+}
+
+.wu-plugin-lessons .teacher-name,
+.wu-plugin-lessons .lesson-room-name {
+  color: var(--wu-secondary-text);
+}
+
+.wu-plugin-lessons .lesson-substitution-text,
+.wu-plugin-lessons .lesson-info-text {
+  font-size: 0.75rem;
+  font-style: italic;
+  display: block;
+}
+
+.wu-plugin-lessons .lesson-substitution-text {
+  color: var(--wu-substitution-accent);
+  font-weight: 500;
+}
+
+.wu-plugin-lessons .lesson-info-text {
+  color: var(--wu-muted-text);
+}
+
+.wu-plugin-lessons .lesson-changed-new {
+  color: var(--wu-changed-highlight);
+  font-weight: 700;
+}
+
+.wu-plugin-lessons .lesson-changed-removed {
+  color: var(--wu-changed-highlight);
+  font-weight: 500;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}

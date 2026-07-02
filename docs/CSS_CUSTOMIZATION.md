@@ -217,7 +217,7 @@ All text elements have dedicated CSS classes for precise styling:
 
 Naming convention for new hooks:
 - Widget-scoped hooks follow `wu-<widget>__<element>` (BEM-like).
-- Existing legacy classes (e.g. `.teacher-name`, `.exam-description`) remain supported for backward compatibility.
+- A few older neutral hooks such as `.teacher-name` remain in use, but widget-specific styling should prefer the `wu-*` hooks.
 
 | Class | Element | Example Use |
 |-------|---------|-------------|
@@ -246,7 +246,7 @@ Naming convention for new hooks:
 | `.teacher-name` | Teacher name (Lessons/Exams) | Make bold |
 | `.lesson-substitution-text` | Substitution info | Orange color |
 | `.lesson-info-text` | General lesson text | Italic style |
-| `.exam-description` | Exam details | Highlight color |
+| `.wu-exam__description` | Exam details | Highlight color |
 | `.message-subject` | Message headline | Larger font |
 | `.message-text` | Message content | Line spacing |
 | `.lesson-cancelled` | Cancelled lessons | Background color |
@@ -282,7 +282,7 @@ Naming convention for new hooks:
   font-size: 0.85rem;       /* Default: 0.65rem */
 }
 
-.MMM-Webuntis .message-subject {
+.wu-plugin-messagesofday .message-subject {
   font-size: 1.2rem;        /* Default: 1rem */
 }
 ```
@@ -310,7 +310,7 @@ Naming convention for new hooks:
 ### 5. Highlight exam descriptions
 
 ```css
-.MMM-Webuntis .exam-description {
+.wu-plugin-exams .wu-exam__description {
   background-color: rgba(255, 235, 59, 0.2);
   padding: 2px 4px;
   border-radius: 2px;
@@ -348,7 +348,7 @@ Naming convention for new hooks:
   row-gap: 0.5rem;          /* Default: 0.25rem */
 }
 
-.MMM-Webuntis .message-text {
+.wu-plugin-messagesofday .message-text {
   line-height: 1.6;         /* Default: inherit */
 }
 ```
@@ -411,7 +411,7 @@ Naming convention for new hooks:
 - `.messages-grid` - Multi-column container for message cards
 - `.messageRow` - Individual message card
 - `.messageRowEmpty` - Empty-state message card
-- `.MMM-Webuntis.messagesofday` - Root widget wrapper (single-widget mode)
+- `.wu-plugin-messagesofday` - Root plugin wrapper for messages of day
 
 ### Lesson State Classes
 - `.lesson-cancelled` - Cancelled lessons
@@ -513,13 +513,13 @@ Notes:
 - `.teacher-name` - Teacher name (inline)
 - `.lesson-substitution-text` - Substitution details
 - `.lesson-info-text` - General lesson information
-- `.exam-description` - Exam description text
+- `.wu-exam__description` - Exam description text
 - `.message-subject` - Message headline
 - `.message-text` - Message body text
 
-### Legacy Classes (Deprecated, use lesson-primary/lesson-secondary instead)
-- `.lesson-subject` - **Deprecated:** Use `.lesson-primary`
-- `.lesson-teacher` - **Deprecated:** Use `.lesson-secondary`
+### Removed Legacy Classes
+- `.lesson-subject` - Removed; use `.lesson-primary`
+- `.lesson-teacher` - Removed; use `.lesson-secondary`
 
 ### Row Type Classes
 - `.examRow` - Exam data row

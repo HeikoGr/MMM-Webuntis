@@ -1,5 +1,5 @@
 /**
- * Lessons Widget
+ * Lessons Plugin
  * Renders upcoming lessons for students with support for:
  * - Time-based lesson display (past/future days configurable)
  * - Holiday detection and display
@@ -7,9 +7,13 @@
  * - Configurable date formats and student group filtering
  * - Exam detection within lesson entries
  */
-(() => {
-  const root = window.MMMWebuntisWidgets || {};
-  window.MMMWebuntisWidgets = root;
+(function registerLessonsPlugin(globalRoot) {
+  const host = globalRoot.MMMWebuntisPluginHost;
+  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+    return;
+  }
+
+  const root = globalRoot.MMMWebuntisFrontendShared || {};
   const LESSON_ACTIVITY_TYPE = Object.freeze({
     EXAM: 'EXAM',
   });
@@ -29,6 +33,230 @@
     getFirstFieldName,
     normalizeComparableText,
   } = root.util?.resolveWidgetHelpers?.(root) || {};
+
+  function getCurrentDateContext(config) {
+    const runtimeUtils = globalRoot.MMModuleRuntimeUtils;
+    if (runtimeUtils && typeof runtimeUtils.getCurrentDateContext === 'function') {
+      return runtimeUtils.getCurrentDateContext(config || {}, {
+        defaultTimezone: 'Europe/Berlin',
+      });
+    }
+
+    const date = new Date();
+    return {
+      date,
+      ymd: date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate(),
+      isoDate: '',
+      isDebug: false,
+      timezone: 'Europe/Berlin',
+    };
+  }
+
+  function translate(pluginContext, key, fallback, replacements) {
+    if (typeof pluginContext?.translate !== 'function') return fallback;
+    const translated = pluginContext.translate(key, fallback, replacements);
+    return translated && translated !== key ? translated : fallback;
+  }
+
+  function buildHolidayMapFromRanges(holidays) {
+    if (!Array.isArray(holidays) || holidays.length === 0) return {};
+
+    const map = {};
+    holidays.forEach((holiday) => {
+      const startNum = Number(holiday?.startDate);
+      const endNum = Number(holiday?.endDate);
+      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
+
+      const startY = Math.floor(startNum / 10000);
+      const startM = Math.floor((startNum % 10000) / 100) - 1;
+      const startD = startNum % 100;
+      const endY = Math.floor(endNum / 10000);
+      const endM = Math.floor((endNum % 10000) / 100) - 1;
+      const endD = endNum % 100;
+      const cursor = new Date(startY, startM, startD);
+      const endDate = new Date(endY, endM, endD);
+
+      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
+
+      while (cursor <= endDate) {
+        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
+        map[ymd] = holiday;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    });
+
+    return map;
+  }
+
+  function buildDayNoticeMap(dayNotices) {
+    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
+
+    return dayNotices.reduce((map, notice) => {
+      const ymd = Number(notice?.date);
+      if (!Number.isFinite(ymd) || ymd <= 0) return map;
+      map[ymd] = notice;
+      return map;
+    }, {});
+  }
+
+  function normalizeHHMMValue(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    if (/^\d{1,4}$/.test(raw)) {
+      const numeric = Number.parseInt(raw, 10);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
+
+    const hours = Number.parseInt(match[1], 10);
+    const minutes = Number.parseInt(match[2], 10);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+    return hours * 100 + minutes;
+  }
+
+  function buildStartTimesMap(timeUnits) {
+    const map = {};
+    const units = Array.isArray(timeUnits) ? timeUnits : [];
+    units.forEach((unit) => {
+      const start = normalizeHHMMValue(unit?.startTime ?? unit?.start);
+      if (start === null) return;
+      const label = unit.name ?? unit.label;
+      map[start] = label;
+      map[String(start)] = label;
+    });
+    return map;
+  }
+
+  function cloneDayDate(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
+  function getDayYmd(date) {
+    return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+  }
+
+  function isWeekendDay(date) {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  }
+
+  function buildDisplayDates(baseDate, { pastDays, daysToShow, hideWeekends, lessonsByDate }) {
+    const shouldIncludeDate = (date) => {
+      if (!hideWeekends) return true;
+      if (!isWeekendDay(date)) return true;
+      const dateYmd = getDayYmd(date);
+      return Array.isArray(lessonsByDate?.[dateYmd]) && lessonsByDate[dateYmd].length > 0;
+    };
+
+    const displayDates = [];
+    const visiblePastDates = [];
+    let pastOffset = 1;
+    while (visiblePastDates.length < pastDays && pastOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - pastOffset);
+      if (shouldIncludeDate(dayDate)) {
+        visiblePastDates.push(dayDate);
+      }
+      pastOffset += 1;
+    }
+
+    for (const date of visiblePastDates.reverse()) {
+      displayDates.push(date);
+    }
+
+    let extraFutureDays = 0;
+    if (shouldIncludeDate(baseDate)) {
+      displayDates.push(cloneDayDate(baseDate));
+    } else {
+      extraFutureDays = 1;
+    }
+
+    const futureDaysNeeded = daysToShow + extraFutureDays;
+    let futureDaysAdded = 0;
+    let futureOffset = 1;
+    while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
+      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
+      if (shouldIncludeDate(dayDate)) {
+        displayDates.push(dayDate);
+        futureDaysAdded += 1;
+      }
+      futureOffset += 1;
+    }
+
+    return displayDates;
+  }
+
+  function resolveStudentConfig(studentSlice) {
+    const config = studentSlice?.context?.config;
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    return config;
+  }
+
+  function resolveLessonsConfig(studentConfig) {
+    const pluginConfig =
+      studentConfig?.plugins?.lessons?.config && typeof studentConfig.plugins.lessons.config === 'object'
+        ? studentConfig.plugins.lessons.config
+        : {};
+
+    return { ...pluginConfig };
+  }
+
+  function buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig) {
+    const plugins =
+      studentConfig?.plugins && typeof studentConfig.plugins === 'object' && !Array.isArray(studentConfig.plugins)
+        ? studentConfig.plugins
+        : {};
+    const lessonsPlugin = plugins?.lessons && typeof plugins.lessons === 'object' && !Array.isArray(plugins.lessons) ? plugins.lessons : {};
+
+    return {
+      ...studentConfig,
+      lessons: lessonsConfig,
+      plugins: {
+        ...plugins,
+        lessons: {
+          ...lessonsPlugin,
+          config: lessonsConfig,
+        },
+      },
+    };
+  }
+
+  function buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
+    const studentTitle = String(studentSlice?.student?.title || '').trim();
+    const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+    const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+    const effectiveConfig = {
+      ...studentConfig,
+      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
+    };
+    const dateContext = getCurrentDateContext(effectiveConfig);
+
+    return {
+      config: effectiveConfig,
+      holidayMapByStudent: {
+        [studentTitle]: buildHolidayMapFromRanges(holidays),
+      },
+      dayNoticeMapByStudent: {
+        [studentTitle]: buildDayNoticeMap(dayNotices),
+      },
+      _currentTodayYmd: dateContext.ymd,
+      getCurrentDateContext(configOverride = null) {
+        return getCurrentDateContext(configOverride || effectiveConfig);
+      },
+      _computeTodayYmdValue() {
+        return this._currentTodayYmd || this.getCurrentDateContext().ymd;
+      },
+      translate(key, replacements) {
+        return translate(pluginContext, key, key, replacements);
+      },
+    };
+  }
 
   const LESSON_FIELD_MAP = Object.freeze({
     subject: 'subjects',
@@ -181,7 +409,6 @@
     // Determine display window (aligns with grid behavior: past + today + future)
     const daysToShow = nextDays;
     const pastDays = Math.max(0, parseInt(getLessonsConfig('pastDays') ?? 0, 10));
-    const startOffset = -pastDays;
     const totalDisplayDays = pastDays + 1 + daysToShow;
     log('debug', `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
 
@@ -193,6 +420,7 @@
     const lessonsDateFormat = getLessonsConfig('dateFormat');
     const useShortSubject = Boolean(getLessonsConfig('useShortSubject'));
     const teacherMode = getLessonsConfig('showTeacherMode');
+    const hideWeekends = Boolean(getLessonsConfig('hideWeekends'));
     const showSubstitution = Boolean(getLessonsConfig('showSubstitution'));
     const showRoom = Boolean(getLessonsConfig('showRoom'));
     const showRegular = Boolean(getLessonsConfig('showRegular'));
@@ -211,14 +439,16 @@
       baseDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
     }
 
+    const displayDates = buildDisplayDates(baseDate, {
+      pastDays,
+      daysToShow,
+      hideWeekends,
+      lessonsByDate,
+    });
+
     // Iterate display days in order and render lessons or holiday notices
-    for (let d = 0; d < totalDisplayDays; d++) {
-      const dayIndex = startOffset + d;
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayIndex);
-      const y = dayDate.getFullYear();
-      const m = `0${dayDate.getMonth() + 1}`.slice(-2);
-      const dd = `0${dayDate.getDate()}`.slice(-2);
-      const dateYmd = Number(`${y}${m}${dd}`);
+    for (const dayDate of displayDates) {
+      const dateYmd = getDayYmd(dayDate);
 
       const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => {
         const aTime = Number(a.startTime) || 0;
@@ -283,14 +513,17 @@
         const hh = String(stHour).padStart(2, '0');
         const mm = String(stMin).padStart(2, '0');
         const formattedStart = `${hh}:${mm}`;
-        const startKey = entry.startTime !== undefined && entry.startTime !== null ? String(entry.startTime) : '';
-        const startLabel = startTimesMap?.[entry.startTime] ?? startTimesMap?.[startKey];
+        const startNumeric = normalizeHHMMValue(entry.startTime);
+        const endNumeric = normalizeHHMMValue(entry.endTime);
+        const startKey = startNumeric !== null ? String(startNumeric) : '';
+        const startLabel = startNumeric !== null ? (startTimesMap?.[startNumeric] ?? startTimesMap?.[startKey]) : undefined;
 
         let endPeriodLabel = startLabel;
-        if (startLabel && entry.endTime) {
+        if (startLabel && startNumeric !== null && endNumeric !== null) {
           const sortedStarts = Object.keys(startTimesMap)
             .map(Number)
-            .filter((t) => t > entry.startTime && t < entry.endTime)
+            .filter(Number.isFinite)
+            .filter((t) => t > startNumeric && t < endNumeric)
             .sort((a, b) => b - a);
 
           if (sortedStarts.length > 0) {
@@ -411,7 +644,48 @@
     return addedRows;
   }
 
-  root.lessons = {
-    renderLessonsForStudent,
-  };
-})();
+  host.registerFrontendPlugin({
+    id: 'lessons',
+    hostApiVersion: 1,
+
+    create(pluginContext) {
+      return {
+        render(renderContext) {
+          const wrapper = document.createElement('section');
+          wrapper.className = 'wu-plugin wu-plugin-lessons';
+          const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
+          let renderedContainers = 0;
+
+          for (const studentSlice of students) {
+            const studentConfig = resolveStudentConfig(studentSlice);
+            const lessonsConfig = resolveLessonsConfig(studentConfig);
+            const effectiveStudentConfig = buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig);
+            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const container = document.createElement('div');
+            container.className = 'wu-widget-container bright small light';
+            const startTimesMap = buildStartTimesMap(studentSlice?.data?.timeUnits);
+            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+            const pluginRuntimeContext = buildPluginRuntimeContext(pluginContext, renderContext, studentSlice, effectiveStudentConfig);
+            const count = renderLessonsForStudent(
+              pluginRuntimeContext,
+              container,
+              studentTitle,
+              studentTitle,
+              effectiveStudentConfig,
+              Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [],
+              startTimesMap,
+              holidays
+            );
+
+            if (count > 0) {
+              wrapper.appendChild(container);
+              renderedContainers += 1;
+            }
+          }
+
+          return renderedContainers > 0 ? wrapper : null;
+        },
+      };
+    },
+  });
+})(typeof globalThis !== 'undefined' ? globalThis : this);

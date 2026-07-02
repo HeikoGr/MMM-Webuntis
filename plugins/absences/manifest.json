@@ -1,0 +1,24 @@
+{
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
+  "id": "absences",
+  "version": "1.0.0",
+  "title": "Absences",
+  "type": "widget",
+  "entry": {
+    "frontend": "frontend.js",
+    "backend": "backend.js",
+    "styles": ["styles.css"]
+  },
+  "slots": ["main"],
+  "order": 500,
+  "capabilities": ["absences", "studentContext", "runtimeState"],
+  "configNamespace": "absences",
+  "activation": {
+    "enabledByDefault": false,
+    "displayAliases": ["absences", "absence"]
+  },
+  "compatibility": {
+    "contractVersion": 3,
+    "hostApiVersion": 1
+  }
+}

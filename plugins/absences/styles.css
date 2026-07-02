@@ -1,0 +1,47 @@
+.wu-plugin-absences {
+  width: 100%;
+}
+
+.wu-plugin-absences .wu-absence__reason,
+.wu-plugin-absences .wu-absence__status {
+  display: inline-block;
+  font-size: var(--wu-widget-detail-font-size);
+  line-height: var(--wu-widget-detail-line-height);
+  font-weight: var(--wu-widget-detail-font-weight);
+}
+
+.wu-plugin-absences .wu-absence__reason {
+  margin-top: var(--wu-widget-detail-margin-top);
+  color: var(--wu-secondary-text);
+}
+
+.wu-plugin-absences .wu-absence__status {
+  white-space: nowrap;
+}
+
+.wu-plugin-absences .absence-excused,
+.wu-plugin-absences .wu-absence__status.absence-excused {
+  color: var(--wu-absence-excused-color);
+}
+
+.wu-plugin-absences .absence-unexcused,
+.wu-plugin-absences .wu-absence__status.absence-unexcused {
+  color: var(--wu-absence-unexcused-color);
+}
+
+.wu-plugin-absences .absence-unexcused {
+  font-weight: 600;
+}
+
+.wu-plugin-absences .absences-unavailable-info {
+  margin-bottom: var(--wu-widget-stack-gap);
+  border-left: 3px solid var(--wu-warning-color);
+  width: fit-content;
+  max-width: min(100%, 36rem);
+  padding: 0.5rem;
+  font-size: 0.9em;
+  font-weight: 400;
+  line-height: 1.3;
+  background-color: var(--wu-warning-bg-strong);
+  font-style: italic;
+}

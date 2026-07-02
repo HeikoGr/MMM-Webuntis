@@ -51,42 +51,6 @@ Module.register('MMM-Webuntis', {
     return nowContext?.isDebug !== true;
   },
 
-  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
-    if (!this._usesLiveClock(nowContext)) return false;
-
-    const nextTodayYmd = Number(nowContext?.ymd);
-    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
-
-    if (this._currentTodayYmd === undefined || this._currentTodayYmd === null) {
-      this._currentTodayYmd = nextTodayYmd;
-      return false;
-    }
-
-    if (nextTodayYmd === this._currentTodayYmd) return false;
-
-    const previousTodayYmd = this._currentTodayYmd;
-
-    try {
-      if (typeof this._sendFetchData === 'function') {
-        this._sendFetchData('date-change');
-      } else {
-        this.sendSocketNotification('FETCH_DATA', this.config);
-      }
-    } catch {
-      return false;
-    }
-
-    try {
-      this.updateDom();
-    } catch {
-      return false;
-    }
-
-    this._currentTodayYmd = nextTodayYmd;
-    this._log('debug', `[clock] Detected day change: ${previousTodayYmd || 'unset'} -> ${nextTodayYmd}`);
-    return true;
-  },
-
   /**
    * Generate a random session identifier.
    * Uses a cryptographically secure random number generator when available.
@@ -134,7 +98,7 @@ Module.register('MMM-Webuntis', {
     timezone: 'Europe/Berlin', // timezone for date calculations
 
     // === DEBUG OPTIONS ===
-    logLevel: 'none', // One of: "error", "warn", "info", "debug". Default is "info".
+    logLevel: 'none', // Logging level: none, error, warn, info, debug.
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     initRetryTimeout: 5000, // timeout for INIT_MODULE -> MODULE_INITIALIZED watchdog (milliseconds)
@@ -145,9 +109,9 @@ Module.register('MMM-Webuntis', {
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
-    displayMode: 'lessons, exams',
+    displayMode: 'lessons, exams', // Legacy widget activation string.
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
-    useClassTimetable: false,
+    useClassTimetable: false, // Prefer class timetable endpoints when available.
 
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
@@ -164,71 +128,21 @@ Module.register('MMM-Webuntis', {
     //   },
     // ],
 
-    // === WIDGET NAMESPACED DEFAULTS ===
-    // Per-widget configuration namespaces
-    lessons: {
-      nextDays: 2, // widget-specific days ahead
-      dateFormat: 'EEE', // format for lesson dates
-      showStartTime: false, // show lesson start time instead of timeunit
-      showRegular: false, // show also regular lessons
-      useShortSubject: false, // use short subject names
-      showTeacherMode: 'full', // 'off'|'initial'|'full'
-      showRoom: false, // show room in lessons widget
-      showSubstitution: false, // show substitution info
-      naText: 'N/A', // placeholder for changed fields with no current value
-    },
+    // === WIDGET NAMESPACED CONFIG OVERRIDES (legacy-compatible) ===
+    // These namespaces are still accepted from config.js.
+    // Canonical runtime config should use plugins.<pluginId>.config.
+    lessons: {}, // Legacy overrides for lessons plugin.
+    grid: {}, // Legacy overrides for grid plugin.
+    exams: {}, // Legacy overrides for exams plugin.
+    homework: {}, // Legacy overrides for homework plugin.
+    absences: {}, // Legacy overrides for absences plugin.
+    messagesofday: {}, // Legacy overrides for messagesofday plugin.
 
-    grid: {
-      nextDays: 4, // widget-specific days ahead
-      pastDays: 0, // widget-specific days past
-      weekView: false, // show Monday-Friday calendar week (overrides nextDays/pastDays; auto-advances on Friday after last lesson)
-      dateFormat: 'EEE dd.MM.', // format for grid dates
-      showNowLine: true, // show current time line
-      mergeGap: 15, // minutes gap to merge adjacent lessons
-      maxLessons: 0, // max lessons per day (0 = no limit)
-      naText: 'N/A', // placeholder for changed fields with no current value
-
-      // Flexible field display configuration
-      fields: {
-        primary: 'subject', // Primary field to display (subject, teacher, room, class, studentGroup)
-        secondary: 'teacher', // Secondary field to display
-        additional: ['room'], // Array of additional fields to show as badges
-        format: {
-          subject: 'long', // 'short' or 'long' name format
-          teacher: 'long',
-          class: 'short',
-          room: 'short',
-          studentGroup: 'short',
-        },
-      },
-    },
-
-    exams: {
-      nextDays: 21, // widget-specific days ahead
-      dateFormat: 'EEE dd.MM.', // format for exam dates
-      showSubject: true, // show subject name with exam
-      showTeacher: true, // show teacher name with exam
-    },
-
-    homework: {
-      nextDays: 28, // widget-specific days ahead
-      pastDays: 0, // widget-specific days past
-      dateFormat: 'EEE dd.MM.', // format for homework dates
-      showSubject: true, // show subject name with homework
-      showText: true, // show homework description/text
-    },
-
-    absences: {
-      pastDays: 21, // days in the past to show
-      nextDays: 7, // days in the future to show
-      dateFormat: 'EEE dd.MM.', // format for absence dates
-      showDate: true, // show absence date
-      showExcused: true, // show excused/unexcused status
-      showReason: true, // show reason for absence
-      maxItems: null, // max number of absence entries to show (null = no limit)
-    },
-
-    messagesofday: {}, // no specific defaults yet
+    // === CANONICAL PLUGIN CONFIG ===
+    // Plugin-local defaults live in backend plugin implementations.
+    // User configuration should be provided via plugins.<pluginId>.config and
+    // optional students[].plugins.<pluginId>.config overrides.
+    plugins: {}, // Canonical plugin config map by plugin id.
   },
 
   /**
@@ -250,23 +164,7 @@ Module.register('MMM-Webuntis', {
   getScripts() {
     window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
-    const scripts = [this.file('lib/runtime-utils.js'), this.file('widgets/util.js')];
-
-    const widgetScriptMap = {
-      lessons: 'widgets/lessons.js',
-      exams: 'widgets/exams.js',
-      homework: 'widgets/homework.js',
-      absences: 'widgets/absences.js',
-      grid: 'widgets/grid.js',
-      messagesofday: 'widgets/messagesofday.js',
-    };
-
-    const widgets = Array.from(new Set(this._getDisplayWidgets()));
-    for (const widget of widgets) {
-      const scriptPath = widgetScriptMap[widget];
-      if (!scriptPath) continue;
-      scripts.push(this.file(scriptPath));
-    }
+    const scripts = [this.file('lib/runtime-utils.js'), this.file('lib/pluginHostFrontend.js'), this.file('lib/frontendShared.js')];
 
     return scripts;
   },
@@ -284,19 +182,335 @@ Module.register('MMM-Webuntis', {
     };
   },
 
+  _getPluginTranslationEntry(pluginId, key) {
+    const translations = this._pluginTranslationsById?.get(String(pluginId || '').trim());
+    if (!translations || typeof translations !== 'object') return undefined;
+    return Object.hasOwn(translations, key) ? translations[key] : undefined;
+  },
+
+  _applyTranslationReplacements(template, replacements) {
+    const source = String(template ?? '');
+    if (!replacements || typeof replacements !== 'object' || Array.isArray(replacements)) {
+      return source;
+    }
+
+    return source.replace(/\{([^}]+)\}/g, (match, key) => {
+      return Object.hasOwn(replacements, key) ? String(replacements[key]) : match;
+    });
+  },
+
+  _translatePluginKey(pluginId, key, fallback, replacements) {
+    const pluginValue = this._getPluginTranslationEntry(pluginId, key);
+    if (pluginValue !== undefined) {
+      return this._applyTranslationReplacements(pluginValue, replacements);
+    }
+
+    const translated = replacements ? this.translate(key, replacements) : this.translate(key);
+    return translated && translated !== key ? translated : fallback || key;
+  },
+
+  _getPluginTranslationLoadOrder() {
+    const configuredLanguage = String(globalThis.config?.language || this.config?.language || navigator?.language || 'en').trim();
+    const normalizedLanguage = configuredLanguage || 'en';
+    const baseLanguage = normalizedLanguage.split('-')[0];
+    return Array.from(new Set(['en', baseLanguage, normalizedLanguage].filter(Boolean)));
+  },
+
+  async _loadPluginTranslations(pluginEntry) {
+    const pluginId = String(pluginEntry?.id || '').trim();
+    if (!pluginId) return;
+
+    if (!this._pluginTranslationsById) {
+      this._pluginTranslationsById = new Map();
+    }
+    if (this._pluginTranslationsById.has(pluginId)) return;
+
+    const frontendEntry = String(pluginEntry?.entry?.frontend || '').trim();
+    const lastSlash = frontendEntry.lastIndexOf('/');
+    const pluginRoot = lastSlash === -1 ? '' : frontendEntry.slice(0, lastSlash);
+    if (!pluginRoot) {
+      this._pluginTranslationsById.set(pluginId, {});
+      return;
+    }
+
+    const mergedTranslations = {};
+    const languages = this._getPluginTranslationLoadOrder();
+    for (const language of languages) {
+      const relativePath = `${pluginRoot}/translations/${language}.json`;
+      const url = this.file(relativePath);
+
+      try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (response.status === 404) continue;
+        if (!response.ok) {
+          this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath} (${response.status})`);
+          continue;
+        }
+
+        const json = await response.json();
+        if (!json || typeof json !== 'object' || Array.isArray(json)) {
+          this._log('warn', `[plugins] ${pluginId}: ignoring non-object translations in ${relativePath}`);
+          continue;
+        }
+
+        Object.assign(mergedTranslations, json);
+      } catch (error) {
+        this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath}: ${error?.message || error}`);
+      }
+    }
+
+    this._pluginTranslationsById.set(pluginId, mergedTranslations);
+  },
+
   /**
-   * Get global widget API object
-   * The widget API is populated by widget scripts (widgets/*.js) at load time
-   * Provides access to widget rendering functions and utilities
+   * Get the shared frontend helper API.
    *
-   * @returns {Object|null} Widget API object or null if not available
+   * Provides access to rendering helpers used by both the host and frontend plugins.
+   *
+   * @returns {Object|null} Shared frontend helper API or null if not available
    */
   _getWidgetApi() {
     try {
-      return window.MMMWebuntisWidgets || null;
+      return window.MMMWebuntisFrontendShared || null;
     } catch {
       return null;
     }
+  },
+
+  _getPluginHost() {
+    try {
+      return globalThis.MMMWebuntisPluginHost || null;
+    } catch {
+      return null;
+    }
+  },
+
+  _setPluginRegistry(pluginEntries = []) {
+    this._pluginRegistryById = new Map();
+    const entries = Array.isArray(pluginEntries) ? pluginEntries : [];
+    entries.forEach((entry) => {
+      const pluginId = String(entry?.id || '').trim();
+      if (!pluginId) return;
+      this._pluginRegistryById.set(pluginId, entry);
+    });
+  },
+
+  _getPluginRegistryEntry(pluginId) {
+    return this._pluginRegistryById?.get(String(pluginId || '').trim()) || null;
+  },
+
+  _getLegacyDisplayTokens(configSource = this.config || {}) {
+    const parseDisplayModeTokens = globalThis.MMModuleRuntimeUtils?.parseDisplayModeTokens;
+    if (typeof parseDisplayModeTokens === 'function') {
+      return parseDisplayModeTokens(configSource?.displayMode);
+    }
+
+    const raw = configSource?.displayMode;
+    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
+    if (displayMode === 'grid') return ['grid'];
+    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
+    return displayMode
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+  },
+
+  _isPluginActive(pluginId) {
+    return this._getPluginRegistryEntry(pluginId)?.active === true;
+  },
+
+  _ensurePluginAssetState(pluginId) {
+    if (!this._pluginAssetStateById) {
+      this._pluginAssetStateById = new Map();
+    }
+    const normalizedPluginId = String(pluginId || '').trim();
+    if (!this._pluginAssetStateById.has(normalizedPluginId)) {
+      this._pluginAssetStateById.set(normalizedPluginId, {
+        loaded: false,
+        failed: false,
+        promise: null,
+        errorMessage: '',
+      });
+    }
+    return this._pluginAssetStateById.get(normalizedPluginId);
+  },
+
+  _loadPluginStyles(pluginEntry) {
+    const styles = Array.isArray(pluginEntry?.entry?.styles) ? pluginEntry.entry.styles : [];
+    styles.forEach((stylePath) => {
+      const href = this.file(stylePath);
+      if (document.querySelector(`link[data-wu-plugin-style="${href}"]`)) return;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.dataset.wuPluginStyle = href;
+      document.head.appendChild(link);
+    });
+  },
+
+  _loadPluginScript(pluginEntry) {
+    return new Promise((resolve, reject) => {
+      const scriptPath = pluginEntry?.entry?.frontend;
+      if (!scriptPath) {
+        reject(new Error(`Plugin ${pluginEntry?.id || 'unknown'} is missing a frontend entry.`));
+        return;
+      }
+
+      const src = this.file(scriptPath);
+      const existing = document.querySelector(`script[data-wu-plugin-script="${src}"]`);
+      if (existing) {
+        if (existing.dataset.wuPluginLoaded === 'true') {
+          resolve();
+          return;
+        }
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      script.dataset.wuPluginScript = src;
+      script.addEventListener(
+        'load',
+        () => {
+          script.dataset.wuPluginLoaded = 'true';
+          resolve();
+        },
+        { once: true }
+      );
+      script.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+      document.head.appendChild(script);
+    });
+  },
+
+  _initializeActivePlugins(pluginEntries = []) {
+    const entries = Array.isArray(pluginEntries) ? pluginEntries.filter((entry) => entry?.active === true) : [];
+    const loadTasks = entries.map((pluginEntry) => {
+      const state = this._ensurePluginAssetState(pluginEntry.id);
+      if (state.loaded) return Promise.resolve();
+      if (state.promise) return state.promise;
+
+      state.promise = Promise.resolve()
+        .then(() => {
+          this._loadPluginStyles(pluginEntry);
+          return this._loadPluginTranslations(pluginEntry);
+        })
+        .then(() => {
+          return this._loadPluginScript(pluginEntry);
+        })
+        .then(() => {
+          state.loaded = true;
+          state.failed = false;
+          state.errorMessage = '';
+        })
+        .catch((error) => {
+          state.failed = true;
+          state.errorMessage = error?.message || String(error);
+          this._log('error', `[plugins] ${pluginEntry.id}: ${state.errorMessage}`);
+        })
+        .finally(() => {
+          state.promise = null;
+        });
+
+      return state.promise;
+    });
+
+    return Promise.all(loadTasks).then(() => {
+      this.updateDom();
+    });
+  },
+
+  _buildPluginStudentRuntimeSlices(studentTitles = []) {
+    return studentTitles.map((studentTitle) => ({
+      student: {
+        id: null,
+        title: studentTitle,
+      },
+      context: {
+        config: this.configByStudent?.[studentTitle] || this.config || {},
+      },
+      data: {
+        lessons: this.timetableByStudent?.[studentTitle] || [],
+        timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
+        exams: this.examsByStudent?.[studentTitle] || [],
+        homework: this.homeworksByStudent?.[studentTitle] || [],
+        absences: this.absencesByStudent?.[studentTitle] || [],
+        messages: this.messagesOfDayByStudent?.[studentTitle] || [],
+        holidays: {
+          ranges: this.holidaysByStudent?.[studentTitle] || [],
+        },
+        dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
+      },
+      state: {
+        warnings: this.runtimeWarningsByStudent?.[studentTitle] ? Array.from(this.runtimeWarningsByStudent[studentTitle]) : [],
+      },
+      plugins: {},
+    }));
+  },
+
+  _createFrontendPluginContext(pluginEntry) {
+    return {
+      pluginId: pluginEntry.id,
+      hostApiVersion: this._getPluginHost()?.hostApiVersion || 1,
+      manifest: pluginEntry,
+      translate: (key, fallback, replacements) => {
+        return this._translatePluginKey(pluginEntry.id, key, fallback, replacements);
+      },
+      log: (level, message, meta = null) => {
+        if (meta) {
+          this._log(level, `[plugin:${pluginEntry.id}] ${message}`, meta);
+          return;
+        }
+        this._log(level, `[plugin:${pluginEntry.id}] ${message}`);
+      },
+      dom: {},
+      time: {},
+      formatting: {},
+      shared: {},
+    };
+  },
+
+  _renderFrontendPluginWidget(pluginId, studentTitles = []) {
+    const pluginEntry = this._getPluginRegistryEntry(pluginId);
+    if (pluginEntry?.active !== true) return null;
+
+    const state = this._ensurePluginAssetState(pluginId);
+    if (state.failed) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'wu-widget__error widget-error dimmed';
+      errorDiv.textContent = state.errorMessage || `Plugin ${pluginId} failed to load`;
+      return errorDiv;
+    }
+
+    const pluginHost = this._getPluginHost();
+    if (!state.loaded || !pluginHost?.hasFrontendPlugin?.(pluginId)) {
+      const loadingDiv = document.createElement('div');
+      loadingDiv.className = 'wu-widget__info dimmed';
+      loadingDiv.textContent = `${pluginEntry.title || pluginId} plugin is loading...`;
+      return loadingDiv;
+    }
+
+    if (!this._frontendPluginInstancesById) {
+      this._frontendPluginInstancesById = new Map();
+    }
+
+    let pluginInstance = this._frontendPluginInstancesById.get(pluginId);
+    if (!pluginInstance) {
+      pluginInstance = pluginHost.createFrontendPluginInstance(pluginId, this._createFrontendPluginContext(pluginEntry));
+      this._frontendPluginInstancesById.set(pluginId, pluginInstance);
+    }
+
+    const renderContext = {
+      moduleId: this.identifier,
+      mode: this.config?.mode || 'verbose',
+      students: this._buildPluginStudentRuntimeSlices(studentTitles),
+      warnings: this._getRuntimeWarnings(),
+      runtime: {},
+    };
+
+    return typeof pluginInstance?.render === 'function' ? pluginInstance.render(renderContext) : null;
   },
 
   /**
@@ -416,16 +630,6 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Check if a specific widget is enabled in the current displayMode
-   *
-   * @param {string} name - Widget name to check (e.g., 'grid', 'lessons')
-   * @returns {boolean} True if widget is enabled
-   */
-  _hasWidget(name) {
-    return this._getDisplayWidgets().includes(String(name).toLowerCase());
-  },
-
-  /**
    * Parse displayMode config and return array of enabled widgets
    * Handles special cases:
    *   - 'grid' → ['grid']
@@ -437,46 +641,67 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of enabled widget names (lowercase, canonical form)
    */
   _getDisplayWidgets() {
-    const raw = this?.config?.displayMode;
-    const s = raw === undefined || raw === null ? '' : String(raw);
-    const lower = s.toLowerCase().trim();
+    const displayTokens = this._getLegacyDisplayTokens(this.config || {});
 
-    if (lower === 'grid') return ['grid'];
-    if (lower === 'list') return ['lessons', 'exams'];
+    if (this._pluginRegistryById && this._pluginRegistryById.size > 0 && displayTokens.length > 0) {
+      const pluginEntries = Array.from(this._pluginRegistryById.values()).filter((entry) => entry?.active === true);
+      const enabledFromDisplayMode = [];
 
-    const parts = lower
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean);
+      for (const token of displayTokens) {
+        const matches = pluginEntries
+          .filter((entry) => {
+            const aliases = Array.isArray(entry?.aliases) && entry.aliases.length > 0 ? entry.aliases : [entry?.id];
+            return aliases.includes(token);
+          })
+          .sort((left, right) => {
+            const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
+            if (orderDelta !== 0) return orderDelta;
+            return String(left?.id || '').localeCompare(String(right?.id || ''));
+          });
 
-    const map = {
-      grid: 'grid',
-      list: 'list',
-      lessons: 'lessons',
-      lesson: 'lessons',
-      exams: 'exams',
-      exam: 'exams',
-      homework: 'homework',
-      homeworks: 'homework',
-      absences: 'absences',
-      absence: 'absences',
-      messagesofday: 'messagesofday',
-      messages: 'messagesofday',
-    };
-
-    const out = [];
-    for (const p of parts) {
-      const w = map[p];
-      if (!w) continue;
-      if (w === 'list') {
-        if (!out.includes('lessons')) out.push('lessons');
-        if (!out.includes('exams')) out.push('exams');
-        continue;
+        for (const match of matches) {
+          const pluginId = String(match?.id || '');
+          if (!pluginId || enabledFromDisplayMode.includes(pluginId)) continue;
+          enabledFromDisplayMode.push(pluginId);
+        }
       }
-      if (!out.includes(w)) out.push(w);
+
+      if (enabledFromDisplayMode.length > 0) return enabledFromDisplayMode;
     }
 
-    return out.length > 0 ? out : ['lessons', 'exams'];
+    if (this._pluginRegistryById && this._pluginRegistryById.size > 0) {
+      const activePlugins = Array.from(this._pluginRegistryById.values())
+        .filter((entry) => entry?.active === true)
+        .sort((left, right) => {
+          const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
+          if (orderDelta !== 0) return orderDelta;
+          return String(left?.id || '').localeCompare(String(right?.id || ''));
+        })
+        .map((entry) => String(entry.id));
+      if (activePlugins.length > 0) return activePlugins;
+    }
+
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+    const explicitEnabled = Object.entries(explicitPlugins)
+      .filter(([, entry]) => entry?.enabled === true)
+      .map(([pluginId]) => pluginId);
+    if (explicitEnabled.length > 0) {
+      return explicitEnabled;
+    }
+
+    const enabled = [];
+    for (const token of displayTokens) {
+      if (token === 'list') {
+        if (!enabled.includes('lessons')) enabled.push('lessons');
+        if (!enabled.includes('exams')) enabled.push('exams');
+        continue;
+      }
+      if (['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'].includes(token) && !enabled.includes(token)) {
+        enabled.push(token);
+      }
+    }
+    return enabled.length > 0 ? enabled : ['lessons', 'exams'];
   },
 
   /**
@@ -517,89 +742,9 @@ Module.register('MMM-Webuntis', {
     }
   },
 
-  _getDomHelper() {
-    const helper = this._getWidgetApi()?.dom || null;
-    if (!helper) {
-      this._log('warn', 'MMM-Webuntis dom helper not available, widget container helpers will be skipped.');
-    }
-    return helper;
-  },
-
-  _createWidgetContainer() {
-    const helper = this._getDomHelper();
-    if (helper && typeof helper.createContainer === 'function') {
-      return helper.createContainer();
-    }
-    const container = document.createElement('div');
-    container.className = 'wu-widget-container bright small light';
-    return container;
-  },
-
-  _shouldRenderStudentHeader(studentConfig) {
-    const mode = studentConfig?.mode ?? this.config.mode;
-    return mode === 'verbose' && Array.isArray(this.config.students) && this.config.students.length > 1;
-  },
-
-  _prepareStudentLabel(container, studentTitle, studentConfig) {
-    if (this._shouldRenderStudentHeader(studentConfig)) {
-      const helper = this._getDomHelper();
-      if (helper && typeof helper.addHeader === 'function') {
-        helper.addHeader(container, studentTitle);
-      }
-      return '';
-    }
-    return studentTitle;
-  },
-
   _getSortedStudentTitles() {
     if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
     return Object.keys(this.timetableByStudent).sort();
-  },
-
-  _invokeWidgetRenderer(widgetKey, methodName, ...args) {
-    const api = this._getWidgetApi();
-    const fn = api?.[widgetKey]?.[methodName];
-    if (typeof fn !== 'function') {
-      this._log('warn', `${widgetKey} widget script not loaded`);
-      return 0;
-    }
-    return fn(this, ...args);
-  },
-
-  _renderWidgetTableRows(studentTitles, renderRow) {
-    const frag = document.createDocumentFragment();
-
-    for (const studentTitle of studentTitles) {
-      const studentConfig = this.configByStudent?.[studentTitle] || this.config;
-      const container = this._createWidgetContainer();
-      const studentLabel = this._prepareStudentLabel(container, studentTitle, studentConfig);
-      try {
-        const count = renderRow(studentTitle, studentLabel, studentConfig, container);
-        if (count > 0) {
-          frag.appendChild(container);
-        }
-      } catch (err) {
-        this._log('error', `Error rendering widget for ${studentTitle}:`, err);
-      }
-    }
-
-    return frag.hasChildNodes() ? frag : null;
-  },
-
-  _computeTodayYmdValue() {
-    if (this._currentTodayYmd) return this._currentTodayYmd;
-    return this.getCurrentDateContext().ymd;
-  },
-
-  _shiftYmd(baseYmd, deltaDays = 0) {
-    const num = Number(baseYmd);
-    if (!Number.isFinite(num)) return null;
-    const year = Math.floor(num / 10000);
-    const month = Math.floor((num % 10000) / 100) - 1;
-    const day = num % 100;
-    const date = new Date(year, month, day);
-    date.setDate(date.getDate() + deltaDays);
-    return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
   },
 
   /**
@@ -661,6 +806,10 @@ Module.register('MMM-Webuntis', {
   _buildSendConfig() {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
     const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins)
+        ? this.config.plugins
+        : undefined;
 
     const sendConfig = {
       ...this.defaults,
@@ -669,6 +818,10 @@ Module.register('MMM-Webuntis', {
       id: this.identifier,
       sessionId: this._sessionId,
     };
+
+    if (explicitPlugins) {
+      sendConfig.plugins = explicitPlugins;
+    }
 
     widgetKeys.forEach((widget) => {
       sendConfig[widget] = {
@@ -1092,232 +1245,38 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Render grid widget for a student
-   * Delegates to grid widget script (widgets/grid.js)
-   *
-   * @param {string} studentTitle - Student name/title
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} timetable - Filtered timetable entries
-   * @param {Array} timeUnits - Time slots (periods)
-   * @param {Array} absences - Absence entries
-   * @returns {HTMLElement|null} Grid DOM element or null if widget not loaded
-   */
-  _renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences) {
-    const api = this._getWidgetApi();
-    const fn = api?.grid?.renderGridForStudent;
-    if (typeof fn !== 'function') {
-      this._log('warn', 'grid widget script not loaded');
-      return null;
-    }
-    return fn(this, studentTitle, studentConfig, timetable, timeUnits, absences);
-  },
-
-  /**
-   * Render lessons list widget for a student
-   * Delegates to lessons widget script (widgets/lessons.js)
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string (or empty if header added)
-   * @param {string} studentTitle - Student name/title
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} timetable - Filtered timetable entries
-   * @param {Map} startTimesMap - Map of time units for formatting
-   * @param {Array} holidays - Holiday entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays) {
-    return this._invokeWidgetRenderer(
-      'lessons',
-      'renderLessonsForStudent',
-      container,
-      studentLabel,
-      studentTitle,
-      studentConfig,
-      timetable,
-      startTimesMap,
-      holidays
-    );
-  },
-
-  /**
-   * Render exams widget for a student
-   * Delegates to exams widget script (widgets/exams.js)
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} exams - Exam entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderExamsForStudent(container, studentLabel, studentConfig, exams) {
-    return this._invokeWidgetRenderer('exams', 'renderExamsForStudent', container, studentLabel, studentConfig, exams);
-  },
-
-  /**
-   * Render homework widget for a student
-   * Delegates to homework widget script (widgets/homework.js)
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} homeworks - Homework entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks) {
-    return this._invokeWidgetRenderer('homework', 'renderHomeworksForStudent', container, studentLabel, studentConfig, homeworks);
-  },
-
-  /**
-   * Render absences widget for a student
-   * Delegates to absences widget script (widgets/absences.js)
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} absences - Absence entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderAbsencesForStudent(container, studentLabel, studentConfig, absences) {
-    return this._invokeWidgetRenderer('absences', 'renderAbsencesForStudent', container, studentLabel, studentConfig, absences);
-  },
-
-  /**
-   * Render messages of day widget for a student
-   * Delegates to messagesofday widget script (widgets/messagesofday.js)
-   *
-   * @param {HTMLElement} container - Container element to render into
-   * @param {string} studentLabel - Student label string
-   * @param {Object} studentConfig - Student configuration
-   * @param {Array} messagesOfDay - Message entries
-   * @returns {number} Number of rendered rows
-   */
-  _renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay) {
-    return this._invokeWidgetRenderer(
-      'messagesofday',
-      'renderMessagesOfDayForStudent',
-      container,
-      studentLabel,
-      studentConfig,
-      messagesOfDay
-    );
-  },
-
-  /**
-   * Collect all widget-relevant student data in one normalized object.
-   *
-   * @param {string} studentTitle - Student key/title.
-   * @returns {Object} Aggregated widget data for the student.
-   */
-  _getStudentWidgetData(studentTitle) {
-    return {
-      studentConfig: this.configByStudent?.[studentTitle] || this.config,
-      timetable: this.timetableByStudent?.[studentTitle] || [],
-      dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
-      timeUnits: this.timeUnitsByStudent?.[studentTitle] || [],
-      homeworks: this.homeworksByStudent?.[studentTitle] || [],
-      exams: this.examsByStudent?.[studentTitle] || [],
-      absences: this.absencesByStudent?.[studentTitle] || [],
-      holidays: this.holidaysByStudent?.[studentTitle] || [],
-      messagesOfDay: this.messagesOfDayByStudent?.[studentTitle] || [],
-      startTimesMap: this.periodNamesByStudent?.[studentTitle] || {},
-    };
-  },
-
-  /**
-   * Render all grid widgets for the current student set.
-   *
-   * @param {HTMLElement} wrapper - Module wrapper element.
-   * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} appendWidgetError - Shared widget error renderer.
-   */
-  _renderGridWidgets(wrapper, studentTitles, appendWidgetError) {
-    let renderedCount = 0;
-    for (const studentTitle of studentTitles) {
-      const { studentConfig, timetable, timeUnits, absences, holidays } = this._getStudentWidgetData(studentTitle);
-      if (timeUnits.length === 0 && holidays.length === 0) {
-        continue;
-      }
-
-      try {
-        const gridElem = this._renderGridForStudent(studentTitle, studentConfig, timetable, timeUnits, absences);
-        if (gridElem) {
-          wrapper.appendChild(gridElem);
-          renderedCount += 1;
-        }
-      } catch (error) {
-        appendWidgetError('Grid', error);
-      }
-    }
-
-    return renderedCount;
-  },
-
-  /**
-   * Render the parent-account limitation notice for absences when needed.
-   *
-   * @param {HTMLElement} wrapper - Module wrapper element.
-   * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} withWarningIcon - Warning icon helper.
-   */
-  _appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon) {
-    const hasUnavailableAbsences = studentTitles.some((title) => this.absencesUnavailableByStudent?.[title]);
-    if (!hasUnavailableAbsences) {
-      return;
-    }
-
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'dimmed small wu-absence__unavailable-info absences-unavailable-info';
-    withWarningIcon(infoDiv, this.translate('absences_unavailable_parent_account'));
-    wrapper.appendChild(infoDiv);
-  },
-
-  /**
    * Build the widget renderer map used by getDom().
    *
    * @param {HTMLElement} wrapper - Module wrapper element.
    * @param {string[]} studentTitles - Sorted student titles.
-   * @param {Function} renderTableWidget - Shared table widget renderer.
    * @param {Function} appendWidgetError - Shared widget error renderer.
-   * @param {Function} withWarningIcon - Warning icon helper.
    * @returns {Object<string, Function>} Widget render functions by display key.
    */
-  _createWidgetRenderers(wrapper, studentTitles, renderTableWidget, appendWidgetError, withWarningIcon) {
+  _createWidgetRenderers(wrapper, studentTitles, appendWidgetError) {
+    const renderPluginWidget = (pluginId, widgetLabel) => {
+      if (!this._isPluginActive(pluginId)) {
+        this._log('warn', `[plugins] ${pluginId} is not active; skipping ${widgetLabel} render path.`);
+        return 0;
+      }
+      try {
+        const pluginElement = this._renderFrontendPluginWidget(pluginId, studentTitles);
+        if (pluginElement) {
+          wrapper.appendChild(pluginElement);
+          return 1;
+        }
+      } catch (error) {
+        appendWidgetError(widgetLabel, error);
+      }
+      return 0;
+    };
+
     return {
-      grid: () => {
-        this._renderGridWidgets(wrapper, studentTitles, appendWidgetError);
-      },
-      lessons: () => {
-        renderTableWidget('Lessons', (studentTitle, studentLabel, studentConfig, container) => {
-          const { timetable, startTimesMap, holidays } = this._getStudentWidgetData(studentTitle);
-          return this._renderListForStudent(container, studentLabel, studentTitle, studentConfig, timetable, startTimesMap, holidays);
-        });
-      },
-      exams: () => {
-        renderTableWidget('Exams', (studentTitle, studentLabel, studentConfig, container) => {
-          const { exams } = this._getStudentWidgetData(studentTitle);
-          if (!Array.isArray(exams)) return 0;
-          return this._renderExamsForStudent(container, studentLabel, studentConfig, exams);
-        });
-      },
-      homework: () => {
-        renderTableWidget('Homework', (studentTitle, studentLabel, studentConfig, container) => {
-          const { homeworks } = this._getStudentWidgetData(studentTitle);
-          return this._renderHomeworksForStudent(container, studentLabel, studentConfig, homeworks);
-        });
-      },
-      absences: () => {
-        this._appendAbsencesUnavailableInfo(wrapper, studentTitles, withWarningIcon);
-        renderTableWidget('Absences', (studentTitle, studentLabel, studentConfig, container) => {
-          const { absences } = this._getStudentWidgetData(studentTitle);
-          return this._renderAbsencesForStudent(container, studentLabel, studentConfig, absences);
-        });
-      },
-      messagesofday: () => {
-        renderTableWidget('Messages of Day', (studentTitle, studentLabel, studentConfig, container) => {
-          const { messagesOfDay } = this._getStudentWidgetData(studentTitle);
-          return this._renderMessagesOfDayForStudent(container, studentLabel, studentConfig, messagesOfDay);
-        });
-      },
+      grid: () => renderPluginWidget('grid', 'Grid'),
+      lessons: () => renderPluginWidget('lessons', 'Lessons'),
+      exams: () => renderPluginWidget('exams', 'Exams'),
+      homework: () => renderPluginWidget('homework', 'Homework'),
+      absences: () => renderPluginWidget('absences', 'Absences'),
+      messagesofday: () => renderPluginWidget('messagesofday', 'Messages of Day'),
     };
   },
 
@@ -1376,7 +1335,6 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent = {};
     this.homeworksByStudent = {};
     this.absencesByStudent = {};
-    this.absencesUnavailableByStudent = {};
     this.messagesOfDayByStudent = {};
     this.holidaysByStudent = {};
     this.holidayMapByStudent = {};
@@ -1388,6 +1346,9 @@ Module.register('MMM-Webuntis', {
     this.runtimeWarningsByStudent = {};
     this._runtimeWarningStreakByStudent = {};
     this._runtimeWarningsLogged = new Set();
+    this._pluginRegistryById = new Map();
+    this._pluginAssetStateById = new Map();
+    this._frontendPluginInstancesById = new Map();
 
     this._updateDomTimer = null;
     this._initialized = false;
@@ -1726,7 +1687,7 @@ Module.register('MMM-Webuntis', {
     let renderedWidgetCount = 0;
     const withWarningIcon = (element, text) => {
       const icon = document.createElement('span');
-      icon.className = 'wu-inline-icon wu-icon-warning';
+      icon.className = 'wu-inline-icon wu-inline-icon--warning';
       icon.setAttribute('aria-hidden', 'true');
       element.replaceChildren(icon, document.createTextNode(` ${text}`));
     };
@@ -1746,18 +1707,6 @@ Module.register('MMM-Webuntis', {
       errorDiv.className = 'wu-widget__error widget-error dimmed';
       withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: widgetLabel }));
       wrapper.appendChild(errorDiv);
-    };
-
-    const renderTableWidget = (widgetLabel, renderRows) => {
-      try {
-        const container = this._renderWidgetTableRows(sortedStudentTitles, renderRows);
-        if (container) {
-          wrapper.appendChild(container);
-          renderedWidgetCount += 1;
-        }
-      } catch (error) {
-        appendWidgetError(widgetLabel, error);
-      }
     };
 
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
@@ -1792,13 +1741,7 @@ Module.register('MMM-Webuntis', {
       wrapper.appendChild(runtimeContainer);
     }
 
-    const widgetRenderers = this._createWidgetRenderers(
-      wrapper,
-      sortedStudentTitles,
-      renderTableWidget,
-      appendWidgetError,
-      withWarningIcon
-    );
+    const widgetRenderers = this._createWidgetRenderers(wrapper, sortedStudentTitles, appendWidgetError);
 
     for (const widget of widgets) {
       const renderWidget = widgetRenderers[widget];
@@ -1806,11 +1749,7 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `Unknown widget type: ${widget}`);
         continue;
       }
-      if (widget === 'grid') {
-        renderedWidgetCount += renderWidget() || 0;
-      } else {
-        renderWidget();
-      }
+      renderedWidgetCount += renderWidget() || 0;
     }
 
     appendEmptyState();
@@ -1911,6 +1850,11 @@ Module.register('MMM-Webuntis', {
       });
     }
 
+    this._setPluginRegistry(payload?.plugins || []);
+    this._initializeActivePlugins(payload?.plugins || []).catch((error) => {
+      this._log('error', `[plugins] initialization failed: ${error?.message || String(error)}`);
+    });
+
     this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
     this._startFetchTimer();
   },
@@ -1927,6 +1871,19 @@ Module.register('MMM-Webuntis', {
         this._log('warn', `  - ${warn}`);
       });
     }
+
+    const errorWarnings = Array.isArray(payload.errors) ? payload.errors : [];
+    const errorWarningMeta = errorWarnings.map((message) => ({
+      message: String(message),
+      kind: 'config',
+      severity: 'critical',
+    }));
+    this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: 'config', severity: 'critical' });
+
+    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
+      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
+    }
+
     this._initialized = false;
     this._initRequested = false;
     if (this._initWatchdogTimer) {
@@ -2125,9 +2082,6 @@ Module.register('MMM-Webuntis', {
       ) {
         target[title] = parsedArray;
         dataChanged = true;
-        if (target === this.absencesByStudent) {
-          this.absencesUnavailableByStudent[title] = [403, 404, 410].includes(Number(status));
-        }
       }
     });
 

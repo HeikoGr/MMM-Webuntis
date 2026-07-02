@@ -6,9 +6,9 @@ Status:
 - this document describes the payload currently emitted and consumed by the module
 
 Scope of this document:
-- define the intended backend -> frontend runtime contract for widget-agnostic, canonically normalized data
-- decide which logic belongs in transport and which must stay frontend-owned
-- establish a reusable domain contract that current and future widgets can consume without backend widget knowledge
+- describe the current backend -> frontend runtime contract for widget-agnostic, canonically normalized data
+- define which logic belongs in transport and which stays frontend-owned
+- document the reusable domain contract consumed by the shipped frontend plugins
 
 Out of scope:
 - external WebUntis REST and JSON-RPC details
@@ -22,13 +22,13 @@ For the historical V2 contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 ## 1. Contract Principles
 
 - Frontend and backend are shipped together.
-- Runtime contract version for this target is fixed at `3`.
+- Runtime contract version is fixed at `3`.
 - No legacy alias fields are required inside V3.
 - V3 is widget-agnostic.
 - V3 transports reusable domain data, not widget-specific view models.
 - The backend may normalize field names, value formats, status values, and text sanitization.
 - The backend must not emit arrays or objects whose meaning depends on one specific widget.
-- V3 must not ship HTML layout fragments, CSS class decisions, animation directives, or widget placement instructions as part of the contract.
+- V3 does not ship HTML layout fragments, CSS class decisions, animation directives, or widget placement instructions as part of the contract.
 
 Meaning of the split:
 - `data` contains canonical normalized domain facts.
@@ -39,32 +39,22 @@ Meaning of the split:
 
 ---
 
-## 2. Why V3 Exists
+## 2. Contract Intent
 
-V2 already has one important property worth preserving: it stays fairly close to normalized upstream data. That is good for extensibility because the backend does not need to know every widget shape.
+V3 keeps the transport focused on normalized domain data instead of widget-specific view models.
 
-The main weaknesses V3 should fix are different:
+Practical consequences:
 
-- transport field names are still partly optimized for compactness instead of readability
-- some collections still expose inconsistent naming conventions across domains
-- frontend widgets currently spend effort translating transport quirks instead of only deriving their own views
-- adding a new widget is harder when the contract leaks historical abbreviations or transport-specific shortcuts
-
-V3 therefore focuses on canonicalization rather than widget preparation:
-
-- readable field names
-- normalized date and time formats
-- normalized enum and status values where useful
-- sanitized text fields
-- stable collection shapes that are reusable across multiple widgets
-
-This means V3 keeps the backend responsible for domain normalization, while the frontend remains responsible for widget-specific derivation.
+- field names are readable rather than transport-shortened
+- date and time values are normalized consistently
+- domain collections are reusable across multiple plugins
+- widgets derive their own sorting, grouping, and display decisions in the frontend
 
 ---
 
 ## 3. Explicit Non-Goals
 
-The following logic must remain frontend-owned and is therefore not part of the V3 transport promise:
+The following logic remains frontend-owned and is not part of the V3 transport contract:
 
 - widget-specific view arrays or slices such as lessons lists, exams lists, absence lists, or grid-only structures
 - day-window expansion for one specific widget
@@ -78,10 +68,10 @@ The following logic must remain frontend-owned and is therefore not part of the 
 - DOM layout, ticker animation, split-view placement, or CSS class assembly
 - viewport-specific rendering behavior
 
-Important hold-back:
+Current constraint:
 - teacher-specific break supervision behavior is important, but not reliably testable in the current environment
-- therefore V3 must keep the canonical lesson-level markers required by grid rendering, especially `displayIcons`, activity and change markers, and enough lesson structure for `BREAK_SUPERVISION` handling
-- V3 must not flatten grid semantics into an opaque backend layout model
+- V3 keeps the canonical lesson-level markers required by grid rendering, especially `displayIcons`, activity and change markers, and enough lesson structure for `BREAK_SUPERVISION` handling
+- V3 does not flatten grid semantics into an opaque backend layout model
 
 ---
 
@@ -210,7 +200,7 @@ Required canonical collections:
 
 Why these remain in V3:
 - they are reusable domain inputs across current widgets
-- they allow future widgets to be implemented without requiring backend widget-specific slices
+- they allow additional plugins to be implemented without requiring backend widget-specific slices
 - cross-widget relationships remain visible instead of being hidden behind one widget's derived output
 - grid still depends on canonical lesson data and related calendar inputs
 
@@ -284,8 +274,8 @@ Field naming rule for V3 lesson data:
 
 Implementation warning for the `changedFields[]` rename:
 Renaming the values inside `changedFields[]` is not an adapter-internal change. Two frontend files embed the V2 abbreviation strings as literal lookup values:
-- `widgets/util.js#getChangedFieldSet()` synthesizes the change set from `suOld`/`teOld`/`roOld` presence and explicitly adds the strings `'su'`, `'te'`, `'ro'`
-- `widgets/grid.js` checks `changedFields.has('su')`, `.has('te')`, `.has('ro')` and uses string literals `'te'` and `'ro'` in a filter expression at multiple call sites
+- `lib/frontendShared.js#getChangedFieldSet()` synthesizes the change set from `suOld`/`teOld`/`roOld` presence and explicitly adds the strings `'su'`, `'te'`, `'ro'`
+- `plugins/grid/frontend.js` checks `changedFields.has('su')`, `.has('te')`, `.has('ro')` and uses string literals `'te'` and `'ro'` in a filter expression at multiple call sites
 
 Both files must be updated in the same change that renames the transport values. If only the adapter emits the new names while these callers still expect the old abbreviations, change rendering in both the grid and lessons widgets will break silently.
 
@@ -374,7 +364,7 @@ These collections remain explicit because they are reusable primitives for multi
 Examples:
 - lessons widgets can derive empty-day states from `lessons[]`, `dayNotices[]`, and `holidays`
 - grid can derive headers, day boundaries, and time-based placement from `timeUnits[]`
-- future widgets can derive calendar summaries or attendance overlays from the same shared sources
+- other plugins can derive calendar summaries or attendance overlays from the same shared sources
 
 Design rule:
 - transport should ship the primitive facts required for these derivations, not prebuilt empty-day rows, day windows, or widget-grouped slices
@@ -475,11 +465,11 @@ Recommended implementation order:
 Atomic deployment requirement:
 The field renames inside `data.*` cannot be staged independently. Current widgets and frontend helpers read the old field names directly. Therefore the following files must all change in a single coordinated update:
 - `lib/mmm-adapter/mmmPayloadMapper.js` - adapter schema field renames + `contractVersion: 3`
-- `widgets/util.js#getChangedFieldSet()` - rename the synthesized strings `'su'`, `'te'`, `'ro'` to `'subject'`, `'teacher'`, `'room'`
-- `widgets/grid.js` - update all `changedFields.has('su'|'te'|'ro')` and the filter expression using these strings, update `el.substText` -> `el.substitutionText`, `el.lstext` -> `el.lessonText`, `el.suOld` -> `el.previousSubjects`, `el.teOld` -> `el.previousTeachers`, `el.roOld` -> `el.previousRooms`, and the `su`/`te`/`ro`/`cl`/`sg` field accesses
-- `widgets/lessons.js` - update `su`/`te`/`ro`/`suOld`/`teOld`/`roOld`/`substText`/`lstext` field accesses
-- `widgets/absences.js` - update `su`/`te` field accesses to canonical absence field names
-- `widgets/homework.js` - update `su` field access to the canonical homework field name
+- `lib/frontendShared.js#getChangedFieldSet()` - rename the synthesized strings `'su'`, `'te'`, `'ro'` to `'subject'`, `'teacher'`, `'room'`
+- `plugins/grid/frontend.js` - update all `changedFields.has('su'|'te'|'ro')` and the filter expression using these strings, update `el.substText` -> `el.substitutionText`, `el.lstext` -> `el.lessonText`, `el.suOld` -> `el.previousSubjects`, `el.teOld` -> `el.previousTeachers`, `el.roOld` -> `el.previousRooms`, and the `su`/`te`/`ro`/`cl`/`sg` field accesses
+- `plugins/lessons/frontend.js` - update `su`/`te`/`ro`/`suOld`/`teOld`/`roOld`/`substText`/`lstext` field accesses
+- `plugins/absences/frontend.js` - update frontend absence field access to canonical absence field names
+- `plugins/homework/frontend.js` - update frontend homework field access to the canonical homework field name
 - `MMM-Webuntis.js` - update `contractVersion` check from `2` to `3`
 
 Explicitly deferred:

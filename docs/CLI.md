@@ -109,4 +109,4 @@ cat debug_dumps/*.json | jq '.data.exams | length'
 - [../docs/CONFIG.md](../docs/CONFIG.md)
 - [../docs/API_REFERENCE.md](../docs/API_REFERENCE.md)
 - [../docs/SERVER_REQUEST_FLOW.md](../docs/SERVER_REQUEST_FLOW.md)
-- [../docs/API_V2_MANIFEST.md](../docs/API_V2_MANIFEST.md)
+- [../docs/API_V3_MANIFEST.md](../docs/API_V3_MANIFEST.md)

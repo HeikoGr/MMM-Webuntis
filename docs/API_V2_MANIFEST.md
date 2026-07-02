@@ -1,9 +1,9 @@
-# API v2 Manifest (Backend <-> Frontend)
+# API v2 Manifest (Archived)
 
-Normative transport contract for MMM-Webuntis runtime payloads.
+Archived reference for the historical MMM-Webuntis runtime payload.
 
-This document describes the historical V2 runtime contract.
-For the current V3 runtime contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
+This document describes the superseded V2 runtime contract.
+For the current shipped runtime contract, see [API_V3_MANIFEST.md](API_V3_MANIFEST.md).
 
 Scope of this document:
 - frontend -> backend request shape used by `INIT_MODULE` and `FETCH_DATA`

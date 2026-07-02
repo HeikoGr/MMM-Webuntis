@@ -1,0 +1,21 @@
+.wu-plugin-exams {
+  width: 100%;
+}
+
+.wu-plugin-exams .examRow,
+.wu-plugin-exams .examRowEmpty {
+  color: var(--wu-legacy-exam-row-color);
+}
+
+.wu-plugin-exams .teacher-name {
+  color: var(--wu-secondary-text);
+}
+
+.wu-plugin-exams .wu-exam__description {
+  display: inline-block;
+  font-size: var(--wu-widget-detail-font-size);
+  line-height: var(--wu-widget-detail-line-height);
+  font-weight: var(--wu-widget-detail-font-weight);
+  margin-top: var(--wu-widget-detail-margin-top);
+  color: var(--wu-exam-description-color);
+}
