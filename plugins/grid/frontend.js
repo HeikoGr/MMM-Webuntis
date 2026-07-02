@@ -324,7 +324,7 @@ function getModuleRootElement(ctx) {
    * @param {Object} config - Student configuration object
    * @returns {Object} Resolved field configuration
    */
-  function resolveFieldConfig(config, _ctx) {
+  function resolveFieldConfig(config) {
     const gridConfig = config?.grid?.fields || {};
     const defaultFields = {
       primary: 'subject',
@@ -418,9 +418,8 @@ function getModuleRootElement(ctx) {
    *   - additional: string[] - Additional field values (deduplicated)
    */
   function buildFlexibleLessonDisplay(lesson, config, options = {}) {
-    const { includeAdditional = true, ctx = null } = options;
-    const fieldConfig = resolveFieldConfig(config, ctx);
-
+    const { includeAdditional = true } = options;
+    const fieldConfig = resolveFieldConfig(config);
     const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
     const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
 
