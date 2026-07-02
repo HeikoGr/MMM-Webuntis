@@ -51,6 +51,14 @@ Module.register('MMM-Webuntis', {
     return nowContext?.isDebug !== true;
   },
 
+  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+    const nextTodayYmd = Number(nowContext?.ymd);
+    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+    if (nextTodayYmd === this._currentTodayYmd) return false;
+    this._currentTodayYmd = nextTodayYmd;
+    return true;
+  },
+
   /**
    * Generate a random session identifier.
    * Uses a cryptographically secure random number generator when available.
@@ -317,6 +325,14 @@ Module.register('MMM-Webuntis', {
 
   _isPluginActive(pluginId) {
     return this._getPluginRegistryEntry(pluginId)?.active === true;
+  },
+
+  _hasWidget(name) {
+    const normalizedName = String(name || '')
+      .trim()
+      .toLowerCase();
+    if (!normalizedName) return false;
+    return this._getDisplayWidgets().includes(normalizedName);
   },
 
   _ensurePluginAssetState(pluginId) {
