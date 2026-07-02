@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Current package version: 0.8.0
+Current package version: 0.8.1
 
 ### 🔌 Plugin Architecture
 

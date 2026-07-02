@@ -2084,6 +2084,13 @@ module.exports = NodeHelper.create({
       plugins: student.plugins || config.plugins,
     };
     const fetchFlags = this._buildFetchFlags(effectiveConfig);
+    const pluginConfigMap =
+      student?.plugins && typeof student.plugins === 'object' && !Array.isArray(student.plugins) ? student.plugins : {};
+    const gridConfig = pluginConfigMap.grid?.config || student.grid || {};
+    const lessonsConfig = pluginConfigMap.lessons?.config || student.lessons || {};
+    const examsConfig = pluginConfigMap.exams?.config || student.exams || {};
+    const absencesConfig = pluginConfigMap.absences?.config || student.absences || {};
+    const homeworkConfig = pluginConfigMap.homework?.config || student.homework || {};
     const baseNow = this._calculateBaseNow(config);
     const dateRanges = calculateFetchRanges({
       baseNow,
@@ -2096,21 +2103,21 @@ module.exports = NodeHelper.create({
       days: {
         globalPastDays: student.pastDays,
         globalNextDays: student.nextDays,
-        gridPastDays: student.grid?.pastDays,
-        gridNextDays: student.grid?.nextDays,
-        lessonsPastDays: student.lessons?.pastDays,
-        lessonsNextDays: student.lessons?.nextDays,
-        examsPastDays: student.exams?.pastDays ?? student.pastDays,
-        examsNextDays: student.exams?.nextDays,
-        absencesPastDays: student.absences?.pastDays,
-        absencesNextDays: student.absences?.nextDays,
-        homeworkPastDays: student.homework?.pastDays,
-        homeworkNextDays: student.homework?.nextDays,
+        gridPastDays: gridConfig.pastDays,
+        gridNextDays: gridConfig.nextDays,
+        lessonsPastDays: lessonsConfig.pastDays,
+        lessonsNextDays: lessonsConfig.nextDays,
+        examsPastDays: examsConfig.pastDays ?? student.pastDays,
+        examsNextDays: examsConfig.nextDays,
+        absencesPastDays: absencesConfig.pastDays,
+        absencesNextDays: absencesConfig.nextDays,
+        homeworkPastDays: homeworkConfig.pastDays,
+        homeworkNextDays: homeworkConfig.nextDays,
       },
       options: {
-        gridWeekView: student.grid?.weekView,
-        gridHideWeekends: student.grid?.hideWeekends,
-        lessonsHideWeekends: student.lessons?.hideWeekends,
+        gridWeekView: gridConfig.weekView,
+        gridHideWeekends: gridConfig.hideWeekends,
+        lessonsHideWeekends: lessonsConfig.hideWeekends,
         debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
       },
     });
