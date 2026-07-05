@@ -95,6 +95,7 @@ test('createGroupWarningCollector stores one warning entry per message', () => {
 });
 
 test('emit helpers preserve or override route metadata as intended', () => {
+  helper.notifications = { EVENT: 'MMM-Webuntis_EVENT' };
   const emitted = [];
   helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
 
@@ -102,20 +103,38 @@ test('emit helpers preserve or override route metadata as intended', () => {
   helper._emitInitError({ id: 'old', sessionId: 'old-session', value: 2 }, { identifier: 'new', sessionId: 'new-session' });
   helper._emitModuleInitialized({ value: 3 }, { identifier: 'new', sessionId: 'new-session' });
 
-  assert.deepEqual(emitted, [
-    {
-      name: 'GOT_DATA',
-      payload: { id: 'new', sessionId: 'new-session', value: 1 },
-    },
-    {
-      name: 'INIT_ERROR',
-      payload: { id: 'old', sessionId: 'old-session', value: 2 },
-    },
-    {
-      name: 'MODULE_INITIALIZED',
-      payload: { id: 'new', sessionId: 'new-session', value: 3 },
-    },
-  ]);
+  assert.equal(emitted.length, 3);
+
+  const [dataEvt, errEvt, readyEvt] = emitted;
+  assert.equal(dataEvt.name, 'MMM-Webuntis_EVENT');
+  assert.equal(dataEvt.payload.action, 'DATA_UPDATE');
+  assert.equal(dataEvt.payload.identifier, 'new');
+  assert.equal(dataEvt.payload.instanceId, 'new');
+  assert.equal(dataEvt.payload.ok, true);
+  assert.deepEqual(dataEvt.payload.data, { id: 'new', sessionId: 'new-session', value: 1 });
+  assert.equal(dataEvt.payload.error, null);
+  assert.equal(typeof dataEvt.payload.requestId, 'string');
+  assert.equal(Number.isFinite(dataEvt.payload.ts), true);
+
+  assert.equal(errEvt.name, 'MMM-Webuntis_EVENT');
+  assert.equal(errEvt.payload.action, 'MODULE_INIT_FAILED');
+  assert.equal(errEvt.payload.identifier, 'old');
+  assert.equal(errEvt.payload.instanceId, 'old');
+  assert.equal(errEvt.payload.ok, false);
+  assert.deepEqual(errEvt.payload.data, { id: 'old', sessionId: 'old-session', value: 2 });
+  assert.deepEqual(errEvt.payload.error, { id: 'old', sessionId: 'old-session', value: 2 });
+  assert.equal(typeof errEvt.payload.requestId, 'string');
+  assert.equal(Number.isFinite(errEvt.payload.ts), true);
+
+  assert.equal(readyEvt.name, 'MMM-Webuntis_EVENT');
+  assert.equal(readyEvt.payload.action, 'MODULE_READY');
+  assert.equal(readyEvt.payload.identifier, 'new');
+  assert.equal(readyEvt.payload.instanceId, 'new');
+  assert.equal(readyEvt.payload.ok, true);
+  assert.deepEqual(readyEvt.payload.data, { id: 'new', sessionId: 'new-session', value: 3 });
+  assert.equal(readyEvt.payload.error, null);
+  assert.equal(typeof readyEvt.payload.requestId, 'string');
+  assert.equal(Number.isFinite(readyEvt.payload.ts), true);
 });
 
 test('handleSessionState uses default route values for missing payload metadata', () => {

@@ -10,13 +10,13 @@
 
 **Frontend → Backend Socket Flow**:
 ```
-MMM-Webuntis.js (start) → socketNotification("INIT_MODULE")
+MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="CONFIGURE")
   → node_helper.js:socketNotificationReceived() [~L1421] → _handleInitModule()
     → validate + applyLegacyMappings → auto-discover students (optional)
-    → socketNotification("MODULE_INITIALIZED") to FE
-    → _handleFetchData() auto-runs first fetch (no FE FETCH_DATA needed)
+    → socketNotification("MMM-Webuntis_EVENT", action="MODULE_READY") to FE
+    → _handleFetchData() auto-runs first fetch (no FE action="REFRESH" needed)
       → orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
-      → buildGotDataPayload() → socketNotification("GOT_DATA", payload)
+      → buildUpdatePayload() → socketNotification("MMM-Webuntis_EVENT", action="DATA_UPDATE", data)
   → MMM-Webuntis.js:socketNotificationReceived() → widgets render
 ```
 
@@ -87,7 +87,7 @@ This was NOT always the case. Previously it whitelisted explicit field names, ca
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → mmm-adapter/mmmPayloadMapper.js#schemas.lesson – declares field for compaction
     → mmm-adapter/mmmPayloadMapper.js#compactArray() – compacts lessons
-      → socket GOT_DATA payload               – field present in data.lessons[]
+      → socket DATA_UPDATE payload            – field present in data.lessons[]
         → plugins/grid/frontend.js#extractDayLessons() – spread: auto-forwarded ✅
             → makeLessonInnerHTML()                – field available on `lesson`
 ```
@@ -134,7 +134,7 @@ console.warn('[feature] Warning:', error);
 - `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
 - `lib/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
-- `lib/mmm-adapter/mmmPayloadMapper.js` - Build GOT_DATA payloads + debug dumps (MMM adapter layer)
+- `lib/mmm-adapter/mmmPayloadMapper.js` - Build DATA_UPDATE payload data + debug dumps (MMM adapter layer)
 
 Boundary rule:
 - Only `lib/webuntisClient.js` is a public WebUntis API entry point at the lib root.

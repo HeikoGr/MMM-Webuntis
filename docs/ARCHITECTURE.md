@@ -56,8 +56,8 @@ Files:
 - `MMM-Webuntis.css`
 
 Responsibilities:
-- send `INIT_MODULE` and `FETCH_DATA`
-- receive `MODULE_INITIALIZED`, `INIT_ERROR`, and `GOT_DATA`
+- send `CONFIGURE` and `REFRESH`
+- receive `MODULE_READY`, `MODULE_INIT_FAILED`, and `DATA_UPDATE`
 - load frontend plugin assets and register plugin instances
 - render active plugins through the frontend plugin host
 - format already-normalized data for display
@@ -122,19 +122,19 @@ Responsibilities:
 - normalize dates, times, and field shapes
 - sanitize HTML-bearing fields
 - compact payloads before they reach the frontend
-- map fetched data into the canonical `GOT_DATA` contract
+- map fetched data into the canonical `DATA_UPDATE` contract
 - keep MMM contract-building logic co-located in one adapter module
 
 This layer separates transport data from frontend-facing runtime data.
 
 ## Main Control Flow
 
-1. `MMM-Webuntis.js` sends `INIT_MODULE`.
+1. `MMM-Webuntis.js` sends `CONFIGURE`.
 2. `node_helper.js` validates config and prepares session state.
 3. `node_helper.js` triggers the first fetch automatically.
 4. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
-5. `lib/webuntisClient.js` maps the normalized bundle into the `GOT_DATA` payload.
-6. `node_helper.js` emits `GOT_DATA`.
+5. `lib/webuntisClient.js` maps the normalized bundle into the `DATA_UPDATE` payload.
+6. `node_helper.js` emits `DATA_UPDATE`.
 7. Frontend plugin renderers consume the normalized result.
 
 Current compatibility note:

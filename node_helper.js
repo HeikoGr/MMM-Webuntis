@@ -2,10 +2,10 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
+const shared = require('./lib/mmm-shared');
 const { getCurrentDateContext, parseDisplayModeTokens } = require('./lib/runtime-utils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
-const createBackendLogger = require('./lib/logger');
 const {
   DEFAULT_WARNING_META,
   createWarningMetaEntry,
@@ -54,7 +54,7 @@ module.exports = NodeHelper.create({
    */
   start() {
     this._mmLog('debug', null, 'Node helper started');
-    this.logger = createBackendLogger(this._mmLog.bind(this));
+    this.notifications = shared.buildNotifications('MMM-Webuntis');
 
     const libLogger = (level, message) => {
       this._mmLog(level, null, `[lib] ${message}`);
@@ -507,7 +507,7 @@ module.exports = NodeHelper.create({
     this._configsBySession.set(sessionKey, normalizedConfig);
 
     if (normalizedConfig.debugDate) {
-      this._mmLog('debug', null, `[INIT_MODULE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
+      this._mmLog('debug', null, `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
     }
 
     if (typeof normalizedConfig.displayMode === 'string') {
@@ -535,7 +535,7 @@ module.exports = NodeHelper.create({
       return { valid, combinedWarnings, combinedWarningMeta };
     }
 
-    this._mmLog('error', null, `[INIT_MODULE] Config validation failed for ${identifier}`);
+    this._mmLog('error', null, `[CONFIGURE] Config validation failed for ${identifier}`);
     this._emitInitError(
       {
         errors: this._collectValidationWarnings(errors, pluginValidation.errors),
@@ -1693,60 +1693,69 @@ module.exports = NodeHelper.create({
    * Main entry point for all frontend-to-backend communication
    *
    * Listens for:
-   *   - INIT_MODULE: First-time module initialization (config validation, student discovery)
-   *   - FETCH_DATA: Data refresh request (periodic updates, manual refresh)
+   *   - CONFIGURE: First-time module initialization (config validation, student discovery)
+   *   - REFRESH: Data refresh request (periodic updates, manual refresh)
    *   - SESSION_STATE: Per-session lifecycle state updates (paused/active)
    *
-   * @param {string} notification - Notification name (INIT_MODULE, FETCH_DATA, SESSION_STATE)
+   * @param {string} notification - Notification name (REQUEST envelope)
    * @param {any} payload - Notification payload (config object, refresh request)
    * @returns {Promise<void>}
    */
   async socketNotificationReceived(notification, payload) {
-    const handlers = {
-      INIT_MODULE: async () => this._handleInitModule(payload),
-      FETCH_DATA: async () => this._handleFetchData(payload),
-      SESSION_STATE: async () => this._handleSessionState(payload),
+    if (notification !== this.notifications.REQUEST) return;
+
+    const action = payload?.action;
+    const requestData = {
+      ...(payload?.data || {}),
+      id: payload?.identifier || payload?.data?.id || DEFAULT_IDENTIFIER,
+      sessionId: payload?.data?.sessionId || DEFAULT_SESSION_ID,
     };
 
-    const handler = handlers[notification];
+    const handlers = {
+      CONFIGURE: async () => this._handleInitModule(requestData),
+      REFRESH: async () => this._handleFetchData(requestData),
+      SESSION_STATE: async () => this._handleSessionState(requestData),
+    };
+
+    const handler = handlers[action];
     if (!handler) return;
     await handler();
   },
 
   /**
-   * Send GOT_DATA payload with consistent id/session routing metadata.
+   * Send DATA_UPDATE payload with consistent id/session routing metadata.
    *
-   * @param {Object} payload - GOT_DATA payload
+   * @param {Object} payload - DATA_UPDATE payload
    * @param {Object} [route] - Optional route metadata override
    * @param {string} [route.identifier] - Module identifier
    * @param {string} [route.sessionId] - Session ID
    */
   _emitGotData(payload, route = {}) {
-    this._emitSocketNotification('GOT_DATA', payload, route, { preserveExistingRoute: false });
+    this._emitSocketNotification('DATA_UPDATE', payload, route, { preserveExistingRoute: false });
   },
 
   /**
-   * Send INIT_ERROR with consistent routing metadata.
+   * Send MODULE_INIT_FAILED with consistent routing metadata.
    *
-   * @param {Object} payload - INIT_ERROR payload
+   * @param {Object} payload - MODULE_INIT_FAILED payload
    * @param {Object} [route] - Optional route metadata override
    * @param {string} [route.identifier] - Module identifier
    * @param {string} [route.sessionId] - Session ID
    */
   _emitInitError(payload, route = {}) {
-    this._emitSocketNotification('INIT_ERROR', payload, route, { preserveExistingRoute: true });
+    this._emitSocketNotification('MODULE_INIT_FAILED', payload, route, { preserveExistingRoute: true });
   },
 
   /**
-   * Send MODULE_INITIALIZED with consistent routing metadata.
+   * Send MODULE_READY with consistent routing metadata.
    *
-   * @param {Object} payload - MODULE_INITIALIZED payload
+   * @param {Object} payload - MODULE_READY payload
    * @param {Object} [route] - Optional route metadata override
    * @param {string} [route.identifier] - Module identifier
    * @param {string} [route.sessionId] - Session ID
    */
   _emitModuleInitialized(payload, route = {}) {
-    this._emitSocketNotification('MODULE_INITIALIZED', payload, route, { preserveExistingRoute: true });
+    this._emitSocketNotification('MODULE_READY', payload, route, { preserveExistingRoute: true });
   },
 
   _emitSocketNotification(notification, payload, route = {}, options = {}) {
@@ -1762,7 +1771,18 @@ module.exports = NodeHelper.create({
       nextPayload.sessionId = route.sessionId;
     }
 
-    this.sendSocketNotification(notification, nextPayload);
+    this.sendSocketNotification(
+      this.notifications.EVENT,
+      shared.createEnvelope({
+        identifier: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
+        instanceId: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
+        action: notification,
+        ok: !String(notification).includes('FAILED'),
+        data: nextPayload,
+        error: String(notification).includes('FAILED') ? nextPayload : null,
+        meta: {},
+      })
+    );
   },
 
   /**
@@ -1786,15 +1806,15 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Handle INIT_MODULE notification - performs one-time module initialization
+   * Handle CONFIGURE request - performs one-time module initialization
    *
    * Flow:
    *   1. Apply legacy config mappings (25+ deprecated keys)
    *   2. Validate configuration (validateConfig from configValidator)
    *   3. Set up AuthService for this identifier (prevents cache cross-contamination)
    *   4. Auto-discover students if parent credentials provided
-   *   5. Send MODULE_INITIALIZED to frontend
-   *   6. Automatically trigger initial data fetch (no separate FETCH_DATA needed)
+   *   5. Send MODULE_READY to frontend
+   *   6. Automatically trigger initial data fetch (no separate REFRESH needed)
    *
    * @param {Object} payload - Module configuration from frontend (includes id, sessionId, config)
    * @returns {Promise<void>}
@@ -1810,7 +1830,7 @@ module.exports = NodeHelper.create({
       const { identifier: routeIdentifier, sessionId, sessionKey, initReason } = this._resolveInitRoute(normalizedConfig, payload);
       identifier = routeIdentifier;
 
-      this._mmLog('info', null, `[INIT_MODULE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
+      this._mmLog('info', null, `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
 
       this._storeInitSessionConfig(sessionKey, normalizedConfig);
       const { valid, combinedWarnings, combinedWarningMeta } = this._validateInitConfig(
@@ -1825,7 +1845,7 @@ module.exports = NodeHelper.create({
       this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta);
       await this._triggerPostInitFetch(normalizedConfig, identifier, sessionId);
     } catch (error) {
-      this._mmLog('error', null, `[INIT_MODULE] Initialization failed: ${this._formatErr(error)}`);
+      this._mmLog('error', null, `[CONFIGURE] Initialization failed: ${this._formatErr(error)}`);
       this._emitInitError(
         {
           errors: [error.message || 'Unknown initialization error'],
@@ -1842,7 +1862,7 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Handle FETCH_DATA notification - performs data refresh for already initialized module
+   * Handle REFRESH request - performs data refresh for already initialized module
    *
    * Flow:
    *   1. Verify module is initialized (per session or per identifier)
@@ -1850,7 +1870,7 @@ module.exports = NodeHelper.create({
    *   3. Delegate to _executeFetchForSession for actual data fetching
    *
    * Uses cached config and authentication, only fetches fresh data from WebUntis.
-   * Supports self-healing: if module not initialized but FETCH_DATA received, re-runs INIT_MODULE.
+   * Supports self-healing: if module not initialized but REFRESH received, re-runs CONFIGURE.
    *
    * @param {Object} payload - Fetch request from frontend (includes id, sessionId, optional debugDate)
    * @returns {Promise<void>}
@@ -1859,26 +1879,26 @@ module.exports = NodeHelper.create({
     const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
     const fetchReason = payload?.reason || 'unspecified';
 
-    this._mmLog('debug', null, `[FETCH_DATA] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+    this._mmLog('debug', null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
 
     if (this._pausedSessions.has(sessionKey)) {
-      this._mmLog('debug', null, `[FETCH_DATA] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+      this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
       return;
     }
 
-    // Track FETCH_DATA requests to debug duplicate calls (silently)
+    // Track REFRESH requests to debug duplicate calls (silently)
     const fetchTimestamp = Date.now();
     this._lastFetchTimestamp = fetchTimestamp;
 
     // Verify module is initialized and ensure session-specific config exists.
     let normalizedConfig = this._getOrCreateSessionConfig(sessionKey, identifier);
     if (!normalizedConfig) {
-      // Self-healing: if module not initialized but FETCH_DATA received, re-run initialization
+      // Self-healing: if module not initialized but REFRESH received, re-run initialization
       // This handles cases where backend restarted but frontend still thinks it's initialized
       this._mmLog(
         'warn',
         null,
-        `[FETCH_DATA] Module ${identifier} not initialized for session ${sessionId} - attempting re-init from incoming payload`
+        `[REFRESH] Module ${identifier} not initialized for session ${sessionId} - attempting re-init from incoming payload`
       );
       // Attempt a self-heal by re-running initialization using the provided payload.
       // This covers cases where the backend restarted but the frontend still thinks it is initialized.
@@ -1891,7 +1911,7 @@ module.exports = NodeHelper.create({
       normalizedConfig = { ...normalizedConfig, debugDate: payload.debugDate };
       this._configsBySession.set(sessionKey, normalizedConfig);
       if (payload.debugDate) {
-        this._mmLog('debug', null, `[FETCH_DATA] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
+        this._mmLog('debug', null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
       }
     }
 
@@ -1921,7 +1941,7 @@ module.exports = NodeHelper.create({
       return;
     }
 
-    // Get AuthService reference (already initialized during INIT_MODULE)
+    // Get AuthService reference (already initialized during CONFIGURE)
     config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
 
     try {
@@ -2068,7 +2088,7 @@ module.exports = NodeHelper.create({
    * @param {Array} [params.compactHolidays] - Pre-extracted and compacted holidays (shared across students in group)
    * @param {Object} params.config - Module configuration
    * @param {string} params.sessionKey - Session key for API status tracking
-   * @returns {Promise<Object|null>} GOT_DATA payload object or null on error
+   * @returns {Promise<Object|null>} DATA_UPDATE payload object or null on error
    */
   async fetchData(params) {
     const { authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey, currentFetchWarnings } = params || {};

@@ -99,8 +99,8 @@ The canonical defaults live in the `defaults` object in `MMM-Webuntis.js`. Globa
 | `timezone` | string | `'Europe/Berlin'` | Timezone used for date calculations and debug-date handling. |
 | `debugDate` | string\|null | `null` | Freeze the calendar day for testing (`YYYY-MM-DD`) while keeping the live clock time. |
 | `demoDataFile` | string\|null | `null` | Relative path to a local fixture JSON for frontend-only demo mode. |
-| `initRetryTimeout` | int | `5000` | Watchdog timeout in milliseconds before the frontend retries `INIT_MODULE`. |
-| `initRetryMaxAttempts` | int | `4` | Maximum automatic `INIT_MODULE` retries before waiting for the next trigger. |
+| `initRetryTimeout` | int | `5000` | Watchdog timeout in milliseconds before the frontend retries `CONFIGURE`. |
+| `initRetryMaxAttempts` | int | `4` | Maximum automatic `CONFIGURE` retries before waiting for the next trigger. |
 | `dumpBackendPayloads` | bool | `false` | Write backend payload snapshots to `debug_dumps/`. |
 | `dumpRawApiResponses` | bool | `false` | Write raw REST responses to `debug_dumps/raw_api_*.json`. |
 | `useClassTimetable` | bool | `false` | Use class timetable instead of personal timetable where required. |

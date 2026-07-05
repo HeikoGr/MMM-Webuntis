@@ -8,7 +8,7 @@ Scope of this document:
 - normalization rules applied before data reaches the frontend
 
 Out of scope:
-- internal `GOT_DATA` payload shape
+- internal `DATA_UPDATE` payload shape
 - frontend/backend transport contract
 - detailed retry, timeout, and skip behavior
 

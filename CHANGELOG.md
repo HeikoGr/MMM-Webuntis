@@ -197,12 +197,12 @@ Historical changelog catch-up for the previously undocumented range between `0.7
 
 ### 🏗️ Architecture Improvements
 
-- **Separated Socket Communication**: Split initialization (`INIT_MODULE`) from data fetching (`FETCH_DATA`) for cleaner architecture
+- **Separated Socket Communication**: Split initialization (`CONFIGURE`) from data fetching (`REFRESH`) for cleaner architecture
   - Init phase: One-time config validation, authentication setup, student auto-discovery
   - Fetch phase: Pure data refresh using cached config and authentication
   - Performance: Config validation and auto-discovery now only run once instead of on every fetch
   - Better error handling: Separate error paths for initialization vs. runtime data fetch failures
-  - Improved logging: Clear `[INIT_MODULE]` and `[FETCH_DATA]` tags for easier debugging
+  - Improved logging: Clear `[CONFIGURE]` and `[REFRESH]` tags for easier debugging
 
 ## 0.5.0
 

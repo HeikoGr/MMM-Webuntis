@@ -33,12 +33,12 @@ It complements, but does not replace:
 flowchart TD
     FE[Frontend MMM-Webuntis.js]
     NH[node_helper.js]
-    INIT[INIT_MODULE]
-    FETCH[FETCH_DATA]
+    INIT[REQUEST: CONFIGURE]
+    FETCH[REQUEST: REFRESH]
     STATE[SESSION_STATE]
-    MODOK[MODULE_INITIALIZED]
-    GOT[GOT_DATA]
-    INITERR[INIT_ERROR]
+    MODOK[EVENT: MODULE_READY]
+    GOT[EVENT: DATA_UPDATE]
+    INITERR[EVENT: MODULE_INIT_FAILED]
 
     CFG[Config validation and legacy mapping]
     DISCOVER[Optional student auto-discovery via app/data]
@@ -122,7 +122,7 @@ sequenceDiagram
     participant FC as fetchClient
     participant WU as WebUntis
 
-    FE->>NH: INIT_MODULE or FETCH_DATA
+    FE->>NH: REQUEST action CONFIGURE or REFRESH
     NH->>WF: fetchStudentData(...)
     WF->>WC: fetchBundle(...)
     WC->>OR: orchestrateFetch(...)
@@ -169,7 +169,7 @@ sequenceDiagram
 
     OR-->>WC: timetable + parallel endpoint results
     WC-->>NH: normalized payload
-    NH-->>FE: GOT_DATA
+    NH-->>FE: EVENT action DATA_UPDATE
 ```
 
 ## 3. Socket-Level Status Signals
@@ -178,22 +178,22 @@ These are the internal status signals between frontend and backend.
 
 | Signal | Direction | Meaning |
 |--------|-----------|---------|
-| `INIT_MODULE` | frontend -> backend | Validate config, set up auth service, optionally auto-discover students, then trigger initial fetch |
-| `MODULE_INITIALIZED` | backend -> frontend | Initialization finished successfully; includes normalized config, warnings, and students |
-| `INIT_ERROR` | backend -> frontend | Initialization failed; includes `errors`, `warnings`, and `severity` |
-| `FETCH_DATA` | frontend -> backend | Start a refresh for an already initialized session |
-| `GOT_DATA` | backend -> frontend | Final payload after auth, fetch, normalization, and payload building |
+| `CONFIGURE` | frontend -> backend | Validate config, set up auth service, optionally auto-discover students, then trigger initial fetch |
+| `MODULE_READY` | backend -> frontend | Initialization finished successfully; includes normalized config, warnings, and students |
+| `MODULE_INIT_FAILED` | backend -> frontend | Initialization failed; includes `errors`, `warnings`, and `severity` |
+| `REFRESH` | frontend -> backend | Start a refresh for an already initialized session |
+| `DATA_UPDATE` | backend -> frontend | Final payload after auth, fetch, normalization, and payload building |
 | `SESSION_STATE` | frontend -> backend | Mark session as `active` or `paused`; paused sessions ignore fetches |
 
 ## 4. Request Phases
 
 ### Phase 1: Initialization
 
-1. Frontend sends `INIT_MODULE`.
+1. Frontend sends `CONFIGURE`.
 2. `node_helper.js` applies legacy mappings and validates config.
 3. An identifier-scoped `AuthService` instance is created.
 4. If parent credentials are present, `app/data` may be used to auto-discover students.
-5. Backend emits `MODULE_INITIALIZED`.
+5. Backend emits `MODULE_READY`.
 6. Backend immediately runs `_handleFetchData()` for the first fetch.
 
 ### Phase 2: Auth Session Creation
@@ -290,7 +290,7 @@ Retryable conditions:
 
 The jitter (±25%) helps prevent the "thundering herd" problem where multiple clients hammer the server simultaneously when recovering. The built-in backoff adds at most ~7 seconds total before the final failure is returned.
 
-After the fourth and final attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `FETCH_DATA` based on the configured `updateInterval`.
+After the fourth and final attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `REFRESH` based on the configured `updateInterval`.
 
 ### Auth Retry in `webuntisApiService`
 

@@ -6,7 +6,7 @@ Synthetic fixture payloads for screenshot generation and local UI testing.
 
 - Never copy personal data from real users.
 - Keep all names, IDs, rooms, and free text anonymized.
-- Keep payload shape compatible with `GOT_DATA` frontend payloads.
+- Keep payload shape compatible with `DATA_UPDATE` frontend payloads.
 - Prefer realistic but deterministic school-week data.
 
 ## Files

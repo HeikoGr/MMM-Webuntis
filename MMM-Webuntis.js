@@ -109,8 +109,8 @@ Module.register('MMM-Webuntis', {
     logLevel: 'none', // Logging level: none, error, warn, info, debug.
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
-    initRetryTimeout: 5000, // timeout for INIT_MODULE -> MODULE_INITIALIZED watchdog (milliseconds)
-    initRetryMaxAttempts: 4, // max INIT_MODULE attempts before reopening init gate
+    initRetryTimeout: 5000, // timeout for CONFIGURE -> MODULE_READY watchdog (milliseconds)
+    initRetryMaxAttempts: 4, // max CONFIGURE attempts before reopening init gate
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
     dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
 
@@ -172,7 +172,12 @@ Module.register('MMM-Webuntis', {
   getScripts() {
     window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
-    const scripts = [this.file('lib/runtime-utils.js'), this.file('lib/pluginHostFrontend.js'), this.file('lib/frontendShared.js')];
+    const scripts = [
+      this.file('lib/mmm-shared.js'),
+      this.file('lib/runtime-utils.js'),
+      this.file('lib/pluginHostFrontend.js'),
+      this.file('lib/frontendShared.js'),
+    ];
 
     return scripts;
   },
@@ -596,7 +601,7 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Emit one or more demo payloads through the normal GOT_DATA handler path.
+   * Emit one or more demo payloads through the normal DATA_UPDATE handler path.
    *
    * @param {string} [reason='manual'] - Trigger reason for logging/debugging context.
    * @returns {Promise<void>}
@@ -632,7 +637,12 @@ Module.register('MMM-Webuntis', {
           sessionId: this._sessionId,
           id: this.identifier,
         };
-        this.socketNotificationReceived('GOT_DATA', payload);
+        this.socketNotificationReceived(this.notifications.EVENT, {
+          identifier: this.identifier,
+          instanceId: this.identifier,
+          action: 'DATA_UPDATE',
+          data: payload,
+        });
       });
 
       this._log('debug', `[DEMO] Rendered ${payloads.length} demo payload(s) (${reason})`);
@@ -1304,12 +1314,27 @@ Module.register('MMM-Webuntis', {
    *   2. Initialize data storage structures (timetableByStudent, examsByStudent, etc.)
    *   3. Generate unique session ID for browser window isolation
    *   4. Parse and set debugDate if configured (frozen date for testing)
-   *   5. Request INIT_MODULE once DOM is ready (DOM_OBJECTS_CREATED),
+   *   5. Request CONFIGURE once DOM is ready (DOM_OBJECTS_CREATED),
    *      with resume() and startup fallback as safety nets
    *
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
   start() {
+    this.shared = globalThis.MMModuleShared;
+    this.sharedContext = this.shared.createModuleContext('MMM-Webuntis', this.identifier, {
+      instanceId: this.identifier,
+      logLevel: this.config.logLevel || this.defaults.logLevel || 'info',
+      logStructured: true,
+      logRedaction: true,
+    });
+    this.transport = this.shared.createTransport({
+      moduleName: 'MMM-Webuntis',
+      identifier: this.identifier,
+      instanceId: this.identifier,
+      sendSocketNotification: this.sendSocketNotification.bind(this),
+    });
+    this.notifications = this.transport.notifications;
+
     this._sessionId = this._generateSessionId(9);
 
     // Multi-instance support via explicit identifiers.
@@ -1433,7 +1458,7 @@ Module.register('MMM-Webuntis', {
 
   /**
    * Start periodic data fetch timer
-   * Sends FETCH_DATA to backend at configured updateInterval
+   * Sends REFRESH to backend at configured updateInterval
    * Timer is skipped if module is paused or interval is invalid
    */
   _startFetchTimer() {
@@ -1462,8 +1487,7 @@ Module.register('MMM-Webuntis', {
    * @param {string} reason - Lifecycle reason
    */
   _sendSessionState(state, reason = 'manual') {
-    this.sendSocketNotification('SESSION_STATE', {
-      id: this.identifier,
+    this.transport.sendRequest('SESSION_STATE', {
       sessionId: this._sessionId,
       state,
       reason,
@@ -1471,16 +1495,16 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Send INIT_MODULE notification to backend
+   * Send CONFIGURE request to backend
    * Triggers one-time module initialization (config validation, student discovery)
-   * Backend responds with MODULE_INITIALIZED when ready
+   * Backend responds with MODULE_READY when ready
    *
    * @param {string} reason - Reason for initialization trigger
    */
   _sendInit(reason = 'manual') {
     this._initAttemptCount += 1;
-    this._log('debug', `[INIT] Sending INIT_MODULE to backend (reason=${reason})`);
-    this.sendSocketNotification('INIT_MODULE', {
+    this._log('debug', `[CONFIGURE] Sending to backend (reason=${reason})`);
+    this.transport.sendRequest('CONFIGURE', {
       ...this._buildSendConfig(),
       reason,
     });
@@ -1488,7 +1512,7 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Arm a watchdog for the init handshake and retry when MODULE_INITIALIZED is missing.
+   * Arm a watchdog for the init handshake and retry when MODULE_READY is missing.
    */
   _armInitWatchdog() {
     const configuredTimeout = Number(this.config?.initRetryTimeout);
@@ -1508,7 +1532,7 @@ Module.register('MMM-Webuntis', {
       if (this._initAttemptCount >= maxAttempts) {
         this._log(
           'warn',
-          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_INITIALIZED; reopening init gate for next trigger`
+          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_READY; reopening init gate for next trigger`
         );
         this._initRequested = false;
         this._initAttemptCount = 0;
@@ -1516,7 +1540,7 @@ Module.register('MMM-Webuntis', {
       }
 
       const nextAttempt = this._initAttemptCount + 1;
-      this._log('warn', `[INIT] No MODULE_INITIALIZED within ${timeoutMs}ms, retrying INIT_MODULE (attempt ${nextAttempt}/${maxAttempts})`);
+      this._log('warn', `[INIT] No MODULE_READY within ${timeoutMs}ms, retrying CONFIGURE (attempt ${nextAttempt}/${maxAttempts})`);
       this._sendInit(`retry-timeout-${nextAttempt}`);
     }, timeoutMs);
   },
@@ -1576,7 +1600,7 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Send FETCH_DATA notification to backend for data refresh
+   * Send REFRESH request to backend for data refresh
    * Only sends if module is initialized (prevents fetch before init)
    * Stores pending resume request if called during initialization
    *
@@ -1588,11 +1612,11 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    // Hard guard: never send FETCH_DATA while module is suspended/paused.
+    // Hard guard: never send REFRESH while module is suspended/paused.
     // This covers timer race conditions where a queued callback might still fire
     // right around suspend().
     if (this._paused) {
-      this._log('debug', `[FETCH_DATA] Skipped while suspended (reason=${reason})`);
+      this._log('debug', `[REFRESH] Skipped while suspended (reason=${reason})`);
       return;
     }
 
@@ -1603,7 +1627,7 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    this.sendSocketNotification('FETCH_DATA', {
+    this.transport.sendRequest('REFRESH', {
       ...this._buildSendConfig(),
       reason,
     });
@@ -1683,10 +1707,10 @@ Module.register('MMM-Webuntis', {
     const interval = this.config?.updateInterval || 5 * 60 * 1000;
 
     if (!hasReceivedData) {
-      this._log('debug', '[resume] No data received yet in this session, sending FETCH_DATA...');
+      this._log('debug', '[resume] No data received yet in this session, sending REFRESH...');
       this._sendFetchData('resume-no-data');
     } else if (dataAge >= interval) {
-      this._log('debug', `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s), sending FETCH_DATA...`);
+      this._log('debug', `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s), sending REFRESH...`);
       this._sendFetchData('resume-stale-data');
     } else {
       this._log(
@@ -1794,24 +1818,23 @@ Module.register('MMM-Webuntis', {
   },
 
   socketNotificationReceived(notification, payload) {
+    if (notification !== this.notifications.EVENT) return;
     if (!this._isValidTargetInstance(payload)) return;
 
-    switch (notification) {
-      case 'MODULE_INITIALIZED':
-        this._handleModuleInitialized(payload);
+    const action = payload?.action;
+    const eventData = payload?.data || {};
+
+    switch (action) {
+      case 'MODULE_READY':
+        this._handleModuleInitialized(eventData);
         break;
 
-      case 'INIT_ERROR':
-        this._handleInitError(payload);
+      case 'MODULE_INIT_FAILED':
+        this._handleInitError(eventData);
         break;
 
-      case 'CONFIG_WARNING':
-      case 'CONFIG_ERROR':
-        this._handleConfigIssues(payload);
-        break;
-
-      case 'GOT_DATA':
-        this._handleGotData(payload);
+      case 'DATA_UPDATE':
+        this._handleGotData(eventData);
         break;
 
       default:
@@ -1823,18 +1846,20 @@ Module.register('MMM-Webuntis', {
    * Ensure the payload matches the current module instance's sessionId or identifier
    */
   _isValidTargetInstance(payload) {
-    if (payload?.sessionId && this._sessionId !== payload.sessionId) return false;
-    if (payload?.id && !payload?.sessionId && this.identifier !== payload.id) return false;
+    const routed = payload?.data || payload || {};
+    if (routed?.sessionId && this._sessionId !== routed.sessionId) return false;
+    if (routed?.id && !routed?.sessionId && this.identifier !== routed.id) return false;
+    if (payload?.identifier && this.identifier !== payload.identifier) return false;
     return true;
   },
 
   _handleModuleInitialized(payload) {
     if (this._initialized) {
-      this._log('debug', `[MODULE_INITIALIZED] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
+      this._log('debug', `[MODULE_READY] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
       return;
     }
 
-    this._log('info', `Module initialized successfully, sessionId=${payload?.sessionId}`);
+    this._log('info', `Module ready, sessionId=${payload?.sessionId}`);
     this._initialized = true;
     this._initRequested = false;
     this._initializedAt = Date.now();
@@ -1855,7 +1880,7 @@ Module.register('MMM-Webuntis', {
     this._deferredInitRetryCount = 0;
 
     if (this._pendingResumeRequest) {
-      this._log('debug', '[MODULE_INITIALIZED] Clearing pending resume request (backend handles initial fetch)');
+      this._log('debug', '[MODULE_READY] Clearing pending resume request (backend handles initial fetch)');
       this._pendingResumeRequest = false;
     }
 
@@ -1871,7 +1896,7 @@ Module.register('MMM-Webuntis', {
       this._log('error', `[plugins] initialization failed: ${error?.message || String(error)}`);
     });
 
-    this._log('debug', '[MODULE_INITIALIZED] Backend will auto-fetch data, starting periodic timer only');
+    this._log('debug', '[MODULE_READY] Backend will auto-fetch data, starting periodic timer only');
     this._startFetchTimer();
   },
 
@@ -1915,24 +1940,15 @@ Module.register('MMM-Webuntis', {
     this.updateDom();
   },
 
-  _handleConfigIssues(payload) {
-    const warnList = Array.isArray(payload?.warnings) ? payload.warnings : [];
-    this._upsertModuleWarnings(warnList, payload?.warningMeta, { kind: 'config', severity: 'warning' });
-    warnList.forEach((w) => {
-      this._log('warn', `Config warning: ${w}`);
-    });
-    this.updateDom();
-  },
-
   _handleGotData(payload) {
     if (Number(payload?.contractVersion) !== 3) {
-      this._log('warn', `[GOT_DATA] Ignored unsupported contractVersion=${payload?.contractVersion}`);
+      this._log('warn', `[DATA_UPDATE] Ignored unsupported contractVersion=${payload?.contractVersion}`);
       return;
     }
 
     const title = payload?.context?.student?.title;
     if (!title) {
-      this._log('warn', '[GOT_DATA] Missing context.student.title in payload, handling as module-level warning payload');
+      this._log('warn', '[DATA_UPDATE] Missing context.student.title in payload, handling as module-level warning payload');
       this._processGotDataWarnings('__module__', payload);
 
       if (this._updateDomTimer) {
@@ -1943,7 +1959,7 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
-    this._log('debug', `[GOT_DATA] Received for student=${title}, sessionId=${payload?.sessionId}`);
+    this._log('debug', `[DATA_UPDATE] Received for student=${title}, sessionId=${payload?.sessionId}`);
     this._lastDataReceivedAt = Date.now();
     this.configByStudent[title] = payload?.context?.config || {};
 
@@ -1958,19 +1974,19 @@ Module.register('MMM-Webuntis', {
     if (dataChanged || warningsChanged) {
       this.updateDom();
     } else {
-      this._log('debug', `[GOT_DATA] Skipping DOM update for ${title}: no effective data/warning changes`);
+      this._log('debug', `[DATA_UPDATE] Skipping DOM update for ${title}: no effective data/warning changes`);
     }
   },
 
   _syncDebugDate(cfg) {
-    this._log('debug', `[GOT_DATA] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
+    this._log('debug', `[DATA_UPDATE] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
     const debugDateContext = this.getCurrentDateContext(cfg || {});
     if (debugDateContext.isDebug) {
-      this._log('debug', `[GOT_DATA] Using debugDate="${debugDateContext.isoDate}" from backend`);
+      this._log('debug', `[DATA_UPDATE] Using debugDate="${debugDateContext.isoDate}" from backend`);
       this._currentTodayYmd = debugDateContext.ymd;
-      this._log('debug', `[GOT_DATA] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
+      this._log('debug', `[DATA_UPDATE] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
     } else {
-      this._log('debug', `[GOT_DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
+      this._log('debug', `[DATA_UPDATE] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
   },
 
@@ -2034,7 +2050,10 @@ Module.register('MMM-Webuntis', {
       this.timetableByStudent[title] = rawLessons;
       dataChanged = true;
     }
-    this._log('debug', `[GOT_DATA] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`);
+    this._log(
+      'debug',
+      `[DATA_UPDATE] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`
+    );
 
     const dayNotices = Array.isArray(payload?.data?.dayNotices) ? payload.data.dayNotices : [];
     if (
@@ -2159,7 +2178,7 @@ Module.register('MMM-Webuntis', {
     const shouldShowDebouncedNow = hasCriticalDebouncedWarningNow || nextRuntimeWarningStreak >= 2;
     const visibleWarnings = shouldShowDebouncedNow ? [...persistentWarnings, ...debouncedWarnings] : [...persistentWarnings];
     if (hasAnyDebouncedWarningNow && !shouldShowDebouncedNow) {
-      this._log('debug', `[GOT_DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
+      this._log('debug', `[DATA_UPDATE] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
     }
 
     let warningsChanged = this._updateRuntimeWarnings(title, visibleWarnings);

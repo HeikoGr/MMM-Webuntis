@@ -38,8 +38,8 @@ const config = {
         logLevel: 'none', // 'none', 'error', 'warn', 'info', 'debug'
         debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
         demoDataFile: null, // optional: local fixture JSON path (e.g. 'demo/fixtures/single-student-week.json') to run frontend-only demo mode
-        initRetryTimeout: 5000, // retry timeout for missing MODULE_INITIALIZED during startup (milliseconds)
-        initRetryMaxAttempts: 4, // max startup INIT_MODULE attempts before waiting for next trigger
+        initRetryTimeout: 5000, // retry timeout for missing MODULE_READY during startup (milliseconds)
+        initRetryMaxAttempts: 4, // max startup CONFIGURE attempts before waiting for next trigger
         dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
         dumpRawApiResponses: false, // when true, save raw REST API responses to ./debug_dumps/raw_api_*.json
         timezone: 'Europe/Berlin', // timezone for date calculations (important for schools outside UTC)

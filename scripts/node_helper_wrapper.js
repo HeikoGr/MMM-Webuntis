@@ -80,10 +80,10 @@ const NodeHelper = {
   create: (moduleImpl) => ({
     ...moduleImpl,
     sendSocketNotification: (name, payload) => {
-      if (name === 'GOT_DATA' && payload?.id) {
-        capturedPayloads.set(payload.id, payload);
+      if (name === 'MMM-Webuntis_EVENT' && payload?.action === 'DATA_UPDATE' && payload?.data?.id) {
+        capturedPayloads.set(payload.data.id, payload.data);
       }
-      Log.debug(`[sendSocketNotification] ${name} for ${payload?.id || 'unknown'}`);
+      Log.debug(`[sendSocketNotification] ${name} for ${payload?.data?.id || payload?.id || 'unknown'}`);
     },
   }),
 };
