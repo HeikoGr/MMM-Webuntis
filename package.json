@@ -4,7 +4,7 @@
     "type": "git",
     "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "MagicMirror module to access Webuntis school timetables.",
   "main": "MMM-Webuntis.js",
   "exports": {
@@ -44,9 +44,7 @@
     "diagnose": "bash scripts/diagnose_instability.sh",
     "debug": "node scripts/node_helper_wrapper.js",
     "check": "node scripts/magicmirror-check.mjs --devcontainer-only --current",
-    "deps:check": "npm outdated && ncu",
-    "deps:update": "ncu -u && npm install",
-    "biome:migrate": "npx biome migrate --write"
+    "deps:update": "ncu -u && npm install && npx biome migrate --write"
   },
   "lint-staged": {
     "*": [
@@ -58,7 +56,7 @@
     "sanitize-html": "^2.17.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.2",
+    "@biomejs/biome": "^2.5.3",
     "cspell": "^10.0.1",
     "lint-staged": "^17.0.8",
     "simple-git-hooks": "^2.13.1"
