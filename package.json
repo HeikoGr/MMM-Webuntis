@@ -47,7 +47,7 @@
     "deps:update": "ncu -u && npm install && npx biome migrate --write"
   },
   "lint-staged": {
-    "*": [
+    "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,css}": [
       "biome check --write --files-ignore-unknown=true"
     ]
   },
