@@ -2,6 +2,13 @@
 
 Ziel ist ein robustes Feed-System, das tatsächlich stattfindende Stunden und Klausuren als getrennte Kalender bereitstellt, primär für das MagicMirror-Standardmodul calendar über ICS. Die Umsetzung erfolgt in zwei Stufen: Phase 1 liefert stabile, schülerbezogene ICS-Feeds (plus .ical-Alias), Phase 2 ergänzt optional CalDAV. Dadurch wird der direkte Mehrwert für MagicMirror schnell erreicht, ohne die erste Version durch CalDAV-Komplexität zu verzögern.
 
+**Theoretische Verifikation**
+- Im MagicMirror-Umfeld ist die Bereitstellung eines ICS-Feeds per URL grundsätzlich möglich.
+- Der technische Grund ist, dass MagicMirror jedem NodeHelper ein Express-App-Objekt zur Verfügung stellt; das Modul kann daher eigene HTTP-Endpunkte im bestehenden MagicMirror-Prozess registrieren, statt zwingend einen separaten Server zu starten.
+- Für MMM-Webuntis ist das architektonisch passend, weil die benötigten Daten (`lessons`, `exams`) bereits als kanonisch normalisierte Backend-Collections vorliegen und nach erfolgreichem Fetch zentral im DATA_UPDATE-Pfad erzeugt werden.
+- Das MagicMirror-Standardmodul `calendar` arbeitet URL-basiert, lädt ICS-Inhalte per HTTP und parst sie serverseitig. Ein von MMM-Webuntis ausgelieferter Feed ist deshalb mit dem Standardmodul kompatibel, solange gültiges iCalendar (`text/calendar`) zurückgegeben wird.
+- Schlussfolgerung für Phase 1: Ein URL-Feed innerhalb des bestehenden Node-/MagicMirror-Prozesses ist der richtige Primärweg. Ein separater interner HTTP-Server ist nur noch ein optionaler Fallback, nicht mehr die wahrscheinliche Hauptlösung.
+
 **Schritte**
 1. Scope und Datenregeln finalisieren
 - Definiere verbindlich die enthaltenen Datentypen je Feed:
@@ -24,9 +31,12 @@ Ziel ist ein robustes Feed-System, das tatsächlich stattfindende Stunden und Kl
 3. Integrationspunkt im Backend bestimmen
 - Technischen Einstiegspunkt in der Backend-Laufzeit definieren:
   - bevorzugt innerhalb des bestehenden Node-Helper-Lifecycle, damit gleiche Session-/Config-Logik gilt
-- Vor Implementierung per Mini-Spike klären, wie HTTP-Routen im aktuellen MagicMirror-NodeHelper-Kontext stabil registriert werden (ohne bestehende Socket-Flows zu stören).
-- Fallback-Strategie dokumentieren, falls direkte Route-Registrierung nicht verfügbar ist:
-  - kleiner interner HTTP-Server auf konfigurierbarem Port, nur für Feeds
+- Verifiziert: HTTP-Routen koennen direkt im MagicMirror-NodeHelper-Kontext registriert werden.
+- Empfehlung fuer Phase 1:
+  - Feed-Routen am bestehenden MagicMirror-Express-App-Objekt registrieren
+  - URL-Namespace unter dem Modulpfad halten, damit Mehrinstanzen und Reverse-Proxy-Setups nachvollziehbar bleiben
+- Fallback-Strategie nur fuer Sonderfaelle dokumentieren:
+  - kleiner interner HTTP-Server auf konfigurierbarem Port, falls eine getrennte externe Bereitstellung spaeter ausdruecklich gewuenscht ist
 
 4. Feed-Lebenszyklus und Caching designen
 - Definiere Feed-Cache pro sessionKey + student + feedType:
