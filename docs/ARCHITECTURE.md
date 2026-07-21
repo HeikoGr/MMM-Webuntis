@@ -147,7 +147,7 @@ Current compatibility note:
 
 ### Configuration Rules
 
-- Canonical config names are defined by the validators and documented in [CONFIG.md](CONFIG.md).
+- Canonical config names are defined by the validators and documented in the project wiki's [Configuration](https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration) page.
 - Legacy config keys may still be mapped internally, but they are not the public documentation target.
 
 ### API Rules
@@ -171,7 +171,7 @@ Current compatibility note:
 
 | Change type | Start here |
 | --- | --- |
-| Config key or auth shape | [CONFIG.md](CONFIG.md) and the validators |
+| Config key or auth shape | The wiki [Configuration](https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration) and [Authentication](https://github.com/HeikoGr/MMM-Webuntis/wiki/Authentication) pages plus the validators |
 | Endpoint or auth bug | [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md) and `lib/webuntis/*` |
 | Payload field or frontend/backend contract | [API_V3_MANIFEST.md](API_V3_MANIFEST.md) |
 | Widget rendering issue | `plugins/*` plus [GRID_RENDERING_LOGIC.md](GRID_RENDERING_LOGIC.md) for grid-specific logic |
@@ -179,7 +179,7 @@ Current compatibility note:
 
 ## Related Docs
 
-- [CONFIG.md](CONFIG.md)
+- User-facing setup: [Wiki Home](https://github.com/HeikoGr/MMM-Webuntis/wiki)
 - [API_REFERENCE.md](API_REFERENCE.md)
 - [SERVER_REQUEST_FLOW.md](SERVER_REQUEST_FLOW.md)
 - [API_V3_MANIFEST.md](API_V3_MANIFEST.md)

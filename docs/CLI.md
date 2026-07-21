@@ -106,7 +106,7 @@ cat debug_dumps/*.json | jq '.data.exams | length'
 
 ## Related Documentation
 
-- [../docs/CONFIG.md](../docs/CONFIG.md)
+- [Configuration wiki page](https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration)
 - [../docs/API_REFERENCE.md](../docs/API_REFERENCE.md)
 - [../docs/SERVER_REQUEST_FLOW.md](../docs/SERVER_REQUEST_FLOW.md)
 - [../docs/API_V3_MANIFEST.md](../docs/API_V3_MANIFEST.md)

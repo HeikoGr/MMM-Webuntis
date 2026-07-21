@@ -27,27 +27,9 @@ cd MMM-Webuntis
 npm ci --omit=dev
 ```
 
-## Update
-
-```bash
-cd ~/MagicMirror/modules/MMM-Webuntis
-node -v
-git pull
-npm ci --omit=dev
-```
-
-If `git pull` fails because your local history diverged, either re-clone the module or reset it to the remote state after backing up local changes:
-
-```bash
-cd ~/MagicMirror/modules/MMM-Webuntis
-git fetch origin
-git reset --hard origin/master
-npm ci --omit=dev
-```
-
 ## Quick Start
 
-Use [docs/CONFIG.md](docs/CONFIG.md) as the configuration source of truth. A minimal QR-code setup looks like this:
+A minimal QR-code setup looks like this:
 
 ```javascript
 {
@@ -65,88 +47,28 @@ Use [docs/CONFIG.md](docs/CONFIG.md) as the configuration source of truth. A min
 }
 ```
 
-## Authentication
-
-MMM-Webuntis supports two canonical auth modes:
-
-- QR code login for students, parents, and SSO-backed accounts
-- Username/password login for regular non-SSO accounts
-
-Parent accounts can be configured at module level with `students: []` to enable child auto-discovery. Mixed per-student credentials are supported, but the full matrix of valid config shapes is documented only in [docs/CONFIG.md](docs/CONFIG.md#authentication-patterns).
-
-## Common Setups
-
-Typical patterns:
-
-- Week view: `displayMode: 'grid'` with `grid.weekView: true`
-- Parent account auto-discovery: top-level credentials plus `students: []`
-- Multiple families: use multiple module instances
-- Class timetable mode: set `useClassTimetable: true` globally or per student
-
-## Widgets
-
-Set `displayMode` to a comma-separated list:
-
-- `grid`
-- `lessons`
-- `exams`
-- `homework`
-- `absences`
-- `messagesofday`
-
-`list` remains a supported alias for `lessons, exams`.
-
-Internally, MMM-Webuntis normalizes these legacy-facing display settings into canonical plugin activation and plugin config. `displayMode` remains a supported public config option.
-
-## Styling
-
-The module uses a semantic color system:
-
-- Blue for active and informational states
-- Yellow for changed and warning states
-- Red for cancelled and critical states
-
-For styling, CSS variables, accessibility guidance, and the legacy multi-color recreation, use [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md#legacy-color-theme-exact-values).
-
-## Troubleshooting
-
-If data is missing or empty:
-
-1. Verify the auth method and credentials.
-2. Set `logLevel: 'debug'`.
-3. Check recent backend logs with `pm2 logs --lines 100`.
-4. For parent setups, confirm that `students: []` is used for auto-discovery.
-5. For SSO accounts, use QR code instead of direct credentials.
-
-## CLI And Checks
-
-Useful scripts:
-
-- `node --run debug`
-- `node --run check`
-- `node --run lint`
-- `node --run test:spelling`
-- `node --run test:auth:curl`
-
-Use the low-level curl auth test when you want to bypass module logic entirely:
-
-```bash
-node --run test:auth:curl
-./scripts/test_auth_with_curl.sh "school" "server.webuntis.com" "username" "password"
-```
-
 ## Documentation
 
-Start with [docs/README.md](docs/README.md).
+User-facing setup and configuration documentation now lives in the project wiki:
 
-- [docs/CONFIG.md](docs/CONFIG.md) - canonical configuration reference
-- [docs/API_V3_MANIFEST.md](docs/API_V3_MANIFEST.md) - backend/frontend payload contract
-- [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - external WebUntis endpoints and normalization
-- [docs/SERVER_REQUEST_FLOW.md](docs/SERVER_REQUEST_FLOW.md) - runtime fetch, retry, and status behavior
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - high-level module structure and responsibilities
-- [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md) - styling, accessibility, and legacy theme overrides
-- [docs/CLI.md](docs/CLI.md) - CLI usage
-- [config/config.template.js](config/config.template.js) - example configuration
+- [Wiki Home](https://github.com/HeikoGr/MMM-Webuntis/wiki)
+- [Installation](https://github.com/HeikoGr/MMM-Webuntis/wiki/Installation)
+- [Update](https://github.com/HeikoGr/MMM-Webuntis/wiki/Update)
+- [Quick Start](https://github.com/HeikoGr/MMM-Webuntis/wiki/Quick-Start)
+- [Configuration](https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration)
+- [Authentication](https://github.com/HeikoGr/MMM-Webuntis/wiki/Authentication)
+- [Widgets](https://github.com/HeikoGr/MMM-Webuntis/wiki/Widgets)
+- [Troubleshooting](https://github.com/HeikoGr/MMM-Webuntis/wiki/Troubleshooting)
+
+Technical background documentation remains in `docs/`:
+
+- [docs/API_V3_MANIFEST.md](docs/API_V3_MANIFEST.md)
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+- [docs/SERVER_REQUEST_FLOW.md](docs/SERVER_REQUEST_FLOW.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md)
+- [docs/CLI.md](docs/CLI.md)
+- [config/config.template.js](config/config.template.js)
 
 ## Screenshots
 
@@ -161,7 +83,7 @@ Start with [docs/README.md](docs/README.md).
 ## Support
 
 - Issues: [GitHub Issues](https://github.com/HeikoGr/MMM-Webuntis/issues)
-- Documentation: start with [docs/README.md](docs/README.md)
+- Documentation: start with the [project wiki](https://github.com/HeikoGr/MMM-Webuntis/wiki)
 - Logs: enable `logLevel: 'debug'` in your config
 
 ## License

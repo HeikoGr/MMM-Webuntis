@@ -126,4 +126,4 @@ flowchart TD
 
 - `plugins/grid/frontend.js` (source of truth)
 - `docs/ARCHITECTURE.md`
-- `docs/CONFIG.md`
+- `https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration`
