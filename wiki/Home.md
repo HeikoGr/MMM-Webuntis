@@ -7,7 +7,7 @@ Use this wiki if you want to:
 - install the module cleanly
 - update an existing installation safely
 - configure one student, a parent account, or multiple students
-- enable only the widgets you actually want to see
+- enable only the plugins you actually want to see
 - troubleshoot common auth and data issues
 
 ## Start Here
@@ -17,7 +17,7 @@ Use this wiki if you want to:
 - [Quick Start](Quick-Start)
 - [Configuration](Configuration)
 - [Authentication](Authentication)
-- [Widgets](Widgets)
+- [Plugins](Plugins)
 - [Troubleshooting](Troubleshooting)
 
 ## Typical Setup Path
@@ -25,7 +25,7 @@ Use this wiki if you want to:
 1. Install the module.
 2. Start with the QR-code example from [Quick Start](Quick-Start).
 3. Adjust your options in [Configuration](Configuration).
-4. Enable the widgets you need in [Widgets](Widgets).
+4. Enable the plugins you need in [Plugins](Plugins).
 5. If data stays empty, check [Troubleshooting](Troubleshooting).
 
 ## What Stays In The Repository Docs

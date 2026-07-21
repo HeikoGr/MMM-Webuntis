@@ -154,8 +154,8 @@ Required fields:
 - `display.widgets`
 
 Notes:
-- `context.config` is currently part of the runtime contract because frontend rendering resolves per-student widget configuration from it.
-- `display.widgets` uses canonical widget names: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`.
+- `context.config` is currently part of the runtime contract because frontend rendering resolves per-student plugin configuration from it.
+- `display.widgets` uses canonical built-in plugin names: `grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`.
 
 ---
 
@@ -241,7 +241,7 @@ Representative shape:
 }
 ```
 
-The exact lesson schema is intentionally rich because grid and lessons widgets depend on change-state and normalized display markers.
+The exact lesson schema is intentionally rich because the grid and lessons plugins depend on change-state and normalized display markers.
 `displayIcons[]` contains normalized lesson markers derived from timetable metadata, for example `HOMEWORK`, `EXAM`, `EVENT`, `BREAK_SUPERVISION`, or `MOVED`.
 
 ### 6.3 `data.dayNotices[]`
@@ -255,7 +255,7 @@ The exact lesson schema is intentionally rich because grid and lessons widgets d
 ```
 
 `data.dayNotices[]` is used when the timetable endpoint returns a day-level status without renderable lesson entries.
-Frontend widgets may use this to render a restriction notice instead of falling back to a generic empty-day state.
+Frontend plugins may use this to render a restriction notice instead of falling back to a generic empty-day state.
 
 ### 6.4 `data.exams[]`
 

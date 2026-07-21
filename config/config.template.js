@@ -6,7 +6,7 @@
  * For detailed option documentation, see:
  * - MMM-Webuntis.js (module-level defaults)
  * - plugin backend.js files under plugins/ (plugin-local defaults)
- * - the GitHub wiki (installation, configuration, widgets, troubleshooting)
+ * - the GitHub wiki (installation, configuration, plugins, troubleshooting)
  */
 const config = {
   address: '0.0.0.0',
@@ -75,8 +75,8 @@ const config = {
         ],
 
         // === CANONICAL PLUGIN CONFIG ===
-        // Configure widgets under plugins.<id>.config.
-        // Top-level widget namespaces remain compatibility input only.
+        // Configure plugins under plugins.<id>.config.
+        // Top-level legacy plugin namespaces remain compatibility input only.
         plugins: {
           lessons: {
             enabled: true,

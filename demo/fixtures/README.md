@@ -11,7 +11,7 @@ Synthetic fixture payloads for screenshot generation and local UI testing.
 
 ## Files
 
-- `single-student-week.json` – one anonymized student with one full week and all widgets populated.
+- `single-student-week.json` – one anonymized student with one full week and all built-in plugins populated.
 
 ## Usage
 

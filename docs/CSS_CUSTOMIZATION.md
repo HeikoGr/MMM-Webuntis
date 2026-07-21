@@ -64,7 +64,7 @@ Example alternative set:
 | `homework` | `--wu-homework-padding`, `--wu-homework-icon-top`, `--wu-homework-icon-right`, `--wu-secondary-text`, `--wu-muted-text` |
 | `absences` | `--wu-absence-overlay-bg`, `--wu-absence-overlay-border`, `--wu-absence-reason-color`, `--wu-absence-excused-color`, `--wu-absence-unexcused-color`, `--wu-critical-bg` |
 | `messagesofday` | `--wu-messages-min-width`, `--wu-messages-max-cols`, `--wu-message-card-bg`, `--wu-message-card-border`, `--wu-message-text` |
-| `all widgets (icons)` | `--wu-icon-warning`, `--wu-icon-homework`, `--wu-icon-break-supervision`, `--wu-icon-holiday`, `--wu-icon-no-lessons`, `--wu-icon-absence`, `--wu-icon-moved` |
+| `all built-in plugins (icons)` | `--wu-icon-warning`, `--wu-icon-homework`, `--wu-icon-break-supervision`, `--wu-icon-holiday`, `--wu-icon-no-lessons`, `--wu-icon-absence`, `--wu-icon-moved` |
 
 ## Available CSS Variables
 
@@ -216,8 +216,8 @@ Related card styling options:
 All text elements have dedicated CSS classes for precise styling:
 
 Naming convention for new hooks:
-- Widget-scoped hooks follow `wu-<widget>__<element>` (BEM-like).
-- A few older neutral hooks such as `.teacher-name` remain in use, but widget-specific styling should prefer the `wu-*` hooks.
+- Plugin-scoped hooks follow `wu-<plugin>__<element>` (BEM-like).
+- A few older neutral hooks such as `.teacher-name` remain in use, but plugin-specific styling should prefer the `wu-*` hooks.
 
 | Class | Element | Example Use |
 |-------|---------|-------------|

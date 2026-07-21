@@ -288,7 +288,7 @@ Applied to:
 Date ranges are computed centrally before API calls.
 
 Inputs may depend on:
-- selected widgets
+- selected plugins
 - `grid.nextDays` and `grid.pastDays`
 - `lessons.nextDays` and `lessons.pastDays`
 - `exams.nextDays`

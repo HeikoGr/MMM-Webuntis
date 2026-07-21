@@ -140,7 +140,7 @@ This layer separates transport data from frontend-facing runtime data.
 Current compatibility note:
 
 - `displayMode` remains a valid public config option.
-- The backend normalizes `displayMode` and top-level widget namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
+- The backend normalizes `displayMode` and top-level legacy plugin namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
 - The frontend render path is plugin-only.
 
 ## Key Architectural Rules

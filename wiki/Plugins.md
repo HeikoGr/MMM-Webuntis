@@ -1,10 +1,10 @@
-# Widgets
+# Plugins
 
-Use `displayMode` to decide which widgets are active.
+Use `displayMode` to decide which built-in plugins are active.
 
-## Available Widgets
+## Available Plugins
 
-| Widget | Purpose |
+| Plugin | Purpose |
 | --- | --- |
 | `grid` | Weekly or rolling timetable grid |
 | `lessons` | Lesson list with changes |
@@ -20,9 +20,11 @@ Use `displayMode` to decide which widgets are active.
 - `grid`
 - `homework, absences`
 
-## Common Widget Options
+`displayMode` remains the simple public switch for the built-in plugins. Internally, the module normalizes this into `plugins.<id>.enabled`.
 
-### Lessons
+## Common Plugin Options
+
+### Lessons Plugin
 
 Useful options:
 
@@ -35,7 +37,7 @@ Useful options:
 - `lessons.showRoom`
 - `lessons.showSubstitution`
 
-### Grid
+### Grid Plugin
 
 Useful options:
 
@@ -49,7 +51,7 @@ Useful options:
 - `grid.fields.secondary`
 - `grid.fields.additional`
 
-### Exams, Homework, Absences
+### Exams, Homework, And Absences Plugins
 
 The most common options are the date range and the date format:
 
@@ -59,7 +61,7 @@ The most common options are the date range and the date format:
 - `absences.nextDays`
 - `*.dateFormat`
 
-## Canonical Config Example
+## Canonical Plugin Config Example
 
 ```javascript
 plugins: {
@@ -86,4 +88,4 @@ plugins: {
 }
 ```
 
-If you are just getting started, keep widget configuration minimal and only add one or two display tweaks at a time.
+If you are just getting started, keep plugin configuration minimal and only add one or two display tweaks at a time.

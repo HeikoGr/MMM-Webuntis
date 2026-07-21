@@ -52,4 +52,4 @@ This page gives you the fastest route to a working setup.
 
 - Auth method and parent-account setups: [Authentication](Authentication)
 - Common options and ranges: [Configuration](Configuration)
-- Widget-specific display choices: [Widgets](Widgets)
+- Plugin-specific display choices: [Plugins](Plugins)

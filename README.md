@@ -57,7 +57,7 @@ User-facing setup and configuration documentation now lives in the project wiki:
 - [Quick Start](https://github.com/HeikoGr/MMM-Webuntis/wiki/Quick-Start)
 - [Configuration](https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration)
 - [Authentication](https://github.com/HeikoGr/MMM-Webuntis/wiki/Authentication)
-- [Widgets](https://github.com/HeikoGr/MMM-Webuntis/wiki/Widgets)
+- [Plugins](https://github.com/HeikoGr/MMM-Webuntis/wiki/Plugins)
 - [Troubleshooting](https://github.com/HeikoGr/MMM-Webuntis/wiki/Troubleshooting)
 
 Technical background documentation remains in `docs/`:

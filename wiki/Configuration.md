@@ -8,13 +8,13 @@ This page covers the options most users actually need. For a full example file, 
 | --- | --- | --- |
 | `header` | `MMM-Webuntis` | Module title shown by MagicMirror |
 | `updateInterval` | `5 * 60 * 1000` | Refresh interval in milliseconds |
-| `displayMode` | `lessons, exams` | Which widgets are enabled |
+| `displayMode` | `lessons, exams` | Which built-in plugins are enabled |
 | `timezone` | `Europe/Berlin` | Timezone used for date handling |
 | `useClassTimetable` | `false` | Use class timetable instead of personal timetable |
 | `logLevel` | `none` | Backend logging level for troubleshooting |
 | `debugDate` | `null` | Freeze the calendar date for testing |
 
-## Choosing Widgets With `displayMode`
+## Choosing Plugins With `displayMode`
 
 Use a comma-separated list:
 
@@ -46,7 +46,7 @@ Example:
 
 - `pastDays: 1, nextDays: 3` means yesterday, today, and three future days.
 
-Some widgets can override these values individually. See [Widgets](Widgets).
+Some plugins can override these values individually. See [Plugins](Plugins).
 
 ## Student Entries
 
@@ -79,7 +79,7 @@ Use these only when you need to investigate problems:
 
 ## Canonical Plugin Config
 
-Widget-specific options live under `plugins.<id>.config`.
+Plugin-specific options live under `plugins.<id>.config`.
 
 Example:
 
@@ -101,4 +101,4 @@ plugins: {
 }
 ```
 
-If you are migrating from an older config, `displayMode` is still the simplest public entry point. Detailed widget options are summarized in [Widgets](Widgets).
+If you are migrating from an older config, `displayMode` is still the simplest public entry point. Detailed plugin options are summarized in [Plugins](Plugins).

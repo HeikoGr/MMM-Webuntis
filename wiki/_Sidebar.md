@@ -6,5 +6,5 @@
 - [Quick Start](Quick-Start)
 - [Configuration](Configuration)
 - [Authentication](Authentication)
-- [Widgets](Widgets)
+- [Plugins](Plugins)
 - [Troubleshooting](Troubleshooting)

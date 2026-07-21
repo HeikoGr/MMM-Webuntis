@@ -24,31 +24,31 @@ For the historical V2 contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
 - Frontend and backend are shipped together.
 - Runtime contract version is fixed at `3`.
 - No legacy alias fields are required inside V3.
-- V3 is widget-agnostic.
-- V3 transports reusable domain data, not widget-specific view models.
+- V3 is plugin-agnostic.
+- V3 transports reusable domain data, not plugin-specific view models.
 - The backend may normalize field names, value formats, status values, and text sanitization.
-- The backend must not emit arrays or objects whose meaning depends on one specific widget.
-- V3 does not ship HTML layout fragments, CSS class decisions, animation directives, or widget placement instructions as part of the contract.
+- The backend must not emit arrays or objects whose meaning depends on one specific plugin.
+- V3 does not ship HTML layout fragments, CSS class decisions, animation directives, or plugin placement instructions as part of the contract.
 
 Meaning of the split:
 - `data` contains canonical normalized domain facts.
 - `context` contains the runtime frame needed to interpret those facts.
 - `state` contains runtime reliability and warning state.
-- widgets consume the same domain contract and build their own sorting, grouping, filtering, and presentation decisions in the frontend.
-- if multiple widgets need the same derivation, that derivation belongs in shared frontend utilities rather than in the transport contract.
+- frontend plugins consume the same domain contract and build their own sorting, grouping, filtering, and presentation decisions in the frontend.
+- if multiple plugins need the same derivation, that derivation belongs in shared frontend utilities rather than in the transport contract.
 
 ---
 
 ## 2. Contract Intent
 
-V3 keeps the transport focused on normalized domain data instead of widget-specific view models.
+V3 keeps the transport focused on normalized domain data instead of plugin-specific view models.
 
 Practical consequences:
 
 - field names are readable rather than transport-shortened
 - date and time values are normalized consistently
 - domain collections are reusable across multiple plugins
-- widgets derive their own sorting, grouping, and display decisions in the frontend
+- plugins derive their own sorting, grouping, and display decisions in the frontend
 
 ---
 
@@ -56,12 +56,12 @@ Practical consequences:
 
 The following logic remains frontend-owned and is not part of the V3 transport contract:
 
-- widget-specific view arrays or slices such as lessons lists, exams lists, absence lists, or grid-only structures
-- day-window expansion for one specific widget
-- empty-day rows or placeholder entries for one specific widget
-- sort orders whose only purpose is one widget layout
-- primary-field selection such as "first teacher to show in this widget"
-- short-vs-long display choices that depend on widget config
+- plugin-specific view arrays or slices such as lessons lists, exams lists, absence lists, or grid-only structures
+- day-window expansion for one specific plugin
+- empty-day rows or placeholder entries for one specific plugin
+- sort orders whose only purpose is one plugin layout
+- primary-field selection such as "first teacher to show in this plugin"
+- short-vs-long display choices that depend on plugin config
 - localized display labels and browser-locale formatting
 - now-line position
 - live minute-based past-state updates between fetches
@@ -157,9 +157,9 @@ Required fields remain:
 
 Rule changes for V3:
 - `context.config` remains part of the contract
-- the contract does not derive widget-specific helper arrays from config
-- frontend may use `context.config` for presentation and widget-local derivation
-- backend may internally use config for fetch decisions, but those decisions must not appear as widget-specific transport structures
+- the contract does not derive plugin-specific helper arrays from config
+- frontend may use `context.config` for presentation and plugin-local derivation
+- backend may internally use config for fetch decisions, but those decisions must not appear as plugin-specific transport structures
 
 ---
 
@@ -167,7 +167,7 @@ Rule changes for V3:
 
 `data` is the center of V3.
 
-It contains reusable normalized facts that are valid independently of any single widget. A widget may derive its own view from these facts, but the transport itself stays at the domain layer.
+It contains reusable normalized facts that are valid independently of any single plugin. A plugin may derive its own view from these facts, but the transport itself stays at the domain layer.
 
 Representative shape:
 
@@ -199,9 +199,9 @@ Required canonical collections:
 - `holidays.current`
 
 Why these remain in V3:
-- they are reusable domain inputs across current widgets
-- they allow additional plugins to be implemented without requiring backend widget-specific slices
-- cross-widget relationships remain visible instead of being hidden behind one widget's derived output
+- they are reusable domain inputs across current plugins
+- they allow additional plugins to be implemented without requiring backend plugin-specific slices
+- cross-plugin relationships remain visible instead of being hidden behind one plugin's derived output
 - grid still depends on canonical lesson data and related calendar inputs
 
 ### 7.1 Common normalization rules
@@ -277,11 +277,11 @@ Renaming the values inside `changedFields[]` is not an adapter-internal change. 
 - `lib/frontendShared.js#getChangedFieldSet()` synthesizes the change set from `suOld`/`teOld`/`roOld` presence and explicitly adds the strings `'su'`, `'te'`, `'ro'`
 - `plugins/grid/frontend.js` checks `changedFields.has('su')`, `.has('te')`, `.has('ro')` and uses string literals `'te'` and `'ro'` in a filter expression at multiple call sites
 
-Both files must be updated in the same change that renames the transport values. If only the adapter emits the new names while these callers still expect the old abbreviations, change rendering in both the grid and lessons widgets will break silently.
+Both files must be updated in the same change that renames the transport values. If only the adapter emits the new names while these callers still expect the old abbreviations, change rendering in both the grid and lessons plugins will break silently.
 
 ### 7.3 `data.exams[]`
 
-V3 keeps exams as canonical domain records rather than as a widget-specific list.
+V3 keeps exams as canonical domain records rather than as a plugin-specific list.
 
 Representative fields:
 - `examDate`
@@ -297,7 +297,7 @@ Design rule:
 
 ### 7.4 `data.absences[]`
 
-V3 keeps absences as canonical domain records rather than as a widget-specific list.
+V3 keeps absences as canonical domain records rather than as a plugin-specific list.
 
 Representative fields:
 - `date`
@@ -320,7 +320,7 @@ Excused-state rule:
 - V3 must not introduce mutually exclusive booleans such as `isExcused` and `isUnexcused`
 
 Design rule:
-- do not add widget-only date-window flags, prefiltered list slices, or display labels for the absences widget
+- do not add plugin-only date-window flags, prefiltered list slices, or display labels for the absences plugin
 
 ### 7.5 `data.homework[]`
 
@@ -342,7 +342,7 @@ Field naming rule for V3 homework data:
 - `subject` replaces `su`
 
 Design rule:
-- keep homework structural and reusable; do not bake widget-specific sorting or grouping into the transport
+- keep homework structural and reusable; do not bake plugin-specific sorting or grouping into the transport
 
 ### 7.6 `data.messages[]`
 
@@ -362,22 +362,22 @@ Design rule:
 These collections remain explicit because they are reusable primitives for multiple frontend derivations.
 
 Examples:
-- lessons widgets can derive empty-day states from `lessons[]`, `dayNotices[]`, and `holidays`
+- lessons plugins can derive empty-day states from `lessons[]`, `dayNotices[]`, and `holidays`
 - grid can derive headers, day boundaries, and time-based placement from `timeUnits[]`
 - other plugins can derive calendar summaries or attendance overlays from the same shared sources
 
 Design rule:
-- transport should ship the primitive facts required for these derivations, not prebuilt empty-day rows, day windows, or widget-grouped slices
+- transport should ship the primitive facts required for these derivations, not prebuilt empty-day rows, day windows, or plugin-grouped slices
 
 ---
 
 ## 8. Frontend Responsibilities
 
-Because V3 is widget-agnostic, the frontend remains responsible for turning canonical data into widget-specific views.
+Because V3 is plugin-agnostic, the frontend remains responsible for turning canonical data into plugin-specific views.
 
 This includes:
-- sorting within a widget
-- filtering by widget-specific date windows or visibility rules
+- sorting within a plugin view
+- filtering by plugin-specific date windows or visibility rules
 - grouping by day, period, or section
 - deriving empty-day placeholders from `lessons[]`, `dayNotices[]`, and `holidays`
 - deciding whether short or long field names are displayed
@@ -387,12 +387,12 @@ This includes:
 - grid-specific overlap handling, break supervision placement, and now-line rendering
 
 Recommended frontend architecture consequence:
-- if more than one widget needs the same derivation, implement it in shared frontend helpers
-- do not push the derivation into the backend unless it becomes a genuine domain fact instead of a widget concern
+- if more than one plugin needs the same derivation, implement it in shared frontend helpers
+- do not push the derivation into the backend unless it becomes a genuine domain fact instead of a plugin concern
 
 Rationale:
-- this keeps the transport reusable for new widgets
-- this avoids backend coupling to today's widget inventory
+- this keeps the transport reusable for new plugins
+- this avoids backend coupling to today's plugin inventory
 - this prevents the API contract from becoming a grab bag of one-off list shapes
 
 ---
@@ -431,7 +431,7 @@ Required fields:
 - `warnings`
 - `warningMeta`
 
-No widget-specific changes are required here.
+No plugin-specific changes are required here.
 
 ---
 
@@ -445,8 +445,8 @@ No widget-specific changes are required here.
   - `absences`
   - `messages`
 - V3 has no `views` top-level section.
-- New transport additions should prefer canonical domain fields over widget-derived helper arrays.
-- If a new widget needs data that is missing, add the missing domain fact rather than a widget-specific slice.
+- New transport additions should prefer canonical domain fields over plugin-derived helper arrays.
+- If a new plugin needs data that is missing, add the missing domain fact rather than a plugin-specific slice.
 - New live UI behavior must not be smuggled into the contract as pseudo-static flags.
 
 ---
@@ -455,15 +455,15 @@ No widget-specific changes are required here.
 
 Recommended implementation order:
 
-1. Finalize the widget-agnostic V3 contract: `meta`, `context`, `data`, and `state` only.
+1. Finalize the plugin-agnostic V3 contract: `meta`, `context`, `data`, and `state` only.
 2. Rename transport abbreviations to readable canonical field names across domain collections.
 3. Switch frontend payload acceptance from V2 to V3 in one coordinated change.
-4. Update frontend widgets and shared utilities to consume the renamed canonical fields from `data.*`.
+4. Update frontend plugins and shared utilities to consume the renamed canonical fields from `data.*`.
 5. Move repeated derivation logic into shared frontend helpers instead of backend payload builders.
 6. Keep grid on canonical lesson data until teacher break supervision and overlap behavior are covered better.
 
 Atomic deployment requirement:
-The field renames inside `data.*` cannot be staged independently. Current widgets and frontend helpers read the old field names directly. Therefore the following files must all change in a single coordinated update:
+The field renames inside `data.*` cannot be staged independently. Current plugins and frontend helpers read the old field names directly. Therefore the following files must all change in a single coordinated update:
 - `lib/mmm-adapter/mmmPayloadMapper.js` - adapter schema field renames + `contractVersion: 3`
 - `lib/frontendShared.js#getChangedFieldSet()` - rename the synthesized strings `'su'`, `'te'`, `'ro'` to `'subject'`, `'teacher'`, `'room'`
 - `plugins/grid/frontend.js` - update all `changedFields.has('su'|'te'|'ro')` and the filter expression using these strings, update `el.substText` -> `el.substitutionText`, `el.lstext` -> `el.lessonText`, `el.suOld` -> `el.previousSubjects`, `el.teOld` -> `el.previousTeachers`, `el.roOld` -> `el.previousRooms`, and the `su`/`te`/`ro`/`cl`/`sg` field accesses
@@ -473,7 +473,7 @@ The field renames inside `data.*` cannot be staged independently. Current widget
 - `MMM-Webuntis.js` - update `contractVersion` check from `2` to `3`
 
 Explicitly deferred:
-- widget-specific backend view models
+- plugin-specific backend view models
 - removal of canonical `data.lessons[]`
 - collapsing calendar primitives into one widget-owned structure
 
@@ -485,7 +485,7 @@ What should be testable during V3 implementation:
 - payload version handling
 - absence of a `views` top-level section
 - canonical field-name migration across `lessons`, `absences`, and `homework`
-- frontend helper derivations that replace former widget-local transport assumptions
+- frontend helper derivations that replace former plugin-local transport assumptions
 - grid compatibility with renamed lesson fields and renamed `changedFields[]` values
 
 What is currently difficult to test reliably and should therefore stay conservative:

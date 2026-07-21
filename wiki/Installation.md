@@ -40,4 +40,4 @@ If your account does not support QR login, use the username/password example fro
 
 ## Next Step
 
-Continue with [Quick Start](Quick-Start) if you want a minimal working config first, or jump to [Configuration](Configuration) if you already know which widgets and ranges you want.
+Continue with [Quick Start](Quick-Start) if you want a minimal working config first, or jump to [Configuration](Configuration) if you already know which plugins and ranges you want.

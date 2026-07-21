@@ -668,6 +668,17 @@ Module.register('MMM-Webuntis', {
    */
   _getDisplayWidgets() {
     const displayTokens = this._getLegacyDisplayTokens(this.config || {});
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+    const explicitEnabled = Object.entries(explicitPlugins)
+      .filter(([, entry]) => entry?.enabled === true)
+      .map(([pluginId]) => pluginId);
+    const defaultDisplayMode = typeof this.defaults?.displayMode === 'string' ? this.defaults.displayMode.toLowerCase().trim() : '';
+    const currentDisplayMode = typeof this.config?.displayMode === 'string' ? this.config.displayMode.toLowerCase().trim() : '';
+
+    if (explicitEnabled.length > 0 && currentDisplayMode === defaultDisplayMode) {
+      return explicitEnabled;
+    }
 
     if (this._pluginRegistryById && this._pluginRegistryById.size > 0 && displayTokens.length > 0) {
       const pluginEntries = Array.from(this._pluginRegistryById.values()).filter((entry) => entry?.active === true);
@@ -707,11 +718,6 @@ Module.register('MMM-Webuntis', {
       if (activePlugins.length > 0) return activePlugins;
     }
 
-    const explicitPlugins =
-      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
-    const explicitEnabled = Object.entries(explicitPlugins)
-      .filter(([, entry]) => entry?.enabled === true)
-      .map(([pluginId]) => pluginId);
     if (explicitEnabled.length > 0) {
       return explicitEnabled;
     }

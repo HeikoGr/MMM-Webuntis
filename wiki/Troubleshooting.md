@@ -25,7 +25,7 @@ Check these first:
 ## The Module Starts But A Widget Is Missing
 
 - Check `displayMode` first.
-- Then review widget-specific `plugins.<id>.config` settings.
+- Then review plugin-specific `plugins.<id>.config` settings.
 - Test with a simpler mode such as `lessons, exams`.
 
 ## Useful Commands
