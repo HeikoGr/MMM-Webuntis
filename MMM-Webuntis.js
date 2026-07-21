@@ -173,7 +173,7 @@ Module.register('MMM-Webuntis', {
     window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
     const scripts = [
-      this.file('lib/mmm-shared.js'),
+      this.file('lib/mmm-shared/mmm-shared.js'),
       this.file('lib/runtime-utils.js'),
       this.file('lib/pluginHostFrontend.js'),
       this.file('lib/frontendShared.js'),

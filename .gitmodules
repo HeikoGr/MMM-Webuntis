@@ -1,0 +1,3 @@
+[submodule "lib/mmm-shared"]
+	path = lib/mmm-shared
+	url = https://github.com/HeikoGr/mmm-shared.git

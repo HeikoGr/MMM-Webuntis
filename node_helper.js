@@ -2,7 +2,7 @@ const NodeHelper = require('node_helper');
 const Log = require('logger');
 const fs = require('node:fs');
 const path = require('node:path');
-const shared = require('./lib/mmm-shared');
+const shared = require('./lib/mmm-shared/mmm-shared');
 const { getCurrentDateContext, parseDisplayModeTokens } = require('./lib/runtime-utils');
 
 const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
