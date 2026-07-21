@@ -101,4 +101,11 @@ plugins: {
 }
 ```
 
-If you are migrating from an older config, `displayMode` is still the simplest public entry point. Detailed plugin options are summarized in [Plugins](Plugins).
+If you are migrating from an older config, `displayMode` is still the simplest public entry point. Detailed plugin options are summarized in [Plugins](Plugins) and documented per plugin on these pages:
+
+- [Lessons Plugin](Plugin-Lessons)
+- [Grid Plugin](Plugin-Grid)
+- [Exams Plugin](Plugin-Exams)
+- [Homework Plugin](Plugin-Homework)
+- [Absences Plugin](Plugin-Absences)
+- [Messages Of Day Plugin](Plugin-MessagesOfDay)
