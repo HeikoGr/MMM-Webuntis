@@ -27,7 +27,7 @@ jobs:
         run: git clone "$WIKI_REPO_URL" wiki-repo
 
       - name: Synchronize wiki contents
-        run: rsync -a --delete --exclude '.git/' wiki/ wiki-repo/
+        run: rsync -ac --delete --exclude '.git/' wiki/ wiki-repo/
 
       - name: Commit synchronized wiki
         working-directory: wiki-repo
