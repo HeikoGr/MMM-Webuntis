@@ -27,7 +27,15 @@ cd MMM-Webuntis
 npm ci --omit=dev
 ```
 
-## Quick Start
+## Update
+
+```bash
+cd ~/MagicMirror/modules/MMM-Webuntis
+git pull
+npm ci --omit=dev
+```
+
+## Configuration
 
 A minimal QR-code setup looks like this:
 
@@ -44,7 +52,7 @@ A minimal QR-code setup looks like this:
       },
     ],
   },
-}
+},
 ```
 
 ## Documentation
