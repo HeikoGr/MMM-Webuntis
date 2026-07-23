@@ -2,6 +2,12 @@
 
 MMM-Webuntis brings WebUntis data into MagicMirror²: timetable, exams, homework, absences, and messages of day.
 
+## Screenshots
+
+![Grid View](../screenshot-all.png)
+
+![List View](../screenshot-list.png)
+
 Use this wiki if you want to:
 
 - install the module cleanly
