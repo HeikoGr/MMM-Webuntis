@@ -29,7 +29,8 @@ Module.register('MMM-Webuntis', {
   getCurrentDateContext(configOverride = null) {
     if (globalThis.MMModuleRuntimeUtils?.getCurrentDateContext) {
       return globalThis.MMModuleRuntimeUtils.getCurrentDateContext(configOverride || this.config || {}, {
-        defaultTimezone: this.defaults?.timezone || 'Europe/Berlin',
+        // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+        defaultTimezone: this['defaults']?.timezone || 'Europe/Berlin',
       });
     }
 
@@ -43,7 +44,8 @@ Module.register('MMM-Webuntis', {
       ymd: now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(),
       isoDate: `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
       isDebug: false,
-      timezone: configOverride?.timezone || this.config?.timezone || this.defaults?.timezone || 'Europe/Berlin',
+      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+      timezone: configOverride?.timezone || this.config?.timezone || this['defaults']?.timezone || 'Europe/Berlin',
     };
   },
 
@@ -170,7 +172,8 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of JavaScript file paths
    */
   getScripts() {
-    window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
+    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+    window.MMMWebuntisLogLevel = this.config?.logLevel || this['defaults'].logLevel || 'info';
 
     const scripts = [
       this.file('lib/mmm-shared/mmm-shared.js'),
@@ -673,7 +676,8 @@ Module.register('MMM-Webuntis', {
     const explicitEnabled = Object.entries(explicitPlugins)
       .filter(([, entry]) => entry?.enabled === true)
       .map(([pluginId]) => pluginId);
-    const defaultDisplayMode = typeof this.defaults?.displayMode === 'string' ? this.defaults.displayMode.toLowerCase().trim() : '';
+    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+    const defaultDisplayMode = typeof this['defaults']?.displayMode === 'string' ? this['defaults'].displayMode.toLowerCase().trim() : '';
     const currentDisplayMode = typeof this.config?.displayMode === 'string' ? this.config.displayMode.toLowerCase().trim() : '';
 
     if (explicitEnabled.length > 0 && currentDisplayMode === defaultDisplayMode) {
@@ -760,7 +764,8 @@ Module.register('MMM-Webuntis', {
     }
 
     const levels = this._getWidgetApi()?.util?.logLevelWeights || { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    const configured = this.config?.logLevel || this.defaults.logLevel || 'none';
+    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+    const configured = this.config?.logLevel || this['defaults'].logLevel || 'none';
     const configuredLevel = levels[configured] !== undefined ? configured : 'none';
     const msgLevel = levels[level] !== undefined ? level : 'info';
     if (levels[msgLevel] <= levels[configuredLevel]) {
@@ -844,7 +849,8 @@ Module.register('MMM-Webuntis', {
         : undefined;
 
     const sendConfig = {
-      ...this.defaults,
+      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+      ...this['defaults'],
       ...this.config,
       students: rawStudents,
       id: this.identifier,
@@ -857,7 +863,8 @@ Module.register('MMM-Webuntis', {
 
     widgetKeys.forEach((widget) => {
       sendConfig[widget] = {
-        ...(this.defaults?.[widget] || {}),
+        // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+        ...(this['defaults']?.[widget] || {}),
         ...(this.config?.[widget] || {}),
       };
     });
@@ -1329,7 +1336,8 @@ Module.register('MMM-Webuntis', {
     this.shared = globalThis.MMModuleShared;
     this.sharedContext = this.shared.createModuleContext('MMM-Webuntis', this.identifier, {
       instanceId: this.identifier,
-      logLevel: this.config.logLevel || this.defaults.logLevel || 'info',
+      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+      logLevel: this.config.logLevel || this['defaults'].logLevel || 'info',
       logStructured: true,
       logRedaction: true,
     });
@@ -1356,7 +1364,8 @@ Module.register('MMM-Webuntis', {
 
     if (typeof window !== 'undefined') {
       window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
-      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
+      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
+      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this['defaults'].logLevel || 'info';
     }
 
     try {
