@@ -1,0 +1,1319 @@
+{
+  "schema": {
+    "MMM-Webuntis": {
+      "type": "object",
+      "title": "properties for MMM-Webuntis",
+      "properties": {
+        "module": {
+          "type": "string",
+          "title": "module",
+          "default": "MMM-Webuntis",
+          "readonly": true,
+          "description": "Module identifier used by MagicMirror."
+        },
+        "disabled": {
+          "type": "boolean",
+          "title": "disabled",
+          "default": false,
+          "description": "Turn this module instance on or off."
+        },
+        "position": {
+          "type": "string",
+          "title": "module position",
+          "readonly": "true",
+          "description": "Module position set by MagicMirror layout settings."
+        },
+        "classes": {
+          "type": "string",
+          "title": "classes",
+          "default": "",
+          "description": "Additional CSS classes for custom styling."
+        },
+        "header": {
+          "type": "string",
+          "title": "header",
+          "default": "",
+          "description": "Title text shown above this module."
+        },
+        "hiddenOnStartup": {
+          "type": "boolean",
+          "title": "hiddenOnStartup",
+          "default": false,
+          "description": "Start with this module hidden."
+        },
+        "configDeepMerge": {
+          "type": "boolean",
+          "title": "configDeepMerge",
+          "default": false,
+          "description": "Merge nested config values instead of replacing whole objects."
+        },
+        "order": {
+          "type": "string",
+          "title": "order",
+          "default": "*",
+          "description": "Relative order among modules in the same position."
+        },
+        "inconfig": {
+          "type": "string",
+          "title": "inconfig",
+          "default": "0",
+          "description": "Internal MMM-Config field; keep the default value."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Internal instance index used by MMM-Config."
+        },
+        "config": {
+          "type": "object",
+          "title": "config",
+          "properties": {
+            "header": {
+              "type": "string",
+              "description": "Title text shown above this module."
+            },
+            "updateInterval": {
+              "type": "integer",
+              "minimum": 10000,
+              "description": "How often data is refreshed, in milliseconds."
+            },
+            "timezone": {
+              "type": "string",
+              "description": "Timezone used for date calculations and day boundaries."
+            },
+            "logLevel": {
+              "type": "string",
+              "enum": ["none", "error", "warn", "info", "debug"],
+              "description": "Verbosity of frontend logging for troubleshooting."
+            },
+            "debugDate": {
+              "type": "string",
+              "description": "Optional fixed date (YYYY-MM-DD) for reproducible debugging."
+            },
+            "demoDataFile": {
+              "type": "string",
+              "description": "Optional local JSON fixture file for demo mode."
+            },
+            "initRetryTimeout": {
+              "type": "integer",
+              "minimum": 1000,
+              "description": "Wait time in milliseconds before retrying initialization."
+            },
+            "initRetryMaxAttempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of automatic initialization retries."
+            },
+            "dumpBackendPayloads": {
+              "type": "boolean",
+              "description": "Save normalized backend payloads to debug_dumps for analysis."
+            },
+            "dumpRawApiResponses": {
+              "type": "boolean",
+              "description": "Save raw API responses to debug_dumps for troubleshooting."
+            },
+            "displayMode": {
+              "type": "string",
+              "description": "Legacy widget list string; prefer plugins.*.enabled for new setups."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["verbose", "compact"],
+              "description": "Display style: verbose (per student) or compact (combined)."
+            },
+            "useClassTimetable": {
+              "type": "boolean",
+              "description": "Prefer class timetable endpoints when they are available."
+            },
+            "username": {
+              "type": "string",
+              "description": "WebUntis username used for authentication."
+            },
+            "password": {
+              "type": "string",
+              "description": "WebUntis password used for authentication."
+            },
+            "school": {
+              "type": "string",
+              "description": "WebUntis school identifier."
+            },
+            "server": {
+              "type": "string",
+              "description": "WebUntis server hostname without http/https."
+            },
+            "students": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Display name shown for this entry."
+                  },
+                  "studentId": {
+                    "type": "integer",
+                    "description": "Numeric WebUntis student ID for this student."
+                  },
+                  "qrcode": {
+                    "type": "string",
+                    "description": "Untis QR URL used for student authentication."
+                  },
+                  "username": {
+                    "type": "string",
+                    "description": "WebUntis username used for authentication."
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "WebUntis password used for authentication."
+                  },
+                  "school": {
+                    "type": "string",
+                    "description": "WebUntis school identifier."
+                  },
+                  "server": {
+                    "type": "string",
+                    "description": "WebUntis server hostname without http/https."
+                  },
+                  "plugins": {
+                    "type": "object",
+                    "properties": {
+                      "lessons": {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "nextDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many upcoming days should be included."
+                              },
+                              "pastDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many past days should be included."
+                              },
+                              "showRegular": {
+                                "type": "boolean",
+                                "description": "Include regular lessons in addition to changes."
+                              }
+                            },
+                            "description": "Detailed settings for this plugin."
+                          }
+                        },
+                        "description": "Settings for the lessons plugin."
+                      },
+                      "exams": {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "nextDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many upcoming days should be included."
+                              },
+                              "pastDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many past days should be included."
+                              }
+                            },
+                            "description": "Detailed settings for this plugin."
+                          }
+                        },
+                        "description": "Settings for the exams plugin."
+                      },
+                      "homework": {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "nextDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many upcoming days should be included."
+                              },
+                              "pastDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many past days should be included."
+                              }
+                            },
+                            "description": "Detailed settings for this plugin."
+                          }
+                        },
+                        "description": "Settings for the homework plugin."
+                      },
+                      "absences": {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "pastDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many past days should be included."
+                              },
+                              "nextDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many upcoming days should be included."
+                              },
+                              "maxItems": {
+                                "type": ["integer", "null"],
+                                "description": "Optional maximum number of items to render."
+                              }
+                            },
+                            "description": "Detailed settings for this plugin."
+                          }
+                        },
+                        "description": "Settings for the absences plugin."
+                      },
+                      "grid": {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "nextDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many upcoming days should be included."
+                              },
+                              "pastDays": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "How many past days should be included."
+                              },
+                              "weekView": {
+                                "type": "boolean",
+                                "description": "Force a Monday-to-Friday week layout."
+                              }
+                            },
+                            "description": "Detailed settings for this plugin."
+                          }
+                        },
+                        "description": "Settings for the timetable grid plugin."
+                      }
+                    },
+                    "description": "Plugin settings grouped by plugin ID."
+                  }
+                }
+              },
+              "description": "List of student entries for this module instance."
+            },
+            "plugins": {
+              "type": "object",
+              "properties": {
+                "lessons": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "nextDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many upcoming days should be included."
+                        },
+                        "pastDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many past days should be included."
+                        },
+                        "dateFormat": {
+                          "type": "string",
+                          "description": "Date format pattern used in the UI."
+                        },
+                        "hideWeekends": {
+                          "type": "boolean",
+                          "description": "Hide weekend rows/columns where supported."
+                        },
+                        "showStartTime": {
+                          "type": "boolean",
+                          "description": "Show lesson start time instead of period label."
+                        },
+                        "showRegular": {
+                          "type": "boolean",
+                          "description": "Include regular lessons in addition to changes."
+                        },
+                        "useShortSubject": {
+                          "type": "boolean",
+                          "description": "Use short subject labels when available."
+                        },
+                        "showTeacherMode": {
+                          "type": "string",
+                          "enum": ["off", "initial", "full"],
+                          "description": "Teacher display style: off, initials, or full name."
+                        },
+                        "showRoom": {
+                          "type": "boolean",
+                          "description": "Show room information in entries."
+                        },
+                        "showSubstitution": {
+                          "type": "boolean",
+                          "description": "Show substitution/change details."
+                        },
+                        "naText": {
+                          "type": "string",
+                          "description": "Fallback text used when a value is missing."
+                        }
+                      },
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the lessons plugin."
+                },
+                "exams": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "nextDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many upcoming days should be included."
+                        },
+                        "pastDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many past days should be included."
+                        },
+                        "dateFormat": {
+                          "type": "string",
+                          "description": "Date format pattern used in the UI."
+                        },
+                        "showSubject": {
+                          "type": "boolean",
+                          "description": "Show subject labels in entries."
+                        },
+                        "showTeacher": {
+                          "type": "boolean",
+                          "description": "Show teacher information in entries."
+                        }
+                      },
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the exams plugin."
+                },
+                "homework": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "nextDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many upcoming days should be included."
+                        },
+                        "pastDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many past days should be included."
+                        },
+                        "dateFormat": {
+                          "type": "string",
+                          "description": "Date format pattern used in the UI."
+                        },
+                        "showSubject": {
+                          "type": "boolean",
+                          "description": "Show subject labels in entries."
+                        },
+                        "showText": {
+                          "type": "boolean",
+                          "description": "Show full text/details in entries."
+                        }
+                      },
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the homework plugin."
+                },
+                "absences": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "pastDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many past days should be included."
+                        },
+                        "nextDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many upcoming days should be included."
+                        },
+                        "dateFormat": {
+                          "type": "string",
+                          "description": "Date format pattern used in the UI."
+                        },
+                        "showDate": {
+                          "type": "boolean",
+                          "description": "Show the date column in entries."
+                        },
+                        "showExcused": {
+                          "type": "boolean",
+                          "description": "Show whether an absence is excused."
+                        },
+                        "showReason": {
+                          "type": "boolean",
+                          "description": "Show reason text when available."
+                        },
+                        "maxItems": {
+                          "type": ["integer", "null"],
+                          "description": "Optional maximum number of items to render."
+                        }
+                      },
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the absences plugin."
+                },
+                "messagesofday": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {},
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the messages-of-day plugin."
+                },
+                "grid": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Turn this plugin on or off."
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "nextDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many upcoming days should be included."
+                        },
+                        "pastDays": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "How many past days should be included."
+                        },
+                        "weekView": {
+                          "type": "boolean",
+                          "description": "Force a Monday-to-Friday week layout."
+                        },
+                        "dateFormat": {
+                          "type": "string",
+                          "description": "Date format pattern used in the UI."
+                        },
+                        "hideWeekends": {
+                          "type": "boolean",
+                          "description": "Hide weekend rows/columns where supported."
+                        },
+                        "showNowLine": {
+                          "type": "boolean",
+                          "description": "Show a live current-time marker in the grid."
+                        },
+                        "mergeGap": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Merge adjacent lessons when the gap is below this minute threshold."
+                        },
+                        "maxLessons": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "Maximum number of visible lessons; use 0 for unlimited."
+                        },
+                        "naText": {
+                          "type": "string",
+                          "description": "Fallback text used when a value is missing."
+                        },
+                        "fields": {
+                          "type": "object",
+                          "properties": {
+                            "primary": {
+                              "type": "string",
+                              "description": "Main field shown in each grid cell."
+                            },
+                            "secondary": {
+                              "type": "string",
+                              "description": "Secondary field shown in each grid cell."
+                            },
+                            "additional": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Additional fields appended in each grid cell."
+                            },
+                            "format": {
+                              "type": "object",
+                              "properties": {
+                                "subject": {
+                                  "type": "string",
+                                  "enum": ["short", "long"],
+                                  "description": "Subject label format (short or long)."
+                                },
+                                "teacher": {
+                                  "type": "string",
+                                  "enum": ["short", "long"],
+                                  "description": "Teacher label format (short or long)."
+                                },
+                                "class": {
+                                  "type": "string",
+                                  "enum": ["short", "long"],
+                                  "description": "Class label format (short or long)."
+                                },
+                                "room": {
+                                  "type": "string",
+                                  "enum": ["short", "long"],
+                                  "description": "Room label format (short or long)."
+                                },
+                                "studentGroup": {
+                                  "type": "string",
+                                  "enum": ["short", "long"],
+                                  "description": "Student group label format (short or long)."
+                                }
+                              },
+                              "description": "Display format settings for mapped fields."
+                            }
+                          },
+                          "description": "Field mapping used to render each grid cell."
+                        }
+                      },
+                      "description": "Detailed settings for this plugin."
+                    }
+                  },
+                  "description": "Settings for the timetable grid plugin."
+                }
+              },
+              "description": "Plugin settings grouped by plugin ID."
+            }
+          },
+          "description": "Detailed settings for this plugin."
+        }
+      }
+    }
+  },
+  "form": [
+    {
+      "key": "MMM-Webuntis.disabled",
+      "htmlClass": "disabled_checkbox",
+      "description": "Turn this module instance on or off."
+    },
+    {
+      "key": "MMM-Webuntis.position",
+      "description": "Module position set by MagicMirror layout settings."
+    },
+    {
+      "key": "MMM-Webuntis.header",
+      "description": "Title text shown above this module."
+    },
+    {
+      "key": "MMM-Webuntis.hiddenOnStartup",
+      "description": "Start with this module hidden."
+    },
+    {
+      "key": "MMM-Webuntis.configDeepMerge",
+      "description": "Merge nested config values instead of replacing whole objects."
+    },
+    {
+      "key": "MMM-Webuntis.classes",
+      "description": "Additional CSS classes for custom styling."
+    },
+    {
+      "key": "MMM-Webuntis.order",
+      "type": "hidden",
+      "description": "Internal MMM-Config field; keep default value."
+    },
+    {
+      "key": "MMM-Webuntis.inconfig",
+      "type": "hidden",
+      "description": "Internal MMM-Config field; keep default value."
+    },
+    {
+      "key": "MMM-Webuntis.index",
+      "type": "hidden",
+      "description": "Internal MMM-Config field; keep default value."
+    },
+    {
+      "type": "fieldset",
+      "title": "config",
+      "htmlClass": "moduleConfig",
+      "items": [
+        {
+          "type": "button",
+          "title": "Open module readme",
+          "htmlClass": "repo_button",
+          "onClick": "(evt,node)=>{let siblings=$(evt.target).siblings('.readme_url');let element=siblings.toArray()[0];let url=element.innerText;let pos=$(evt.target).offset();process_readme(url,pos)}"
+        },
+        {
+          "type": "button",
+          "htmlClass": "hidden readme_url",
+          "title": "https://github.com/HeikoGr/MMM-Webuntis/blob/master/README.md"
+        },
+        {
+          "key": "MMM-Webuntis.config.header",
+          "title": "config.header",
+          "description": "Title text shown above this module."
+        },
+        {
+          "key": "MMM-Webuntis.config.updateInterval",
+          "title": "updateInterval",
+          "description": "How often data is refreshed, in milliseconds."
+        },
+        {
+          "key": "MMM-Webuntis.config.timezone",
+          "title": "timezone",
+          "description": "Timezone used for date calculations and day boundaries."
+        },
+        {
+          "key": "MMM-Webuntis.config.logLevel",
+          "title": "logLevel",
+          "description": "Verbosity of frontend logging for troubleshooting."
+        },
+        {
+          "key": "MMM-Webuntis.config.debugDate",
+          "title": "debugDate",
+          "description": "Optional fixed date (YYYY-MM-DD) for reproducible debugging."
+        },
+        {
+          "key": "MMM-Webuntis.config.demoDataFile",
+          "title": "demoDataFile",
+          "description": "Optional local JSON fixture file for demo mode."
+        },
+        {
+          "key": "MMM-Webuntis.config.initRetryTimeout",
+          "title": "initRetryTimeout",
+          "description": "Wait time in milliseconds before retrying initialization."
+        },
+        {
+          "key": "MMM-Webuntis.config.initRetryMaxAttempts",
+          "title": "initRetryMaxAttempts",
+          "description": "Maximum number of automatic initialization retries."
+        },
+        {
+          "key": "MMM-Webuntis.config.dumpBackendPayloads",
+          "title": "dumpBackendPayloads",
+          "description": "Save normalized backend payloads to debug_dumps for analysis."
+        },
+        {
+          "key": "MMM-Webuntis.config.dumpRawApiResponses",
+          "title": "dumpRawApiResponses",
+          "description": "Save raw API responses to debug_dumps for troubleshooting."
+        },
+        {
+          "key": "MMM-Webuntis.config.displayMode",
+          "title": "displayMode",
+          "description": "Legacy widget list string; prefer plugins.*.enabled for new setups."
+        },
+        {
+          "key": "MMM-Webuntis.config.mode",
+          "title": "mode",
+          "description": "Display style: verbose (per student) or compact (combined)."
+        },
+        {
+          "key": "MMM-Webuntis.config.useClassTimetable",
+          "title": "useClassTimetable",
+          "description": "Prefer class timetable endpoints when they are available."
+        },
+        {
+          "type": "fieldset",
+          "title": "auth",
+          "items": [
+            {
+              "key": "MMM-Webuntis.config.username",
+              "title": "username",
+              "description": "WebUntis username used for authentication."
+            },
+            {
+              "key": "MMM-Webuntis.config.password",
+              "title": "password",
+              "description": "WebUntis password used for authentication."
+            },
+            {
+              "key": "MMM-Webuntis.config.school",
+              "title": "school",
+              "description": "WebUntis school identifier."
+            },
+            {
+              "key": "MMM-Webuntis.config.server",
+              "title": "server",
+              "description": "WebUntis server hostname without http/https."
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "title": "students",
+          "deleteCurrent": false,
+          "draggable": false,
+          "items": {
+            "type": "fieldset",
+            "items": [
+              {
+                "key": "MMM-Webuntis.config.students[].title",
+                "title": "title",
+                "description": "Display name shown for this entry."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].studentId",
+                "title": "studentId",
+                "description": "Numeric WebUntis student ID for this student."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].qrcode",
+                "title": "qrcode",
+                "description": "Untis QR URL used for student authentication."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].username",
+                "title": "username",
+                "description": "WebUntis username used for authentication."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].password",
+                "title": "password",
+                "description": "WebUntis password used for authentication."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].school",
+                "title": "school",
+                "description": "WebUntis school identifier."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].server",
+                "title": "server",
+                "description": "WebUntis server hostname without http/https."
+              },
+              {
+                "type": "fieldset",
+                "title": "plugins overrides",
+                "description": "Optional per-student overrides for plugin-specific configuration fields.",
+                "items": [
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.nextDays",
+                    "title": "lessons.nextDays",
+                    "description": "How many upcoming days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.pastDays",
+                    "title": "lessons.pastDays",
+                    "description": "How many past days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.showRegular",
+                    "title": "lessons.showRegular",
+                    "description": "Include regular lessons in addition to changes."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.exams.config.nextDays",
+                    "title": "exams.nextDays",
+                    "description": "How many upcoming days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.exams.config.pastDays",
+                    "title": "exams.pastDays",
+                    "description": "How many past days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.homework.config.nextDays",
+                    "title": "homework.nextDays",
+                    "description": "How many upcoming days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.homework.config.pastDays",
+                    "title": "homework.pastDays",
+                    "description": "How many past days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.pastDays",
+                    "title": "absences.pastDays",
+                    "description": "How many past days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.nextDays",
+                    "title": "absences.nextDays",
+                    "description": "How many upcoming days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.maxItems",
+                    "title": "absences.maxItems",
+                    "description": "Optional maximum number of items to render."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.nextDays",
+                    "title": "grid.nextDays",
+                    "description": "How many upcoming days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.pastDays",
+                    "title": "grid.pastDays",
+                    "description": "How many past days should be included."
+                  },
+                  {
+                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.weekView",
+                    "title": "grid.weekView",
+                    "description": "Force a Monday-to-Friday week layout."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "fieldset",
+          "title": "plugins (new notation)",
+          "description": "Enable plugins and configure them only under plugins.<id>.config.",
+          "items": [
+            {
+              "type": "fieldset",
+              "title": "lessons",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.nextDays",
+                  "title": "nextDays",
+                  "description": "How many upcoming days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.pastDays",
+                  "title": "pastDays",
+                  "description": "How many past days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.dateFormat",
+                  "title": "dateFormat",
+                  "description": "Date format pattern used in the UI."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.hideWeekends",
+                  "title": "hideWeekends",
+                  "description": "Hide weekend rows/columns where supported."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.showStartTime",
+                  "title": "showStartTime",
+                  "description": "Show lesson start time instead of period label."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.showRegular",
+                  "title": "showRegular",
+                  "description": "Include regular lessons in addition to changes."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.useShortSubject",
+                  "title": "useShortSubject",
+                  "description": "Use short subject labels when available."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.showTeacherMode",
+                  "title": "showTeacherMode",
+                  "description": "Teacher display style: off, initials, or full name."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.showRoom",
+                  "title": "showRoom",
+                  "description": "Show room information in entries."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.showSubstitution",
+                  "title": "showSubstitution",
+                  "description": "Show substitution/change details."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.naText",
+                  "title": "naText",
+                  "description": "Fallback text used when a value is missing."
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "exams",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.config.nextDays",
+                  "title": "nextDays",
+                  "description": "How many upcoming days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.config.pastDays",
+                  "title": "pastDays",
+                  "description": "How many past days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.config.dateFormat",
+                  "title": "dateFormat",
+                  "description": "Date format pattern used in the UI."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.config.showSubject",
+                  "title": "showSubject",
+                  "description": "Show subject labels in entries."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.exams.config.showTeacher",
+                  "title": "showTeacher",
+                  "description": "Show teacher information in entries."
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "homework",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.config.nextDays",
+                  "title": "nextDays",
+                  "description": "How many upcoming days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.config.pastDays",
+                  "title": "pastDays",
+                  "description": "How many past days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.config.dateFormat",
+                  "title": "dateFormat",
+                  "description": "Date format pattern used in the UI."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.config.showSubject",
+                  "title": "showSubject",
+                  "description": "Show subject labels in entries."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.homework.config.showText",
+                  "title": "showText",
+                  "description": "Show full text/details in entries."
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "absences",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.pastDays",
+                  "title": "pastDays",
+                  "description": "How many past days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.nextDays",
+                  "title": "nextDays",
+                  "description": "How many upcoming days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.dateFormat",
+                  "title": "dateFormat",
+                  "description": "Date format pattern used in the UI."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.showDate",
+                  "title": "showDate",
+                  "description": "Show the date column in entries."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.showExcused",
+                  "title": "showExcused",
+                  "description": "Show whether an absence is excused."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.showReason",
+                  "title": "showReason",
+                  "description": "Show reason text when available."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.absences.config.maxItems",
+                  "title": "maxItems",
+                  "description": "Optional maximum number of items to render."
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "messagesofday",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.messagesofday.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                }
+              ]
+            },
+            {
+              "type": "fieldset",
+              "title": "grid",
+              "items": [
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.enabled",
+                  "title": "enabled",
+                  "description": "Turn this plugin on or off."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.nextDays",
+                  "title": "nextDays",
+                  "description": "How many upcoming days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.pastDays",
+                  "title": "pastDays",
+                  "description": "How many past days should be included."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.weekView",
+                  "title": "weekView",
+                  "description": "Force a Monday-to-Friday week layout."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.dateFormat",
+                  "title": "dateFormat",
+                  "description": "Date format pattern used in the UI."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.hideWeekends",
+                  "title": "hideWeekends",
+                  "description": "Hide weekend rows/columns where supported."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.showNowLine",
+                  "title": "showNowLine",
+                  "description": "Show a live current-time marker in the grid."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.mergeGap",
+                  "title": "mergeGap",
+                  "description": "Merge adjacent lessons when the gap is below this minute threshold."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.maxLessons",
+                  "title": "maxLessons",
+                  "description": "Maximum number of visible lessons; use 0 for unlimited."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.naText",
+                  "title": "naText",
+                  "description": "Fallback text used when a value is missing."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.primary",
+                  "title": "fields.primary",
+                  "description": "Main field shown in each grid cell."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.secondary",
+                  "title": "fields.secondary",
+                  "description": "Secondary field shown in each grid cell."
+                },
+                {
+                  "type": "array",
+                  "title": "fields.additional",
+                  "description": "Additional fields appended in parentheses, for example room or class.",
+                  "items": [
+                    {
+                      "key": "MMM-Webuntis.config.plugins.grid.config.fields.additional[]",
+                      "notitle": true,
+                      "description": "Additional fields appended in each grid cell."
+                    }
+                  ]
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.format.subject",
+                  "title": "fields.format.subject",
+                  "description": "Subject label format (short or long)."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.format.teacher",
+                  "title": "fields.format.teacher",
+                  "description": "Teacher label format (short or long)."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.format.class",
+                  "title": "fields.format.class",
+                  "description": "Class label format (short or long)."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.format.room",
+                  "title": "fields.format.room",
+                  "description": "Room label format (short or long)."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.grid.config.fields.format.studentGroup",
+                  "title": "fields.format.studentGroup",
+                  "description": "Student group label format (short or long)."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "value": {
+    "disabled": true,
+    "module": "MMM-Webuntis",
+    "position": "none",
+    "classes": "",
+    "header": "",
+    "hiddenOnStartup": false,
+    "configDeepMerge": false,
+    "order": "*",
+    "inconfig": "0",
+    "config": {
+      "header": "MMM-Webuntis",
+      "updateInterval": 300000,
+      "timezone": "Europe/Berlin",
+      "logLevel": "none",
+      "debugDate": "",
+      "demoDataFile": "",
+      "initRetryTimeout": 5000,
+      "initRetryMaxAttempts": 4,
+      "dumpBackendPayloads": false,
+      "dumpRawApiResponses": false,
+      "displayMode": "lessons, exams",
+      "mode": "verbose",
+      "useClassTimetable": false,
+      "username": "",
+      "password": "",
+      "school": "",
+      "server": "",
+      "students": [
+        {
+          "title": "Student",
+          "studentId": 0,
+          "qrcode": ""
+        }
+      ],
+      "plugins": {
+        "lessons": {
+          "enabled": true,
+          "config": {
+            "nextDays": 2,
+            "pastDays": 0,
+            "dateFormat": "EEE",
+            "hideWeekends": false,
+            "showStartTime": false,
+            "showRegular": false,
+            "useShortSubject": false,
+            "showTeacherMode": "full",
+            "showRoom": false,
+            "showSubstitution": false,
+            "naText": "N/A"
+          }
+        },
+        "exams": {
+          "enabled": true,
+          "config": {
+            "nextDays": 21,
+            "pastDays": 0,
+            "dateFormat": "EEE dd.MM.",
+            "showSubject": true,
+            "showTeacher": true
+          }
+        },
+        "homework": {
+          "enabled": false,
+          "config": {
+            "nextDays": 28,
+            "pastDays": 0,
+            "dateFormat": "EEE dd.MM.",
+            "showSubject": true,
+            "showText": true
+          }
+        },
+        "absences": {
+          "enabled": false,
+          "config": {
+            "pastDays": 21,
+            "nextDays": 7,
+            "dateFormat": "EEE dd.MM.",
+            "showDate": true,
+            "showExcused": true,
+            "showReason": true,
+            "maxItems": null
+          }
+        },
+        "messagesofday": {
+          "enabled": false,
+          "config": {}
+        },
+        "grid": {
+          "enabled": false,
+          "config": {
+            "nextDays": 4,
+            "pastDays": 0,
+            "weekView": false,
+            "dateFormat": "EEE dd.MM.",
+            "hideWeekends": false,
+            "showNowLine": true,
+            "mergeGap": 15,
+            "maxLessons": 0,
+            "naText": "N/A",
+            "fields": {
+              "primary": "subject",
+              "secondary": "teacher",
+              "additional": ["room"],
+              "format": {
+                "subject": "long",
+                "teacher": "long",
+                "class": "short",
+                "room": "short",
+                "studentGroup": "short"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
