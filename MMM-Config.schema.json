@@ -87,11 +87,11 @@
             },
             "debugDate": {
               "type": "string",
-              "description": "Optional fixed date (YYYY-MM-DD) for reproducible debugging."
+              "description": "FOR DEV ONLY: Optional fixed date (YYYY-MM-DD) for reproducible debugging."
             },
             "demoDataFile": {
               "type": "string",
-              "description": "Optional local JSON fixture file for demo mode."
+              "description": "FOR DEV ONLY: Optional local JSON fixture file for demo mode."
             },
             "initRetryTimeout": {
               "type": "integer",
@@ -105,11 +105,11 @@
             },
             "dumpBackendPayloads": {
               "type": "boolean",
-              "description": "Save normalized backend payloads to debug_dumps for analysis."
+              "description": "FOR DEV ONLY: Save normalized backend payloads to debug_dumps for analysis."
             },
             "dumpRawApiResponses": {
               "type": "boolean",
-              "description": "Save raw API responses to debug_dumps for troubleshooting."
+              "description": "FOR DEV ONLY: Save raw API responses to debug_dumps for troubleshooting."
             },
             "displayMode": {
               "type": "string",
@@ -735,7 +735,7 @@
         {
           "key": "MMM-Webuntis.config.displayMode",
           "title": "displayMode",
-          "description": "Legacy widget list string; prefer plugins.*.enabled for new setups."
+          "description": "Legacy plugins list string; prefer plugins.*.enabled for new setups."
         },
         {
           "key": "MMM-Webuntis.config.mode",
@@ -794,7 +794,7 @@
               {
                 "key": "MMM-Webuntis.config.students[].qrcode",
                 "title": "qrcode",
-                "description": "Untis QR URL used for student authentication."
+                "description": "Full Untis QR string used for student authentication."
               },
               {
                 "key": "MMM-Webuntis.config.students[].username",
@@ -815,85 +815,13 @@
                 "key": "MMM-Webuntis.config.students[].server",
                 "title": "server",
                 "description": "WebUntis server hostname without http/https."
-              },
-              {
-                "type": "fieldset",
-                "title": "plugins overrides",
-                "description": "Optional per-student overrides for plugin-specific configuration fields.",
-                "items": [
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.nextDays",
-                    "title": "lessons.nextDays",
-                    "description": "How many upcoming days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.pastDays",
-                    "title": "lessons.pastDays",
-                    "description": "How many past days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.lessons.config.showRegular",
-                    "title": "lessons.showRegular",
-                    "description": "Include regular lessons in addition to changes."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.exams.config.nextDays",
-                    "title": "exams.nextDays",
-                    "description": "How many upcoming days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.exams.config.pastDays",
-                    "title": "exams.pastDays",
-                    "description": "How many past days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.homework.config.nextDays",
-                    "title": "homework.nextDays",
-                    "description": "How many upcoming days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.homework.config.pastDays",
-                    "title": "homework.pastDays",
-                    "description": "How many past days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.pastDays",
-                    "title": "absences.pastDays",
-                    "description": "How many past days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.nextDays",
-                    "title": "absences.nextDays",
-                    "description": "How many upcoming days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.absences.config.maxItems",
-                    "title": "absences.maxItems",
-                    "description": "Optional maximum number of items to render."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.nextDays",
-                    "title": "grid.nextDays",
-                    "description": "How many upcoming days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.pastDays",
-                    "title": "grid.pastDays",
-                    "description": "How many past days should be included."
-                  },
-                  {
-                    "key": "MMM-Webuntis.config.students[].plugins.grid.config.weekView",
-                    "title": "grid.weekView",
-                    "description": "Force a Monday-to-Friday week layout."
-                  }
-                ]
               }
             ]
           }
         },
         {
           "type": "fieldset",
-          "title": "plugins (new notation)",
+          "title": "plugins",
           "description": "Enable plugins and configure them only under plugins.<id>.config.",
           "items": [
             {
