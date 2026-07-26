@@ -1,106 +1,6 @@
 Module.register('MMM-Webuntis', {
   _cacheVersion: '2.0.2',
 
-  /**
-   * Frontend logger factory for widget logging.
-   * Uses the runtime utility loaded via getScripts(); _log provides the console fallback.
-   *
-   * @param {string} moduleName - Module name for log prefixes (default: 'MMM-Webuntis')
-   * @returns {Object|null} Logger object with log(level, msg) method, or null if unavailable
-   */
-  _createFrontendLogger(moduleName = 'MMM-Webuntis') {
-    if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
-      return null;
-    }
-
-    return globalThis.MMModuleRuntimeUtils.createLevelLogger({
-      prefix: `[${moduleName}]`,
-      getLevel: () => window.MMMWebuntisLogLevel || 'info',
-    });
-  },
-
-  /**
-   * Central frontend clock access for widgets and module lifecycle logic.
-   * Keeps debugDate semantics in one place on the module instance.
-   *
-   * @param {Object|null} configOverride - Optional config to evaluate instead of this.config
-   * @returns {{date: Date, ymd: number, isoDate: string, isDebug: boolean, timezone: string}}
-   */
-  getCurrentDateContext(configOverride = null) {
-    if (globalThis.MMModuleRuntimeUtils?.getCurrentDateContext) {
-      return globalThis.MMModuleRuntimeUtils.getCurrentDateContext(configOverride || this.config || {}, {
-        // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-        defaultTimezone: this['defaults']?.timezone || 'Europe/Berlin',
-      });
-    }
-
-    // Fallback: Simple date context without debugDate/timezone support
-    // This should never execute in practice since runtime-utils.js is loaded via getScripts()
-    // If this fallback runs, it means the script failed to load - module will work but
-    // debugDate and timezone-aware date handling will not be available
-    const now = new Date();
-    return {
-      date: now,
-      ymd: now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(),
-      isoDate: `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
-      isDebug: false,
-      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-      timezone: configOverride?.timezone || this.config?.timezone || this['defaults']?.timezone || 'Europe/Berlin',
-    };
-  },
-
-  _usesLiveClock(nowContext = this.getCurrentDateContext()) {
-    return nowContext?.isDebug !== true;
-  },
-
-  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
-    const nextTodayYmd = Number(nowContext?.ymd);
-    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
-    if (nextTodayYmd === this._currentTodayYmd) return false;
-    this._currentTodayYmd = nextTodayYmd;
-    return true;
-  },
-
-  /**
-   * Generate a random session identifier.
-   * Uses a cryptographically secure random number generator when available.
-   *
-   * @param {number} length - Length of the identifier to generate.
-   * @returns {string} Random session identifier consisting of [0-9a-z].
-   * @private
-   */
-  _generateSessionId(length = 9) {
-    if (globalThis.MMModuleRuntimeUtils?.generateScopedId) {
-      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId('wu', length);
-      return scopedId.startsWith('wu_') ? scopedId.slice(3) : scopedId;
-    }
-
-    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
-
-    const cryptoObj =
-      (typeof window !== 'undefined' && window.crypto) ||
-      (typeof self !== 'undefined' && self.crypto) ||
-      (typeof crypto !== 'undefined' && crypto);
-
-    let result = '';
-
-    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
-      const array = new Uint8Array(length);
-      cryptoObj.getRandomValues(array);
-      for (let i = 0; i < length; i += 1) {
-        const idx = array[i] % alphabet.length;
-        result += alphabet.charAt(idx);
-      }
-      return result;
-    }
-
-    for (let i = 0; i < length; i += 1) {
-      const idx = Math.floor(Math.random() * alphabet.length);
-      result += alphabet.charAt(idx);
-    }
-    return result;
-  },
-
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
@@ -156,6 +56,104 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
+   * Frontend logger factory for widget logging.
+   * Uses the runtime utility loaded via getScripts(); _log provides the console fallback.
+   *
+   * @param {string} moduleName - Module name for log prefixes (default: 'MMM-Webuntis')
+   * @returns {Object|null} Logger object with log(level, msg) method, or null if unavailable
+   */
+  _createFrontendLogger(moduleName = 'MMM-Webuntis') {
+    if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
+      return null;
+    }
+
+    return globalThis.MMModuleRuntimeUtils.createLevelLogger({
+      prefix: `[${moduleName}]`,
+      getLevel: () => window.MMMWebuntisLogLevel || 'info',
+    });
+  },
+
+  /**
+   * Central frontend clock access for widgets and module lifecycle logic.
+   * Keeps debugDate semantics in one place on the module instance.
+   *
+   * @param {Object|null} configOverride - Optional config to evaluate instead of this.config
+   * @returns {{date: Date, ymd: number, isoDate: string, isDebug: boolean, timezone: string}}
+   */
+  getCurrentDateContext(configOverride = null) {
+    if (globalThis.MMModuleRuntimeUtils?.getCurrentDateContext) {
+      return globalThis.MMModuleRuntimeUtils.getCurrentDateContext(configOverride || this.config || {}, {
+        defaultTimezone: this.defaults?.timezone || 'Europe/Berlin',
+      });
+    }
+
+    // Fallback: Simple date context without debugDate/timezone support
+    // This should never execute in practice since runtime-utils.js is loaded via getScripts()
+    // If this fallback runs, it means the script failed to load - module will work but
+    // debugDate and timezone-aware date handling will not be available
+    const now = new Date();
+    return {
+      date: now,
+      ymd: now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(),
+      isoDate: `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      isDebug: false,
+      timezone: configOverride?.timezone || this.config?.timezone || this.defaults?.timezone || 'Europe/Berlin',
+    };
+  },
+
+  _usesLiveClock(nowContext = this.getCurrentDateContext()) {
+    return nowContext?.isDebug !== true;
+  },
+
+  _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+    const nextTodayYmd = Number(nowContext?.ymd);
+    if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+    if (nextTodayYmd === this._currentTodayYmd) return false;
+    this._currentTodayYmd = nextTodayYmd;
+    return true;
+  },
+
+  /**
+   * Generate a random session identifier.
+   * Uses a cryptographically secure random number generator when available.
+   *
+   * @param {number} length - Length of the identifier to generate.
+   * @returns {string} Random session identifier consisting of [0-9a-z].
+   * @private
+   */
+  _generateSessionId(length = 9) {
+    if (globalThis.MMModuleRuntimeUtils?.generateScopedId) {
+      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId('wu', length);
+      return scopedId.startsWith('wu_') ? scopedId.slice(3) : scopedId;
+    }
+
+    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+    const cryptoObj =
+      (typeof window !== 'undefined' && window.crypto) ||
+      (typeof self !== 'undefined' && self.crypto) ||
+      (typeof crypto !== 'undefined' && crypto);
+
+    let result = '';
+
+    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+      const array = new Uint8Array(length);
+      cryptoObj.getRandomValues(array);
+      for (let i = 0; i < length; i += 1) {
+        const idx = array[i] % alphabet.length;
+        result += alphabet.charAt(idx);
+      }
+      return result;
+    }
+
+    for (let i = 0; i < length; i += 1) {
+      const idx = Math.floor(Math.random() * alphabet.length);
+      result += alphabet.charAt(idx);
+    }
+    return result;
+  },
+
+  /**
    * Return array of CSS files to load for this module
    * Called by MagicMirror during module initialization
    *
@@ -172,8 +170,7 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of JavaScript file paths
    */
   getScripts() {
-    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-    window.MMMWebuntisLogLevel = this.config?.logLevel || this['defaults'].logLevel || 'info';
+    window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
 
     const scripts = [
       this.file('lib/mmm-shared/mmm-shared.js'),
@@ -676,8 +673,7 @@ Module.register('MMM-Webuntis', {
     const explicitEnabled = Object.entries(explicitPlugins)
       .filter(([, entry]) => entry?.enabled === true)
       .map(([pluginId]) => pluginId);
-    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-    const defaultDisplayMode = typeof this['defaults']?.displayMode === 'string' ? this['defaults'].displayMode.toLowerCase().trim() : '';
+    const defaultDisplayMode = typeof this.defaults?.displayMode === 'string' ? this.defaults.displayMode.toLowerCase().trim() : '';
     const currentDisplayMode = typeof this.config?.displayMode === 'string' ? this.config.displayMode.toLowerCase().trim() : '';
 
     if (explicitEnabled.length > 0 && currentDisplayMode === defaultDisplayMode) {
@@ -764,8 +760,7 @@ Module.register('MMM-Webuntis', {
     }
 
     const levels = this._getWidgetApi()?.util?.logLevelWeights || { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-    const configured = this.config?.logLevel || this['defaults'].logLevel || 'none';
+    const configured = this.config?.logLevel || this.defaults.logLevel || 'none';
     const configuredLevel = levels[configured] !== undefined ? configured : 'none';
     const msgLevel = levels[level] !== undefined ? level : 'info';
     if (levels[msgLevel] <= levels[configuredLevel]) {
@@ -849,8 +844,7 @@ Module.register('MMM-Webuntis', {
         : undefined;
 
     const sendConfig = {
-      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-      ...this['defaults'],
+      ...this.defaults,
       ...this.config,
       students: rawStudents,
       id: this.identifier,
@@ -863,8 +857,7 @@ Module.register('MMM-Webuntis', {
 
     widgetKeys.forEach((widget) => {
       sendConfig[widget] = {
-        // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-        ...(this['defaults']?.[widget] || {}),
+        ...(this.defaults?.[widget] || {}),
         ...(this.config?.[widget] || {}),
       };
     });
@@ -1336,8 +1329,7 @@ Module.register('MMM-Webuntis', {
     this.shared = globalThis.MMModuleShared;
     this.sharedContext = this.shared.createModuleContext('MMM-Webuntis', this.identifier, {
       instanceId: this.identifier,
-      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-      logLevel: this.config.logLevel || this['defaults'].logLevel || 'info',
+      logLevel: this.config.logLevel || this.defaults.logLevel || 'info',
       logStructured: true,
       logRedaction: true,
     });
@@ -1364,8 +1356,7 @@ Module.register('MMM-Webuntis', {
 
     if (typeof window !== 'undefined') {
       window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
-      // biome-ignore lint/complexity/useLiteralKeys: intentional parser-safe bracket access to defaults
-      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this['defaults'].logLevel || 'info';
+      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
     }
 
     try {
