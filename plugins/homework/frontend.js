@@ -1,61 +1,11 @@
 (function registerHomeworkPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
+  if (!host || typeof host.registerFrontendPlugin !== 'function' || !sharedDom) {
     return;
   }
 
-  function appendClassName(element, className) {
-    const normalized = String(className || '').trim();
-    if (!normalized) return element;
-    element.className = normalized;
-    return element;
-  }
-
-  function createElement(tagName, className = '') {
-    const element = document.createElement(tagName);
-    return appendClassName(element, className);
-  }
-
-  function createContainer() {
-    return createElement('div', 'wu-widget-container bright small light');
-  }
-
-  function addHeader(container, text) {
-    const header = createElement('div', 'wu-row wu-row-header');
-    header.innerHTML = text;
-    container.appendChild(header);
-  }
-
-  function addRow(container, rowClassName, studentTitle = '', metaHtml = '', dataHtml = '') {
-    const row = createElement('div', `wu-row ${rowClassName}`);
-
-    const studentCol = createElement('div', 'wu-col wu-col-student');
-    studentCol.innerHTML = studentTitle;
-    row.appendChild(studentCol);
-
-    const metaCol = createElement('div', 'wu-col wu-col-meta');
-    metaCol.innerHTML = metaHtml;
-    row.appendChild(metaCol);
-
-    if (dataHtml !== '') {
-      const dataCol = createElement('div', 'wu-col wu-col-data');
-      dataCol.innerHTML = dataHtml;
-      row.appendChild(dataCol);
-    } else if (metaHtml !== '') {
-      metaCol.className = 'wu-col wu-col-full';
-    }
-
-    container.appendChild(row);
-  }
-
-  function escapeHtml(value) {
-    return String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  const { addHeader, addRow, createContainer, createElement, escapeHtml } = sharedDom;
 
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== 'function') return fallback;

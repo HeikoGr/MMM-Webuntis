@@ -826,45 +826,11 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Map of YYYYMMDD -> holiday object
    */
   _buildHolidayMapFromRanges(holidays) {
-    if (!Array.isArray(holidays) || holidays.length === 0) return {};
-
-    const map = {};
-    holidays.forEach((holiday) => {
-      const startNum = Number(holiday?.startDate);
-      const endNum = Number(holiday?.endDate);
-      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
-
-      const startY = Math.floor(startNum / 10000);
-      const startM = Math.floor((startNum % 10000) / 100) - 1;
-      const startD = startNum % 100;
-      const endY = Math.floor(endNum / 10000);
-      const endM = Math.floor((endNum % 10000) / 100) - 1;
-      const endD = endNum % 100;
-
-      const cursor = new Date(startY, startM, startD);
-      const endDate = new Date(endY, endM, endD);
-
-      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
-
-      while (cursor <= endDate) {
-        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
-        map[ymd] = holiday;
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    });
-
-    return map;
+    return this._getWidgetApi()?.util?.buildHolidayMapFromRanges(holidays) || {};
   },
 
   _buildDayNoticeMap(dayNotices) {
-    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
-
-    return dayNotices.reduce((map, notice) => {
-      const ymd = Number(notice?.date);
-      if (!Number.isFinite(ymd) || ymd <= 0) return map;
-      map[ymd] = notice;
-      return map;
-    }, {});
+    return this._getWidgetApi()?.util?.buildDayNoticeMap(dayNotices) || {};
   },
 
   /**
