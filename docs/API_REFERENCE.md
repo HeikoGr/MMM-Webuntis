@@ -267,7 +267,7 @@ Rule:
 
 ### HTML Sanitization
 
-HTML-bearing fields are sanitized before transport.
+HTML-bearing fields are sanitized before transport by the shared `sanitizeRichText()` helper, which uses `sanitize-html`. No HTML attributes are retained.
 
 Whitelist:
 - `<b>`
@@ -275,8 +275,10 @@ Whitelist:
 - `<i>`
 - `<em>`
 - `<u>`
-- `<br>`
-- `<p>`
+- `<s>`, `<strike>`, `<del>`
+- `<sub>`, `<sup>`, `<small>`
+
+`<br>` and block elements (`<p>`, `<div>`, `<li>`, `<h1>` through `<h6>`) are converted to line breaks. All other tags, attributes, and unsafe tag content are removed.
 
 Applied to:
 - homework text

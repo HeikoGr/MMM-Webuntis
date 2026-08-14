@@ -3,8 +3,8 @@
 # MMM-Webuntis: AI Agent Coding Guidelines
 
 **Purpose**: Guide AI agents toward productive, high-quality contributions.
-**Status**: Production module (~5,500 LOC, 17 services, 6 widgets).
-**Last Updated**: 2025-01-21
+**Status**: Production module (~17,700 LOC, 14 backend/core services, 6 first-party plugins).
+**Last Updated**: 2026-08-14
 
 ## Architecture Overview (Critical to Understand)
 
@@ -122,7 +122,7 @@ console.warn('[feature] Warning:', error);
 - `plugins/*/*.js` - first-party frontend/backend plugin implementations for all built-in widgets
 - `lib/frontendShared.js` - Shared frontend utilities and DOM helpers used by the module and plugins
 - `config/config.template.js` - Config schema with 90+ options (includes grid.fields for flexible display)
-- `tests/unit.test.js` - Jest tests (currently 0% coverage)
+- `tests/unit.test.js` - `node:test`-based unit tests, run via `node --run test`
 
 **Supporting modules** (rarely modified):
 - `lib/webuntis/fetchClient.js` - HTTP fetch abstraction
@@ -145,9 +145,8 @@ Boundary rule:
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
 - `docs/API_REFERENCE.md` - External APIs plus normalization rules (time, date, HTML sanitization)
 - `docs/SERVER_REQUEST_FLOW.md` - Runtime request order, retries, skip rules, and statuses
-- `docs/01-research/API_ARCHITECTURE.md` - REST endpoints, auth methods, coverage
-- `docs/ISSUES.md` - Known issues, CRITICAL refactoring tasks
-- `docs/lib-README.md` - Service documentation
+- `docs/API_V3_MANIFEST.md` - Currently shipped frontend/backend payload contract
+- `docs/PLUGINS.md` - Plugin runtime contract, manifest model, and host APIs
 
 ## Quality bar
 
@@ -161,8 +160,8 @@ Boundary rule:
 - **When making code changes, review and update related documentation**:
   - Update Mermaid diagrams in `docs/ARCHITECTURE.md` if control flow or data flow changes
   - Update this file (`copilot-instructions.md`) if file organization, build commands, or conventions change
-  - Keep `docs/lib-README.md` in sync with `lib/` folder changes
-  - Update `CLI_COMPREHENSIVE_GUIDE.md` if CLI options or workflow changes
+  - Update `docs/PLUGINS.md` if plugin host APIs or manifest fields change
+  - Update `docs/CLI.md` if CLI options or workflow changes
 
 ### Git & Commits - IMPORTANT RESTRICTIONS
 
@@ -179,6 +178,7 @@ Boundary rule:
 ## How to build and test
 
 - **Lint code**: `node --run lint` (or `node --run lint:fix` to auto-fix)
+- **Unit tests**: `node --run test` (`node:test`-based tests in `tests/`)
 - **Spell check**: `node --run test:spelling`
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)
@@ -278,7 +278,7 @@ The devcontainer includes additional CLI tools beyond the standard Node.js devel
 - `netcat` (`nc` command) - Test TCP/UDP connections and ports
 
 **Development:**
-- `jest` - Testing framework (globally available: `jest tests/unit.test.js`)
+- `node --run test` - Runs the `node:test`-based unit tests in `tests/unit.test.js`
 - `diff-so-fancy` - Enhanced git diff output (automatically used by git)
 - `playwright` - Frontend testing (provided by the shared devcontainer base image)
 

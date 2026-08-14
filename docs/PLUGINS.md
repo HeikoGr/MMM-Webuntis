@@ -42,12 +42,16 @@ plugins/
     frontend.js
     backend.js
     styles.css
+    translations/
+      en.json
+      de.json
 ```
 
 Allowed variations:
 - `frontend.js` may point to a nested file such as `frontend/index.js`
 - `backend.js` is optional
 - `styles.css` is optional and may be a list of CSS files
+- `translations/` is optional (see [Translations](#translations))
 
 All manifest entry paths must:
 - be relative to the plugin root
@@ -62,7 +66,7 @@ Example:
 
 ```json
 {
-  "$schema": "../docs/schemas/plugin-widget-manifest.schema.json",
+  "$schema": "../../docs/schemas/plugin-widget-manifest.schema.json",
   "id": "lessons",
   "version": "1.0.0",
   "title": "Lessons",
@@ -156,6 +160,33 @@ Frontend loading:
 
 Plugins are sorted by `order`, then by `id`.
 
+## Translations
+
+Each plugin may ship its own translation files under `plugins/<pluginId>/translations/<lang>.json`.
+These are separate from the module-level `translations/` folder registered via `getTranslations()`.
+
+Load behavior (`MMM-Webuntis.js` → `_loadPluginTranslations`):
+
+- files are fetched relative to the plugin root derived from `entry.frontend`
+- load order is `en`, then the base language, then the full locale — for example
+  `en` → `de` → `de-AT`
+- later files shallow-merge over earlier ones, so `en.json` acts as the fallback layer
+- a `404` is silently skipped; other failures and non-object payloads log a warning and are ignored
+- results are cached per plugin ID for the module lifetime
+
+Frontend plugins read them through `pluginContext.translate(key, fallback, replacements)`, which
+returns `fallback` when the key is unknown. Keys are plugin-scoped, so two plugins may use the same
+key without colliding.
+
+File shape:
+
+```json
+{
+  "homework": "Hausaufgaben",
+  "no_homework": "keine Hausaufgaben"
+}
+```
+
 ## Capability Model
 
 Current canonical capabilities:
@@ -212,15 +243,29 @@ Frontend definition shape:
 ```
 
 `pluginContext` provides:
-- `pluginId`
-- `hostApiVersion`
-- `manifest`
-- `translate()`
-- `log()`
-- `dom`
-- `time`
-- `formatting`
-- `shared`
+
+| Field | Contents |
+| --- | --- |
+| `pluginId` | Plugin ID from the manifest |
+| `hostApiVersion` | Host API version (currently `1`) |
+| `manifest` | The plugin's registry entry |
+| `translate(key, fallback, replacements)` | Plugin-scoped translation lookup, see [Translations](#translations) |
+| `log(level, message, meta)` | Logger prefixed with `[plugin:<id>]` |
+| `dom` | `createElement`, `createContainer`, `addHeader`, `addRow`, `addFullRow`, `escapeHtml` |
+| `time` | `getCurrentDateContext`, `currentTimeAsHHMM`, `toMinutesSinceMidnight`, `DEFAULT_TIMEZONE` |
+| `formatting` | `formatDisplayDate`, `formatDisplayTime`, `formatYmd`, `escapeHtml` |
+| `shared` | The full `window.MMMWebuntisFrontendShared` object as an escape hatch |
+
+The four namespaces are forwarded verbatim from `window.MMMWebuntisFrontendShared`, which owns the
+grouping (`lib/frontendShared.js`). `shared.util` continues to expose every helper, including those
+not surfaced in a namespace.
+
+Always prefer `pluginContext.*` over reaching for the global directly. The first-party plugins still
+use the global in places because these namespaces were empty placeholders until recently — that is
+legacy, not the pattern to copy.
+
+Use `time.getCurrentDateContext(config)` rather than `new Date()`: it honours the `debugDate` config
+option, which is what makes deterministic screenshots and fixture-based demo mode work.
 
 `renderContext` provides:
 - `moduleId`
@@ -240,14 +285,14 @@ module.exports = {
   hostApiVersion: 1,
   setup(context) {
     return {
+      getDefaultConfig() {
+        return { nextDays: 4 };
+      },
       validateConfig(pluginConfig) {
         return [];
       },
       getCapabilities(pluginConfig, helpers) {
         return ['lessons'];
-      },
-      deriveStudentData(studentInput, helpers) {
-        return null;
       }
     };
   }
@@ -262,13 +307,27 @@ module.exports = {
 - `helpers`
 
 Supported instance hooks are:
-- `validateConfig(pluginConfig)`
-- `getCapabilities(pluginConfig, helpers)`
-- `deriveStudentData(...)`
+
+| Hook | Called by | Purpose |
+| --- | --- | --- |
+| `getDefaultConfig()` | `node_helper._getBackendPluginDefaultConfig()` | Defaults merged under the plugin's config namespace |
+| `validateConfig(pluginConfig, ctx)` | `node_helper._collectPluginValidationIssues()` | Returns config issues as strings or `{ message, severity }` |
+| `getCapabilities(pluginConfig, helpers)` | `pluginCapabilityResolver.collectCapabilities()` | Overrides the manifest's `capabilities` — use only for config-dependent capabilities |
+
+All three are optional. When `getCapabilities()` is absent, the manifest's `capabilities` array is
+used, which is what every first-party plugin relies on: a hook that just restates the manifest is
+duplication, and the two declarations will drift.
+
+Capability names outside the canonical list are dropped, so a hook cannot invent fetch flags.
 
 ## Runtime Boundaries
 
-The plugin system is current production architecture, but two boundaries still matter:
-- central widget validation still exists in `lib/widgetConfigValidator.js`
+The plugin system is current production architecture, but one boundary still matters:
+- demo mode builds its plugin registry in the frontend from a hardcoded ID list
+  (`MMM-Webuntis.js` → `_demoPluginIds`) instead of receiving it from the backend host
+
+Plugin config validation is fully owned by the plugins: each backend implements `validateConfig()`
+on top of the shared helpers in `lib/pluginValidationUtils.js`. `lib/widgetConfigValidator.js` only
+covers student credentials, which belong to no single plugin.
 
 These are current implementation details, not separate legacy documentation targets.

@@ -52,7 +52,10 @@ Files:
 - `MMM-Webuntis.js`
 - `lib/pluginHostFrontend.js`
 - `lib/frontendShared.js`
+- `lib/runtime-utils.js`
+- `lib/mmm-shared/mmm-shared.js` (git submodule, see [Shared Submodule](#shared-submodule))
 - `plugins/*/frontend.js`
+- `plugins/*/translations/*.json`
 - `MMM-Webuntis.css`
 
 Responsibilities:
@@ -71,10 +74,14 @@ Files:
 - `lib/pluginLoader.js`
 - `lib/pluginHostBackend.js`
 - `lib/pluginCapabilityResolver.js`
+- `lib/pluginManifestValidator.js`
+- `lib/pluginValidationUtils.js`
 - `lib/webuntisClient.js`
 - `lib/configValidator.js`
-- `lib/widgetConfigValidator.js`
-- `lib/logger.js`
+- `lib/widgetConfigValidator.js` (student credentials only; plugin config is validated by the plugins)
+- `lib/warningUtils.js`
+- `lib/runtime-utils.js`
+- `lib/mmm-shared/mmm-shared.js` (git submodule, see [Shared Submodule](#shared-submodule))
 
 Responsibilities:
 - validate and normalize module config
@@ -127,6 +134,22 @@ Responsibilities:
 
 This layer separates transport data from frontend-facing runtime data.
 
+### Shared Submodule
+
+`lib/mmm-shared` is a git submodule (`https://github.com/HeikoGr/mmm-shared.git`) that provides
+notification-name and socket-envelope helpers used by both runtime halves:
+
+- `node_helper.js` requires it at load time for `buildNotifications()` and `createEnvelope()`
+- `MMM-Webuntis.js` ships `lib/mmm-shared/mmm-shared.js` as the first entry of `getScripts()`
+
+Consequences for contributors:
+
+- Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive`
+- `npm install` runs `scripts/install-mmm-shared-submodule.js`, which performs that update
+  automatically — but only inside a git checkout, and it never fails the install
+- The submodule is excluded from Biome checks (`biome.jsonc` → `files.includes`), because it is
+  formatted by its own repository
+
 ## Main Control Flow
 
 1. `MMM-Webuntis.js` sends `CONFIGURE`.
@@ -142,6 +165,24 @@ Current compatibility note:
 - `displayMode` remains a valid public config option.
 - The backend normalizes `displayMode` and top-level legacy plugin namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
 - The frontend render path is plugin-only.
+
+### Demo Mode (Frontend-Only Path)
+
+When `demoDataFile` is set, the frontend bypasses the backend entirely:
+
+1. `MMM-Webuntis.js` skips `CONFIGURE` and never opens a WebUntis session.
+2. `_loadDemoPluginRegistry()` fetches each `plugins/<id>/manifest.json` over HTTP and builds the
+   plugin registry that the backend would normally supply.
+3. `_loadDemoPayloads()` reads the fixture and emits it through the same `DATA_UPDATE` handling as
+   a live payload.
+
+The fixture must therefore satisfy the same contract as a real payload
+([API_V3_MANIFEST.md](API_V3_MANIFEST.md)); `tests/unit.test.js` asserts that shape for
+`demo/fixtures/single-student-week.json`. Fixture rules live in
+[demo/fixtures/README.md](../demo/fixtures/README.md).
+
+Because the demo registry is built in the frontend, the plugin ID list is hardcoded in
+`MMM-Webuntis.js` (`_demoPluginIds`) and must be kept in sync when plugins are added or removed.
 
 ## Key Architectural Rules
 

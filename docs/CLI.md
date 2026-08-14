@@ -32,6 +32,9 @@ Supported options:
 | `--debug-api`, `-x` | Show detailed API requests and truncated responses |
 | `--help`, `-h` | Show built-in help |
 
+Value options accept both `--action auth` and `--action=auth`. Short flags may be bundled
+(`-vd`), and `-c`, `-s`, `-a` take the following argument as their value.
+
 ## Common Commands
 
 ```bash

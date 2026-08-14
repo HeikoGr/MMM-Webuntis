@@ -22,16 +22,24 @@ Older Node 20 installations have shown authentication and runtime failures in re
 
 ```bash
 cd ~/MagicMirror/modules
-git clone https://github.com/HeikoGr/MMM-Webuntis
+git clone --recurse-submodules https://github.com/HeikoGr/MMM-Webuntis
 cd MMM-Webuntis
 npm ci --omit=dev
+```
+
+The module depends on the `lib/mmm-shared` git submodule. `npm ci` normally fetches it for you, but
+cloning with `--recurse-submodules` makes that explicit. If the module fails to start with a
+`Cannot find module './lib/mmm-shared/mmm-shared'` error, run:
+
+```bash
+git submodule update --init --recursive
 ```
 
 ## Update
 
 ```bash
 cd ~/MagicMirror/modules/MMM-Webuntis
-git pull
+git pull --recurse-submodules
 npm ci --omit=dev
 ```
 
@@ -67,6 +75,9 @@ User-facing setup and configuration documentation now lives in the project wiki:
 - [Authentication](https://github.com/HeikoGr/MMM-Webuntis/wiki/Authentication)
 - [Plugins](https://github.com/HeikoGr/MMM-Webuntis/wiki/Plugins)
 - [Troubleshooting](https://github.com/HeikoGr/MMM-Webuntis/wiki/Troubleshooting)
+
+Want to see the module without WebUntis credentials? Set `demoDataFile: 'demo/fixtures/single-student-week.json'`
+in your config to render a synthetic school week offline — see [demo/fixtures/README.md](demo/fixtures/README.md).
 
 Technical background documentation remains in `docs/`:
 
