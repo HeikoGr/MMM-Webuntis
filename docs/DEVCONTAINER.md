@@ -10,9 +10,38 @@ This devcontainer provides a complete development environment for MMM-Webuntis.
 - MagicMirror² preinstalled at `/opt/magic_mirror`
 - Playwright, `playwright-mcp`, and Chrome preinstalled in the image
 
-### APT Packages (Dockerfile)
-- Shared image provides common tooling such as `git`, `curl`, `ripgrep`, `python3`, `jq`, `httpie`, `build-essential`, `pm2`, Playwright, and MagicMirror².
-- This repo-specific Dockerfile only adds `procps`, `htop`, and `netcat-openbsd`.
+### Packages (Dockerfile)
+- Shared image provides common tooling such as `git`, `curl`, `wget`, `gpg`, `ripgrep`, `python3`, `jq`, `httpie`, `build-essential`, `pm2`, Playwright, and MagicMirror².
+- This repo-specific Dockerfile adds:
+  - `npm-check-updates` (`ncu`) via npm
+  - `gh` (GitHub CLI) from the official upstream apt repository, since Debian does not package it
+
+### GitHub CLI
+
+`gh` picks up the `GITHUB_TOKEN` that Codespaces/devcontainer injects, so `gh auth login` is not
+needed:
+
+```bash
+gh auth status          # -> Logged in to github.com account <you> (GITHUB_TOKEN)
+gh pr create --fill
+gh run list --limit 5
+gh run watch
+```
+
+That token belongs to a GitHub App installation, not to your account directly. It can read and
+write repository content, pull requests, and workflow runs, but **cannot administer the repository**:
+
+```bash
+gh api repos/:owner/:repo/branches/master/protection
+# 403 Resource not accessible by integration
+```
+
+Branch protection, rulesets, and other admin calls need a personal access token instead
+(classic scope `repo`, or fine-grained `Administration: Read and write`):
+
+```bash
+GH_TOKEN=<your PAT> gh api --method PUT repos/:owner/:repo/branches/master/protection --input -
+```
 
 ### MagicMirror Modules In The Shared Image
 - `MMM-Cursor`
