@@ -46,5 +46,12 @@
       "matchCommandLine": true
     }
   },
-  "markdown.validate.enabled": true
+  "markdown.validate.enabled": true,
+  // Copilot does not read .github/copilot-instructions.md when generating commit messages,
+  // so the commit conventions are pointed at explicitly here.
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "file": ".github/commit-instructions.md"
+    }
+  ]
 }

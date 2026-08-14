@@ -56,6 +56,13 @@ The VS Code extension `vivaxy.vscode-conventional-commits` (recommended in `.vsc
 preinstalled in the devcontainer) gives you a guided form for type, scope, body, and breaking-change
 footer.
 
+If you let Copilot draft the message with the ✨ button in the Source Control view, it follows
+`.github/commit-instructions.md`, which `.vscode/settings.json` wires up via
+`github.copilot.chat.commitMessageGeneration.instructions`. Note that Copilot does *not* read
+`.github/copilot-instructions.md` for commit messages — that file only applies to chat and code
+generation. Keep the rules in `commitlint.config.js`, `scripts/check-commit-scope.js`, and
+`.github/commit-instructions.md` in sync when you change them.
+
 4. Create a PR
 
 - Make a branch and open a PR with testing steps. CI runs lint, tests, spell check, and commitlint.
