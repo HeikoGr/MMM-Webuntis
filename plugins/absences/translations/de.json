@@ -3,5 +3,5 @@
   "no_absences": "keine Fehlzeiten",
   "excused": "entschuldigt",
   "unexcused": "unentschuldigt",
-  "absences_unavailable_parent_account": "Fehlzeiten sind mit Elternaccounts nicht verf\u00fcgbar (WebUntis API-Limitation)"
+  "absences_unavailable_parent_account": "Fehlzeiten sind mit Elternaccounts nicht verfügbar (WebUntis API-Limitation)"
 }
