@@ -1,0 +1,33 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Keeps an open "chore(main): release x.y.z" PR in sync with every conventional commit
+      # landing on master. Merging that PR bumps package.json + package-lock.json, writes the
+      # CHANGELOG entry, creates the git tag, and publishes a GitHub release.
+      #
+      # Version numbers therefore stop being a manual step attached to an unrelated commit,
+      # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
+      - name: Run release-please
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

@@ -1,19 +1,74 @@
 # Changelog
 
-## Unreleased
+## 0.8.5 - 2026-07-26
 
-Current package version: 0.8.1
+### ⚙️ Configuration
 
-### 🔌 Plugin Architecture
+- Added `MMM-Config.schema.json`, a full JSON schema of every module and plugin option, so MMM-Config can render a form-based editor for this module.
+- Changed internal `defaults` reads from `this.defaults` to `this['defaults']`. MMM-Config extracts the defaults block by parsing the source, and bracket access keeps that parse reliable.
+- Removed the 80-line `plugins` block from the module `defaults`. Plugin defaults now come solely from each plugin backend's `getDefaultConfig()`, which removes a second, drifting source of truth. Plugin activation was already driven by `displayMode` or an explicit `plugins.<id>.enabled`, since every manifest declares `enabledByDefault: false`.
 
-- Introduced a first-party `messagesofday` plugin with dedicated frontend and backend entrypoints under `plugins/messagesofday/`.
-- Continued the widgets-to-plugins transition without removing `displayMode` as a supported public config option.
+## 0.8.4 - 2026-07-22
 
 ### 📚 Documentation
 
-- Consolidated plugin documentation into a single current-state reference at `docs/PLUGINS.md`.
-- Updated architecture, configuration, and API docs to describe the current plugin runtime instead of the earlier migration target state.
+- Rewrote the README around a minimal quick-start config and moved detailed setup into the wiki.
+- Added screenshots to the wiki home page.
+
+## 0.8.3 - 2026-07-09
+
+### 🧱 Architecture & Runtime
+
+- Converted the bundled `lib/mmm-shared.js` into the `lib/mmm-shared` git submodule so the shared transport, envelope, and logger helpers can be reused across modules. `postinstall` runs `scripts/install-mmm-shared-submodule.js` to fetch it.
+
+### 📚 Documentation
+
+- Added the `wiki/` documentation set (installation, quick start, configuration, authentication, troubleshooting, update, and one page per plugin) plus a workflow that syncs it to the GitHub wiki.
+- Consolidated plugin documentation into a single current-state reference at `docs/PLUGINS.md`, and updated architecture, configuration, and API docs to describe the shipped plugin runtime instead of the earlier migration target state.
 - Corrected payload-contract documentation so V3 is documented as the currently shipped frontend/backend contract and V2 is treated as archived history.
+- Renamed remaining "widgets" terminology to "plugins" across docs and code.
+
+### 🔧 Tooling
+
+- Switched Dependabot to daily checks and added an auto-merge workflow for minor and patch updates.
+
+## 0.8.2 - 2026-07-05
+
+### 🌐 API & Data Handling
+
+- Replaced the flat socket-notification protocol with a two-channel envelope. Frontend and backend now exchange `MMM-Webuntis_REQUEST` and `MMM-Webuntis_EVENT`, each carrying `{ action, requestId, ts, data, error }`, which makes responses correlatable and log redaction uniform.
+- Renamed the actions carried in that envelope: `INIT_MODULE` → `CONFIGURE`, `FETCH_DATA` → `REFRESH`, `GOT_DATA` → `DATA_UPDATE`, `MODULE_INITIALIZED` → `MODULE_READY`, `INIT_ERROR` → `MODULE_INIT_FAILED`.
+- Replaced `lib/logger.js` with the broader `lib/mmm-shared.js`, which provides the notification names, envelope factory, and request-id generation used by both runtime halves.
+
+## 0.8.1 - 2026-07-02
+
+The widgets-to-plugins migration. `displayMode` remains a supported public config option; the backend normalizes it into `plugins.<id>.enabled`.
+
+Note: the version jumped from `0.7.14` straight to `0.8.1`; no `0.8.0` was ever released.
+
+### 🔌 Plugin Architecture
+
+- Replaced the `widgets/` directory with `plugins/`, where each of the six first-party plugins (`grid`, `lessons`, `exams`, `homework`, `absences`, `messagesofday`) owns its `manifest.json`, `frontend.js`, optional `backend.js`, `styles.css`, and `translations/`.
+- Introduced the plugin host: `lib/pluginLoader.js` discovers and validates plugin folders, `lib/pluginHostBackend.js` and `lib/pluginHostFrontend.js` load and register entrypoints, and `lib/pluginManifestValidator.js` enforces the manifest contract including safe relative entry paths.
+- Added the capability model in `lib/pluginCapabilityResolver.js`: plugins declare what data they need, and the backend derives fetch flags from the union of active plugins instead of from hardcoded display flags.
+- Split the monolithic `MMM-Webuntis.css` and the two module translation files, moving plugin-specific styles and strings into the owning plugin.
+- Promoted `widgets/util.js` to `lib/frontendShared.js` as the shared frontend helper API.
+- Added `docs/schemas/plugin-widget-manifest.schema.json` and `docs/PLUGINS.md`.
+- Introduced `messagesofday` as a first-party plugin with its own frontend and backend entrypoints.
+
+### 🖥️ Frontend
+
+- Added clock-driven day rollover so the display advances at midnight without waiting for the next fetch.
+
+## 0.7.14 - 2026-06-17
+
+### 🖥️ Widgets & Frontend
+
+- Fixed `lessons.nextDays: 0` being treated as "not configured" and silently skipping the widget. Zero is now a valid value meaning "no future days"; only a missing value skips.
+
+### ⚙️ Configuration
+
+- Adjusted the config template defaults: `lessons.nextDays` 4 → 2 and `exams.nextDays` 2 → 4, matching the typical use of a short lesson list next to a longer exam outlook.
 
 ## 0.7.6 - 0.7.13
 
@@ -78,6 +133,28 @@ Historical changelog catch-up for the previously undocumented range between `0.7
 
 ## 0.7.4
 
+### 🌐 API & Data Handling
+
+- `HTTP 403` from unlicensed WebUntis endpoints is now handled gracefully: the call returns empty data and the endpoint is skipped on later cycles instead of failing the fetch.
+- Normalized lesson display markers into a single `displayIcons` field, so widgets no longer derive icon state themselves from scattered status fields.
+- Switched to a single `AbortController` for the full request lifecycle, fixing timeouts that could leave requests running.
+
+### 🖥️ Widgets & Frontend
+
+- Reworked grid rendering and icon chip styling; widgets now consume `displayIcons` instead of duplicating the derivation.
+
+### 🧱 Initialization
+
+- Backend initialization is now triggered via `DOM_OBJECTS_CREATED`, with configurable init-retry options for slow or hidden startups.
+
+### 🔧 Tooling
+
+- Added `scripts/webuntis-network-toggle.sh` for simulating network loss during diagnostics.
+
+## 0.7.2 - 0.7.3
+
+Historical catch-up. This entry was originally filed under `0.7.4`; the work landed in `0.7.2` and `0.7.3`.
+
 ### 🧱 Architecture & Data Flow
 
 - Backend fetching was further modularized and cleaned up: orchestration now flows more clearly through `webuntisClient`, mapper, and payload builder layers, with better separation of responsibilities.
@@ -104,7 +181,11 @@ Historical changelog catch-up for the previously undocumented range between `0.7
 ### 📦 Packaging
 
 - Package metadata and exports were revised (including README in package contents), plus minor maintenance updates to install scripts.
-- Version bumped to `0.7.4`.
+
+### 🗂️ Module Layout (0.7.3)
+
+- Split the WebUntis core into `lib/webuntis/*` (auth, HTTP, REST, cache, cookies, orchestration) and the MMM adapter into `lib/webuntis-client/*`, establishing the layer boundary the module still uses today.
+- Added `lib/webuntis/webuntisClient.js` as the facade over that core and moved payload mapping into a dedicated mapper, shrinking `node_helper.js` substantially.
 
 ## 0.7.1
 
@@ -158,6 +239,23 @@ Historical changelog catch-up for the previously undocumented range between `0.7
 ### 🛠️ Development Environment
 
 - Overhauled the devcontainer setup: streamlined Dockerfile layers, added a single bootstrap path via `bootstrap-magicmirror.sh`, and aligned `entrypoint.sh` / `postCreate.sh` so the local MagicMirror install is reliable on first launch.
+
+## 0.6.2 - 0.6.11
+
+Historical changelog catch-up for the previously undocumented range between `0.6.1` and `0.6.12`.
+
+### 🖥️ Widgets & Frontend
+
+- Substantially expanded the grid widget: overlapping-lesson handling, split view for cancelled plus replacement lessons, ticker animation for parallel lessons, and absence overlays.
+- Reworked the shared widget utilities around consistent field extraction and formatting.
+
+### 🌐 API & Data Handling
+
+- Reworked payload compaction and the WebUntis API service, reducing the payload sent to the frontend.
+
+### 🔧 Tooling
+
+- Heavily expanded `scripts/magicmirror-check.mjs` and added `scripts/test_with_dump.js` for fixture-based backend testing.
 
 ## 0.6.1
 

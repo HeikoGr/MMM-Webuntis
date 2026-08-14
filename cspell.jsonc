@@ -1,0 +1,17 @@
+{
+  "version": "0.2",
+  // Docs and inline notes are partly German, code and identifiers are English.
+  "language": "en,de-DE",
+  "import": ["@cspell/dict-de-de/cspell-ext.json"],
+  // Skips gitignored paths (debug_dumps, config/config.js, check results, ...).
+  "useGitignore": true,
+  "ignorePaths": ["node_modules/**", "lib/mmm-shared/**", "package-lock.json", ".git/**", "**/*.png", "MMM-Config.schema.json"],
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./project-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": ["project-words"]
+}

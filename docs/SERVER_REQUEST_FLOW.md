@@ -63,7 +63,7 @@ flowchart TD
     FETCHC[fetchClient.request]
 
     STATUS[(session api status map)]
-    SKIP{previous status 403/404/410\nand younger than 24h?}
+    SKIP{403/404/410 younger than 24h?\nor 3+ consecutive failures\nwithin backoff window?}
     REFRESH{401 auth error?}
     RETRYORCH{auth refreshed during\ntimetable phase?}
 
@@ -330,9 +330,17 @@ They are retried on the next normal fetch cycle:
 - HTTP `5xx`
 - network and timeout failures
 
-## 7. Skip Rules for Permanent Errors
+Repeated temporary failures of the *same* endpoint are throttled by the circuit breaker described
+in section 7.2.
 
-`node_helper.js` stores endpoint status per session in `_apiStatusBySession`.
+## 7. Skip Rules
+
+`node_helper.js` stores endpoint status per session in `_apiStatusBySession` as
+`{ status, recordedAt, failureCount }`.
+
+Two independent skip mechanisms act on that record.
+
+### 7.1 Permanent Errors
 
 Permanent statuses:
 - `403 Forbidden`
@@ -340,8 +348,8 @@ Permanent statuses:
 - `410 Gone`
 
 Behavior:
-1. store `{ status, recordedAt }` for the endpoint
-2. skip future calls for that endpoint in the same session
+1. store the status for the endpoint
+2. skip future calls for that endpoint in the same session — immediately, no threshold
 3. keep skipping for `24h`
 4. after `24h`, clear the stored status and allow a new try
 
@@ -352,6 +360,30 @@ Why this exists:
 Important detail:
 - `403` is handled gracefully in `webuntisClient`: it returns an empty array and logs that the endpoint will be skipped in future cycles
 - `404` and `410` are also recorded and therefore become skip candidates for later fetches
+
+### 7.2 Circuit Breaker for Repeated Temporary Errors
+
+A single `5xx` is a blip and must stay retryable. But WebUntis can serve a constant `500` for weeks —
+for example during holidays, when students hold no class assignment. Without a breaker, every fetch
+cycle would burn the full internal retry ladder (4 attempts with backoff) on a result that will not
+change.
+
+Behavior:
+1. `_recordApiStatusFromError()` increments `failureCount` for **consecutive** failures; an
+   intervening success restarts the count
+2. below `TRANSIENT_FAILURE_THRESHOLD` (3) nothing is skipped — isolated failures are retried on the
+   very next cycle, unchanged
+3. from the third consecutive failure, `_shouldSkipApi()` suppresses calls within a growing window:
+   `15min` → `1h` → `6h`, capped at the last step
+4. once the window elapses, exactly one probe is allowed through; if it fails, the breaker escalates
+   to the next step instead of restarting at `15min`
+5. any success resets `failureCount` to `0` and closes the breaker
+
+This applies to every non-permanent, non-success status, including `failureCount` accumulated from
+errors that carry no HTTP status at all.
+
+Skips are graceful: `webuntisClient._executeRestEndpoint()` returns an empty array, exactly as for
+permanent errors — no exception reaches the payload builder.
 
 ## 8. HTTP Statuses and Their Meaning
 
@@ -367,11 +399,15 @@ Important detail:
 | `403` | permanent permission or licensing problem | no immediate retry | yes, for 24h |
 | `404` | endpoint or resource unavailable | no immediate retry | yes, for 24h |
 | `410` | endpoint/resource gone | no immediate retry | yes, for 24h |
-| `429` | rate limited | yes, internal REST retry | no |
-| `500` | server-side error | yes, internal REST retry | no |
-| `502` | bad gateway | yes, internal REST retry | no |
-| `503` | service unavailable | yes, internal REST retry and later fetch cycles | no |
-| timeout or network error | connection problem | yes, internal REST retry | no |
+| `429` | rate limited | yes, internal REST retry | after 3 consecutive failures (breaker) |
+| `500` | server-side error | yes, internal REST retry | after 3 consecutive failures (breaker) |
+| `502` | bad gateway | yes, internal REST retry | after 3 consecutive failures (breaker) |
+| `503` | service unavailable | yes, internal REST retry and later fetch cycles | after 3 consecutive failures (breaker) |
+| timeout or network error | connection problem | yes, internal REST retry | after 3 consecutive failures (breaker) |
+
+"Breaker" refers to the circuit breaker in section 7.2: the skip starts only after three consecutive
+failures of the same endpoint and lasts `15min` → `1h` → `6h`, not `24h` as for permanent errors.
+Any success closes it immediately.
 
 ### Warning Metadata Kinds
 

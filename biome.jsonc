@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -8,7 +8,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/node_modules", "!**/*.png", "!**/*.md", "!**/.mm-module-checker"]
+    "includes": ["**", "!**/node_modules", "!**/*.png", "!**/*.md", "!**/.mm-module-checker", "!lib/mmm-shared"]
   },
   "formatter": {
     "enabled": true,
@@ -69,12 +69,6 @@
     "globals": ["Log", "Module", "config"]
   },
   "overrides": [
-    {
-      "includes": ["widgets/**/*.js"],
-      "javascript": {
-        "globals": ["config"]
-      }
-    },
     {
       "includes": ["MMM-Webuntis.js"],
       "javascript": {

@@ -18,11 +18,31 @@
   "forwardPorts": [8080],
   "customizations": {
     "vscode": {
-      "extensions": ["actboy168.tasks", "vstirbu.vscode-mermaid-preview"],
+      "extensions": ["actboy168.tasks", "vstirbu.vscode-mermaid-preview", "vivaxy.vscode-conventional-commits"],
       "settings": {
         "chat.mcp.autoStart": true,
         "editor.formatOnSave": true,
-        "files.trimTrailingWhitespace": true
+        "files.trimTrailingWhitespace": true,
+        // Guided commit form matching commitlint.config.js. The scope list is optional;
+        // leaving it empty is fine for repo-wide changes.
+        "conventionalCommits.showEditor": true,
+        "conventionalCommits.promptScopes": true,
+        "conventionalCommits.promptBody": true,
+        "conventionalCommits.promptFooter": true,
+        "conventionalCommits.scopes": [
+          "grid",
+          "lessons",
+          "exams",
+          "homework",
+          "absences",
+          "messagesofday",
+          "auth",
+          "api",
+          "config",
+          "plugins",
+          "cli",
+          "deps"
+        ]
       }
     }
   },

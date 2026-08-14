@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    // Guided Conventional Commits form. Commit messages are validated by commitlint in a
+    // commit-msg hook and again in CI, and they drive version bumps via release-please.
+    "vivaxy.vscode-conventional-commits",
+    // Formatter/linter used by `node --run lint`.
+    "biomejs.biome",
+    // Renders the Mermaid diagrams in docs/ARCHITECTURE.md.
+    "vstirbu.vscode-mermaid-preview",
+    // Runs the tasks defined in .vscode/tasks.json from the status bar.
+    "actboy168.tasks"
+  ]
+}

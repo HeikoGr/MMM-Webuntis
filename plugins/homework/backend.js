@@ -33,14 +33,6 @@ module.exports = {
 
         return issues;
       },
-
-      getCapabilities() {
-        return ['homework', 'studentContext'];
-      },
-
-      deriveStudentData() {
-        return null;
-      },
     };
   },
 };

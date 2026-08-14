@@ -1,47 +1,11 @@
 (function registerMessagesOfDayPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
+  if (!host || typeof host.registerFrontendPlugin !== 'function' || !sharedDom) {
     return;
   }
 
-  function appendClassName(element, className) {
-    const normalized = String(className || '').trim();
-    if (!normalized) return element;
-    element.className = normalized;
-    return element;
-  }
-
-  function createElement(tagName, className = '') {
-    const element = document.createElement(tagName);
-    return appendClassName(element, className);
-  }
-
-  function addHeader(container, text) {
-    const header = createElement('div', 'wu-row wu-row-header');
-    header.innerHTML = text;
-    container.appendChild(header);
-  }
-
-  function addFullRow(container, rowClassName, content = '') {
-    const row = createElement('div', `wu-row ${rowClassName}`);
-    const fullCol = createElement('div', 'wu-col wu-col-full-width');
-    fullCol.innerHTML = content;
-    row.appendChild(fullCol);
-    container.appendChild(row);
-  }
-
-  function createContainer() {
-    return createElement('div', 'wu-widget-container bright small light');
-  }
-
-  function escapeHtml(value) {
-    return String(value || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+  const { addFullRow, addHeader, createContainer, createElement, escapeHtml } = sharedDom;
 
   host.registerFrontendPlugin({
     id: 'messagesofday',

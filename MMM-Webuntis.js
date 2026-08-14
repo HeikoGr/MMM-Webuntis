@@ -1,6 +1,8 @@
 Module.register('MMM-Webuntis', {
   _cacheVersion: '2.0.2',
 
+  _demoPluginIds: ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'],
+
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
@@ -470,7 +472,23 @@ Module.register('MMM-Webuntis', {
     }));
   },
 
+  /**
+   * Build the context object handed to a frontend plugin's create().
+   *
+   * The dom/time/formatting/shared namespaces are forwarded from the shared frontend API
+   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. They used to be empty
+   * placeholders, which is why plugins reach for the global directly; new plugin code should use
+   * `pluginContext.*` instead. See docs/PLUGINS.md.
+   *
+   * @param {Object} pluginEntry - Registry entry for the plugin
+   * @returns {Object} Plugin context
+   */
   _createFrontendPluginContext(pluginEntry) {
+    const shared = this._getWidgetApi();
+    if (!shared) {
+      this._log('warn', `[plugins] ${pluginEntry.id}: shared frontend API unavailable; context namespaces will be empty`);
+    }
+
     return {
       pluginId: pluginEntry.id,
       hostApiVersion: this._getPluginHost()?.hostApiVersion || 1,
@@ -485,10 +503,10 @@ Module.register('MMM-Webuntis', {
         }
         this._log(level, `[plugin:${pluginEntry.id}] ${message}`);
       },
-      dom: {},
-      time: {},
-      formatting: {},
-      shared: {},
+      dom: shared?.dom || {},
+      time: shared?.time || {},
+      formatting: shared?.formatting || {},
+      shared: shared || {},
     };
   },
 
@@ -567,6 +585,43 @@ Module.register('MMM-Webuntis', {
     if (Array.isArray(rawData)) return rawData;
     if (Array.isArray(rawData?.payloads)) return rawData.payloads;
     return [rawData];
+  },
+
+  async _loadDemoPluginRegistry() {
+    const displayTokens = this._getLegacyDisplayTokens(this.config || {});
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+
+    const entries = await Promise.all(
+      this._demoPluginIds.map(async (pluginId) => {
+        const response = await fetch(this.file(`plugins/${pluginId}/manifest.json`), { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to load demo plugin manifest for "${pluginId}" (${response.status}).`);
+        }
+
+        const manifest = await response.json();
+        const aliases = Array.isArray(manifest?.activation?.displayAliases) ? manifest.activation.displayAliases : [manifest.id];
+        const explicitConfig = explicitPlugins[manifest.id];
+        const active = explicitConfig?.enabled === true || aliases.some((alias) => displayTokens.includes(alias));
+
+        return {
+          id: manifest.id,
+          title: manifest.title,
+          order: manifest.order || 1000,
+          configNamespace: manifest.configNamespace || manifest.id,
+          aliases,
+          capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities : [],
+          active,
+          entry: {
+            frontend: `plugins/${pluginId}/${manifest.entry.frontend}`,
+            styles: Array.isArray(manifest.entry.styles) ? manifest.entry.styles.map((style) => `plugins/${pluginId}/${style}`) : [],
+          },
+        };
+      })
+    );
+
+    this._setPluginRegistry(entries);
+    return entries;
   },
 
   /**
@@ -787,45 +842,11 @@ Module.register('MMM-Webuntis', {
    * @returns {Object} Map of YYYYMMDD -> holiday object
    */
   _buildHolidayMapFromRanges(holidays) {
-    if (!Array.isArray(holidays) || holidays.length === 0) return {};
-
-    const map = {};
-    holidays.forEach((holiday) => {
-      const startNum = Number(holiday?.startDate);
-      const endNum = Number(holiday?.endDate);
-      if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return;
-
-      const startY = Math.floor(startNum / 10000);
-      const startM = Math.floor((startNum % 10000) / 100) - 1;
-      const startD = startNum % 100;
-      const endY = Math.floor(endNum / 10000);
-      const endM = Math.floor((endNum % 10000) / 100) - 1;
-      const endD = endNum % 100;
-
-      const cursor = new Date(startY, startM, startD);
-      const endDate = new Date(endY, endM, endD);
-
-      if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime())) return;
-
-      while (cursor <= endDate) {
-        const ymd = cursor.getFullYear() * 10000 + (cursor.getMonth() + 1) * 100 + cursor.getDate();
-        map[ymd] = holiday;
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    });
-
-    return map;
+    return this._getWidgetApi()?.util?.buildHolidayMapFromRanges(holidays) || {};
   },
 
   _buildDayNoticeMap(dayNotices) {
-    if (!Array.isArray(dayNotices) || dayNotices.length === 0) return {};
-
-    return dayNotices.reduce((map, notice) => {
-      const ymd = Number(notice?.date);
-      if (!Number.isFinite(ymd) || ymd <= 0) return map;
-      map[ymd] = notice;
-      return map;
-    }, {});
+    return this._getWidgetApi()?.util?.buildDayNoticeMap(dayNotices) || {};
   },
 
   /**
@@ -1419,7 +1440,15 @@ Module.register('MMM-Webuntis', {
       this._initialized = true;
       this._initializedAt = Date.now();
       this._log('info', `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
-      this._emitDemoPayload('start');
+      this._loadDemoPluginRegistry()
+        .then((pluginEntries) => this._initializeActivePlugins(pluginEntries))
+        .then(() => this._emitDemoPayload('start'))
+        .catch((error) => {
+          const msg = `Demo mode failed: ${error?.message || String(error)}`;
+          this._log('error', msg);
+          this.moduleWarningsSet.add(msg);
+          this.updateDom();
+        });
       this._startFetchTimer();
       return;
     }

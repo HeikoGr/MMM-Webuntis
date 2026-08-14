@@ -366,49 +366,88 @@ EXAMPLES:
 `);
 }
 
-async function main() {
-  const args = process.argv;
+// Short flags that consume the following argument as their value.
+const VALUE_SHORT_FLAGS = new Set(['c', 's', 'a']);
+// Long flags that consume the following argument as their value.
+const VALUE_LONG_FLAGS = new Set(['config', 'student', 'action']);
+
+/**
+ * Parse CLI arguments into flags plus an optional positional command.
+ *
+ * Flags and the positional command are resolved in ONE pass. A separate pre-scan for the first
+ * non-dash argument used to misread flag values: in `--action auth`, `auth` was taken as the
+ * positional command and later reused as the config path, so every documented `--action <x>` call
+ * failed with "Config file not found: .../auth".
+ *
+ * Supported forms: `--flag value`, `--flag=value`, `--flag`, `-c value`, and bundled `-vd`.
+ *
+ * @param {string[]} args - Raw process.argv
+ * @param {number} [startIdx] - First index to inspect
+ * @returns {{flags: Object, command: string|null}} Parsed flags and positional command
+ */
+function parseCliArgs(args, startIdx = 2) {
   const flags = {};
   let command = null;
-  const startIdx = 2;
 
   for (let i = startIdx; i < args.length; i++) {
     const arg = args[i];
-    if (!arg.startsWith('-')) {
-      command = arg;
-      break;
-    }
-  }
 
-  for (let i = startIdx; i < args.length; i++) {
-    const arg = args[i];
     if (arg.startsWith('--')) {
-      const key = arg.slice(2);
+      const body = arg.slice(2);
+      const eqIdx = body.indexOf('=');
+
+      if (eqIdx !== -1) {
+        flags[body.slice(0, eqIdx)] = body.slice(eqIdx + 1);
+        continue;
+      }
+
       const nextArg = args[i + 1];
-      if (nextArg && !nextArg.startsWith('--') && !nextArg.startsWith('-')) {
-        flags[key] = nextArg;
+      // Only declared value-flags consume the next token, so `--verbose --action auth` cannot
+      // swallow `--action` and boolean flags stay boolean.
+      if (VALUE_LONG_FLAGS.has(body) && nextArg !== undefined && !nextArg.startsWith('-')) {
+        flags[body] = nextArg;
         i++;
       } else {
-        flags[key] = true;
+        flags[body] = true;
       }
-    } else if (arg.startsWith('-') && arg !== '-') {
+      continue;
+    }
+
+    if (arg.startsWith('-') && arg !== '-') {
       const shortFlags = arg.slice(1);
       for (let j = 0; j < shortFlags.length; j++) {
         const char = shortFlags[j];
-        if (char === 'c' || char === 's' || char === 'a') {
+
+        if (char === 'h') {
+          command = 'help';
+          continue;
+        }
+
+        if (VALUE_SHORT_FLAGS.has(char)) {
           const nextArg = args[i + 1];
-          if (nextArg && !nextArg.startsWith('-')) {
+          if (nextArg !== undefined && !nextArg.startsWith('-')) {
             flags[char] = nextArg;
             i++;
+          } else {
+            flags[char] = true;
           }
-        } else if (char === 'h') {
-          command = 'help';
-        } else {
-          flags[char] = true;
+          continue;
         }
+
+        flags[char] = true;
       }
+      continue;
     }
+
+    // Bare token that no flag claimed: the positional command. First one wins.
+    if (command === null) command = arg;
   }
+
+  return { flags, command };
+}
+
+async function main() {
+  const { flags, command } = parseCliArgs(process.argv);
 
   try {
     if (command === 'help' || command === '--help' || command === '-h' || flags.help) {
@@ -433,4 +472,9 @@ async function main() {
   }
 }
 
-main();
+// Only auto-run as a CLI. Guarded so tests can require parseCliArgs without executing a fetch.
+if (require.main === module) {
+  main();
+}
+
+module.exports = { parseCliArgs };

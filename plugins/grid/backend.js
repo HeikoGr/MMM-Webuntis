@@ -65,14 +65,6 @@ module.exports = {
 
         return issues;
       },
-
-      getCapabilities() {
-        return ['lessons', 'timeUnits', 'absences', 'holidays', 'dayNotices', 'studentContext'];
-      },
-
-      deriveStudentData() {
-        return null;
-      },
     };
   },
 };
