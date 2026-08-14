@@ -146,7 +146,7 @@ Consequences for contributors:
 
 - Clone with `git clone --recurse-submodules`, or run `git submodule update --init --recursive`
 - `npm install` runs `scripts/install-mmm-shared-submodule.js`, which performs that update
-  automatically — but only inside a git checkout, and it never fails the install
+  automatically — but only inside a checkout, and it never fails the install
 - The submodule is excluded from Biome checks (`biome.jsonc` → `files.includes`), because it is
   formatted by its own repository
 

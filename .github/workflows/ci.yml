@@ -27,7 +27,7 @@ jobs:
           submodules: recursive
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # Test the minimum version declared in package.json engines, not the latest.
           # Otherwise the supported floor is never actually exercised.
@@ -71,7 +71,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20.18.1'
           cache: npm
