@@ -40,8 +40,19 @@ jobs:
       - name: Lint
         run: node --run lint
 
-      - name: Unit tests
+      # Run the suite twice. Date handling is the module's core job, and a bug in it is only
+      # visible when the host clock differs from the school timezone - a UTC-only run cannot see
+      # it. Europe/Berlin is the zone virtually every installation runs in; UTC is pinned
+      # explicitly so the runner default can never silently become the only zone under test.
+      - name: Unit tests (UTC)
         run: node --run test
+        env:
+          TZ: UTC
+
+      - name: Unit tests (Europe/Berlin)
+        run: node --run test
+        env:
+          TZ: Europe/Berlin
 
       - name: Spell check
         run: node --run test:spelling
