@@ -38,7 +38,8 @@
     "postinstall": "node scripts/install-mmm-shared-submodule.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "test:spelling": "cspell .",
+    "test": "node --test tests/*.test.js",
+    "test:spelling": "cspell \"**/*.{js,mjs,cjs,json,jsonc,md,css}\" --no-progress",
     "test:auth:curl": "bash scripts/test_auth_with_curl.sh --from-config",
     "test:api": "node scripts/test_api_endpoint.js",
     "test:api:discover": "bash scripts/discover_endpoints.sh",
@@ -55,16 +56,20 @@
   },
   "dependencies": {
     "otplib": "^13.4.1",
-    "sanitize-html": "^2.17.6"
+    "sanitize-html": "^2.17.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.7",
+    "@biomejs/biome": "^2.5.8",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@cspell/dict-de-de": "^4.1.2",
     "cspell": "^10.0.1",
     "lint-staged": "^17.3.0",
     "simple-git-hooks": "^2.13.1"
   },
   "simple-git-hooks": {
-    "pre-commit": "npx --no-install lint-staged"
+    "pre-commit": "npx --no-install lint-staged",
+    "commit-msg": "npx --no-install commitlint --edit $1 && node scripts/check-commit-scope.js $1"
   },
   "allowScripts": {
     "simple-git-hooks@2.13.1": true
