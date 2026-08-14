@@ -17,7 +17,7 @@ const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, nor
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
-const { buildFetchFlagsFromCapabilities } = require('./lib/pluginCapabilityResolver');
+const { buildFetchFlagsFromCapabilities, collectCapabilities } = require('./lib/pluginCapabilityResolver');
 const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 
 const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
@@ -1220,18 +1220,21 @@ module.exports = NodeHelper.create({
     if (displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode)) {
       const config = displayMode;
       const pluginsConfig = config.plugins && typeof config.plugins === 'object' ? config.plugins : {};
-      const definitions = this._getKnownPluginDefinitions();
       const activePluginIds = Object.entries(pluginsConfig)
         .filter(([, entry]) => entry?.enabled === true)
         .map(([pluginId]) => pluginId);
 
       if (activePluginIds.length > 0) {
-        const activeDefinitions = activePluginIds.map((pluginId) => definitions.get(pluginId)).filter(Boolean);
-        const capabilities = Array.from(
-          new Set(activeDefinitions.flatMap((definition) => (Array.isArray(definition.capabilities) ? definition.capabilities : [])))
-        );
-        const capabilityFlags = buildFetchFlagsFromCapabilities(capabilities);
         const activeSet = new Set(activePluginIds);
+        // Ask the plugin records (not the flattened definitions) so a backend plugin's
+        // getCapabilities() hook can override its manifest. Falls back to manifest capabilities.
+        const activeRecords = (Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : []).filter((pluginRecord) =>
+          activeSet.has(pluginRecord?.manifest?.id)
+        );
+        const capabilities = collectCapabilities(activeRecords, {
+          getPluginConfig: (pluginId) => pluginsConfig[pluginId]?.config || {},
+        });
+        const capabilityFlags = buildFetchFlagsFromCapabilities(capabilities);
 
         return {
           wantsGridWidget: activeSet.has('grid'),
