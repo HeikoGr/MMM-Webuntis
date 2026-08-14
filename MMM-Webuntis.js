@@ -1,6 +1,8 @@
 Module.register('MMM-Webuntis', {
   _cacheVersion: '2.0.2',
 
+  _demoPluginIds: ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'],
+
   defaults: {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
@@ -567,6 +569,43 @@ Module.register('MMM-Webuntis', {
     if (Array.isArray(rawData)) return rawData;
     if (Array.isArray(rawData?.payloads)) return rawData.payloads;
     return [rawData];
+  },
+
+  async _loadDemoPluginRegistry() {
+    const displayTokens = this._getLegacyDisplayTokens(this.config || {});
+    const explicitPlugins =
+      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+
+    const entries = await Promise.all(
+      this._demoPluginIds.map(async (pluginId) => {
+        const response = await fetch(this.file(`plugins/${pluginId}/manifest.json`), { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to load demo plugin manifest for "${pluginId}" (${response.status}).`);
+        }
+
+        const manifest = await response.json();
+        const aliases = Array.isArray(manifest?.activation?.displayAliases) ? manifest.activation.displayAliases : [manifest.id];
+        const explicitConfig = explicitPlugins[manifest.id];
+        const active = explicitConfig?.enabled === true || aliases.some((alias) => displayTokens.includes(alias));
+
+        return {
+          id: manifest.id,
+          title: manifest.title,
+          order: manifest.order || 1000,
+          configNamespace: manifest.configNamespace || manifest.id,
+          aliases,
+          capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities : [],
+          active,
+          entry: {
+            frontend: `plugins/${pluginId}/${manifest.entry.frontend}`,
+            styles: Array.isArray(manifest.entry.styles) ? manifest.entry.styles.map((style) => `plugins/${pluginId}/${style}`) : [],
+          },
+        };
+      })
+    );
+
+    this._setPluginRegistry(entries);
+    return entries;
   },
 
   /**
@@ -1419,7 +1458,15 @@ Module.register('MMM-Webuntis', {
       this._initialized = true;
       this._initializedAt = Date.now();
       this._log('info', `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
-      this._emitDemoPayload('start');
+      this._loadDemoPluginRegistry()
+        .then((pluginEntries) => this._initializeActivePlugins(pluginEntries))
+        .then(() => this._emitDemoPayload('start'))
+        .catch((error) => {
+          const msg = `Demo mode failed: ${error?.message || String(error)}`;
+          this._log('error', msg);
+          this.moduleWarningsSet.add(msg);
+          this.updateDom();
+        });
       this._startFetchTimer();
       return;
     }
