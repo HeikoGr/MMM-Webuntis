@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "mmm-webuntis",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "draft": false,
+      "prerelease": false,
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "changelog-sections": [
+        { "type": "feat", "section": "🔌 Features" },
+        { "type": "fix", "section": "🐛 Fixes" },
+        { "type": "perf", "section": "⚡ Performance" },
+        { "type": "refactor", "section": "🧱 Refactoring" },
+        { "type": "docs", "section": "📚 Documentation" },
+        { "type": "test", "section": "🧪 Testing" },
+        { "type": "build", "section": "📦 Build & Dependencies" },
+        { "type": "ci", "section": "🔧 Tooling" },
+        { "type": "chore", "section": "🔧 Maintenance", "hidden": true },
+        { "type": "revert", "section": "⏪ Reverts" }
+      ]
+    }
+  },
+  "bootstrap-sha": "3bdcb66dc1791c0fb4aed8fb48164cd0b5c9b5ff"
+}
