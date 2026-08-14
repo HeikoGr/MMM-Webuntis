@@ -43,6 +43,24 @@ Branch protection, rulesets, and other admin calls need a personal access token 
 GH_TOKEN=<your PAT> gh api --method PUT repos/:owner/:repo/branches/master/protection --input -
 ```
 
+### Timezone
+
+The container runs in `Europe/Berlin` (`ENV TZ` plus `/etc/localtime` in the Dockerfile). The base
+image defaults to UTC, which is a poor fit for a timetable module: the mirror marks the wrong
+lesson as current, and between 00:00 and 02:00 local time it still shows the previous day.
+
+Use the zone name, never the abbreviation — `CEST` has no daylight-saving rules attached and would
+be an hour off all winter. Override per container in `devcontainer.json`:
+
+```jsonc
+"containerEnv": { "TZ": "Europe/Vienna" }
+```
+
+The module's own `timezone` config option is independent of this and stays authoritative for the
+school's clock: `getCurrentDateContext()` resolves it via `Intl`, so a mirror in a different zone
+than its school still renders the school's wall clock. CI runs the unit tests under both `UTC` and
+`Europe/Berlin` to keep it that way.
+
 ### MagicMirror Modules In The Shared Image
 - `MMM-Cursor`
 - `MMM-Carousel`

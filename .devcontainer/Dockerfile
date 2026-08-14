@@ -22,6 +22,18 @@ RUN set -eux; \
         rm -rf /var/lib/apt/lists/*; \
     fi
 
+# Run the container in the timezone the module is actually used in.
+#
+# The base image defaults to UTC. That silently breaks development in two ways: the mirror marks
+# the wrong lesson as current (two hours off in summer), and between 00:00 and 02:00 local time it
+# still renders the previous day's timetable. WebUntis is a DACH product, so effectively every
+# installation runs in this zone - developing in UTC means testing a configuration nobody uses.
+#
+# Europe/Berlin, not CEST: only the zone name carries the daylight-saving rules. Override per
+# container with "containerEnv": { "TZ": "..." } in devcontainer.json.
+ENV TZ=Europe/Berlin
+RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone
+
 # Copy shell scripts and ensure correct line endings (LF) for cross-platform compatibility (Windows/Linux)
 COPY --chmod=755 ./entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && \
