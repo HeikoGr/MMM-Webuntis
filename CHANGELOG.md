@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.9.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.8.5...v0.9.0) (2026-08-14)
+
+
+### 🔌 Features
+
+* **demo:** build the demo plugin registry from plugin manifests ([960342e](https://github.com/HeikoGr/MMM-Webuntis/commit/960342ed0b6644b534aaaece89c5dcaabb55d069))
+
+
+### 🐛 Fixes
+
+* **api:** make the configured timezone authoritative over the host clock ([307fdc2](https://github.com/HeikoGr/MMM-Webuntis/commit/307fdc24752ff47bc9f9d7034f9229d0e440264c))
+* **cli:** stop mistaking flag values for the positional config path ([c292363](https://github.com/HeikoGr/MMM-Webuntis/commit/c292363c429ab0add5687e71b07ae7d16661dc5f))
+* **i18n:** use literal umlauts in the German absences translation ([a2c9728](https://github.com/HeikoGr/MMM-Webuntis/commit/a2c9728c2e783ac9a94fc5ff16450c8d2f5e87d9))
+* **node_helper:** release stale session state and back off from failing endpoints ([77db2a0](https://github.com/HeikoGr/MMM-Webuntis/commit/77db2a0216bc085b50db1c93d6f37e1b545c4b47))
+* **plugins:** populate the plugin context dom, time, formatting and shared namespaces ([26421a8](https://github.com/HeikoGr/MMM-Webuntis/commit/26421a8a29cedb78e589064371de3eb24c33c602))
+
+
+### 🧱 Refactoring
+
+* **api:** consolidate HTML sanitizing on the sanitize-html library ([2cb05bc](https://github.com/HeikoGr/MMM-Webuntis/commit/2cb05bc1d36a3869f5b85df6ce073c110c750a71))
+* **node_helper:** resolve fetch capabilities through the capability resolver ([2c72eff](https://github.com/HeikoGr/MMM-Webuntis/commit/2c72eff6a224650d8ec7b9da654afd5902836af5))
+* **plugins:** move duplicated frontend helpers into frontendShared ([0c667d6](https://github.com/HeikoGr/MMM-Webuntis/commit/0c667d6296082207e4a33fbf7a2f99545555bc94))
+* **plugins:** remove dead backend hooks and the superseded widget validator ([11dce81](https://github.com/HeikoGr/MMM-Webuntis/commit/11dce81e4c7f1a6377b0bf05cf7dc79c7300d561))
+
+
+### 📚 Documentation
+
+* correct architecture, plugin and changelog documentation ([d4130c3](https://github.com/HeikoGr/MMM-Webuntis/commit/d4130c3ba386305a3312dc1a444310ec2374b0e4))
+
+
+### 🧪 Testing
+
+* cover date context resolution across host timezones ([755c8c4](https://github.com/HeikoGr/MMM-Webuntis/commit/755c8c4108f819c10fb26e42ec903850e5e3f410))
+* cover session eviction, endpoint backoff, CLI parsing and shared namespaces ([9b97337](https://github.com/HeikoGr/MMM-Webuntis/commit/9b9733752ab64cac864cec0f01f47263e2b7bc37))
+
+
+### 📦 Build & Dependencies
+
+* **devcontainer:** install the GitHub CLI ([f4c298b](https://github.com/HeikoGr/MMM-Webuntis/commit/f4c298b66321ad9abc5bcdcfe037b9ac7b2e797f))
+* **devcontainer:** pin the container to Europe/Berlin ([0f7d0b8](https://github.com/HeikoGr/MMM-Webuntis/commit/0f7d0b8da4cf0232288ad9048bdbe2694f42a80f))
+* enforce commit conventions and repair the spell-check gate ([f427bcd](https://github.com/HeikoGr/MMM-Webuntis/commit/f427bcde3c144214582c23344c98a2c7c5fbb4d5))
+* teach Copilot the repository commit conventions ([b7faf77](https://github.com/HeikoGr/MMM-Webuntis/commit/b7faf77c652d5d25aca9c19ecdf97c5fe184a071))
+
+
+### 🔧 Tooling
+
+* run lint, tests and spell check on PRs and automate releases ([7971efa](https://github.com/HeikoGr/MMM-Webuntis/commit/7971efa4a84ce201b08807c2e2f476f8174ad8b8))
+* run the unit tests under UTC and Europe/Berlin ([73eaf2e](https://github.com/HeikoGr/MMM-Webuntis/commit/73eaf2e1bb2ee5def2f7927195185f349c6490e5))
+* sync package-lock.json engines field to &gt;=22.22.1 ([f7b2715](https://github.com/HeikoGr/MMM-Webuntis/commit/f7b2715cc499e2e5cfa71cf124919a0157dce545))
+* upgrade Node setup action to v7 ([b36fc85](https://github.com/HeikoGr/MMM-Webuntis/commit/b36fc8535519b611fbdccee071ec5ae82a35be41))
+* upgrade Node.js to 22 and align package.json engines ([a5b6198](https://github.com/HeikoGr/MMM-Webuntis/commit/a5b61986f60349df18548e98bc8b45e2e2ad5aeb))
+
 ## 0.8.5 - 2026-07-26
 
 ### ⚙️ Configuration
