@@ -17,14 +17,6 @@ module.exports = {
       validateConfig(pluginConfig) {
         return validateConfigObject('messagesofday', pluginConfig, 'messagesofday');
       },
-
-      getCapabilities() {
-        return ['messages', 'studentContext'];
-      },
-
-      deriveStudentData() {
-        return null;
-      },
     };
   },
 };

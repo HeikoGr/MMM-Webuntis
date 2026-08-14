@@ -39,14 +39,6 @@ module.exports = {
 
         return issues;
       },
-
-      getCapabilities() {
-        return ['absences', 'studentContext', 'runtimeState'];
-      },
-
-      deriveStudentData() {
-        return null;
-      },
     };
   },
 };

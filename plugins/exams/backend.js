@@ -32,14 +32,6 @@ module.exports = {
 
         return issues;
       },
-
-      getCapabilities() {
-        return ['exams', 'studentContext'];
-      },
-
-      deriveStudentData() {
-        return null;
-      },
     };
   },
 };
