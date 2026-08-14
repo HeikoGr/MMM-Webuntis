@@ -539,6 +539,66 @@ test('getCurrentDateContext keeps wall clock time while overriding debug date', 
   assert.equal(result.date.getSeconds(), 22);
 });
 
+/**
+ * The configured timezone is the school's, and it has to win over whatever clock the host runs.
+ *
+ * These cases only bite when `config.timezone` differs from the host zone. `getTimeZoneDate` once
+ * computed the conversion via Intl and then cancelled it out again, which made it an identity
+ * function - invisible on a UTC host, two hours wrong on the Raspberry Pi the module ships to.
+ * Run the suite under `TZ=Europe/Berlin` as well; CI does.
+ */
+const wallClock = (date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+test('getCurrentDateContext resolves the school wall clock regardless of the host timezone', () => {
+  const now = new Date(Date.UTC(2026, 4, 12, 14, 37, 0)); // 16:37 in Berlin (CEST, UTC+2)
+  const result = runtimeUtils.getCurrentDateContext({ timezone: 'Europe/Berlin' }, { now, defaultTimezone: 'Europe/Berlin' });
+
+  assert.equal(wallClock(result.date), '16:37');
+  assert.equal(result.ymd, 20260512);
+  assert.equal(result.isDebug, false);
+});
+
+test('getCurrentDateContext applies the winter offset outside daylight saving time', () => {
+  const now = new Date(Date.UTC(2026, 0, 15, 14, 30, 0)); // 15:30 in Berlin (CET, UTC+1)
+  const result = runtimeUtils.getCurrentDateContext({ timezone: 'Europe/Berlin' }, { now, defaultTimezone: 'Europe/Berlin' });
+
+  assert.equal(wallClock(result.date), '15:30');
+  assert.equal(result.ymd, 20260115);
+});
+
+test('getCurrentDateContext rolls over the day at local midnight, not at UTC midnight', () => {
+  const now = new Date(Date.UTC(2026, 7, 14, 22, 30, 0)); // 00:30 on the 15th in Berlin
+  const result = runtimeUtils.getCurrentDateContext({ timezone: 'Europe/Berlin' }, { now, defaultTimezone: 'Europe/Berlin' });
+
+  assert.equal(result.ymd, 20260815, 'the timetable must already show the new day');
+  assert.equal(result.isoDate, '2026-08-15');
+  assert.equal(wallClock(result.date), '00:30');
+});
+
+test('getCurrentDateContext honours a timezone behind UTC', () => {
+  const now = new Date(Date.UTC(2026, 0, 15, 14, 30, 0)); // 09:30 in New York (EST, UTC-5)
+  const result = runtimeUtils.getCurrentDateContext({ timezone: 'America/New_York' }, { now, defaultTimezone: 'Europe/Berlin' });
+
+  assert.equal(wallClock(result.date), '09:30');
+  assert.equal(result.ymd, 20260115);
+});
+
+test('getCurrentDateContext keeps the school wall clock when debugDate crosses a DST boundary', () => {
+  // Real date is in CEST (UTC+2), the debug date is in CET (UTC+1). The wall clock must survive
+  // the jump untouched - only the day changes.
+  const now = new Date(Date.UTC(2026, 4, 12, 14, 37, 22, 15));
+  const result = runtimeUtils.getCurrentDateContext(
+    { debugDate: '2026-03-02', timezone: 'Europe/Berlin' },
+    { now, defaultTimezone: 'Europe/Berlin' }
+  );
+
+  assert.equal(result.isDebug, true);
+  assert.equal(result.ymd, 20260302);
+  assert.equal(wallClock(result.date), '16:37');
+  assert.equal(result.date.getSeconds(), 22);
+  assert.equal(result.date.getMilliseconds(), 15, 'milliseconds survive the Intl round trip');
+});
+
 test('_calculateBaseNow uses normalized debug date context', () => {
   const baseNow = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
 
