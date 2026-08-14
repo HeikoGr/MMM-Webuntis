@@ -25,7 +25,21 @@ const DEFAULT_IDENTIFIER = 'default';
 const DEFAULT_SESSION_ID = 'unknown';
 const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
 const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
+
+// Circuit breaker for endpoints that keep failing with non-permanent errors (typically 5xx).
+// A single 5xx is a blip and must stay retryable, but WebUntis can serve a constant 500 for weeks -
+// e.g. during holidays when students hold no class assignment. Without a breaker every fetch cycle
+// burns the full retry ladder on a result that will not change. Failures escalate through the
+// backoff steps; any success resets the counter. See _shouldSkipApi().
+const TRANSIENT_FAILURE_THRESHOLD = 3;
+const TRANSIENT_BACKOFF_STEPS_MS = [15 * 60 * 1000, 60 * 60 * 1000, 6 * 60 * 60 * 1000];
 const AUTH_ERROR_CODES = new Set(['AUTH_FAILED', 'SESSION_EXPIRED', 'TOKEN_INVALID']);
+
+// Session eviction: how long a session of the same identifier may stay silent before its
+// per-session state (config clone, API status, pause flag) is released. See _releaseStaleSessions().
+const SESSION_TTL_DEFAULT_MS = 5 * 60 * 1000;
+const SESSION_TTL_MIN_MS = 10 * 60 * 1000;
+const SESSION_TTL_MAX_MS = 60 * 60 * 1000;
 
 function createEmptyApiStatusSnapshot() {
   return {
@@ -68,6 +82,7 @@ module.exports = NodeHelper.create({
     this._configsByIdentifier = new Map();
     this._configsBySession = new Map();
     this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
+    this._sessionLastSeenAt = new Map(); // sessionKey -> epoch ms of last frontend contact
     this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
     this._studentsDiscovered = {};
     this._pluginHost = initializeBackendPluginHost({
@@ -117,39 +132,90 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Check if an API endpoint should be skipped based on previous HTTP status
-   * Skips only on permanent errors (403, 404, 410), not on temporary errors (5xx)
+   * Whether an HTTP status represents a successful response.
+   *
+   * @param {number} status - HTTP status code
+   * @returns {boolean} True for 2xx
+   */
+  _isSuccessStatus(status) {
+    return Number.isFinite(status) && status >= 200 && status < 300;
+  },
+
+  /**
+   * Backoff window for an endpoint that keeps failing with non-permanent errors.
+   *
+   * Returns 0 while the failure count is below the threshold, so isolated blips stay retryable
+   * on the very next cycle.
+   *
+   * @param {number} failureCount - Consecutive failures recorded for the endpoint
+   * @returns {number} Backoff window in milliseconds (0 = retry immediately)
+   */
+  _getTransientBackoffMs(failureCount) {
+    if (!Number.isFinite(failureCount) || failureCount < TRANSIENT_FAILURE_THRESHOLD) return 0;
+    const stepIndex = Math.min(failureCount - TRANSIENT_FAILURE_THRESHOLD, TRANSIENT_BACKOFF_STEPS_MS.length - 1);
+    return TRANSIENT_BACKOFF_STEPS_MS[stepIndex];
+  },
+
+  /**
+   * Check if an API endpoint should be skipped based on its previous HTTP status.
+   *
+   * Two independent skip reasons:
+   *   1. Permanent errors (403, 404, 410) - skipped for 24h, in case the school adds a license.
+   *   2. Repeated non-permanent errors (typically 5xx) - skipped for a growing backoff window
+   *      once the endpoint has failed TRANSIENT_FAILURE_THRESHOLD times in a row.
+   *
    * @param {string} sessionKey - Session key
    * @param {string} endpoint - API endpoint name (timetable, exams, homework, absences, messagesOfDay)
    * @returns {boolean} True if API should be skipped
    */
   _shouldSkipApi(sessionKey, endpoint) {
-    if (!this._apiStatusBySession.has(sessionKey)) return false;
+    if (!this._apiStatusBySession?.has(sessionKey)) return false;
     const record = this._apiStatusBySession.get(sessionKey)[endpoint];
     if (!record) return false;
 
-    // Support both old format (plain number) and new format ({ status, recordedAt })
+    // Support both old format (plain number) and new format ({ status, recordedAt, failureCount })
     const status = typeof record === 'object' ? record.status : record;
     const recordedAt = typeof record === 'object' ? record.recordedAt : 0;
+    const failureCount = typeof record === 'object' && Number.isFinite(record.failureCount) ? record.failureCount : 0;
 
     // Permanent errors - skip API calls for these
     // 403 Forbidden - user has no permission for this endpoint (school licensing)
     // 404 Not Found - endpoint doesn't exist
     // 410 Gone - resource permanently removed
-    if (!PERMANENT_API_ERRORS.has(status)) return false;
-
-    // Retry after 24 hours in case the school adds a new module/license
-    if (recordedAt && Date.now() - recordedAt > API_RETRY_AFTER_MS) {
-      // Expired — clear status and allow retry
-      delete this._apiStatusBySession.get(sessionKey)[endpoint];
-      return false;
+    if (PERMANENT_API_ERRORS.has(status)) {
+      // Retry after 24 hours in case the school adds a new module/license
+      if (recordedAt && Date.now() - recordedAt > API_RETRY_AFTER_MS) {
+        // Expired — clear status and allow retry
+        delete this._apiStatusBySession.get(sessionKey)[endpoint];
+        return false;
+      }
+      return true;
     }
 
+    if (this._isSuccessStatus(status)) return false;
+
+    // Non-permanent failure: apply the circuit breaker.
+    const backoffMs = this._getTransientBackoffMs(failureCount);
+    if (backoffMs === 0 || !recordedAt) return false;
+
+    const waitedMs = Date.now() - recordedAt;
+    if (waitedMs >= backoffMs) return false;
+
+    const remainingMin = Math.ceil((backoffMs - waitedMs) / 60000);
+    this._mmLog(
+      'debug',
+      null,
+      `[${endpoint}] Backing off after ${failureCount} consecutive failures (status ${status}); next attempt in ~${remainingMin}min`
+    );
     return true;
   },
 
   /**
    * Record API status from an error response so frontend can detect failures.
+   *
+   * Consecutive failures are counted so _shouldSkipApi() can back off; a recorded success
+   * (see setApiStatus in fetchData) resets the counter.
+   *
    * @param {string} sessionKey - Session key
    * @param {string} endpoint - API endpoint name
    * @param {Error} err - Error object
@@ -158,10 +224,21 @@ module.exports = NodeHelper.create({
     if (!sessionKey) return;
     const status = this._extractHttpStatus(err);
 
+    if (!this._apiStatusBySession) this._apiStatusBySession = new Map();
     if (!this._apiStatusBySession.has(sessionKey)) {
       this._apiStatusBySession.set(sessionKey, {});
     }
-    this._apiStatusBySession.get(sessionKey)[endpoint] = { status, recordedAt: Date.now() };
+
+    const endpointStatuses = this._apiStatusBySession.get(sessionKey);
+    const previous = endpointStatuses[endpoint];
+    const previousStatus = typeof previous === 'object' ? previous.status : previous;
+    const previousCount = typeof previous === 'object' && Number.isFinite(previous.failureCount) ? previous.failureCount : 0;
+
+    // Only a prior failure continues a streak; a prior success (or no record) starts a new one.
+    const continuesStreak = previous !== undefined && !this._isSuccessStatus(previousStatus);
+    const failureCount = continuesStreak ? previousCount + 1 : 1;
+
+    endpointStatuses[endpoint] = { status, recordedAt: Date.now(), failureCount };
   },
 
   /**
@@ -503,7 +580,96 @@ module.exports = NodeHelper.create({
     };
   },
 
+  /**
+   * Record frontend contact for a session.
+   *
+   * Every CONFIGURE, REFRESH, and SESSION_STATE marks its session as alive. Sessions that stop
+   * reporting are eventually released by _releaseStaleSessions().
+   *
+   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
+   */
+  _touchSession(sessionKey) {
+    if (!sessionKey) return;
+    // Lazy-init: the CLI wrapper and unit tests drive handlers without going through start().
+    if (!this._sessionLastSeenAt) this._sessionLastSeenAt = new Map();
+    this._sessionLastSeenAt.set(sessionKey, Date.now());
+  },
+
+  /**
+   * Release per-session state for sessions of the same identifier that went silent.
+   *
+   * The frontend generates a fresh sessionId on every start (page reload, Electron restart,
+   * MMM-Remote-Control restart), while this node_helper process survives. Without eviction,
+   * _configsBySession would keep one full config clone - including student credentials - per
+   * reload, forever.
+   *
+   * Eviction is time-based rather than "drop every other session of this identifier", because
+   * MagicMirror legitimately serves several clients (the mirror plus a phone browser) that share
+   * one identifier but hold distinct sessionIds. Those keep refreshing and therefore stay alive.
+   *
+   * Dropping a session is recoverable: _getOrCreateSessionConfig() rebuilds it from the
+   * identifier-level config. Only a session-scoped debugDate override is lost.
+   *
+   * @param {string} sessionKey - Session key whose identifier should be swept
+   * @param {number} ttlMs - Silence period after which a session is considered gone
+   * @returns {number} Count of released sessions
+   */
+  _releaseStaleSessions(sessionKey, ttlMs) {
+    const { identifier } = this._parseSessionKey(sessionKey);
+    const cutoff = Date.now() - ttlMs;
+    const staleSessionKeys = [];
+
+    // Lazy-init: the CLI wrapper and unit tests drive handlers without going through start().
+    if (!this._sessionLastSeenAt) this._sessionLastSeenAt = new Map();
+    const configsBySession = this._configsBySession || new Map();
+    const apiStatusBySession = this._apiStatusBySession || new Map();
+    const pausedSessions = this._pausedSessions || new Set();
+
+    const candidateKeys = new Set([...configsBySession.keys(), ...apiStatusBySession.keys(), ...pausedSessions]);
+
+    for (const candidateKey of candidateKeys) {
+      if (candidateKey === sessionKey) continue;
+      if (this._parseSessionKey(candidateKey).identifier !== identifier) continue;
+
+      // Unknown last-seen means the session predates tracking - treat it as stale.
+      const lastSeenAt = this._sessionLastSeenAt.get(candidateKey) ?? 0;
+      if (lastSeenAt > cutoff) continue;
+
+      staleSessionKeys.push(candidateKey);
+    }
+
+    for (const staleSessionKey of staleSessionKeys) {
+      configsBySession.delete(staleSessionKey);
+      apiStatusBySession.delete(staleSessionKey);
+      pausedSessions.delete(staleSessionKey);
+      this._sessionLastSeenAt.delete(staleSessionKey);
+    }
+
+    if (staleSessionKeys.length > 0) {
+      this._mmLog('debug', null, `[CONFIGURE] Released ${staleSessionKeys.length} stale session(s) for identifier "${identifier}"`);
+    }
+
+    return staleSessionKeys.length;
+  },
+
+  /**
+   * Silence period before a session of the same identifier is released.
+   *
+   * Two update cycles of headroom, clamped so that neither a very short nor a very long
+   * updateInterval produces a pathological TTL.
+   *
+   * @param {Object} normalizedConfig - Normalized module config
+   * @returns {number} TTL in milliseconds
+   */
+  _getSessionTtlMs(normalizedConfig = {}) {
+    const updateInterval = Number(normalizedConfig?.updateInterval);
+    const base = Number.isFinite(updateInterval) && updateInterval > 0 ? updateInterval : SESSION_TTL_DEFAULT_MS;
+    return Math.min(Math.max(base * 2, SESSION_TTL_MIN_MS), SESSION_TTL_MAX_MS);
+  },
+
   _storeInitSessionConfig(sessionKey, normalizedConfig) {
+    this._releaseStaleSessions(sessionKey, this._getSessionTtlMs(normalizedConfig));
+    this._touchSession(sessionKey);
     this._configsBySession.set(sessionKey, normalizedConfig);
 
     if (normalizedConfig.debugDate) {
@@ -1799,6 +1965,11 @@ module.exports = NodeHelper.create({
     const state = payload.state === 'active' ? 'active' : 'paused';
     const reason = payload.reason || 'unspecified';
 
+    // Counts as frontend contact. A session that stays paused sends no further REFRESH and will
+    // eventually age out - that is intentional and harmless: resuming it triggers SESSION_STATE
+    // plus REFRESH, and _getOrCreateSessionConfig() rebuilds the session from the identifier config.
+    this._touchSession(sessionKey);
+
     if (state === 'paused') {
       this._pausedSessions.add(sessionKey);
     } else {
@@ -1883,6 +2054,8 @@ module.exports = NodeHelper.create({
     const fetchReason = payload?.reason || 'unspecified';
 
     this._mmLog('debug', null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+
+    this._touchSession(sessionKey);
 
     if (this._pausedSessions.has(sessionKey)) {
       this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
@@ -2166,7 +2339,19 @@ module.exports = NodeHelper.create({
         if (!this._apiStatusBySession.has(key)) {
           this._apiStatusBySession.set(key, {});
         }
-        this._apiStatusBySession.get(key)[endpoint] = { status, recordedAt: Date.now() };
+        const endpointStatuses = this._apiStatusBySession.get(key);
+        const previous = endpointStatuses[endpoint];
+        const previousCount = typeof previous === 'object' && Number.isFinite(previous.failureCount) ? previous.failureCount : 0;
+
+        // A success closes the circuit breaker; anything else keeps the streak intact so a
+        // recovery probe that fails again escalates instead of restarting at the first step.
+        const failureCount = this._isSuccessStatus(status) ? 0 : previousCount;
+
+        if (previousCount > 0 && failureCount === 0) {
+          this._mmLog('debug', null, `[${endpoint}] Recovered after ${previousCount} consecutive failures`);
+        }
+
+        endpointStatuses[endpoint] = { status, recordedAt: Date.now(), failureCount };
       },
     });
 
