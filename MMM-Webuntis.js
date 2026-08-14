@@ -472,7 +472,23 @@ Module.register('MMM-Webuntis', {
     }));
   },
 
+  /**
+   * Build the context object handed to a frontend plugin's create().
+   *
+   * The dom/time/formatting/shared namespaces are forwarded from the shared frontend API
+   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. They used to be empty
+   * placeholders, which is why plugins reach for the global directly; new plugin code should use
+   * `pluginContext.*` instead. See docs/PLUGINS.md.
+   *
+   * @param {Object} pluginEntry - Registry entry for the plugin
+   * @returns {Object} Plugin context
+   */
   _createFrontendPluginContext(pluginEntry) {
+    const shared = this._getWidgetApi();
+    if (!shared) {
+      this._log('warn', `[plugins] ${pluginEntry.id}: shared frontend API unavailable; context namespaces will be empty`);
+    }
+
     return {
       pluginId: pluginEntry.id,
       hostApiVersion: this._getPluginHost()?.hostApiVersion || 1,
@@ -487,10 +503,10 @@ Module.register('MMM-Webuntis', {
         }
         this._log(level, `[plugin:${pluginEntry.id}] ${message}`);
       },
-      dom: {},
-      time: {},
-      formatting: {},
-      shared: {},
+      dom: shared?.dom || {},
+      time: shared?.time || {},
+      formatting: shared?.formatting || {},
+      shared: shared || {},
     };
   },
 
