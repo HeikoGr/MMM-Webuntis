@@ -11,10 +11,8 @@ This devcontainer provides a complete development environment for MMM-Webuntis.
 - Playwright, `playwright-mcp`, and Chrome preinstalled in the image
 
 ### Packages (Dockerfile)
-- Shared image provides common tooling such as `git`, `curl`, `wget`, `gpg`, `ripgrep`, `python3`, `jq`, `httpie`, `build-essential`, `pm2`, Playwright, and MagicMirror².
-- This repo-specific Dockerfile adds:
-  - `npm-check-updates` (`ncu`) via npm
-  - `gh` (GitHub CLI) from the official upstream apt repository, since Debian does not package it
+- Shared image provides common tooling such as `git`, `curl`, `wget`, `gpg`, `ripgrep`, `python3`, `jq`, `httpie`, `build-essential`, `pm2`, `gh` (GitHub CLI), Playwright, and MagicMirror².
+- This repo-specific Dockerfile only adds `npm-check-updates` (`ncu`) via npm.
 
 ### GitHub CLI
 
@@ -45,12 +43,11 @@ GH_TOKEN=<your PAT> gh api --method PUT repos/:owner/:repo/branches/master/prote
 
 ### Timezone
 
-The container runs in `Europe/Berlin` (`ENV TZ` plus `/etc/localtime` in the Dockerfile). The base
-image defaults to UTC, which is a poor fit for a timetable module: the mirror marks the wrong
+The base image runs in `Europe/Berlin` (`ENV TZ` plus `/etc/localtime`), since the base image
+defaults to UTC otherwise, which is a poor fit for a timetable module: the mirror marks the wrong
 lesson as current, and between 00:00 and 02:00 local time it still shows the previous day.
 
-Use the zone name, never the abbreviation — `CEST` has no daylight-saving rules attached and would
-be an hour off all winter. Override per container in `devcontainer.json`:
+Override per container in `devcontainer.json` if needed:
 
 ```jsonc
 "containerEnv": { "TZ": "Europe/Vienna" }
