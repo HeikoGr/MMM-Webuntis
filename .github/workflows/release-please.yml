@@ -26,7 +26,7 @@ jobs:
       # Version numbers therefore stop being a manual step attached to an unrelated commit,
       # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
       - name: Run release-please
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
