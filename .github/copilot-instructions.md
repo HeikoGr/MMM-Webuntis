@@ -179,7 +179,6 @@ Boundary rule:
 
 - **Lint code**: `node --run lint` (or `node --run lint:fix` to auto-fix)
 - **Unit tests**: `node --run test` (`node:test`-based tests in `tests/`)
-- **Spell check**: `node --run test:spelling`
 - **Test configuration**: `node --run check` (interactive CLI tool, runs without errors)
 - **Debug mode**: `node --run debug` (interactive CLI tool, same as check but with verbose output; useful for troubleshooting auth/API issues)
 - **Low-level auth test**: `node --run test:auth:curl` (curl-based JSON-RPC test, bypasses module logic; useful for debugging credentials with special characters)

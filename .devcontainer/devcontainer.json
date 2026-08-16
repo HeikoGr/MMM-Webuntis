@@ -18,7 +18,9 @@
   "forwardPorts": [8080],
   "customizations": {
     "vscode": {
-      "extensions": ["actboy168.tasks", "vstirbu.vscode-mermaid-preview", "vivaxy.vscode-conventional-commits"],
+      // All shared extensions come from the base image (devcontainer.metadata label in
+      // MMM-DevContainer/docker/Dockerfile) and are merged in automatically.
+      "extensions": [],
       "settings": {
         "chat.mcp.autoStart": true,
         "editor.formatOnSave": true,

@@ -13,7 +13,6 @@ Short guide to contribute:
 - `npm ci`
 - `node --run lint` — Biome check
 - `node --run test` — unit tests (`node:test`, no external test runner)
-- `node --run test:spelling` — cspell
 - `node --run check` — MagicMirror module checker
 
 Run at least `node --run lint` and `node --run test` before opening a PR.
