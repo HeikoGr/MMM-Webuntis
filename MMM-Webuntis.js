@@ -7,6 +7,8 @@ Module.register('MMM-Webuntis', {
     // === GLOBAL OPTIONS ===
     header: 'MMM-Webuntis', // displayed as module title in MagicMirror
     updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+    backgroundRefresh: true, // keep refreshing while hidden (e.g. under MMM-Carousel)
+    quietHours: null, // optional window without polling, e.g. { from: '22:00', to: '06:00' }
     timezone: 'Europe/Berlin', // timezone for date calculations
 
     // === DEBUG OPTIONS ===
@@ -1420,21 +1422,12 @@ Module.register('MMM-Webuntis', {
     this._updateDomTimer = null;
     this._initialized = false;
     this._initRequested = false;
-    this._initFallbackTimer = null;
     this._initWatchdogTimer = null;
     this._initAttemptCount = 0;
-    this._deferredInitRetryTimer = null;
-    this._deferredInitRetryCount = 0;
 
     this._lastDataReceivedAt = null;
 
-    this._paused = this._isModuleSuspended();
-    if (this._paused) {
-      this._log('debug', '[start] Module starts hidden/suspended, deferring timers until resume()');
-    } else {
-      this._startNowLineUpdater();
-    }
-    this._sendSessionState(this._paused ? 'paused' : 'active', 'start');
+    this._createLifecycle();
 
     if (this._isDemoModeEnabled()) {
       this._initialized = true;
@@ -1449,16 +1442,55 @@ Module.register('MMM-Webuntis', {
           this.moduleWarningsSet.add(msg);
           this.updateDom();
         });
-      this._startFetchTimer();
-      return;
     }
 
-    this._initFallbackTimer = setTimeout(() => {
-      this._initFallbackTimer = null;
-      this._requestInitIfNeeded('start-fallback');
-    }, 2500);
-
+    this.lifecycle.start();
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
+  },
+
+  /**
+   * Build the shared lifecycle.
+   *
+   * It owns everything that used to live in this file as hand-written timer and
+   * visibility bookkeeping: the freshness guard on resume(), the guard inside
+   * the interval callback, the deferred init for a module that starts hidden,
+   * the day rollover across a suspend, jitter and quiet hours.
+   *
+   * @private
+   */
+  _createLifecycle() {
+    this.lifecycle = this.shared.createLifecycle({
+      module: this,
+      log: this._log.bind(this),
+      getUpdateInterval: () => this.config?.updateInterval,
+      minUpdateInterval: 30 * 1000,
+      backgroundRefresh: this.config?.backgroundRefresh !== false,
+      quietHours: this.config?.quietHours,
+      getDayKey: () => {
+        const context = this.getCurrentDateContext();
+        return this._usesLiveClock(context) ? String(context?.ymd ?? '') : null;
+      },
+      onDayChange: ({ previous, current }) => {
+        this._log('debug', `[lifecycle] Day change detected: ${previous} -> ${current}`);
+        this._handleClockDrivenDayRollover();
+      },
+      onVisible: () => this._startNowLineUpdater(),
+      onHidden: () => {
+        this._stopNowLineUpdater();
+        if (this._updateDomTimer) {
+          clearTimeout(this._updateDomTimer);
+          this._updateDomTimer = null;
+        }
+      },
+      onSessionState: ({ state, reason }) => this.transport.sendRequest('SESSION_STATE', { sessionId: this._sessionId, state, reason }),
+      onFetch: ({ reason }) => this._sendFetchData(reason),
+      deferredInit: {
+        run: (reason) => this._requestInitIfNeeded(reason),
+        isPending: () => !this._isDemoModeEnabled() && !this._initialized && !this._initRequested,
+        intervalMs: Number(this.config?.initRetryTimeout) || 5000,
+        maxAttempts: 12,
+      },
+    });
   },
 
   /**
@@ -1479,53 +1511,6 @@ Module.register('MMM-Webuntis', {
   _stopNowLineUpdater() {
     const fn = this._getWidgetApi()?.grid?.stopNowLineUpdater;
     if (typeof fn === 'function') fn(this);
-  },
-
-  /**
-   * Check whether module is currently hidden/suspended by MagicMirror
-   *
-   * @returns {boolean} True if module should be treated as suspended
-   */
-  _isModuleSuspended() {
-    return this._paused === true || this.hidden === true || this.data?.hidden === true;
-  },
-
-  /**
-   * Start periodic data fetch timer
-   * Sends REFRESH to backend at configured updateInterval
-   * Timer is skipped if module is paused or interval is invalid
-   */
-  _startFetchTimer() {
-    if (this._isModuleSuspended()) {
-      this._paused = true;
-      return;
-    }
-    if (this._fetchTimer) return;
-    const interval = typeof this.config?.updateInterval === 'number' ? Number(this.config.updateInterval) : null;
-    if (!interval || !Number.isFinite(interval) || interval <= 0) return;
-
-    this._fetchTimer = setInterval(() => {
-      if (this._isModuleSuspended()) {
-        this._paused = true;
-        this._stopFetchTimer();
-        return;
-      }
-      this._sendFetchData('periodic');
-    }, interval);
-  },
-
-  /**
-   * Notify backend about current session visibility state
-   *
-   * @param {'paused'|'active'} state - Session state from frontend lifecycle
-   * @param {string} reason - Lifecycle reason
-   */
-  _sendSessionState(state, reason = 'manual') {
-    this.transport.sendRequest('SESSION_STATE', {
-      sessionId: this._sessionId,
-      state,
-      reason,
-    });
   },
 
   /**
@@ -1594,46 +1579,6 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Retry init after DOM_OBJECTS_CREATED when module starts hidden (e.g. MMM-Carousel).
-   * Retries only while still uninitialized and never sends init while suspended.
-   */
-  _scheduleDeferredInitRetry(reason = 'dom-objects-created-hidden') {
-    if (this._isDemoModeEnabled()) return;
-    if (this._initialized || this._initRequested) return;
-
-    const configuredTimeout = Number(this.config?.initRetryTimeout);
-    const intervalMs = Number.isFinite(configuredTimeout) ? Math.max(1000, Math.floor(configuredTimeout)) : 5000;
-    const configuredMaxAttempts = Number(this.config?.initRetryMaxAttempts);
-    const baseMaxAttempts = Number.isFinite(configuredMaxAttempts) ? Math.max(1, Math.floor(configuredMaxAttempts)) : 4;
-    const maxDeferredAttempts = Math.max(baseMaxAttempts * 6, 12);
-
-    if (this._deferredInitRetryTimer) {
-      clearTimeout(this._deferredInitRetryTimer);
-      this._deferredInitRetryTimer = null;
-    }
-
-    this._deferredInitRetryTimer = setTimeout(() => {
-      this._deferredInitRetryTimer = null;
-
-      if (this._initialized || this._initRequested) return;
-
-      this._deferredInitRetryCount += 1;
-      if (!this._isModuleSuspended()) {
-        this._log('info', `[INIT] Deferred init retry successful (attempt ${this._deferredInitRetryCount}/${maxDeferredAttempts})`);
-        this._requestInitIfNeeded(`${reason}-retry-${this._deferredInitRetryCount}`);
-        return;
-      }
-
-      if (this._deferredInitRetryCount >= maxDeferredAttempts) {
-        this._log('warn', `[INIT] Deferred init retries exhausted (${maxDeferredAttempts}) while hidden; waiting for resume()`);
-        return;
-      }
-
-      this._scheduleDeferredInitRetry(reason);
-    }, intervalMs);
-  },
-
-  /**
    * Send REFRESH request to backend for data refresh
    * Only sends if module is initialized (prevents fetch before init)
    * Stores pending resume request if called during initialization
@@ -1643,14 +1588,6 @@ Module.register('MMM-Webuntis', {
   _sendFetchData(reason = 'manual') {
     if (this._isDemoModeEnabled()) {
       this._emitDemoPayload(reason);
-      return;
-    }
-
-    // Hard guard: never send REFRESH while module is suspended/paused.
-    // This covers timer race conditions where a queued callback might still fire
-    // right around suspend().
-    if (this._paused) {
-      this._log('debug', `[REFRESH] Skipped while suspended (reason=${reason})`);
       return;
     }
 
@@ -1667,91 +1604,12 @@ Module.register('MMM-Webuntis', {
     });
   },
 
-  /**
-   * Stop periodic data fetch timer
-   * Called during suspend() to stop unnecessary fetch attempts
-   */
-  _stopFetchTimer() {
-    if (this._fetchTimer) {
-      clearInterval(this._fetchTimer);
-      this._fetchTimer = null;
-    }
-  },
-
-  /**
-   * Suspend module - called by MagicMirror when module becomes hidden
-   * Stops all timers to reduce unnecessary processing:
-   *   - Now line updater (grid widget)
-   *   - Periodic fetch timer
-   *   - DOM update batching timer
-   */
   suspend() {
-    this._log('info', '[suspend] Module suspended');
-    this._paused = true;
-    this._stopNowLineUpdater();
-    this._stopFetchTimer();
-
-    if (this._updateDomTimer) {
-      clearTimeout(this._updateDomTimer);
-      this._updateDomTimer = null;
-    }
-
-    this._sendSessionState('paused', 'suspend');
+    this.lifecycle.suspend();
   },
 
-  /**
-   * Resume module - called by MagicMirror when module becomes visible
-   *
-   * Performs:
-   *   1. Aborts immediately if module is secretly hidden (e.g. MMM-Carousel background loading)
-   *   2. Starts visual timers and background data loops
-   *   3. Detects midnight/date rollovers across sleep
-   *   4. Lazily triggers initialization OR smart-fetches stale data if needed
-   */
   resume() {
-    this._log('debug', `[resume] Module resumed (hidden=${this.hidden}, config.debugDate=${this.config?.debugDate})`);
-
-    if (this.hidden === true || this.data?.hidden === true) {
-      this._paused = true;
-      this._sendSessionState('paused', 'resume-while-hidden');
-      return;
-    }
-
-    this._paused = false;
-    this._sendSessionState('active', 'resume');
-
-    this._startFetchTimer();
-    this._startNowLineUpdater();
-
-    const resumeDateContext = this.getCurrentDateContext();
-    if (this._usesLiveClock(resumeDateContext)) {
-      if (this._currentTodayYmd !== resumeDateContext.ymd) {
-        this._log('debug', `[resume] Detected day change while suspended: ${this._currentTodayYmd || 'unset'} -> ${resumeDateContext.ymd}`);
-        this._currentTodayYmd = resumeDateContext.ymd;
-      }
-    }
-
-    if (!this._initialized && !this._initRequested) {
-      this._requestInitIfNeeded('first-visible-resume');
-      return;
-    }
-
-    const hasReceivedData = Number.isFinite(this._lastDataReceivedAt);
-    const dataAge = hasReceivedData ? Date.now() - this._lastDataReceivedAt : Infinity;
-    const interval = this.config?.updateInterval || 5 * 60 * 1000;
-
-    if (!hasReceivedData) {
-      this._log('debug', '[resume] No data received yet in this session, sending REFRESH...');
-      this._sendFetchData('resume-no-data');
-    } else if (dataAge >= interval) {
-      this._log('debug', `[resume] Data is stale (age=${Math.round(dataAge / 1000)}s), sending REFRESH...`);
-      this._sendFetchData('resume-stale-data');
-    } else {
-      this._log(
-        'debug',
-        `[resume] Data is fresh (age=${Math.round(dataAge / 1000)}s < ${Math.round(interval / 1000)}s), skipping duplicate fetch`
-      );
-    }
+    this.lifecycle.resume();
   },
 
   getDom() {
@@ -1840,13 +1698,8 @@ Module.register('MMM-Webuntis', {
         this._log('warn', 'See the module documentation for migration details.');
       }
 
-      if (this._isModuleSuspended()) {
-        this._log('debug', '[INIT] DOM_OBJECTS_CREATED received while hidden, deferring init with retry');
-        this._deferredInitRetryCount = 0;
-        this._scheduleDeferredInitRetry('dom-objects-created-hidden');
-        return;
-      }
-
+      // The lifecycle already triggered (or deferred) init in start(); this is
+      // only a safety net and is a no-op once init is under way.
       this._requestInitIfNeeded('dom-objects-created');
     }
   },
@@ -1898,20 +1751,11 @@ Module.register('MMM-Webuntis', {
     this._initRequested = false;
     this._initializedAt = Date.now();
 
-    if (this._initFallbackTimer) {
-      clearTimeout(this._initFallbackTimer);
-      this._initFallbackTimer = null;
-    }
     if (this._initWatchdogTimer) {
       clearTimeout(this._initWatchdogTimer);
       this._initWatchdogTimer = null;
     }
-    if (this._deferredInitRetryTimer) {
-      clearTimeout(this._deferredInitRetryTimer);
-      this._deferredInitRetryTimer = null;
-    }
     this._initAttemptCount = 0;
-    this._deferredInitRetryCount = 0;
 
     if (this._pendingResumeRequest) {
       this._log('debug', '[MODULE_READY] Clearing pending resume request (backend handles initial fetch)');
@@ -1930,8 +1774,7 @@ Module.register('MMM-Webuntis', {
       this._log('error', `[plugins] initialization failed: ${error?.message || String(error)}`);
     });
 
-    this._log('debug', '[MODULE_READY] Backend will auto-fetch data, starting periodic timer only');
-    this._startFetchTimer();
+    this._log('debug', '[MODULE_READY] Backend will auto-fetch data, periodic timer is owned by the lifecycle');
   },
 
   _handleInitError(payload) {
@@ -1965,12 +1808,8 @@ Module.register('MMM-Webuntis', {
       clearTimeout(this._initWatchdogTimer);
       this._initWatchdogTimer = null;
     }
-    if (this._deferredInitRetryTimer) {
-      clearTimeout(this._deferredInitRetryTimer);
-      this._deferredInitRetryTimer = null;
-    }
     this._initAttemptCount = 0;
-    this._deferredInitRetryCount = 0;
+    this.lifecycle.markFetchFailed();
     this.updateDom();
   },
 
@@ -1995,6 +1834,7 @@ Module.register('MMM-Webuntis', {
 
     this._log('debug', `[DATA_UPDATE] Received for student=${title}, sessionId=${payload?.sessionId}`);
     this._lastDataReceivedAt = Date.now();
+    this.lifecycle.markDataReceived(this._lastDataReceivedAt);
     this.configByStudent[title] = payload?.context?.config || {};
 
     this._syncDebugDate(this.configByStudent[title]);

@@ -1955,8 +1955,10 @@ module.exports = NodeHelper.create({
   },
 
   /**
-   * Track frontend lifecycle state per session (suspend/resume)
-   * so backend can guard against cross-session/background fetches.
+   * Track frontend visibility per session (suspend/resume).
+   *
+   * The flag is bookkeeping plus a fetch gate for frontends that disabled
+   * background refresh; the frontend lifecycle itself decides when to fetch.
    *
    * @param {Object} payload - Session state payload ({id, sessionId, state, reason})
    */
@@ -1965,9 +1967,7 @@ module.exports = NodeHelper.create({
     const state = payload.state === 'active' ? 'active' : 'paused';
     const reason = payload.reason || 'unspecified';
 
-    // Counts as frontend contact. A session that stays paused sends no further REFRESH and will
-    // eventually age out - that is intentional and harmless: resuming it triggers SESSION_STATE
-    // plus REFRESH, and _getOrCreateSessionConfig() rebuilds the session from the identifier config.
+    // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
     this._touchSession(sessionKey);
 
     if (state === 'paused') {
@@ -2057,7 +2057,10 @@ module.exports = NodeHelper.create({
 
     this._touchSession(sessionKey);
 
-    if (this._pausedSessions.has(sessionKey)) {
+    // A hidden session may still ask for data: the shared frontend lifecycle keeps
+    // refreshing in the background so the view is warm when it becomes visible.
+    // Only a frontend that explicitly opted out of background refresh is gated here.
+    if (this._pausedSessions.has(sessionKey) && payload?.backgroundRefresh === false) {
       this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
       return;
     }

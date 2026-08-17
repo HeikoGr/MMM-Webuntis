@@ -8,6 +8,8 @@ This page covers the options most users actually need. For a full example file, 
 | --- | --- | --- |
 | `header` | `MMM-Webuntis` | Module title shown by MagicMirror |
 | `updateInterval` | `5 * 60 * 1000` | Refresh interval in milliseconds |
+| `backgroundRefresh` | `true` | Keep refreshing while the module is hidden (e.g. under MMM-Carousel), so showing it never causes a request |
+| `quietHours` | `null` | Optional window without any polling, e.g. `{ from: '22:00', to: '06:00' }` |
 | `displayMode` | `lessons, exams` | Which built-in plugins are enabled |
 | `timezone` | `Europe/Berlin` | Timezone used for date handling |
 | `useClassTimetable` | `false` | Use class timetable instead of personal timetable |
