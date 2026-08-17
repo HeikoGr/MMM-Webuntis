@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.9.0...v0.10.0) (2026-08-17)
+
+
+### 🔌 Features
+
+* **devcontainer:** enhance Playwright MCP configuration and update documentation ([eb7dd91](https://github.com/HeikoGr/MMM-Webuntis/commit/eb7dd91aae0aecbe8a4612b236be0f0d66e43e2b))
+* **devcontainer:** enhance postStart script and update mounts for SSH keys ([89d35ac](https://github.com/HeikoGr/MMM-Webuntis/commit/89d35ace254f4baad6fce1b8e8a78eb589a7cafd))
+* replace the hand-written frontend lifecycle with the shared helper ([3622445](https://github.com/HeikoGr/MMM-Webuntis/commit/3622445b4b391a56fed319143497843d65de3b53))
+
+
+### 🐛 Fixes
+
+* bump mmm-shared submodule to include createLifecycle ([4c3fc1a](https://github.com/HeikoGr/MMM-Webuntis/commit/4c3fc1a202b1af63ecb9d8bc655205996f4dba5d))
+
 ## [0.9.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.8.5...v0.9.0) (2026-08-14)
 
 
