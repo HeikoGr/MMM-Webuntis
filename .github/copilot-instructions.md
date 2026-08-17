@@ -390,7 +390,7 @@ In addition to the non‑interactive capture script, we now support Playwright M
 - Enhanced forensics: combine screenshots, console logs, network traces and accessibility snapshots in a single session.
 
 Startup / environment options:
-- Recommended: use the preinstalled `playwright-mcp` binary or the committed `.vscode/mcp.json` configuration.
+- Recommended: use the committed MCP configuration - `.mcp.json` for Claude Code, `.vscode/mcp.json` for Copilot Chat. Both spawn the preinstalled `playwright-mcp` binary over stdio.
 - Running Chromium as root (e.g. in Codespaces) requires `--no-sandbox`. Set `PLAYWRIGHT_CHROMIUM_ARGS="--no-sandbox"` or export that environment variable before launching.
 - Use a separate user data directory for parallel runs: `PLAYWRIGHT_CHROMIUM_USER_DATA_DIR=$(mktemp -d)`.
 

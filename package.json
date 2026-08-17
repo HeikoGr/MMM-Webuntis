@@ -46,7 +46,8 @@
     "debug": "node scripts/node_helper_wrapper.js",
     "check": "node --run mmcheck",
     "mmcheck": "node scripts/magicmirror-check.mjs --devcontainer-only --current",
-    "deps:update": "npx --yes npm-check-updates -u && npm install && npx @biomejs/biome migrate --write"
+    "deps:update": "npx --yes npm-check-updates -u && npm install && npx @biomejs/biome migrate --write",
+    "shared:update": "git submodule update --remote --init --checkout lib/mmm-shared && git submodule status lib/mmm-shared"
   },
   "lint-staged": {
     "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,css}": [

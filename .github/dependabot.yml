@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+
+  # lib/mmm-shared is a git submodule - this opens a PR whenever it moves on main.
+  # CI checks it out recursively, so the module's own tests validate the new version
+  # before the PR can be merged.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: daily

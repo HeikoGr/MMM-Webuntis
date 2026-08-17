@@ -67,7 +67,20 @@ than its school still renders the school's wall clock. CI runs the unit tests un
 
 Configured in `devcontainer.json`:
 - `PLAYWRIGHT_CHROMIUM_ARGS=--no-sandbox --disable-dev-shm-usage --disable-gpu`
-- `ENABLE_PLAYWRIGHT_MCP=1` - Set to `0` to disable Playwright MCP server
+
+## Playwright MCP
+
+Two clients, two config files, one server binary - each client spawns its own stdio process:
+
+| File | Client |
+|---|---|
+| `.mcp.json` | Claude Code |
+| `.vscode/mcp.json` | VS Code Copilot Chat |
+
+Both pass `--browser chrome`, because the image ships the apt package `google-chrome-stable` but
+not Playwright's own bundled Chromium (`playwright install-deps chromium` installs the OS
+libraries, not the browser). Without that flag the server would try to download Chromium on first
+use.
 
 ## Lifecycle Scripts
 
@@ -76,7 +89,7 @@ Configured in `devcontainer.json`:
    - Prepares `/tmp/playwright-mcp`
 
 2. **postStartCommand**:
-   - Starts Playwright MCP server on port 8931 (if enabled)
+   - Prepares `/tmp/playwright-mcp` and prints where things are
    - MagicMirror available at http://localhost:8080
 
 3. **entrypoint.sh**:
