@@ -768,7 +768,7 @@ function getModuleRootElement(ctx) {
         const endText = formatAxisTime(u?.endTime);
 
         if (unitName) {
-          const periodText = formatTimeUnitPeriodText(unitName, ctx);
+          const periodText = escapeHtml(formatTimeUnitPeriodText(unitName, ctx));
           if (labelMode === 'tight') {
             lab.innerHTML = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
           } else if (labelMode === 'compact') {
