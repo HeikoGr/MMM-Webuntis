@@ -4,7 +4,7 @@
 
 Check these first:
 
-1. Verify the Node version is at least `20.18.1`.
+1. Verify the Node version is at least `22.22.1`.
 2. Confirm the auth method matches the account type.
 3. Set `logLevel: 'debug'`.
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.

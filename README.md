@@ -14,9 +14,9 @@ A MagicMirror² module that displays WebUntis timetables, exams, homework, absen
 
 ## Requirements
 
-- Node.js `>=20.18.1`
+- Node.js `>=22.22.1` (see `engines` in `package.json`; also the version tested in CI)
 
-Older Node 20 installations have shown authentication and runtime failures in real-world setups, especially around the module's native HTTP stack. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
+Older Node versions have shown authentication and runtime failures in real-world setups, especially around the module's native HTTP stack. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
 
 ## Installation
 

@@ -26,7 +26,7 @@ If you do have local changes you want to keep, resolve them before resetting.
 
 Check these points:
 
-- your Node version is still at least `20.18.1`
+- your Node version is still at least `22.22.1`
 - your MagicMirror config still matches the current options
 - QR or account credentials still work
 

@@ -2,11 +2,11 @@
 
 ## Requirements
 
-- Node.js `>=20.18.1`
+- Node.js `>=22.22.1`
 - a working MagicMirror² installation
 - a valid WebUntis account or QR code
 
-Older Node 20 builds have caused auth and runtime issues in real installations. If login suddenly fails after a system update, verify the Node version first.
+Older Node builds have caused auth and runtime issues in real installations. If login suddenly fails after a system update, verify the Node version first.
 
 ## Fresh Install
 
