@@ -11,10 +11,16 @@ This page covers the options most users actually need. For a full example file, 
 | `backgroundRefresh` | `true` | Keep refreshing while the module is hidden (e.g. under MMM-Carousel), so showing it never causes a request |
 | `quietHours` | `null` | Optional window without any polling, e.g. `{ from: '22:00', to: '06:00' }` |
 | `displayMode` | `lessons, exams` | Which built-in plugins are enabled |
+| `mode` | `verbose` | `verbose` (per-student sections) or `compact` (combined view) |
 | `timezone` | `Europe/Berlin` | Timezone used for date handling |
 | `useClassTimetable` | `false` | Use class timetable instead of personal timetable |
 | `logLevel` | `none` | Backend logging level for troubleshooting |
 | `debugDate` | `null` | Freeze the calendar date for testing |
+| `demoDataFile` | `null` | Relative JSON fixture path for frontend demo mode (skips backend/API entirely) |
+| `initRetryTimeout` | `5000` | Timeout (ms) for the CONFIGURE → MODULE_READY watchdog before retrying |
+| `initRetryMaxAttempts` | `4` | Max CONFIGURE attempts before the init retry gate reopens |
+| `dumpBackendPayloads` | `false` | Dump raw payloads from the backend into `./debug_dumps/` |
+| `dumpRawApiResponses` | `false` | Save raw WebUntis REST responses into `./debug_dumps/raw_api_*.json` |
 
 ## Choosing Plugins With `displayMode`
 
@@ -72,12 +78,7 @@ students: [
 
 ## Debug Options
 
-Use these only when you need to investigate problems:
-
-- `logLevel: 'debug'`
-- `debugDate: 'YYYY-MM-DD'`
-- `dumpBackendPayloads: true`
-- `dumpRawApiResponses: true`
+Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, `demoDataFile`, `initRetryTimeout`, and `initRetryMaxAttempts` in the option table above.
 
 ## Canonical Plugin Config
 
