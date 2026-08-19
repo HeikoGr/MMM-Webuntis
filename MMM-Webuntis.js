@@ -441,9 +441,13 @@ Module.register('MMM-Webuntis', {
       return state.promise;
     });
 
-    return Promise.all(loadTasks).then(() => {
-      this.updateDom();
-    });
+    return Promise.all(loadTasks)
+      .then(() => {
+        this.updateDom();
+      })
+      .catch((error) => {
+        this._log('error', '[plugins] failed to initialize plugin widgets', error);
+      });
   },
 
   _buildPluginStudentRuntimeSlices(studentTitles = []) {
