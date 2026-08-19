@@ -1888,7 +1888,11 @@ module.exports = NodeHelper.create({
 
     const handler = handlers[action];
     if (!handler) return;
-    await handler();
+    try {
+      await handler();
+    } catch (error) {
+      this._mmLog('error', null, `[${action}] Unhandled failure: ${this._formatErr(error)}`);
+    }
   },
 
   /**
