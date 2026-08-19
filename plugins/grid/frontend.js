@@ -1923,8 +1923,11 @@ function getModuleRootElement(ctx) {
 
     tickerWrapper.appendChild(tickerTrack);
 
-    const duration = Math.max(10, itemCount * 3);
-    tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
+    const prefersReducedMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReducedMotion) {
+      const duration = Math.max(10, itemCount * 3);
+      tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
+    }
 
     container.appendChild(tickerWrapper);
   }

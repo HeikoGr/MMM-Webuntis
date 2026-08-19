@@ -421,6 +421,11 @@
     animation: none;
     transition: none;
   }
+
+  .MMM-Webuntis .ticker-track,
+  .wu-plugin-grid .ticker-track {
+    animation: none;
+  }
 }
 
 @media (max-width: 560px) {
