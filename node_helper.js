@@ -97,6 +97,25 @@ module.exports = NodeHelper.create({
     }
   },
 
+  /**
+   * Called when the MagicMirror backend shuts the helper down.
+   * Drops cached auth state (bearer tokens, cookies, raw app/data) and per-session
+   * config so nothing sensitive lingers in memory past shutdown.
+   */
+  stop() {
+    this._authServicesByIdentifier?.forEach((authService) => {
+      authService.clearCache?.();
+    });
+    this._authServicesByIdentifier?.clear();
+    this._configsByIdentifier?.clear();
+    this._configsBySession?.clear();
+    this._apiStatusBySession?.clear();
+    this._sessionLastSeenAt?.clear();
+    this._pausedSessions?.clear();
+    this._pendingFetchByCredKey?.clear();
+    this._mmLog('debug', null, 'Node helper stopped');
+  },
+
   _buildFrontendPluginRegistry(config = {}) {
     const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
     const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
