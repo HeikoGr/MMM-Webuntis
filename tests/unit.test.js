@@ -30,6 +30,34 @@ function loadFrontendShared() {
   return shared;
 }
 
+/**
+ * Load the frontend module definition object passed to Module.register(),
+ * under minimal Module/document stubs, without executing MagicMirror itself.
+ *
+ * @returns {Object} the module definition object (methods callable as `def.method(...)`)
+ */
+function loadFrontendModule() {
+  const previousModule = global.Module;
+  const previousDocument = global.document;
+
+  let captured = null;
+  global.Module = {
+    register: (_name, definition) => {
+      captured = definition;
+    },
+  };
+  global.document = { createElement: () => ({ style: {}, classList: { add() {} }, appendChild() {} }) };
+
+  const modulePath = require.resolve('../MMM-Webuntis');
+  delete require.cache[modulePath];
+  require(modulePath);
+
+  global.Module = previousModule;
+  global.document = previousDocument;
+
+  return captured;
+}
+
 function loadNodeHelper() {
   const originalLoad = Module._load;
   const helperPath = require.resolve('../node_helper');
@@ -605,4 +633,67 @@ test('_calculateBaseNow uses normalized debug date context', () => {
   assert.equal(baseNow.getFullYear(), 2026);
   assert.equal(baseNow.getMonth(), 2);
   assert.equal(baseNow.getDate(), 2);
+});
+
+const frontend = loadFrontendModule();
+
+test('_shouldPreserveData keeps stale data during an outage but not on a clean empty result', () => {
+  // No previous data: nothing to preserve, even if the fetch failed.
+  assert.equal(frontend._shouldPreserveData([], [], true, 200, [], []), false);
+
+  // Previous data + empty result + fetch skipped entirely -> preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], false, undefined, [], []), true);
+
+  // Previous data + empty result + healthy 200 -> the class really emptied out, don't preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, [], []), false);
+
+  // Previous data + empty result + error status -> preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], true, 500, [], []), true);
+
+  // Previous data + empty result + a critical-kind warning -> preserve even with a 200.
+  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, ['auth failed'], [{ message: 'auth failed', kind: 'auth' }]), true);
+
+  // A failing timetable canary API taints an unrelated widget's empty result.
+  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, [], [], { timetable: 500 }, { timetable: false }), true);
+});
+
+test('_normalizeRuntimeWarnings drops recovered no_data warnings but keeps config warnings', () => {
+  const warningsList = ['no lessons found', 'bad config value', 'generic api warning'];
+  const warningMeta = [
+    { message: 'no lessons found', kind: 'no_data', dataType: 'lessons' },
+    { message: 'bad config value', kind: 'config' },
+  ];
+
+  // Lessons data has since recovered -> the no_data warning is dropped; config warning always stays;
+  // the untagged warning falls back to API-health, and no APIs were reported fetched -> kept.
+  const recovered = frontend._normalizeRuntimeWarnings(warningsList, {
+    effectiveData: { lessons: [{ id: 1 }] },
+    warningMeta,
+  });
+  assert.deepEqual(recovered, ['bad config value', 'generic api warning']);
+
+  // All fetched APIs are healthy -> the untagged generic warning is dropped too.
+  const healthy = frontend._normalizeRuntimeWarnings(warningsList, {
+    effectiveData: { lessons: [] },
+    warningMeta,
+    apiStatus: { timetable: 200 },
+    fetchFlags: { timetable: true },
+  });
+  assert.deepEqual(healthy, ['no lessons found', 'bad config value']);
+});
+
+test('_getDisplayWidgets resolves the legacy displayMode string into canonical widget ids', () => {
+  frontend.config = { displayMode: 'homework, absences' };
+  frontend.defaults = { displayMode: 'lessons, exams' };
+  frontend._pluginRegistryById = null;
+
+  assert.deepEqual(frontend._getDisplayWidgets(), ['homework', 'absences']);
+});
+
+test('_getDisplayWidgets treats the "list" alias as lessons+exams', () => {
+  frontend.config = { displayMode: 'list' };
+  frontend.defaults = { displayMode: 'lessons, exams' };
+  frontend._pluginRegistryById = null;
+
+  assert.deepEqual(frontend._getDisplayWidgets(), ['lessons', 'exams']);
 });
