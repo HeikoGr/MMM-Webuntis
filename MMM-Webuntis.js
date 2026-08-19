@@ -443,7 +443,7 @@ Module.register('MMM-Webuntis', {
 
     return Promise.all(loadTasks)
       .then(() => {
-        this.updateDom();
+        this.lifecycle.render();
       })
       .catch((error) => {
         this._log('error', '[plugins] failed to initialize plugin widgets', error);
@@ -711,7 +711,7 @@ Module.register('MMM-Webuntis', {
       this._log('error', msg);
       this.moduleWarningsSet = this.moduleWarningsSet || new Set();
       this.moduleWarningsSet.add(msg);
-      this.updateDom();
+      this.lifecycle.render();
     }
   },
 
@@ -1418,7 +1418,6 @@ Module.register('MMM-Webuntis', {
     this._pluginAssetStateById = new Map();
     this._frontendPluginInstancesById = new Map();
 
-    this._updateDomTimer = null;
     this._initialized = false;
     this._initRequested = false;
     this._initWatchdogTimer = null;
@@ -1439,7 +1438,7 @@ Module.register('MMM-Webuntis', {
           const msg = `Demo mode failed: ${error?.message || String(error)}`;
           this._log('error', msg);
           this.moduleWarningsSet.add(msg);
-          this.updateDom();
+          this.lifecycle.render();
         });
     }
 
@@ -1484,10 +1483,6 @@ Module.register('MMM-Webuntis', {
       onVisible: () => this._startNowLineUpdater(),
       onHidden: () => {
         this._stopNowLineUpdater();
-        if (this._updateDomTimer) {
-          clearTimeout(this._updateDomTimer);
-          this._updateDomTimer = null;
-        }
       },
       onSessionState: ({ state, reason }) => this.transport.sendRequest('SESSION_STATE', { sessionId: this._sessionId, state, reason }),
       onFetch: ({ reason }) => this._sendFetchData(reason),
@@ -1817,7 +1812,7 @@ Module.register('MMM-Webuntis', {
     }
     this._initAttemptCount = 0;
     this.lifecycle.markFetchFailed();
-    this.updateDom();
+    this.lifecycle.render();
   },
 
   _handleGotData(payload) {
@@ -1831,11 +1826,7 @@ Module.register('MMM-Webuntis', {
       this._log('warn', '[DATA_UPDATE] Missing context.student.title in payload, handling as module-level warning payload');
       this._processGotDataWarnings('__module__', payload);
 
-      if (this._updateDomTimer) {
-        clearTimeout(this._updateDomTimer);
-        this._updateDomTimer = null;
-      }
-      this.updateDom();
+      this.lifecycle.render();
       return;
     }
 
@@ -1848,12 +1839,8 @@ Module.register('MMM-Webuntis', {
     const dataChanged = this._processPayloadData(title, payload);
     const warningsChanged = this._processGotDataWarnings(title, payload);
 
-    if (this._updateDomTimer) {
-      clearTimeout(this._updateDomTimer);
-      this._updateDomTimer = null;
-    }
     if (dataChanged || warningsChanged) {
-      this.updateDom();
+      this.lifecycle.render();
     } else {
       this._log('debug', `[DATA_UPDATE] Skipping DOM update for ${title}: no effective data/warning changes`);
     }
