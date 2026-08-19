@@ -1380,11 +1380,6 @@ Module.register('MMM-Webuntis', {
     }
     this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
 
-    if (typeof window !== 'undefined') {
-      window.MMMWebuntisConfig = window.MMMWebuntisConfig || {};
-      window.MMMWebuntisConfig.logLevel = this.config.logLevel || this.defaults.logLevel || 'info';
-    }
-
     try {
       if (!this.config.language && typeof config !== 'undefined' && config?.language) {
         this.config.language = config.language;
