@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.10.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.10.0...v0.10.1) (2026-08-19)
+
+
+### 🐛 Fixes
+
+* add node_helper stop() to clear cached auth state on shutdown ([3b6e6cf](https://github.com/HeikoGr/MMM-Webuntis/commit/3b6e6cf4a8475fe365fef33135647ad628dbc7fd))
+* cap raw API debug dumps at 50 files ([afa8343](https://github.com/HeikoGr/MMM-Webuntis/commit/afa834399f0f0e6cbc2725175ac6715f2d6f41b4))
+* catch unhandled rejections in socketNotificationReceived ([06b29e8](https://github.com/HeikoGr/MMM-Webuntis/commit/06b29e8b1a4928c9f1203fbb1f82f39cdbd3f184))
+* escape time-unit period name in grid time axis ([582118c](https://github.com/HeikoGr/MMM-Webuntis/commit/582118cb51a117772b0b9f827353c4d4e3da6f53))
+* guard plugin widget init promise chain with a catch ([da243f7](https://github.com/HeikoGr/MMM-Webuntis/commit/da243f7659230c0dfa51738c217bfff1d97a36bc))
+* redact credential-shaped fields in raw API and appData dumps ([f5299f1](https://github.com/HeikoGr/MMM-Webuntis/commit/f5299f19ad52a33b08a2648d0bec8587608edb97))
+* redact qrcode and other secret-shaped fields in debug dumps ([7b9ca2c](https://github.com/HeikoGr/MMM-Webuntis/commit/7b9ca2cc10a62b0c9dd849bfcf4bd39f420223be))
+* respect prefers-reduced-motion for the grid overlap ticker ([e5b1169](https://github.com/HeikoGr/MMM-Webuntis/commit/e5b1169076926fa0271c709e17910b2b913ebdb5))
+
+
+### ⚡ Performance
+
+* render through the shared lifecycle instead of calling updateDom() directly ([1affca6](https://github.com/HeikoGr/MMM-Webuntis/commit/1affca6baed43036b689f646c53e7c521ed14996))
+
+
+### 🧱 Refactoring
+
+* remove dead code with no callers ([36ffa1a](https://github.com/HeikoGr/MMM-Webuntis/commit/36ffa1a6f4f92796fa4e6d3f83529bdecb733188))
+
+
+### 📚 Documentation
+
+* correct Node version requirement to match package.json engines ([0497238](https://github.com/HeikoGr/MMM-Webuntis/commit/0497238174a3d4b360255875b710e923e30f5f81))
+* document the missing top-level config options in the wiki ([dc256ae](https://github.com/HeikoGr/MMM-Webuntis/commit/dc256aea2a34310ab654810c9802a741a3de4d28))
+* document unredacted config logging as an intentional design decision ([26f9264](https://github.com/HeikoGr/MMM-Webuntis/commit/26f92646589ee7a52e92342c31e6912af71f1903))
+
+
+### 🧪 Testing
+
+* cover frontend preserve/warning/widget-selection logic ([d013985](https://github.com/HeikoGr/MMM-Webuntis/commit/d0139854103b19fa359bea7ea1a46dda9519497b))
+
 ## [0.10.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.9.0...v0.10.0) (2026-08-17)
 
 
