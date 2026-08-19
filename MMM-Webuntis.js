@@ -1449,6 +1449,14 @@ Module.register('MMM-Webuntis', {
     }
 
     this.lifecycle.start();
+    // Deliberately unredacted: this only reaches the browser DevTools console, gated behind
+    // logLevel: 'info'/'debug' (default 'none'), and its whole purpose is to let a user see -
+    // and paste to the maintainer for support - the exact config MagicMirror is running with.
+    // MagicMirror already round-trips this config in plaintext between server and frontend, so
+    // there is nothing left to protect by redacting it here. Persisted artifacts are a different
+    // story and ARE redacted before being written to disk - see redactSensitiveFields() in
+    // lib/mmm-adapter/mmmPayloadMapper.js, used by dumpBackendPayloads/dumpRawApiResponses -
+    // because those files get sent back to the maintainer and must not leak credentials.
     this._log('info', 'MMM-Webuntis initializing with config:', this.config);
   },
 
