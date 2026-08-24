@@ -55,7 +55,7 @@
     ]
   },
   "dependencies": {
-    "otplib": "^13.4.1",
+    "otplib": "^13.5.0",
     "sanitize-html": "^2.17.7"
   },
   "devDependencies": {
