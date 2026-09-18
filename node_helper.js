@@ -71,12 +71,17 @@ module.exports = NodeHelper.create({
 
   /**
    * Called when the MagicMirror backend shuts the helper down.
-   * Drops cached auth state (bearer tokens, cookies, raw app/data) and per-session config so
-   * nothing sensitive lingers in memory past shutdown.
+   * Logs every cached WebUntis session out (best effort, fire-and-forget) and drops cached auth
+   * state and per-session config so nothing sensitive lingers in memory past shutdown.
    */
   stop() {
-    this._authService?.clearCache();
+    const authService = this._authService;
     this._authService = null;
+    if (authService) {
+      authService.logoutAll().catch((error) => {
+        this._mmLog('debug', null, `Logout on shutdown failed: ${this._formatErr(error)}`);
+      });
+    }
     this._sessions?.clear();
     this._apiStatus?.clear();
     this._pendingFetchByCredKey?.clear();
@@ -351,7 +356,7 @@ module.exports = NodeHelper.create({
     try {
       const groups = new Map();
       (Array.isArray(config.students) ? config.students : []).forEach((student) => {
-        const credKey = getCredentialKey(student, config, sessionKey);
+        const credKey = getCredentialKey(student, config);
         if (!groups.has(credKey)) groups.set(credKey, []);
         groups.get(credKey).push(student);
       });

@@ -84,6 +84,7 @@ const helper = loadNodeHelper();
 const { ApiStatusTracker, getTransientBackoffMs, extractHttpStatus } = require('../lib/apiStatusTracker');
 const { SessionRegistry, getSessionTtlMs } = require('../lib/sessionRegistry');
 const warningUtils = require('../lib/warningUtils');
+const { getCredentialKey } = require('../lib/authSession');
 const { buildFetchFlags } = require('../lib/moduleConfig');
 const { buildStudentErrorPayload } = require('../lib/mmm-adapter/mmmPayloadMapper');
 const { calculateBaseNow } = require('../lib/webuntisClient');
@@ -729,6 +730,17 @@ function jsonResponse(body, status = 200, headers = {}) {
   });
 }
 
+test('_getCredentialKey is the same for every session and instance using the same account', () => {
+  const parent = { username: 'parent', password: 'x', school: 'school', server: 'srv.webuntis.com' };
+  const student = { title: 'A', studentId: 1 };
+  const keyA = getCredentialKey(student, { ...parent, carouselId: 'wu1' });
+  const keyB = getCredentialKey(student, { ...parent, carouselId: 'wu2' });
+  assert.equal(keyA, keyB);
+  assert.equal(keyA, 'parent:parent@srv.webuntis.com/school');
+  assert.equal(getCredentialKey({ qrcode: 'untis://x' }, parent), 'qrcode:untis://x');
+  assert.equal(getCredentialKey(student, { ...parent, qrcode: 'untis://p' }), 'qrcode:untis://p');
+});
+
 test('_extractHttpStatus never records a rejected login or expired session as success', () => {
   const loginRejected = Object.assign(new Error('bad credentials'), { code: 'AUTH_FAILED', isAuthError: true, httpStatus: 200 });
   const redirected = Object.assign(new Error('login page'), { code: 'SESSION_EXPIRED', isAuthError: true, status: 302 });
@@ -851,4 +863,26 @@ test('getTimetable rejects a 200 body without days[] and retries once after an a
       assert.deepEqual(result.data.dayNotices, []);
     }
   );
+});
+
+test('AuthService.logoutAll logs every cached session out and clears the cache', async () => {
+  const AuthService = require('../lib/webuntis/authService');
+  const service = new AuthService({ logger: () => {} });
+  const loggedOut = [];
+  service.httpClient.logout = async (server, school, cookies) => {
+    loggedOut.push(`${school}@${server}:${cookies}`);
+  };
+  service._authCache.set('parent:a@srv/school', {
+    server: 'srv',
+    school: 'school',
+    cookieString: 'JSESSIONID=1',
+    expiresAt: Date.now() + 60000,
+  });
+  service._authCache.set('qrcode:x', { server: 'srv', school: 'school', cookieString: 'JSESSIONID=2', expiresAt: Date.now() + 60000 });
+  service._authCache.set('broken', { expiresAt: Date.now() });
+
+  const count = await service.logoutAll();
+  assert.equal(count, 2);
+  assert.deepEqual(loggedOut.sort(), ['school@srv:JSESSIONID=1', 'school@srv:JSESSIONID=2']);
+  assert.equal(service._authCache.size, 0);
 });
