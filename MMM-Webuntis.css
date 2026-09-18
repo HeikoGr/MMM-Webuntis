@@ -237,6 +237,8 @@
     0 5px 14px rgba(var(--wu-rgb-black, 0, 0, 0), 0.32);
   transform: translateY(10px) scale(0.985);
   opacity: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .wu-shared-popover.is-open {
@@ -273,11 +275,6 @@
   max-height: min(75vh, 560px);
   transform: none;
   opacity: 1;
-}
-
-.wu-shared-popover__shell {
-  display: flex;
-  flex-direction: column;
 }
 
 .wu-shared-popover__header {
@@ -571,18 +568,29 @@
   line-height: 1.1;
 }
 
-.MMM-Webuntis .grid-combined .grid-lesson > .lesson-content {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
+.MMM-Webuntis .grid-combined .lesson-content {
+  font-size: 0.7rem;
 }
 
 .MMM-Webuntis .lesson-content.has-icons {
   padding-right: calc(var(--wu-homework-padding) + 30px);
 }
 
-.MMM-Webuntis .grid-combined .lesson-content {
-  font-size: 0.7rem;
+/* Lesson content within ticker items (for stacked lessons) */
+.MMM-Webuntis .ticker-item .lesson-content {
+  border-radius: var(--wu-lesson-radius);
+  width: 100%;
+  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+  /* For absolute positioning of homework icon */
+}
+
+.MMM-Webuntis .grid-combined .grid-lesson > .lesson-content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
 }
 
 /* Common styling for lessons in grid and ticker */
@@ -805,17 +813,6 @@
 .MMM-Webuntis .ticker-item:has(.lesson-content) {
   gap: var(--wu-ticker-stack-gap);
   /* Gap between stacked lessons */
-}
-
-/* Lesson content within ticker items (for stacked lessons) */
-.MMM-Webuntis .ticker-item .lesson-content {
-  border-radius: var(--wu-lesson-radius);
-  width: 100%;
-  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
-  /* For absolute positioning of homework icon */
 }
 
 @keyframes ticker-scroll {

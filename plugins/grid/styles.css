@@ -34,6 +34,12 @@
   right: 0;
 }
 
+.wu-plugin-grid .grid-hourline {
+  height: 1px;
+  background: var(--wu-hourline-color);
+  z-index: 0;
+}
+
 .wu-plugin-grid .grid-combined .day-column-inner .grid-hourline {
   left: 4px;
   right: 4px;
@@ -191,18 +197,27 @@
   line-height: 1.1;
 }
 
-.wu-plugin-grid .grid-combined .grid-lesson > .lesson-content {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 0;
+.wu-plugin-grid .grid-combined .lesson-content {
+  font-size: 0.7rem;
 }
 
 .wu-plugin-grid .lesson-content.has-icons {
   padding-right: calc(var(--wu-homework-padding) + 30px);
 }
 
-.wu-plugin-grid .grid-combined .lesson-content {
-  font-size: 0.7rem;
+.wu-plugin-grid .ticker-item .lesson-content {
+  border-radius: var(--wu-lesson-radius);
+  width: 100%;
+  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+
+.wu-plugin-grid .grid-combined .grid-lesson > .lesson-content {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
 }
 
 .wu-plugin-grid .grid-combined .lesson-substitution,
@@ -391,12 +406,6 @@
   line-height: 1.2;
 }
 
-.wu-plugin-grid .grid-hourline {
-  height: 1px;
-  background: var(--wu-hourline-color);
-  z-index: 0;
-}
-
 .wu-plugin-grid .grid-nowline {
   height: 2px;
   background: linear-gradient(90deg, var(--wu-nowline-start), var(--wu-nowline-end));
@@ -431,15 +440,6 @@
 
 .wu-plugin-grid .ticker-item:has(.lesson-content) {
   gap: var(--wu-ticker-stack-gap);
-}
-
-.wu-plugin-grid .ticker-item .lesson-content {
-  border-radius: var(--wu-lesson-radius);
-  width: 100%;
-  padding: var(--wu-ticker-padding-block) var(--wu-ticker-padding-inline);
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
 }
 
 @keyframes ticker-scroll {
