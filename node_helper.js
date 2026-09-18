@@ -13,7 +13,14 @@ const {
   createWarningMetaMap,
   mergeUniqueWarnings,
 } = require('./lib/warningUtils');
-const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, normalizeTimeToHHMM } = require('./lib/webuntisClient');
+const {
+  AuthService,
+  WebUntisClient,
+  formatError,
+  convertRestErrorToWarning,
+  isAuthError,
+  normalizeTimeToHHMM,
+} = require('./lib/webuntisClient');
 const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
 const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
@@ -33,7 +40,6 @@ const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 // backoff steps; any success resets the counter. See _shouldSkipApi().
 const TRANSIENT_FAILURE_THRESHOLD = 3;
 const TRANSIENT_BACKOFF_STEPS_MS = [15 * 60 * 1000, 60 * 60 * 1000, 6 * 60 * 60 * 1000];
-const AUTH_ERROR_CODES = new Set(['AUTH_FAILED', 'SESSION_EXPIRED', 'TOKEN_INVALID']);
 
 // Session eviction: how long a session of the same identifier may stay silent before its
 // per-session state (config clone, API status, pause flag) is released. See _releaseStaleSessions().
@@ -270,7 +276,12 @@ module.exports = NodeHelper.create({
   _extractHttpStatus(err) {
     const rawStatus = err?.status ?? err?.httpStatus ?? err?.response?.status ?? err?.cause?.status ?? err?.cause?.httpStatus;
     const numericStatus = Number(rawStatus);
-    return Number.isFinite(numericStatus) ? numericStatus : 0;
+    const status = Number.isFinite(numericStatus) ? numericStatus : 0;
+    // A rejected login or an expired session must never be recorded as a success: JSON-RPC
+    // reports login failures inside a 200 body and a dead cookie answers with a 302 redirect.
+    // Both are auth failures from the module's point of view.
+    if (isAuthError(err) && status < 400) return 401;
+    return status;
   },
 
   /**
@@ -318,7 +329,7 @@ module.exports = NodeHelper.create({
     if (this._isNetworkError(err)) {
       kind = 'network';
       severity = 'critical';
-    } else if (status === 401 || AUTH_ERROR_CODES.has(code)) {
+    } else if (status === 401 || isAuthError(err)) {
       kind = 'auth';
       severity = 'critical';
     } else if (status === 429) {

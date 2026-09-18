@@ -697,3 +697,148 @@ test('_getDisplayWidgets treats the "list" alias as lessons+exams', () => {
 
   assert.deepEqual(frontend._getDisplayWidgets(), ['lessons', 'exams']);
 });
+
+// ---------------------------------------------------------------------------
+// Session handling: login redirects, expired-session bodies, auth error classification
+// ---------------------------------------------------------------------------
+
+function withStubbedFetch(handler, fn) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => handler(String(url), options);
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      globalThis.fetch = originalFetch;
+    });
+}
+
+function jsonResponse(body, status = 200, headers = {}) {
+  return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...headers },
+  });
+}
+
+test('_extractHttpStatus never records a rejected login or expired session as success', () => {
+  const loginRejected = Object.assign(new Error('bad credentials'), { code: 'AUTH_FAILED', isAuthError: true, httpStatus: 200 });
+  const redirected = Object.assign(new Error('login page'), { code: 'SESSION_EXPIRED', isAuthError: true, status: 302 });
+  assert.equal(helper._extractHttpStatus(loginRejected), 401);
+  assert.equal(helper._extractHttpStatus(redirected), 401);
+  assert.equal(helper._extractHttpStatus(Object.assign(new Error('x'), { status: 503 })), 503);
+  assert.equal(helper._extractHttpStatus(new Error('no status')), 0);
+
+  const meta = helper._classifyWarningMetaFromError(loginRejected);
+  assert.equal(meta.kind, 'auth');
+  assert.equal(meta.severity, 'critical');
+});
+
+test('convertRestErrorToWarning produces a warning for login failures reported inside a 200 body', () => {
+  const { convertRestErrorToWarning } = require('../lib/webuntis/errorHandler');
+  const loginRejected = Object.assign(new Error('Credentials authentication failed: 200 - bad credentials'), {
+    code: 'AUTH_FAILED',
+    isAuthError: true,
+    httpStatus: 200,
+  });
+  const text = convertRestErrorToWarning(loginRejected, { studentTitle: 'A', dataType: 'timetable' });
+  assert.match(text, /Authentication failed while fetching timetable for "A"/);
+
+  const expired = Object.assign(new Error('login page'), { code: 'SESSION_EXPIRED', isAuthError: true, status: 302 });
+  assert.match(convertRestErrorToWarning(expired, { studentTitle: 'A' }), /session expired/);
+
+  const invalid = Object.assign(new Error('timetable response has no days[]'), { code: 'INVALID_RESPONSE' });
+  assert.match(convertRestErrorToWarning(invalid, { studentTitle: 'A', dataType: 'timetable' }), /unusable response/);
+});
+
+test('fetchClient surfaces the WebUntis login redirect as SESSION_EXPIRED instead of following it', async () => {
+  const fetchClient = require('../lib/webuntis/fetchClient');
+  await withStubbedFetch(
+    (_url, options) => {
+      assert.equal(options.redirect, 'manual');
+      return new Response(null, { status: 302, headers: { location: 'https://srv/WebUntis/index.do' } });
+    },
+    async () => {
+      await assert.rejects(fetchClient.request({ url: 'https://srv/WebUntis/api/exams' }), (err) => {
+        assert.equal(err.code, 'SESSION_EXPIRED');
+        assert.equal(err.isAuthError, true);
+        assert.equal(err.status, 302);
+        return true;
+      });
+      await assert.rejects(fetchClient.get('https://srv/WebUntis/api/token/new'), (err) => err.code === 'SESSION_EXPIRED');
+    }
+  );
+
+  await withStubbedFetch(
+    () => new Response('<html>maintenance</html>', { status: 503, headers: { 'content-type': 'text/html' } }),
+    async () => {
+      await assert.rejects(fetchClient.request({ url: 'https://srv/x' }), (err) => {
+        assert.equal(err.status, 503);
+        assert.equal(err.body, '<html>maintenance</html>');
+        return true;
+      });
+    }
+  );
+});
+
+test('restClient treats a 200 login-state or HTML body as an expired session', async () => {
+  const restClient = require('../lib/webuntis/restClient');
+  const base = { server: 'srv', path: '/WebUntis/api/exams', token: 't', cookies: 'JSESSIONID=x' };
+
+  await withStubbedFetch(
+    () => jsonResponse({ loginError: '', state: 'LOGIN_ERROR' }),
+    () => assert.rejects(restClient.callRestAPI(base), (err) => err.code === 'SESSION_EXPIRED' && err.isAuthError === true)
+  );
+  await withStubbedFetch(
+    () => new Response('<!DOCTYPE html><html></html>', { status: 200, headers: { 'content-type': 'text/html' } }),
+    () => assert.rejects(restClient.callRestAPI(base), (err) => err.code === 'SESSION_EXPIRED')
+  );
+  await withStubbedFetch(
+    () => jsonResponse({ data: { exams: [] } }),
+    async () => {
+      const result = await restClient.callRestAPI(base);
+      assert.deepEqual(result, { data: { data: { exams: [] } }, status: 200 });
+    }
+  );
+});
+
+test('getTimetable rejects a 200 body without days[] and retries once after an auth error', async () => {
+  const api = require('../lib/webuntis/webuntisApiService');
+  const range = { rangeStart: new Date('2026-09-18'), rangeEnd: new Date('2026-09-19') };
+  const auth = { token: 't', cookieString: 'JSESSIONID=x', tenantId: 1, schoolYearId: 1 };
+
+  await withStubbedFetch(
+    () => jsonResponse({}),
+    () =>
+      assert.rejects(
+        api.getTimetable({ authContext: { getAuth: async () => auth }, server: 'srv', personId: 1, ...range }),
+        (err) => err.code === 'INVALID_RESPONSE'
+      )
+  );
+
+  let calls = 0;
+  let authErrors = 0;
+  await withStubbedFetch(
+    () => {
+      calls += 1;
+      if (calls === 1) return jsonResponse({ errorCode: 'UNAUTHORIZED' }, 401);
+      return jsonResponse({ days: [{ date: '2026-09-18', status: 'NO_DATA', gridEntries: [] }] });
+    },
+    async () => {
+      const result = await api.getTimetable({
+        authContext: {
+          getAuth: async () => auth,
+          onAuthError: async () => {
+            authErrors += 1;
+          },
+        },
+        server: 'srv',
+        personId: 1,
+        ...range,
+      });
+      assert.equal(authErrors, 1);
+      assert.equal(calls, 2);
+      assert.equal(result.status, 200);
+      assert.equal(result.data.length, 0);
+      assert.deepEqual(result.data.dayNotices, []);
+    }
+  );
+});
