@@ -1,1906 +1,101 @@
 const NodeHelper = require('node_helper');
 const Log = require('logger');
-const fs = require('node:fs');
-const path = require('node:path');
 const shared = require('./lib/mmm-shared/mmm-shared');
-const { getCurrentDateContext, parseDisplayModeTokens } = require('./lib/runtime-utils');
 
-const { validateConfig, applyLegacyMappings, generateDeprecationWarnings } = require('./lib/configValidator');
+const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, buildFetchPlan } = require('./lib/webuntisClient');
+const { ApiStatusTracker } = require('./lib/apiStatusTracker');
+const { SessionRegistry, buildRouteMeta, parseSessionKey, DEFAULT_IDENTIFIER, DEFAULT_SESSION_ID } = require('./lib/sessionRegistry');
 const {
-  DEFAULT_WARNING_META,
-  createWarningMetaEntry,
+  buildEffectiveStudentConfig,
+  buildFetchFlags,
+  buildFrontendPluginRegistry,
+  collectPluginValidationIssues,
+  normalizeModuleConfig,
+  validateNormalizedConfig,
+} = require('./lib/moduleConfig');
+const { createAuthSession, getCredentialKey } = require('./lib/authSession');
+const { ensureStudentsFromAppData } = require('./lib/studentDiscovery');
+const { extractHolidaysFromAppData } = require('./lib/webuntis/dataOrchestration');
+const { buildStudentErrorPayload } = require('./lib/mmm-adapter/mmmPayloadMapper');
+const {
+  buildWarningMetaEntries,
   buildWarningMetaList,
+  classifyWarningMetaFromError,
+  collectValidationWarnings,
+  createGroupWarningCollector,
   createWarningMetaMap,
+  isNetworkError,
+  mergeGroupWarningsIntoPayload,
   mergeUniqueWarnings,
 } = require('./lib/warningUtils');
-const {
-  AuthService,
-  WebUntisClient,
-  formatError,
-  convertRestErrorToWarning,
-  isAuthError,
-  normalizeTimeToHHMM,
-} = require('./lib/webuntisClient');
-const { calculateFetchRanges, compactHolidays } = require('./lib/webuntis/dataOrchestration');
-const { NETWORK_ERROR_CODES } = require('./lib/webuntis/transportConstants');
 const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
-const { buildFetchFlagsFromCapabilities, collectCapabilities } = require('./lib/pluginCapabilityResolver');
 const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 
-const ALL_WIDGETS = Object.freeze(['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday']);
-const DEFAULT_IDENTIFIER = 'default';
-const DEFAULT_SESSION_ID = 'unknown';
-const PERMANENT_API_ERRORS = new Set([403, 404, 410]);
-const API_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
-
-// Circuit breaker for endpoints that keep failing with non-permanent errors (typically 5xx).
-// A single 5xx is a blip and must stay retryable, but WebUntis can serve a constant 500 for weeks -
-// e.g. during holidays when students hold no class assignment. Without a breaker every fetch cycle
-// burns the full retry ladder on a result that will not change. Failures escalate through the
-// backoff steps; any success resets the counter. See _shouldSkipApi().
-const TRANSIENT_FAILURE_THRESHOLD = 3;
-const TRANSIENT_BACKOFF_STEPS_MS = [15 * 60 * 1000, 60 * 60 * 1000, 6 * 60 * 60 * 1000];
-
-// Session eviction: how long a session of the same identifier may stay silent before its
-// per-session state (config clone, API status, pause flag) is released. See _releaseStaleSessions().
-const SESSION_TTL_DEFAULT_MS = 5 * 60 * 1000;
-const SESSION_TTL_MIN_MS = 10 * 60 * 1000;
-const SESSION_TTL_MAX_MS = 60 * 60 * 1000;
-
-function createEmptyApiStatusSnapshot() {
-  return {
-    timetable: null,
-    exams: null,
-    homework: null,
-    absences: null,
-    messages: null,
-  };
-}
-
-function buildRouteMeta(payload = {}) {
-  const identifier = payload.id || DEFAULT_IDENTIFIER;
-  const sessionId = payload.sessionId || DEFAULT_SESSION_ID;
-  return {
-    identifier,
-    sessionId,
-    sessionKey: `${identifier}:${sessionId}`,
-  };
-}
-
+/**
+ * MagicMirror adapter for MMM-Webuntis.
+ *
+ * Owns the socket protocol (CONFIGURE / REFRESH / SESSION_STATE in, MODULE_READY /
+ * MODULE_INIT_FAILED / DATA_UPDATE out), frontend session bookkeeping and the per-credential
+ * fetch loop. Everything else lives in lib/: config normalization (moduleConfig), student
+ * discovery (studentDiscovery), auth (authSession + webuntis/authService), endpoint status and
+ * circuit breaker (apiStatusTracker), WebUntis fetching (webuntisClient) and payload building
+ * (mmm-adapter/mmmPayloadMapper).
+ */
 module.exports = NodeHelper.create({
-  /**
-   * Called when the helper is initialized by the MagicMirror backend.
-   * Use this hook to perform startup initialization.
-   */
   start() {
+    this._ensureRuntime();
     this._mmLog('debug', null, 'Node helper started');
+  },
+
+  /**
+   * Lazily create runtime state so the CLI wrapper and unit tests can drive handlers without
+   * going through start().
+   */
+  _ensureRuntime() {
+    if (this._runtimeReady) return;
+    this._runtimeReady = true;
+
+    const log = this._mmLog.bind(this);
     this.notifications = shared.buildNotifications('MMM-Webuntis');
-
-    const libLogger = (level, message) => {
-      this._mmLog(level, null, `[lib] ${message}`);
-    };
-
-    this._libLogger = libLogger;
-    this._authServicesByIdentifier = new Map();
-
-    this._apiStatusBySession = new Map(); // sessionKey -> { timetable: 200, exams: 403, ... }
-    this._configWarningsSent = false;
-    this._configsByIdentifier = new Map();
-    this._configsBySession = new Map();
-    this._pausedSessions = new Set(); // sessionKey values currently suspended/hidden
-    this._sessionLastSeenAt = new Map(); // sessionKey -> epoch ms of last frontend contact
-    this._pendingFetchByCredKey = new Map(); // Track pending fetches to avoid duplicates
-    this._studentsDiscovered = {};
-    this._pluginHost = initializeBackendPluginHost({
-      moduleRoot: __dirname,
-      logger: this._mmLog.bind(this),
-    });
+    this._authService = new AuthService({ logger: (level, message) => log(level, null, `[lib] ${message}`) });
+    this._apiStatus = new ApiStatusTracker({ logger: log });
+    this._sessions = new SessionRegistry({ logger: log, onRelease: (sessionKey) => this._apiStatus.release(sessionKey) });
+    this._client = new WebUntisClient({ mmLog: log, formatErr: this._formatErr.bind(this), apiStatus: this._apiStatus });
+    this._pendingFetchByCredKey = new Map(); // credKey -> in-flight processGroup() promise
+    this._pluginHost = initializeBackendPluginHost({ moduleRoot: __dirname, logger: log });
     this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
-    if (this._pluginWarnings.length > 0) {
-      this._pluginWarnings.forEach((warning) => {
-        this._mmLog('warn', null, warning);
-      });
-    }
+    this._pluginWarnings.forEach((warning) => {
+      log('warn', null, warning);
+    });
   },
 
   /**
    * Called when the MagicMirror backend shuts the helper down.
-   * Drops cached auth state (bearer tokens, cookies, raw app/data) and per-session
-   * config so nothing sensitive lingers in memory past shutdown.
+   * Drops cached auth state (bearer tokens, cookies, raw app/data) and per-session config so
+   * nothing sensitive lingers in memory past shutdown.
    */
   stop() {
-    this._authServicesByIdentifier?.forEach((authService) => {
-      authService.clearCache?.();
-    });
-    this._authServicesByIdentifier?.clear();
-    this._configsByIdentifier?.clear();
-    this._configsBySession?.clear();
-    this._apiStatusBySession?.clear();
-    this._sessionLastSeenAt?.clear();
-    this._pausedSessions?.clear();
+    this._authService?.clearCache();
+    this._authService = null;
+    this._sessions?.clear();
+    this._apiStatus?.clear();
     this._pendingFetchByCredKey?.clear();
+    this._runtimeReady = false;
     this._mmLog('debug', null, 'Node helper stopped');
   },
 
-  _buildFrontendPluginRegistry(config = {}) {
-    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
-    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
-
-    return pluginDescriptors.map((pluginDescriptor) => {
-      const manifest = pluginDescriptor.manifest || {};
-      const aliases =
-        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
-          ? manifest.activation.displayAliases.slice()
-          : [manifest.id];
-      const explicitPluginConfig = pluginConfigMap?.[manifest.id];
-      const active = explicitPluginConfig?.enabled === true;
-
-      const frontendPath = path.relative(__dirname, pluginDescriptor.entryPaths.frontend).split(path.sep).join('/');
-      const stylePaths = Array.isArray(pluginDescriptor.entryPaths.styles)
-        ? pluginDescriptor.entryPaths.styles.map((stylePath) => path.relative(__dirname, stylePath).split(path.sep).join('/'))
-        : [];
-
-      return {
-        id: manifest.id,
-        title: manifest.title,
-        order: manifest.order || 1000,
-        configNamespace: manifest.configNamespace || manifest.id,
-        aliases,
-        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
-        active,
-        entry: {
-          frontend: frontendPath,
-          styles: stylePaths,
-        },
-      };
-    });
-  },
+  // ---------------------------------------------------------------------------------------------
+  // Socket protocol
+  // ---------------------------------------------------------------------------------------------
 
   /**
-   * Whether an HTTP status represents a successful response.
-   *
-   * @param {number} status - HTTP status code
-   * @returns {boolean} True for 2xx
-   */
-  _isSuccessStatus(status) {
-    return Number.isFinite(status) && status >= 200 && status < 300;
-  },
-
-  /**
-   * Backoff window for an endpoint that keeps failing with non-permanent errors.
-   *
-   * Returns 0 while the failure count is below the threshold, so isolated blips stay retryable
-   * on the very next cycle.
-   *
-   * @param {number} failureCount - Consecutive failures recorded for the endpoint
-   * @returns {number} Backoff window in milliseconds (0 = retry immediately)
-   */
-  _getTransientBackoffMs(failureCount) {
-    if (!Number.isFinite(failureCount) || failureCount < TRANSIENT_FAILURE_THRESHOLD) return 0;
-    const stepIndex = Math.min(failureCount - TRANSIENT_FAILURE_THRESHOLD, TRANSIENT_BACKOFF_STEPS_MS.length - 1);
-    return TRANSIENT_BACKOFF_STEPS_MS[stepIndex];
-  },
-
-  /**
-   * Check if an API endpoint should be skipped based on its previous HTTP status.
-   *
-   * Two independent skip reasons:
-   *   1. Permanent errors (403, 404, 410) - skipped for 24h, in case the school adds a license.
-   *   2. Repeated non-permanent errors (typically 5xx) - skipped for a growing backoff window
-   *      once the endpoint has failed TRANSIENT_FAILURE_THRESHOLD times in a row.
-   *
-   * @param {string} sessionKey - Session key
-   * @param {string} endpoint - API endpoint name (timetable, exams, homework, absences, messagesOfDay)
-   * @returns {boolean} True if API should be skipped
-   */
-  _shouldSkipApi(sessionKey, endpoint) {
-    if (!this._apiStatusBySession?.has(sessionKey)) return false;
-    const record = this._apiStatusBySession.get(sessionKey)[endpoint];
-    if (!record) return false;
-
-    // Support both old format (plain number) and new format ({ status, recordedAt, failureCount })
-    const status = typeof record === 'object' ? record.status : record;
-    const recordedAt = typeof record === 'object' ? record.recordedAt : 0;
-    const failureCount = typeof record === 'object' && Number.isFinite(record.failureCount) ? record.failureCount : 0;
-
-    // Permanent errors - skip API calls for these
-    // 403 Forbidden - user has no permission for this endpoint (school licensing)
-    // 404 Not Found - endpoint doesn't exist
-    // 410 Gone - resource permanently removed
-    if (PERMANENT_API_ERRORS.has(status)) {
-      // Retry after 24 hours in case the school adds a new module/license
-      if (recordedAt && Date.now() - recordedAt > API_RETRY_AFTER_MS) {
-        // Expired — clear status and allow retry
-        delete this._apiStatusBySession.get(sessionKey)[endpoint];
-        return false;
-      }
-      return true;
-    }
-
-    if (this._isSuccessStatus(status)) return false;
-
-    // Non-permanent failure: apply the circuit breaker.
-    const backoffMs = this._getTransientBackoffMs(failureCount);
-    if (backoffMs === 0 || !recordedAt) return false;
-
-    const waitedMs = Date.now() - recordedAt;
-    if (waitedMs >= backoffMs) return false;
-
-    const remainingMin = Math.ceil((backoffMs - waitedMs) / 60000);
-    this._mmLog(
-      'debug',
-      null,
-      `[${endpoint}] Backing off after ${failureCount} consecutive failures (status ${status}); next attempt in ~${remainingMin}min`
-    );
-    return true;
-  },
-
-  /**
-   * Record API status from an error response so frontend can detect failures.
-   *
-   * Consecutive failures are counted so _shouldSkipApi() can back off; a recorded success
-   * (see setApiStatus in fetchData) resets the counter.
-   *
-   * @param {string} sessionKey - Session key
-   * @param {string} endpoint - API endpoint name
-   * @param {Error} err - Error object
-   */
-  _recordApiStatusFromError(sessionKey, endpoint, err) {
-    if (!sessionKey) return;
-    const status = this._extractHttpStatus(err);
-
-    if (!this._apiStatusBySession) this._apiStatusBySession = new Map();
-    if (!this._apiStatusBySession.has(sessionKey)) {
-      this._apiStatusBySession.set(sessionKey, {});
-    }
-
-    const endpointStatuses = this._apiStatusBySession.get(sessionKey);
-    const previous = endpointStatuses[endpoint];
-    const previousStatus = typeof previous === 'object' ? previous.status : previous;
-    const previousCount = typeof previous === 'object' && Number.isFinite(previous.failureCount) ? previous.failureCount : 0;
-
-    // Only a prior failure continues a streak; a prior success (or no record) starts a new one.
-    const continuesStreak = previous !== undefined && !this._isSuccessStatus(previousStatus);
-    const failureCount = continuesStreak ? previousCount + 1 : 1;
-
-    endpointStatuses[endpoint] = { status, recordedAt: Date.now(), failureCount };
-  },
-
-  /**
-   * Extract numeric HTTP status from a structured error object.
-   * Returns 0 when status is unavailable.
-   *
-   * @param {Error|Object} err - Error object
-   * @returns {number} HTTP status code or 0
-   */
-  _extractHttpStatus(err) {
-    const rawStatus = err?.status ?? err?.httpStatus ?? err?.response?.status ?? err?.cause?.status ?? err?.cause?.httpStatus;
-    const numericStatus = Number(rawStatus);
-    const status = Number.isFinite(numericStatus) ? numericStatus : 0;
-    // A rejected login or an expired session must never be recorded as a success: JSON-RPC
-    // reports login failures inside a 200 body and a dead cookie answers with a 302 redirect.
-    // Both are auth failures from the module's point of view.
-    if (isAuthError(err) && status < 400) return 401;
-    return status;
-  },
-
-  /**
-   * Determine whether an error is a network connectivity failure.
-   * Uses structured error codes first; falls back to message parsing only for
-   * network wording variants that sometimes arrive as plain text.
-   *
-   * @param {Error|Object} err - Error object
-   * @returns {boolean} True if network-related
-   */
-  _isNetworkError(err) {
-    const code = String(err?.code || err?.cause?.code || '').toUpperCase();
-    const name = String(err?.name || err?.cause?.name || '').toUpperCase();
-    if (NETWORK_ERROR_CODES.has(code)) return true;
-    if (name === 'ABORTERROR') return true;
-
-    // Allowed fallback: some lower-level fetch paths only surface text.
-    const msg = String(err?.message || err?.cause?.message || '').toLowerCase();
-    return (
-      msg.includes('fetch failed') ||
-      msg.includes('network error') ||
-      msg.includes('timeout') ||
-      msg.includes('timed out') ||
-      msg.includes('econnrefused') ||
-      msg.includes('enotfound') ||
-      msg.includes('ehostunreach') ||
-      msg.includes('eai_again') ||
-      msg.includes('connection refused')
-    );
-  },
-
-  /**
-   * Build structured warning metadata from a fetch/auth error.
-   *
-   * @param {Error|Object} err - Error object
-   * @param {Object} extra - Additional or overriding metadata
-   * @returns {Object} warning metadata
-   */
-  _classifyWarningMetaFromError(err, extra = {}) {
-    const status = this._extractHttpStatus(err);
-    const code = String(err?.code || err?.cause?.code || '').toUpperCase() || null;
-    let kind = 'generic';
-    let severity = 'warning';
-
-    if (this._isNetworkError(err)) {
-      kind = 'network';
-      severity = 'critical';
-    } else if (status === 401 || isAuthError(err)) {
-      kind = 'auth';
-      severity = 'critical';
-    } else if (status === 429) {
-      kind = 'rate_limit';
-      severity = 'warning';
-    } else if (status >= 500) {
-      kind = 'server';
-      severity = 'critical';
-    } else if (status >= 400) {
-      kind = 'client';
-      severity = status === 403 ? 'warning' : 'critical';
-    }
-
-    return {
-      kind,
-      severity,
-      status: status || null,
-      code,
-      ...extra,
-    };
-  },
-
-  /**
-   * Build warning metadata entries for a list of warning messages.
-   *
-   * @param {string[]} warnings - Warning messages
-   * @param {Object} baseMeta - Metadata merged into each entry
-   * @returns {Object[]} warningMeta array
-   */
-  _buildWarningMetaEntries(warnings = [], baseMeta = {}) {
-    if (!Array.isArray(warnings)) return [];
-    return warnings
-      .filter((message) => Boolean(message))
-      .map((message) => ({
-        message: String(message),
-        ...baseMeta,
-      }));
-  },
-
-  _collectPluginValidationIssues(config = {}) {
-    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
-    const pluginConfigMap = config?.plugins && typeof config.plugins === 'object' ? config.plugins : {};
-    const warnings = [];
-    const errors = [];
-    const warningMeta = [];
-
-    pluginDescriptors.forEach((pluginDescriptor) => {
-      const validateConfig = pluginDescriptor?.instance?.validateConfig;
-      if (typeof validateConfig !== 'function') return;
-
-      const pluginId = pluginDescriptor.id;
-      const pluginConfig = pluginConfigMap?.[pluginId]?.config;
-      const issues = validateConfig(pluginConfig, { config, pluginId });
-      if (!Array.isArray(issues) || issues.length === 0) return;
-
-      issues.forEach((issue) => {
-        const message = typeof issue === 'string' ? issue : issue?.message;
-        if (!message) return;
-
-        const severity = typeof issue === 'object' && issue?.severity ? String(issue.severity).toLowerCase() : 'warning';
-        const kind = typeof issue === 'object' && issue?.kind ? issue.kind : 'config';
-        const meta = {
-          message: String(message),
-          kind,
-          severity,
-          pluginId: typeof issue === 'object' && issue?.pluginId ? String(issue.pluginId) : pluginId,
-        };
-
-        warningMeta.push(meta);
-        warnings.push(meta.message);
-
-        if (severity === 'error' || severity === 'critical') {
-          errors.push(meta.message);
-        }
-      });
-    });
-
-    return {
-      warnings: Array.from(new Set(warnings)),
-      errors: Array.from(new Set(errors)),
-      warningMeta,
-    };
-  },
-
-  /**
-   * Get or create AuthService instance for a specific module identifier
-   * Each module instance gets its own AuthService to prevent cache cross-contamination
-   * @param {string} identifier - Module instance identifier
-   * @returns {AuthService} AuthService instance for this identifier
-   */
-  _getAuthServiceForIdentifier(identifier) {
-    if (!this._authServicesByIdentifier.has(identifier)) {
-      // Creating AuthService silently
-      this._authServicesByIdentifier.set(identifier, new AuthService({ logger: this._libLogger }));
-    }
-    return this._authServicesByIdentifier.get(identifier);
-  },
-
-  /**
-   * Normalize legacy configuration keys to modern format.
-   * Applies mappings once for module-level config and once for each student entry.
-   *
-   * @param {Object} cfg - Raw configuration object (may contain legacy keys)
-   * @returns {Object} { normalizedConfig, legacyUsed }
-   */
-  _normalizeLegacyConfig(cfg) {
-    if (!cfg || typeof cfg !== 'object') return { normalizedConfig: cfg, legacyUsed: [] };
-
-    const { normalizedConfig } = applyLegacyMappings(cfg);
-    const legacyUsed = Array.isArray(normalizedConfig.__legacyUsed) ? [...normalizedConfig.__legacyUsed] : [];
-    const configWarnings = [];
-
-    // Normalize each student once at init, so fetch flow can treat students as canonical.
-    if (Array.isArray(normalizedConfig.students)) {
-      normalizedConfig.students = normalizedConfig.students.map((student) => {
-        const { normalizedConfig: normalizedStudent } = applyLegacyMappings(student);
-        const studentLegacy = Array.isArray(normalizedStudent.__legacyUsed) ? normalizedStudent.__legacyUsed : [];
-        studentLegacy.forEach((key) => {
-          if (!legacyUsed.includes(key)) legacyUsed.push(key);
-        });
-        return normalizedStudent;
-      });
-    }
-
-    // Ensure displayMode is lowercase
-    if (typeof normalizedConfig.displayMode === 'string') {
-      normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
-    }
-
-    normalizedConfig.plugins = this._buildCanonicalPluginsConfig(normalizedConfig);
-
-    if (Array.isArray(normalizedConfig.students)) {
-      normalizedConfig.students = normalizedConfig.students.map((student) => ({
-        ...student,
-        plugins: this._buildCanonicalPluginsConfig(student, normalizedConfig.plugins),
-      }));
-    }
-
-    if (legacyUsed.length > 0) {
-      try {
-        const uniq = Array.from(new Set(legacyUsed));
-
-        const detailedWarnings = generateDeprecationWarnings(uniq);
-        configWarnings.push(...detailedWarnings);
-
-        // Attach warnings to config.__warnings so they get sent to frontend and displayed in GUI
-        normalizedConfig.__warnings = normalizedConfig.__warnings || [];
-        normalizedConfig.__warnings.push(...detailedWarnings);
-
-        // Also log them to server logs (only detailed warnings, not the generic summary)
-        detailedWarnings.forEach((warning) => {
-          this._mmLog('warn', null, warning);
-        });
-
-        // Log the normalized config as formatted JSON (with redacted sensitive data) for reference (server-side only)
-        const redacted = { ...normalizedConfig };
-        if (redacted.password) redacted.password = '***redacted***';
-        if (redacted.qrcode) redacted.qrcode = '***redacted***';
-        if (redacted.students && Array.isArray(redacted.students)) {
-          redacted.students = redacted.students.map((s) => {
-            const student = { ...s };
-            if (student.password) student.password = '***redacted***';
-            if (student.qrcode) student.qrcode = '***redacted***';
-            return student;
-          });
-        }
-        const formattedJson = JSON.stringify(redacted, null, 2);
-        this._mmLog('info', null, `Normalized config:\n${formattedJson}`);
-      } catch (e) {
-        this._mmLog('debug', null, `Failed to process legacy config: ${e?.message ? e.message : e}`);
-      }
-    }
-
-    return { normalizedConfig, legacyUsed, configWarnings };
-  },
-
-  _getLegacyDisplayTokens(config = {}) {
-    return parseDisplayModeTokens(config?.displayMode);
-  },
-
-  _getKnownPluginDefinitions() {
-    const definitions = new Map();
-
-    const discoveredPlugins = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
-    discoveredPlugins.forEach((pluginRecord) => {
-      const manifest = pluginRecord?.manifest;
-      if (!manifest?.id) return;
-      const aliases =
-        Array.isArray(manifest.activation?.displayAliases) && manifest.activation.displayAliases.length > 0
-          ? manifest.activation.displayAliases.slice()
-          : [manifest.id];
-
-      definitions.set(manifest.id, {
-        id: manifest.id,
-        configNamespace: manifest.configNamespace || manifest.id,
-        aliases,
-        capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.slice() : [],
-      });
-    });
-
-    return definitions;
-  },
-
-  _getBackendPluginDefaultConfig(pluginId) {
-    const pluginDescriptors = Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : [];
-    const descriptor = pluginDescriptors.find((entry) => entry?.id === pluginId);
-    const getDefaultConfig = descriptor?.instance?.getDefaultConfig;
-    if (typeof getDefaultConfig !== 'function') return {};
-
-    try {
-      const value = getDefaultConfig();
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-      return { ...value };
-    } catch (error) {
-      this._mmLog('warn', null, `[plugins] Failed to read default config for plugin "${pluginId}": ${this._formatErr(error)}`);
-      return {};
-    }
-  },
-
-  _buildCanonicalPluginsConfig(config = {}, inheritedPlugins = null) {
-    const knownDefinitions = this._getKnownPluginDefinitions();
-    const displayTokens = new Set(this._getLegacyDisplayTokens(config));
-    const explicitPlugins = config?.plugins && typeof config.plugins === 'object' && !Array.isArray(config.plugins) ? config.plugins : {};
-    const inherited = inheritedPlugins && typeof inheritedPlugins === 'object' && !Array.isArray(inheritedPlugins) ? inheritedPlugins : {};
-    const result = {};
-
-    knownDefinitions.forEach((definition, pluginId) => {
-      const explicitEntry = explicitPlugins?.[pluginId] && typeof explicitPlugins[pluginId] === 'object' ? explicitPlugins[pluginId] : {};
-      const inheritedEntry = inherited?.[pluginId] && typeof inherited[pluginId] === 'object' ? inherited[pluginId] : {};
-      const namespace = definition.configNamespace || pluginId;
-      const legacyWidgetConfig =
-        config?.[namespace] && typeof config[namespace] === 'object' && !Array.isArray(config[namespace]) ? config[namespace] : {};
-      const pluginDefaultConfig = this._getBackendPluginDefaultConfig(pluginId);
-      const enabledFromLegacy = definition.aliases.some((alias) => displayTokens.has(alias));
-      const enabled =
-        typeof explicitEntry.enabled === 'boolean' ? explicitEntry.enabled : enabledFromLegacy || inheritedEntry.enabled === true;
-
-      result[pluginId] = {
-        enabled,
-        config: {
-          ...pluginDefaultConfig,
-          ...(inheritedEntry.config || {}),
-          ...legacyWidgetConfig,
-          ...(explicitEntry.config || {}),
-        },
-      };
-    });
-
-    Object.keys(explicitPlugins).forEach((pluginId) => {
-      if (result[pluginId]) return;
-      const explicitEntry = explicitPlugins[pluginId];
-      if (!explicitEntry || typeof explicitEntry !== 'object') return;
-      result[pluginId] = {
-        enabled: explicitEntry.enabled === true,
-        config:
-          explicitEntry.config && typeof explicitEntry.config === 'object' && !Array.isArray(explicitEntry.config)
-            ? { ...explicitEntry.config }
-            : {},
-      };
-    });
-
-    return result;
-  },
-
-  _buildConfigWarnings(normalizedConfig, validationWarnings = []) {
-    return mergeUniqueWarnings(validationWarnings, normalizedConfig?.__warnings || []);
-  },
-
-  _resolveInitRoute(normalizedConfig, payload) {
-    const route = buildRouteMeta({
-      id: normalizedConfig.id,
-      sessionId: payload.sessionId,
-    });
-
-    return {
-      ...route,
-      initReason: payload?.reason || 'unspecified',
-    };
-  },
-
-  /**
-   * Record frontend contact for a session.
-   *
-   * Every CONFIGURE, REFRESH, and SESSION_STATE marks its session as alive. Sessions that stop
-   * reporting are eventually released by _releaseStaleSessions().
-   *
-   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
-   */
-  _touchSession(sessionKey) {
-    if (!sessionKey) return;
-    // Lazy-init: the CLI wrapper and unit tests drive handlers without going through start().
-    if (!this._sessionLastSeenAt) this._sessionLastSeenAt = new Map();
-    this._sessionLastSeenAt.set(sessionKey, Date.now());
-  },
-
-  /**
-   * Release per-session state for sessions of the same identifier that went silent.
-   *
-   * The frontend generates a fresh sessionId on every start (page reload, Electron restart,
-   * MMM-Remote-Control restart), while this node_helper process survives. Without eviction,
-   * _configsBySession would keep one full config clone - including student credentials - per
-   * reload, forever.
-   *
-   * Eviction is time-based rather than "drop every other session of this identifier", because
-   * MagicMirror legitimately serves several clients (the mirror plus a phone browser) that share
-   * one identifier but hold distinct sessionIds. Those keep refreshing and therefore stay alive.
-   *
-   * Dropping a session is recoverable: _getOrCreateSessionConfig() rebuilds it from the
-   * identifier-level config. Only a session-scoped debugDate override is lost.
-   *
-   * @param {string} sessionKey - Session key whose identifier should be swept
-   * @param {number} ttlMs - Silence period after which a session is considered gone
-   * @returns {number} Count of released sessions
-   */
-  _releaseStaleSessions(sessionKey, ttlMs) {
-    const { identifier } = this._parseSessionKey(sessionKey);
-    const cutoff = Date.now() - ttlMs;
-    const staleSessionKeys = [];
-
-    // Lazy-init: the CLI wrapper and unit tests drive handlers without going through start().
-    if (!this._sessionLastSeenAt) this._sessionLastSeenAt = new Map();
-    const configsBySession = this._configsBySession || new Map();
-    const apiStatusBySession = this._apiStatusBySession || new Map();
-    const pausedSessions = this._pausedSessions || new Set();
-
-    const candidateKeys = new Set([...configsBySession.keys(), ...apiStatusBySession.keys(), ...pausedSessions]);
-
-    for (const candidateKey of candidateKeys) {
-      if (candidateKey === sessionKey) continue;
-      if (this._parseSessionKey(candidateKey).identifier !== identifier) continue;
-
-      // Unknown last-seen means the session predates tracking - treat it as stale.
-      const lastSeenAt = this._sessionLastSeenAt.get(candidateKey) ?? 0;
-      if (lastSeenAt > cutoff) continue;
-
-      staleSessionKeys.push(candidateKey);
-    }
-
-    for (const staleSessionKey of staleSessionKeys) {
-      configsBySession.delete(staleSessionKey);
-      apiStatusBySession.delete(staleSessionKey);
-      pausedSessions.delete(staleSessionKey);
-      this._sessionLastSeenAt.delete(staleSessionKey);
-    }
-
-    if (staleSessionKeys.length > 0) {
-      this._mmLog('debug', null, `[CONFIGURE] Released ${staleSessionKeys.length} stale session(s) for identifier "${identifier}"`);
-    }
-
-    return staleSessionKeys.length;
-  },
-
-  /**
-   * Silence period before a session of the same identifier is released.
-   *
-   * Two update cycles of headroom, clamped so that neither a very short nor a very long
-   * updateInterval produces a pathological TTL.
-   *
-   * @param {Object} normalizedConfig - Normalized module config
-   * @returns {number} TTL in milliseconds
-   */
-  _getSessionTtlMs(normalizedConfig = {}) {
-    const updateInterval = Number(normalizedConfig?.updateInterval);
-    const base = Number.isFinite(updateInterval) && updateInterval > 0 ? updateInterval : SESSION_TTL_DEFAULT_MS;
-    return Math.min(Math.max(base * 2, SESSION_TTL_MIN_MS), SESSION_TTL_MAX_MS);
-  },
-
-  _storeInitSessionConfig(sessionKey, normalizedConfig) {
-    this._releaseStaleSessions(sessionKey, this._getSessionTtlMs(normalizedConfig));
-    this._touchSession(sessionKey);
-    this._configsBySession.set(sessionKey, normalizedConfig);
-
-    if (normalizedConfig.debugDate) {
-      this._mmLog('debug', null, `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
-    }
-
-    if (typeof normalizedConfig.displayMode === 'string') {
-      normalizedConfig.displayMode = normalizedConfig.displayMode.toLowerCase();
-    }
-  },
-
-  _validateInitConfig(normalizedConfig, identifier, sessionId, configWarnings) {
-    const validatorLogger = { log: () => {} };
-    const { valid, errors, warnings } = validateConfig(normalizedConfig, validatorLogger);
-    const pluginValidation = this._collectPluginValidationIssues(normalizedConfig);
-    const combinedWarnings = this._buildConfigWarnings(normalizedConfig, [
-      ...(warnings || []),
-      ...(configWarnings || []),
-      ...pluginValidation.warnings,
-    ]);
-    const combinedErrors = this._collectValidationWarnings(errors, pluginValidation.errors);
-    const combinedWarningMeta = [
-      ...this._buildWarningMetaEntries(warnings || [], { kind: 'config', severity: 'warning' }),
-      ...this._buildWarningMetaEntries(configWarnings || [], { kind: 'config', severity: 'warning' }),
-      ...pluginValidation.warningMeta,
-    ];
-
-    if (valid && combinedErrors.length === 0) {
-      return { valid, combinedWarnings, combinedWarningMeta };
-    }
-
-    this._mmLog('error', null, `[CONFIGURE] Config validation failed for ${identifier}`);
-    this._emitInitError(
-      {
-        errors: this._collectValidationWarnings(errors, pluginValidation.errors),
-        warnings: combinedWarnings,
-        warningMeta: combinedWarningMeta,
-        severity: 'ERROR',
-        message: 'Configuration validation failed',
-      },
-      {
-        identifier,
-        sessionId,
-      }
-    );
-
-    return { valid: false, combinedWarnings, combinedWarningMeta };
-  },
-
-  async _finalizeInitModule(normalizedConfig, identifier) {
-    this._configsByIdentifier.set(identifier, normalizedConfig);
-    this.config = normalizedConfig;
-    normalizedConfig._authService = this._getAuthServiceForIdentifier(identifier);
-    await this._ensureStudentsFromAppData(normalizedConfig);
-    this._studentsDiscovered = this._studentsDiscovered || {};
-    this._studentsDiscovered[identifier] = true;
-  },
-
-  _emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta = []) {
-    const pluginWarnings = Array.isArray(this._pluginWarnings) ? this._pluginWarnings : [];
-    const warnings = mergeUniqueWarnings(combinedWarnings, pluginWarnings);
-    const mergedWarningMetaByMessage = createWarningMetaMap(combinedWarningMeta);
-    this._buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }).forEach((entry) => {
-      if (!mergedWarningMetaByMessage.has(entry.message)) {
-        mergedWarningMetaByMessage.set(entry.message, entry);
-      }
-    });
-    this._emitModuleInitialized(
-      {
-        config: normalizedConfig,
-        warnings,
-        warningMeta: buildWarningMetaList(warnings, mergedWarningMetaByMessage),
-        students: normalizedConfig.students || [],
-        plugins: this._buildFrontendPluginRegistry(normalizedConfig),
-      },
-      {
-        identifier,
-        sessionId,
-      }
-    );
-  },
-
-  async _triggerPostInitFetch(normalizedConfig, identifier, sessionId) {
-    await this._handleFetchData({
-      ...normalizedConfig,
-      id: identifier,
-      sessionId,
-      reason: 'post-init-auto-fetch',
-    });
-  },
-
-  _applyStudentValidationWarnings(student, warningsState) {
-    const studentValidationWarnings = this._validateStudentConfig(student);
-    if (studentValidationWarnings.length === 0) return;
-
-    studentValidationWarnings.forEach((warning) => {
-      this._mmLog('warn', student, warning);
-      warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
-    });
-  },
-
-  async _fetchStudentPayloadForGroup({ student, authSession, identifier, credKey, compactHolidays, config, sessionKey, warningsState }) {
-    this._applyStudentValidationWarnings(student, warningsState);
-
-    const studentFetchWarnings = new Set();
-    const payload = await this.fetchData({
-      authSession,
-      student,
-      identifier,
-      credKey,
-      compactHolidays,
-      config,
-      sessionKey,
-      currentFetchWarnings: studentFetchWarnings,
-    });
-
-    if (!payload) {
-      this._mmLog('warn', student, `fetchData returned empty payload for ${student.title}`);
-      return null;
-    }
-
-    return this._mergeGroupWarningsIntoPayload(payload, identifier, warningsState.groupWarnings, warningsState.groupWarningMetaByMessage);
-  },
-
-  _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
-    const errorMsg = `Error fetching data for ${student.title}: ${this._formatErr(err)}`;
-    this._mmLog('error', student, errorMsg);
-
-    const warningMsg = convertRestErrorToWarning(err, {
-      studentTitle: student.title,
-      school: student.school || config?.school,
-      server: student.server || config?.server || 'webuntis.com',
-    });
-
-    if (warningMsg) {
-      warningsState.addGroupWarning(warningMsg, this._classifyWarningMetaFromError(err));
-      this._mmLog('warn', student, warningMsg);
-    }
-
-    return this._buildStudentFetchErrorPayload({
-      identifier,
-      sessionId,
-      sessionKey,
-      student,
-      config,
-      groupWarnings: warningsState.groupWarnings,
-      warningMsg,
-      groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
-      warningMetaBase: this._classifyWarningMetaFromError(err),
-    });
-  },
-
-  /**
-   * Internal logging function that forwards messages to MagicMirror's Log system
-   * Automatically adds student name tag if provided
-   *
-   * @param {string} level - Log level: 'debug', 'info', 'warn', 'error'
-   * @param {Object|null} student - Student context object (adds [studentName] tag if present)
-   * @param {string} message - Log message to output
-   */
-  _mmLog(level, student, message) {
-    // Don't add [MMM-Webuntis] tag here - MagicMirror's Log methods add it automatically
-    const studentTag = student?.title ? `[${String(student.title).trim()}] ` : '';
-    const formatted = `${studentTag}${message}`;
-
-    // Always forward debug messages to the underlying MagicMirror logger.
-    // The MagicMirror logging subsystem (or the environment) decides which
-    // levels to actually emit. Avoid double-filtering here to ensure debug
-    // output is visible when the system is configured for debug logging.
-    if (level === 'debug') {
-      Log.debug(formatted);
-      return;
-    }
-
-    if (level === 'error') {
-      Log.error(formatted);
-      return;
-    }
-
-    if (level === 'warn') {
-      Log.warn(formatted);
-      return;
-    }
-
-    // default/info
-    Log.info(formatted);
-  },
-
-  /**
-   * Format error objects into human-readable strings
-   * Delegates to WebUntisClient static helper for consistent error formatting
-   *
-   * @param {Error|any} err - Error object or value to format
-   * @returns {string} Formatted error message
-   */
-  _formatErr(err) {
-    return formatError(err);
-  },
-  /**
-   * Cleanup old debug dumps, keeping only the N most recent files
-   * @param {string} dumpDir - Directory containing debug dump files
-   * @param {number} keepCount - Number of most recent files to keep
-   */
-  _cleanupOldDebugDumps(dumpDir, keepCount = 10) {
-    try {
-      const files = fs
-        .readdirSync(dumpDir)
-        .filter((f) => f.endsWith('.json'))
-        .map((f) => ({
-          name: f,
-          path: path.join(dumpDir, f),
-          mtime: fs.statSync(path.join(dumpDir, f)).mtime.getTime(),
-        }))
-        .sort((a, b) => b.mtime - a.mtime); // Newest first
-
-      // Delete files beyond keepCount
-      if (files.length > keepCount) {
-        files.slice(keepCount).forEach((f) => {
-          try {
-            fs.unlinkSync(f.path);
-          } catch {
-            // Ignore deletion errors
-          }
-        });
-      }
-    } catch {
-      // Ignore cleanup errors (directory might not exist yet)
-    }
-  },
-
-  /**
-   * Create standard options object for authService calls
-   * Provides bound logging and error formatting functions to authService
-   * This ensures consistent logging behavior across all auth operations
-   *
-   * @param {Object} additionalOptions - Additional options to merge (e.g., cacheKey)
-   * @returns {Object} Options object with mmLog and formatErr bound to this instance
-   */
-  _getStandardAuthOptions(additionalOptions = {}) {
-    return {
-      ...additionalOptions,
-      mmLog: this._mmLog.bind(this),
-      formatErr: this._formatErr.bind(this),
-    };
-  },
-
-  /**
-   * Authenticate with module-level parent credentials (QR or username/password).
-   * Centralizes parent auth flow used by student auto-discovery paths.
-   *
-   * @param {Object} moduleConfig - Module configuration object
-   * @param {string} server - Target server hostname
-   * @param {string|null} cacheKey - Optional cache key for username/password auth
-   * @returns {Promise<Object>} Auth result from authService
-   */
-  async _getParentAuthResult(moduleConfig, server, cacheKey = null) {
-    if (moduleConfig.qrcode) {
-      return moduleConfig._authService.getAuthFromQRCode(moduleConfig.qrcode, {
-        cacheKey: `parent-qr:${moduleConfig.qrcode}`,
-      });
-    }
-
-    const options = cacheKey ? this._getStandardAuthOptions({ cacheKey }) : this._getStandardAuthOptions();
-    return moduleConfig._authService.getAuth({
-      school: moduleConfig.school,
-      username: moduleConfig.username,
-      password: moduleConfig.password,
-      server,
-      options,
-    });
-  },
-
-  /**
-   * Merge module-level defaults into student configurations.
-   * Applies legacy mappings and normalizes widget sub-configs consistently.
-   *
-   * @param {Object} moduleConfig - Module configuration object
-   * @param {Array} students - Student configuration array
-   * @param {Object} options - Merge options
-   * @param {boolean} options.markAutoDiscovered - Mark each student as auto-discovered
-   * @returns {Array} Normalized student configurations
-   */
-  _mergeModuleDefaultsIntoStudents(moduleConfig, students, options = {}) {
-    const { markAutoDiscovered = false } = options;
-
-    const defNoStudents = { ...(moduleConfig || {}) };
-    delete defNoStudents.students;
-    // Don't copy parent credentials into student configs to avoid confusion in _createAuthSession
-    delete defNoStudents.username;
-    delete defNoStudents.password;
-    delete defNoStudents.school;
-    delete defNoStudents.server;
-
-    const sourceStudents = Array.isArray(students) ? students : [];
-    return sourceStudents.map((student) => {
-      const inputStudent = markAutoDiscovered ? { ...(student || {}), _autoDiscovered: true } : student || {};
-
-      const merged = {
-        ...defNoStudents,
-        ...inputStudent,
-      };
-
-      ALL_WIDGETS.forEach((widget) => {
-        merged[widget] = {
-          ...(defNoStudents[widget] || {}),
-          ...(inputStudent[widget] || {}),
-        };
-      });
-
-      if (typeof merged.displayMode === 'string') {
-        merged.displayMode = merged.displayMode.toLowerCase();
-      }
-
-      return merged;
-    });
-  },
-
-  _isConfiguredStudentCandidate(student) {
-    if (!student || typeof student !== 'object') return false;
-    const hasStudentId = student.studentId !== undefined && student.studentId !== null && String(student.studentId).trim() !== '';
-    const hasQr = Boolean(student.qrcode);
-    const hasCreds = Boolean(student.username && student.password);
-    const hasTitle = Boolean(student.title && String(student.title).trim() !== '');
-    return hasStudentId || hasQr || hasCreds || hasTitle;
-  },
-
-  _getCandidateStudentIdsForConfig(configStudent, autoStudents) {
-    const candidateMatches = configStudent.title
-      ? autoStudents.filter((a) => (a.title || '').toLowerCase().includes(String(configStudent.title).toLowerCase()))
-      : [];
-    return (candidateMatches.length > 0 ? candidateMatches : autoStudents).map((s) => Number(s.studentId));
-  },
-
-  _enhanceConfiguredStudentFromAutoData(configStudent, autoStudents) {
-    if (!configStudent || typeof configStudent !== 'object') return;
-
-    if (configStudent.studentId && !configStudent.title) {
-      const autoStudent = autoStudents.find((auto) => Number(auto.studentId) === Number(configStudent.studentId));
-      if (autoStudent) {
-        configStudent.title = autoStudent.title;
-        this._mmLog(
-          'debug',
-          configStudent,
-          `Filled in auto-discovered name: "${autoStudent.title}" for studentId ${configStudent.studentId}`
-        );
-      }
-      return;
-    }
-
-    if ((!configStudent.studentId || configStudent.studentId === '') && configStudent.title) {
-      const titleLower = String(configStudent.title).toLowerCase();
-      const matched = autoStudents.filter((a) => (a.title || '').toLowerCase().includes(titleLower));
-      const candidateIds = (matched.length > 0 ? matched : autoStudents).map((s) => Number(s.studentId));
-
-      if (candidateIds.length === 1) {
-        configStudent.studentId = candidateIds[0];
-        configStudent._autoDiscovered = true;
-        delete configStudent.username;
-        delete configStudent.password;
-        delete configStudent.school;
-        delete configStudent.server;
-        const msg = `Auto-assigned studentId=${candidateIds[0]} for "${configStudent.title}" (only match found)`;
-        this._mmLog('debug', configStudent, msg);
-      } else {
-        const msg = `Student with title "${configStudent.title}" has no studentId configured. Possible studentIds: ${candidateIds.join(', ')}.`;
-        configStudent.__warnings = configStudent.__warnings || [];
-        configStudent.__warnings.push(msg);
-        this._mmLog('warn', configStudent, msg);
-      }
-    }
-  },
-
-  _validateConfiguredStudentIds(configuredStudents, autoStudents) {
-    try {
-      if (!autoStudents || autoStudents.length === 0) return;
-
-      configuredStudents.forEach((configStudent) => {
-        if (!configStudent?.studentId) return;
-        const match = autoStudents.find((a) => Number(a.studentId) === Number(configStudent.studentId));
-        if (!match) {
-          const candidateIds = this._getCandidateStudentIdsForConfig(configStudent, autoStudents);
-          const msg = `Configured studentId ${configStudent.studentId} for title "${configStudent.title || ''}" was not found in auto-discovered students. Possible studentIds: ${candidateIds.join(', ')}.`;
-          configStudent.__warnings = configStudent.__warnings || [];
-          configStudent.__warnings.push(msg);
-          this._mmLog('warn', configStudent, msg);
-        }
-      });
-    } catch {
-      // ignore validation errors
-    }
-  },
-
-  async _loadAutoStudentsForConfiguredEntries(moduleConfig, configuredStudents) {
-    const server = moduleConfig.server || 'webuntis.com';
-    try {
-      const authResult = await this._getParentAuthResult(moduleConfig, server);
-      const autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
-
-      if (autoStudents && autoStudents.length > 0) {
-        configuredStudents.forEach((configStudent) => {
-          this._enhanceConfiguredStudentFromAutoData(configStudent, autoStudents);
-        });
-      }
-
-      return autoStudents;
-    } catch (err) {
-      this._mmLog(
-        'warn',
-        null,
-        `Could not fetch auto-discovered names for title fallback (server=${server || 'unknown'}). Is the WebUntis server reachable? ${this._formatErr(err)}`
-      );
-      return null;
-    }
-  },
-
-  _mergeDefaultsIntoConfiguredStudentsOnce(moduleConfig) {
-    if (moduleConfig._moduleDefaultsMerged) return;
-
-    const allStudents = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-    const mergedStudents = this._mergeModuleDefaultsIntoStudents(moduleConfig, allStudents);
-
-    moduleConfig.students = mergedStudents;
-    moduleConfig._moduleDefaultsMerged = true;
-    this._mmLog('debug', null, `✓ Module defaults merged into ${mergedStudents.length} configured student(s)`);
-  },
-
-  _assignAutoStudentsOnce(moduleConfig, autoStudents) {
-    if (moduleConfig._autoStudentsAssigned) {
-      this._mmLog('debug', null, 'Auto-discovered students already assigned; skipping reassignment');
-      return;
-    }
-
-    const normalizedAutoStudents = this._mergeModuleDefaultsIntoStudents(moduleConfig, autoStudents, {
-      markAutoDiscovered: true,
-    });
-
-    moduleConfig.students = normalizedAutoStudents;
-    moduleConfig._autoStudentsAssigned = true;
-    moduleConfig._moduleDefaultsMerged = true;
-
-    const studentList = normalizedAutoStudents.map((s) => `• ${s.title} (ID: ${s.studentId})`).join('\n  ');
-    this._mmLog('debug', null, `✓ Auto-discovered ${normalizedAutoStudents.length} student(s):\n  ${studentList}`);
-  },
-
-  /**
-   * Auto-discover students from parent account (app/data endpoint)
-   * This function handles three scenarios:
-   *   1. No students configured -> auto-discover all students from parent account
-   *   2. Students with IDs but no titles -> fill in missing titles from auto-discovery
-   *   3. Students with titles but no IDs -> suggest/assign student IDs
-   *
-   * Also merges module-level defaults into each student config for consistent behavior
-   *
-   * @param {Object} moduleConfig - Module configuration object
-   * @returns {Promise<void>} No return value, modifies moduleConfig.students in place
-   */
-  async _ensureStudentsFromAppData(moduleConfig) {
-    try {
-      if (!moduleConfig || typeof moduleConfig !== 'object') return;
-
-      const configuredStudentsRaw = Array.isArray(moduleConfig.students) ? moduleConfig.students : [];
-      const configuredStudents = configuredStudentsRaw.filter((s) => this._isConfiguredStudentCandidate(s));
-      let autoStudents = null;
-
-      const hasParentCreds = Boolean((moduleConfig.username && moduleConfig.password && moduleConfig.school) || moduleConfig.qrcode);
-
-      if (configuredStudents.length > 0) {
-        if (hasParentCreds) {
-          autoStudents = await this._loadAutoStudentsForConfiguredEntries(moduleConfig, configuredStudents);
-          this._validateConfiguredStudentIds(configuredStudents, autoStudents);
-        }
-
-        this._mergeDefaultsIntoConfiguredStudentsOnce(moduleConfig);
-        return;
-      }
-
-      if (!hasParentCreds) return;
-
-      const server = moduleConfig.server || 'webuntis.com';
-      const authResult = await this._getParentAuthResult(moduleConfig, server, `parent:${moduleConfig.username}@${server}`);
-
-      autoStudents = moduleConfig._authService.deriveStudentsFromAppData(authResult.appData);
-
-      if (!autoStudents || autoStudents.length === 0) {
-        this._mmLog('warn', null, 'No students discovered via app/data; please configure students[] manually');
-        return;
-      }
-
-      this._assignAutoStudentsOnce(moduleConfig, autoStudents);
-    } catch (err) {
-      this._mmLog('warn', null, `Auto student discovery failed: ${this._formatErr(err)}`);
-    }
-  },
-
-  /**
-   * Create an authenticated session for a student
-   * Returns a session object with authentication data or throws an Error if credentials missing.
-   *
-   * @param {Object} sample - Student configuration sample
-   * @param {Object} moduleConfig - Module configuration
-   * @param {string} cacheKeyOverride - Optional explicit cache key (ensures alignment with credKey)
-   * @returns {Promise<Object>} Session object with { school, server, personId, cookies, token, tenantId, schoolYearId }
-   */
-  async _createAuthSession(sample, moduleConfig, identifier, cacheKeyOverride = null) {
-    const useQrLogin = Boolean(sample.qrcode);
-    const hasOwnCredentials = sample.username && sample.password && sample.school && sample.server;
-    const hasParentCredentials = moduleConfig?.username && moduleConfig.password && moduleConfig.school;
-    const hasParentQr = moduleConfig?.qrcode;
-
-    // Get identifier-specific AuthService to prevent cache cross-contamination
-    const authService = this._getAuthServiceForIdentifier(identifier);
-
-    // Determine which credentials to use: student's own or parent's
-    const useStudentQr = useQrLogin && sample.qrcode;
-    const useParentQr = !useQrLogin && hasParentQr && moduleConfig.qrcode;
-    const useParentCreds = !useQrLogin && !useParentQr && hasParentCredentials;
-
-    // QR Code Authentication (student or parent)
-    if (useStudentQr || useParentQr) {
-      const qrCode = useStudentQr ? sample.qrcode : moduleConfig.qrcode;
-      const cacheKey = cacheKeyOverride || `qrcode:${qrCode}`;
-      const authResult = await authService.getAuthFromQRCode(qrCode, {
-        cacheKey,
-      });
-      return {
-        school: authResult.school,
-        server: authResult.server,
-        personId: authResult.personId,
-        role: authResult.role || null, // STUDENT, LEGAL_GUARDIAN, TEACHER, etc.
-        cookieString: authResult.cookieString,
-        token: authResult.token,
-        tenantId: authResult.tenantId,
-        schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData || null,
-        qrCodeUrl: qrCode, // Store for re-authentication
-      };
-    }
-
-    // Username/Password Authentication (student or parent)
-    if (useParentCreds || hasOwnCredentials) {
-      // Determine which credentials to use
-      const useStudentCreds = hasOwnCredentials;
-      const school = useStudentCreds ? sample.school : sample.school || moduleConfig.school;
-      const server = useStudentCreds ? sample.server : sample.server || moduleConfig.server || 'webuntis.com';
-      const username = useStudentCreds ? sample.username : moduleConfig.username;
-      const password = useStudentCreds ? sample.password : moduleConfig.password;
-
-      const cacheKey = cacheKeyOverride || `${useStudentCreds ? 'student' : 'parent'}:${username}@${server}/${school}`;
-
-      const authResult = await authService.getAuth({
-        school,
-        username,
-        password,
-        server,
-        options: { cacheKey },
-      });
-
-      return {
-        school,
-        server,
-        personId: authResult.personId,
-        role: authResult.role || null, // STUDENT, LEGAL_GUARDIAN, TEACHER, etc.
-        cookieString: authResult.cookieString,
-        token: authResult.token,
-        tenantId: authResult.tenantId,
-        schoolYearId: authResult.schoolYearId,
-        appData: authResult.appData || null,
-        username, // Store for re-authentication
-      };
-    }
-
-    // No valid credentials found
-    let errorMsg = '\nCredentials missing! need either:';
-    errorMsg += '\n  (1) studentId + username/password in module config, or';
-    errorMsg += '\n  (2) username/password/school/server in student config, or';
-    errorMsg += '\n  (3) qrcode in student config for QR code login, or';
-    errorMsg += '\n  (4) qrcode in module config for parent (LEGAL_GUARDIAN) authentication\n';
-
-    this._mmLog('error', sample, errorMsg);
-    throw new Error(errorMsg);
-  },
-
-  /**
-   * Compact timegrid data from WebUntis API to reduce payload size
-   * Handles both old format (array of rows with timeUnits) and new format (direct array of time slots)
-   * Keeps only essential fields: startTime, endTime, name
-   *
-   * @param {Array} rawGrid - Raw timegrid data from API
-   * @returns {Array} Compacted timeUnits array with minimal fields
-   */
-  // Reduce memory by keeping only the fields the frontend uses
-  // Returns timeUnits array directly instead of wrapping in an object,
-  // since timeUnits (lesson slots) are the same for all days.
-  _compactTimegrid(rawGrid) {
-    if (!Array.isArray(rawGrid) || rawGrid.length === 0) return [];
-
-    // Check if this is the old format (array of rows with timeUnits)
-    // or new format (direct array of time slots)
-    const firstRow = rawGrid[0];
-    if (firstRow && Array.isArray(firstRow.timeUnits)) {
-      // Old format: array of rows with timeUnits
-      return firstRow.timeUnits.map((u) => ({
-        startTime: u.startTime,
-        endTime: u.endTime,
-        name: u.name,
-      }));
-    }
-
-    // New format: direct array of time slots from _extractTimegridFromTimetable
-    if (firstRow?.startTime && firstRow.endTime) {
-      return rawGrid.map((u) => ({
-        startTime: u.startTime,
-        endTime: u.endTime,
-        name: u.name || '',
-      }));
-    }
-
-    return [];
-  },
-
-  /**
-   * Extract and compact holidays from authSession.appData.
-   * This is called once per credential group to avoid redundant processing.
-   * @param {Object} authSession - Authenticated session with appData
-   * @param {boolean} shouldFetch - Whether holidays should be fetched
-   * @returns {Array} Compacted holidays array
-   */
-  _extractAndCompactHolidays(authSession, shouldFetch) {
-    if (!shouldFetch) return [];
-
-    let rawHolidays = [];
-    try {
-      if (authSession?.appData) {
-        if (Array.isArray(authSession.appData.holidays)) {
-          rawHolidays = authSession.appData.holidays;
-        } else if (authSession.appData.data && Array.isArray(authSession.appData.data.holidays)) {
-          rawHolidays = authSession.appData.data.holidays;
-        }
-      }
-    } catch (error) {
-      this._mmLog('error', null, `Holidays extraction failed: ${error?.message ? error.message : error}`);
-    }
-
-    return compactHolidays(rawHolidays);
-  },
-
-  /**
-   * Check if a specific widget should be displayed based on displayMode configuration
-   * Supports both exact matches and comma-separated lists
-   * Handles backwards-compatible values (e.g., "list" = "lessons,exams")
-   *
-   * @param {string} widgetName - Widget name to check (e.g., 'grid', 'lessons', 'exams')
-   * @param {string} displayMode - Display mode from config (e.g., 'grid', 'lessons,exams,homework')
-   * @returns {boolean} True if widget should be displayed
-   */
-  _wantsWidget(widgetName, displayMode) {
-    const w = String(widgetName || '').toLowerCase();
-    const dm = (displayMode === undefined || displayMode === null ? '' : String(displayMode)).toLowerCase().trim();
-    if (!w) return false;
-
-    const aliasMap = {
-      homework: ['homework', 'homeworks'],
-      absences: ['absence', 'absences'],
-      messagesofday: ['messagesofday', 'messages'],
-      lessons: ['lessons', 'list'],
-      exams: ['exams', 'list'],
-      grid: ['grid'],
-    };
-
-    const acceptedTokens = aliasMap[w] || [w];
-    if (acceptedTokens.includes(dm)) return true;
-
-    return dm
-      .split(',')
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .some((p) => acceptedTokens.includes(p));
-  },
-
-  /**
-   * Parse compound session key format `identifier:sessionId`.
-   *
-   * @param {string} sessionKey - Session key
-   * @returns {{identifier: string, sessionId: string}} Parsed parts
-   */
-  _parseSessionKey(sessionKey) {
-    const raw = String(sessionKey || 'default:unknown');
-    const idx = raw.indexOf(':');
-    if (idx === -1) {
-      return {
-        identifier: raw || 'default',
-        sessionId: 'unknown',
-      };
-    }
-    return {
-      identifier: raw.slice(0, idx) || 'default',
-      sessionId: raw.slice(idx + 1) || 'unknown',
-    };
-  },
-
-  /**
-   * Build widget/fetch flags from displayMode.
-   *
-   * This is intentionally kept in node_helper (MMM adapter layer) so
-   * lib/webuntis stays free of UI/displayMode concepts.
-   *
-   * @param {string} displayMode - Effective display mode
-   * @returns {Object} Widget and fetch flags
-   */
-  _buildFetchFlags(displayMode) {
-    const legacyDisplayMode =
-      displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode) ? displayMode.displayMode : displayMode;
-
-    if (displayMode && typeof displayMode === 'object' && !Array.isArray(displayMode)) {
-      const config = displayMode;
-      const pluginsConfig = config.plugins && typeof config.plugins === 'object' ? config.plugins : {};
-      const activePluginIds = Object.entries(pluginsConfig)
-        .filter(([, entry]) => entry?.enabled === true)
-        .map(([pluginId]) => pluginId);
-
-      if (activePluginIds.length > 0) {
-        const activeSet = new Set(activePluginIds);
-        // Ask the plugin records (not the flattened definitions) so a backend plugin's
-        // getCapabilities() hook can override its manifest. Falls back to manifest capabilities.
-        const activeRecords = (Array.isArray(this._pluginHost?.plugins) ? this._pluginHost.plugins : []).filter((pluginRecord) =>
-          activeSet.has(pluginRecord?.manifest?.id)
-        );
-        const capabilities = collectCapabilities(activeRecords, {
-          getPluginConfig: (pluginId) => pluginsConfig[pluginId]?.config || {},
-        });
-        const capabilityFlags = buildFetchFlagsFromCapabilities(capabilities);
-
-        return {
-          wantsGridWidget: activeSet.has('grid'),
-          wantsLessonsWidget: activeSet.has('lessons'),
-          wantsExamsWidget: activeSet.has('exams'),
-          wantsHomeworkWidget: activeSet.has('homework'),
-          wantsAbsencesWidget: activeSet.has('absences'),
-          wantsMessagesOfDayWidget: activeSet.has('messagesofday'),
-          fetchTimegrid: Boolean(capabilityFlags.fetchTimegrid || capabilityFlags.fetchTimetable),
-          fetchTimetable: Boolean(capabilityFlags.fetchTimetable),
-          fetchExams: Boolean(capabilityFlags.fetchExams),
-          fetchHomeworks: Boolean(capabilityFlags.fetchHomeworks),
-          fetchAbsences: Boolean(capabilityFlags.fetchAbsences),
-          fetchMessagesOfDay: Boolean(capabilityFlags.fetchMessagesOfDay),
-        };
-      }
-    }
-
-    const wants = (name) => this._wantsWidget(name, legacyDisplayMode);
-    const wantsGridWidget = wants('grid');
-    const wantsLessonsWidget = wants('lessons');
-    const wantsExamsWidget = wants('exams');
-    const wantsHomeworkWidget = wants('homework');
-    const wantsAbsencesWidget = wants('absences');
-    const wantsMessagesOfDayWidget = wants('messagesofday');
-
-    return {
-      wantsGridWidget,
-      wantsLessonsWidget,
-      wantsExamsWidget,
-      wantsHomeworkWidget,
-      wantsAbsencesWidget,
-      wantsMessagesOfDayWidget,
-      fetchTimegrid: Boolean(wantsGridWidget || wantsLessonsWidget),
-      fetchTimetable: Boolean(wantsGridWidget || wantsLessonsWidget),
-      fetchExams: Boolean(wantsExamsWidget),
-      fetchHomeworks: Boolean(wantsHomeworkWidget),
-      fetchAbsences: Boolean(wantsGridWidget || wantsAbsencesWidget),
-      fetchMessagesOfDay: Boolean(wantsMessagesOfDayWidget),
-    };
-  },
-
-  /**
-   * Calculate current base date in configured timezone and optional debug override.
-   *
-   * @param {Object} config - Module config
-   * @returns {Date} Timezone-aware base date
-   */
-  _calculateBaseNow(config) {
-    return getCurrentDateContext(config, { defaultTimezone: 'Europe/Berlin' }).date;
-  },
-
-  /**
-   * Get session config from cache or create it from identifier-level config.
-   *
-   * @param {string} sessionKey - Compound session key
-   * @param {string} identifier - Module identifier
-   * @returns {Object|null} Session config object
-   */
-  _getOrCreateSessionConfig(sessionKey, identifier) {
-    if (this._configsBySession.has(sessionKey)) {
-      return this._configsBySession.get(sessionKey);
-    }
-
-    const baseConfig = this._configsByIdentifier.get(identifier);
-    if (!baseConfig) return null;
-
-    const sessionConfig = { ...baseConfig };
-    this._configsBySession.set(sessionKey, sessionConfig);
-    return sessionConfig;
-  },
-
-  /**
-   * Merge multiple warning arrays into one flattened warning list.
-   *
-   * @param {...Array} warningGroups - Warning arrays from validators
-   * @returns {Array} Flattened warnings
-   */
-  _collectValidationWarnings(...warningGroups) {
-    return warningGroups.flat().filter((warning) => typeof warning === 'string' && warning.length > 0);
-  },
-
-  /**
-   * Validate student credentials and configuration before attempting fetch
-   */
-  _validateStudentConfig(student) {
-    const warnings = this._collectValidationWarnings(validateStudentCredentials(student));
-    const pluginValidation = this._collectPluginValidationIssues(student);
-    return this._collectValidationWarnings(warnings, pluginValidation.warnings);
-  },
-
-  _deriveFallbackStudentTitle(student) {
-    return (
-      student?.title ||
-      student?.name ||
-      (student?.studentId !== undefined && student?.studentId !== null ? `Student ${student.studentId}` : 'Student')
-    );
-  },
-
-  _buildPayloadDisplayWidgets(student, config) {
-    return parseDisplayModeTokens(student?.displayMode || config?.displayMode, ['lessons', 'exams']);
-  },
-
-  _buildBaseStudentPayload({ identifier, sessionId, student, config, fetchFlags }) {
-    return {
-      contractVersion: 3,
-      id: identifier,
-      sessionId,
-      meta: {
-        apiVersion: 'v3',
-        moduleVersion: 'unknown',
-        moduleId: identifier,
-        sessionId,
-        generatedAt: new Date().toISOString(),
-      },
-      context: {
-        student: {
-          id: student?.studentId ?? null,
-          title: this._deriveFallbackStudentTitle(student),
-        },
-        config: student,
-        timezone: config?.timezone || 'Europe/Berlin',
-        todayYmd: null,
-        range: {
-          startYmd: null,
-          endYmd: null,
-        },
-        display: {
-          mode: student?.mode || config?.mode || 'verbose',
-          widgets: this._buildPayloadDisplayWidgets(student, config),
-        },
-      },
-      data: {
-        timeUnits: [],
-        lessons: [],
-        dayNotices: [],
-        exams: [],
-        homework: [],
-        absences: [],
-        messages: [],
-        holidays: {
-          ranges: [],
-          current: null,
-        },
-      },
-      state: {
-        fetch: {
-          timegrid: fetchFlags.fetchTimegrid,
-          timetable: fetchFlags.fetchTimetable,
-          exams: fetchFlags.fetchExams,
-          homework: fetchFlags.fetchHomeworks,
-          absences: fetchFlags.fetchAbsences,
-          messages: fetchFlags.fetchMessagesOfDay,
-        },
-      },
-    };
-  },
-
-  _buildApiStatusSnapshot(sessionKey) {
-    const rawApiStatus = this._apiStatusBySession.get(sessionKey) || {};
-    const apiStatus = createEmptyApiStatusSnapshot();
-
-    Object.entries(rawApiStatus).forEach(([endpoint, record]) => {
-      const status = typeof record === 'object' ? record?.status : record;
-      if (!Number.isFinite(Number(status))) return;
-      if (endpoint === 'messagesofday') {
-        apiStatus.messages = Number(status);
-        return;
-      }
-      if (Object.hasOwn(apiStatus, endpoint)) {
-        apiStatus[endpoint] = Number(status);
-      }
-    });
-
-    return apiStatus;
-  },
-
-  _buildWarningMetaFromMessages(messages, groupWarningMetaByMessage, fallbackMeta) {
-    return buildWarningMetaList(messages, groupWarningMetaByMessage, fallbackMeta || DEFAULT_WARNING_META);
-  },
-
-  _mergeGroupWarningsIntoPayload(payload, identifier, groupWarnings, groupWarningMetaByMessage) {
-    const uniqWarnings = mergeUniqueWarnings(groupWarnings);
-    const mergedWarnings = mergeUniqueWarnings(payload?.state?.warnings || [], uniqWarnings);
-    const mergedWarningMetaByMessage = createWarningMetaMap(Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : []);
-
-    uniqWarnings.forEach((message) => {
-      const existing = mergedWarningMetaByMessage.get(message) || null;
-      const groupMeta = groupWarningMetaByMessage.get(message) || null;
-      if (!existing || (existing.kind === 'generic' && groupMeta)) {
-        mergedWarningMetaByMessage.set(message, createWarningMetaEntry(message, groupMeta || DEFAULT_WARNING_META));
-      }
-    });
-
-    return {
-      ...payload,
-      id: identifier,
-      state: {
-        ...(payload.state || {}),
-        warnings: mergedWarnings,
-        warningMeta: buildWarningMetaList(mergedWarnings, mergedWarningMetaByMessage),
-      },
-    };
-  },
-
-  _buildStudentErrorPayload({
-    identifier,
-    sessionId,
-    sessionKey,
-    student,
-    config,
-    warnings,
-    groupWarningMetaByMessage,
-    warningFallbackMeta,
-    includeApiSnapshot,
-  }) {
-    const effectiveConfig = {
-      ...config,
-      ...(student || {}),
-      displayMode: student?.displayMode || config?.displayMode,
-      plugins: student?.plugins || config?.plugins,
-    };
-    const fetchFlags = this._buildFetchFlags(effectiveConfig);
-    const basePayload = this._buildBaseStudentPayload({
-      identifier,
-      sessionId,
-      student,
-      config,
-      fetchFlags,
-    });
-
-    return {
-      ...basePayload,
-      state: {
-        ...basePayload.state,
-        api: includeApiSnapshot ? this._buildApiStatusSnapshot(sessionKey) : createEmptyApiStatusSnapshot(),
-        warnings,
-        warningMeta: this._buildWarningMetaFromMessages(warnings, groupWarningMetaByMessage, warningFallbackMeta),
-      },
-    };
-  },
-
-  _emitStudentAuthFailurePayloads({ identifier, sessionId, sessionKey, students, config, warnings, groupWarningMetaByMessage }) {
-    students.forEach((student) => {
-      this._emitGotData(
-        this._buildStudentErrorPayload({
-          identifier,
-          sessionId,
-          sessionKey,
-          student,
-          config,
-          warnings,
-          groupWarningMetaByMessage,
-          warningFallbackMeta: { kind: 'generic', severity: 'warning' },
-          includeApiSnapshot: false,
-        })
-      );
-    });
-  },
-
-  _buildStudentFetchErrorPayload({
-    identifier,
-    sessionId,
-    sessionKey,
-    student,
-    config,
-    groupWarnings,
-    warningMsg,
-    groupWarningMetaByMessage,
-    warningMetaBase,
-  }) {
-    const mergedWarnings = mergeUniqueWarnings(groupWarnings || [], warningMsg);
-
-    return this._buildStudentErrorPayload({
-      identifier,
-      sessionId,
-      sessionKey,
-      student,
-      config,
-      warnings: mergedWarnings,
-      groupWarningMetaByMessage,
-      warningFallbackMeta: warningMetaBase,
-      includeApiSnapshot: true,
-    });
-  },
-
-  _createGroupWarningCollector() {
-    const groupWarnings = [];
-    const groupWarningMetaByMessage = new Map();
-    const currentFetchWarnings = new Set();
-
-    return {
-      groupWarnings,
-      groupWarningMetaByMessage,
-      currentFetchWarnings,
-      addGroupWarning: (message, meta = {}) => {
-        if (!message) return;
-        if (!currentFetchWarnings.has(message)) {
-          groupWarnings.push(message);
-          currentFetchWarnings.add(message);
-        }
-
-        if (!groupWarningMetaByMessage.has(message)) {
-          groupWarningMetaByMessage.set(message, {
-            ...DEFAULT_WARNING_META,
-            ...meta,
-          });
-        }
-      },
-    };
-  },
-
-  _handleProcessGroupAuthFailure({ err, credKey, identifier, sessionKey, students, config, sessionId, warningsState }) {
-    const errorMsg = this._formatErr(err);
-    const isNetworkError = this._isNetworkError(err);
-    const msg = isNetworkError
-      ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
-      : `Authentication failed for ${credKey}: ${errorMsg}`;
-
-    this._mmLog('error', null, msg);
-
-    const authService = config?._authService || this._getAuthServiceForIdentifier(identifier);
-    if (authService && typeof authService.invalidateAllCachesForSession === 'function') {
-      authService.invalidateAllCachesForSession(sessionKey);
-      this._mmLog('warn', null, `[REAUTH] Triggered complete re-authentication for session ${sessionKey} due to auth failure`);
-    }
-
-    warningsState.addGroupWarning(msg, this._classifyWarningMetaFromError(err, { kind: isNetworkError ? 'network' : 'auth' }));
-    this._emitStudentAuthFailurePayloads({
-      identifier,
-      sessionId,
-      sessionKey,
-      students,
-      config,
-      warnings: warningsState.groupWarnings,
-      groupWarningMetaByMessage: warningsState.groupWarningMetaByMessage,
-    });
-  },
-
-  async _collectStudentPayloadsForGroup({
-    students,
-    authSession,
-    identifier,
-    credKey,
-    compactHolidays,
-    config,
-    sessionKey,
-    sessionId,
-    warningsState,
-  }) {
-    const studentPayloads = [];
-
-    for (const student of students) {
-      try {
-        const payload = await this._fetchStudentPayloadForGroup({
-          student,
-          authSession,
-          identifier,
-          credKey,
-          compactHolidays,
-          config,
-          sessionKey,
-          warningsState,
-        });
-        if (payload) studentPayloads.push(payload);
-      } catch (err) {
-        studentPayloads.push(
-          this._buildStudentFetchFailurePayload({
-            err,
-            student,
-            identifier,
-            sessionId,
-            sessionKey,
-            config,
-            warningsState,
-          })
-        );
-      }
-    }
-
-    return studentPayloads;
-  },
-
-  _emitStudentPayloadsForGroup(studentPayloads, identifier, sessionId) {
-    for (const payload of studentPayloads) {
-      this._emitGotData(payload, {
-        identifier,
-        sessionId,
-      });
-    }
-  },
-
-  /**
-   * Process a credential group: authenticate, fetch data for all students, send to frontend
-   * This is the main orchestration function that:
-   *   1. Creates authentication session (cached by authService)
-   *   2. Fetches data for each student in the group (using shared credentials)
-   *   3. Sends all payloads to frontend at once (minimizes DOM redraws)
-   *
-   * Authentication is cached by authService, so multiple sessions with same credentials
-   * will only authenticate once. Token caching prevents unnecessary re-authentication.
-   *
-   * @param {string} credKey - Credential grouping key (identifies shared auth session)
-   * @param {Array} students - Array of student configs sharing these credentials
-   * @param {string} identifier - Module instance identifier
-   * @param {string} sessionKey - Session key for API status tracking
-   * @param {Object} config - Module configuration
-   * @returns {Promise<void>}
-   */
-  async processGroup(credKey, students, identifier, sessionKey, config) {
-    let authSession;
-    const sample = students[0];
-    const warningsState = this._createGroupWarningCollector();
-
-    try {
-      const { sessionId } = this._parseSessionKey(sessionKey);
-
-      try {
-        authSession = await this._createAuthSession(sample, config, identifier, credKey);
-      } catch (err) {
-        this._handleProcessGroupAuthFailure({
-          err,
-          credKey,
-          identifier,
-          sessionKey,
-          students,
-          config,
-          sessionId,
-          warningsState,
-        });
-        return;
-      }
-
-      const { fetchTimegrid: shouldFetchHolidays } = this._buildFetchFlags(config);
-      const sharedCompactHolidays = this._extractAndCompactHolidays(authSession, shouldFetchHolidays);
-
-      const studentPayloads = await this._collectStudentPayloadsForGroup({
-        students,
-        authSession,
-        identifier,
-        credKey,
-        compactHolidays: sharedCompactHolidays,
-        config,
-        sessionKey,
-        sessionId,
-        warningsState,
-      });
-
-      this._emitStudentPayloadsForGroup(studentPayloads, identifier, sessionId);
-    } catch (error) {
-      this._mmLog('error', null, `Error during login/fetch for group ${credKey}: ${this._formatErr(error)}`);
-      const authMsg = `Authentication failed for group: ${this._formatErr(error)}`;
-      warningsState.addGroupWarning(authMsg, this._classifyWarningMetaFromError(error, { kind: 'auth' }));
-    }
-  },
-
-  /**
-   * Handle socket notifications sent by the frontend module
-   * Main entry point for all frontend-to-backend communication
-   *
-   * Listens for:
-   *   - CONFIGURE: First-time module initialization (config validation, student discovery)
-   *   - REFRESH: Data refresh request (periodic updates, manual refresh)
-   *   - SESSION_STATE: Per-session lifecycle state updates (paused/active)
-   *
-   * @param {string} notification - Notification name (REQUEST envelope)
-   * @param {any} payload - Notification payload (config object, refresh request)
-   * @returns {Promise<void>}
+   * Main entry point for all frontend-to-backend communication.
+   *   - CONFIGURE: first-time module initialization (config validation, student discovery)
+   *   - REFRESH: data refresh request (periodic updates, manual refresh)
+   *   - SESSION_STATE: per-session lifecycle state updates (paused/active)
    */
   async socketNotificationReceived(notification, payload) {
+    this._ensureRuntime();
     if (notification !== this.notifications.REQUEST) return;
 
     const action = payload?.action;
@@ -1911,9 +106,9 @@ module.exports = NodeHelper.create({
     };
 
     const handlers = {
-      CONFIGURE: async () => this._handleInitModule(requestData),
-      REFRESH: async () => this._handleFetchData(requestData),
-      SESSION_STATE: async () => this._handleSessionState(requestData),
+      CONFIGURE: () => this._handleInitModule(requestData),
+      REFRESH: () => this._handleFetchData(requestData),
+      SESSION_STATE: () => this._handleSessionState(requestData),
     };
 
     const handler = handlers[action];
@@ -1925,44 +120,30 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /**
-   * Send DATA_UPDATE payload with consistent id/session routing metadata.
-   *
-   * @param {Object} payload - DATA_UPDATE payload
-   * @param {Object} [route] - Optional route metadata override
-   * @param {string} [route.identifier] - Module identifier
-   * @param {string} [route.sessionId] - Session ID
-   */
   _emitGotData(payload, route = {}) {
     this._emitSocketNotification('DATA_UPDATE', payload, route, { preserveExistingRoute: false });
   },
 
-  /**
-   * Send MODULE_INIT_FAILED with consistent routing metadata.
-   *
-   * @param {Object} payload - MODULE_INIT_FAILED payload
-   * @param {Object} [route] - Optional route metadata override
-   * @param {string} [route.identifier] - Module identifier
-   * @param {string} [route.sessionId] - Session ID
-   */
   _emitInitError(payload, route = {}) {
     this._emitSocketNotification('MODULE_INIT_FAILED', payload, route, { preserveExistingRoute: true });
   },
 
-  /**
-   * Send MODULE_READY with consistent routing metadata.
-   *
-   * @param {Object} payload - MODULE_READY payload
-   * @param {Object} [route] - Optional route metadata override
-   * @param {string} [route.identifier] - Module identifier
-   * @param {string} [route.sessionId] - Session ID
-   */
   _emitModuleInitialized(payload, route = {}) {
     this._emitSocketNotification('MODULE_READY', payload, route, { preserveExistingRoute: true });
   },
 
+  /**
+   * Send an EVENT envelope with consistent id/session routing metadata.
+   *
+   * @param {string} notification - Action name
+   * @param {Object} payload - Event payload
+   * @param {Object} [route] - { identifier, sessionId } override
+   * @param {Object} [options]
+   * @param {boolean} [options.preserveExistingRoute=false] - Keep id/sessionId already set on the payload
+   */
   _emitSocketNotification(notification, payload, route = {}, options = {}) {
     if (!payload || typeof payload !== 'object') return;
+    this._ensureRuntime();
 
     const { preserveExistingRoute = false } = options;
     const nextPayload = { ...payload };
@@ -1974,84 +155,88 @@ module.exports = NodeHelper.create({
       nextPayload.sessionId = route.sessionId;
     }
 
+    const isFailure = String(notification).includes('FAILED');
     this.sendSocketNotification(
       this.notifications.EVENT,
       shared.createEnvelope({
         identifier: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
         instanceId: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
         action: notification,
-        ok: !String(notification).includes('FAILED'),
+        ok: !isFailure,
         data: nextPayload,
-        error: String(notification).includes('FAILED') ? nextPayload : null,
+        error: isFailure ? nextPayload : null,
         meta: {},
       })
     );
   },
 
-  /**
-   * Track frontend visibility per session (suspend/resume).
-   *
-   * The flag is bookkeeping plus a fetch gate for frontends that disabled
-   * background refresh; the frontend lifecycle itself decides when to fetch.
-   *
-   * @param {Object} payload - Session state payload ({id, sessionId, state, reason})
-   */
-  _handleSessionState(payload = {}) {
-    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
-    const state = payload.state === 'active' ? 'active' : 'paused';
-    const reason = payload.reason || 'unspecified';
-
-    // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
-    this._touchSession(sessionKey);
-
-    if (state === 'paused') {
-      this._pausedSessions.add(sessionKey);
-    } else {
-      this._pausedSessions.delete(sessionKey);
-    }
-
-    this._mmLog('debug', null, `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${reason})`);
-  },
+  // ---------------------------------------------------------------------------------------------
+  // CONFIGURE
+  // ---------------------------------------------------------------------------------------------
 
   /**
-   * Handle CONFIGURE request - performs one-time module initialization
+   * Handle CONFIGURE - one-time module initialization for a frontend session.
    *
    * Flow:
-   *   1. Apply legacy config mappings (25+ deprecated keys)
-   *   2. Validate configuration (validateConfig from configValidator)
-   *   3. Set up AuthService for this identifier (prevents cache cross-contamination)
-   *   4. Auto-discover students if parent credentials provided
-   *   5. Send MODULE_READY to frontend
-   *   6. Automatically trigger initial data fetch (no separate REFRESH needed)
-   *
-   * @param {Object} payload - Module configuration from frontend (includes id, sessionId, config)
-   * @returns {Promise<void>}
+   *   1. Normalize (legacy mappings, canonical plugins) and validate the config
+   *   2. Register the session, auto-discover students if parent credentials are present
+   *   3. Send MODULE_READY
+   *   4. Run the first fetch automatically (no separate REFRESH needed)
    */
   async _handleInitModule(payload) {
-    let normalizedConfig;
-    let identifier;
+    this._ensureRuntime();
+    return this._runInitModule(payload);
+  },
 
+  async _runInitModule(payload) {
+    let identifier;
     try {
       const payloadCopy = JSON.parse(JSON.stringify(payload));
-      const result = this._normalizeLegacyConfig(payloadCopy);
-      normalizedConfig = result.normalizedConfig;
-      const { identifier: routeIdentifier, sessionId, sessionKey, initReason } = this._resolveInitRoute(normalizedConfig, payload);
-      identifier = routeIdentifier;
+      const { normalizedConfig, configWarnings } = normalizeModuleConfig(payloadCopy, {
+        pluginHost: this._pluginHost,
+        logger: this._mmLog.bind(this),
+      });
+      const route = buildRouteMeta({ id: normalizedConfig.id, sessionId: payload.sessionId });
+      identifier = route.identifier;
+      const { sessionId, sessionKey } = route;
 
-      this._mmLog('info', null, `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${initReason})`);
-
-      this._storeInitSessionConfig(sessionKey, normalizedConfig);
-      const { valid, combinedWarnings, combinedWarningMeta } = this._validateInitConfig(
-        normalizedConfig,
-        identifier,
-        sessionId,
-        result.configWarnings
+      this._mmLog(
+        'info',
+        null,
+        `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || 'unspecified'})`
       );
-      if (!valid) return;
+      this._sessions.storeInitConfig(sessionKey, normalizedConfig);
+      if (normalizedConfig.debugDate) {
+        this._mmLog('debug', null, `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
+      }
 
-      await this._finalizeInitModule(normalizedConfig, identifier);
-      this._emitInitSuccess(normalizedConfig, identifier, sessionId, combinedWarnings, combinedWarningMeta);
-      await this._triggerPostInitFetch(normalizedConfig, identifier, sessionId);
+      const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
+      if (!validation.valid) {
+        this._mmLog('error', null, `[CONFIGURE] Config validation failed for ${identifier}`);
+        this._emitInitError(
+          {
+            errors: validation.errors,
+            warnings: validation.warnings,
+            warningMeta: validation.warningMeta,
+            severity: 'ERROR',
+            message: 'Configuration validation failed',
+          },
+          { identifier, sessionId }
+        );
+        return;
+      }
+
+      this._sessions.configsByIdentifier.set(identifier, normalizedConfig);
+      normalizedConfig._authService = this._authService;
+
+      await ensureStudentsFromAppData(normalizedConfig, {
+        authService: this._authService,
+        logger: this._mmLog.bind(this),
+        formatError: this._formatErr.bind(this),
+      });
+
+      this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
+      await this._handleFetchData({ ...normalizedConfig, id: identifier, sessionId, reason: 'post-init-auto-fetch' });
     } catch (error) {
       this._mmLog('error', null, `[CONFIGURE] Initialization failed: ${this._formatErr(error)}`);
       this._emitInitError(
@@ -2061,367 +246,301 @@ module.exports = NodeHelper.create({
           severity: 'ERROR',
           message: 'Module initialization failed',
         },
-        {
-          identifier: identifier || 'unknown',
-          sessionId: payload?.sessionId,
-        }
+        { identifier: identifier || 'unknown', sessionId: payload?.sessionId }
       );
     }
   },
 
+  _emitInitSuccess(normalizedConfig, identifier, sessionId, validationWarnings, validationWarningMeta = []) {
+    const warnings = mergeUniqueWarnings(validationWarnings, this._pluginWarnings || []);
+    const metaByMessage = createWarningMetaMap(validationWarningMeta);
+    buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }).forEach((entry) => {
+      if (!metaByMessage.has(entry.message)) metaByMessage.set(entry.message, entry);
+    });
+
+    this._emitModuleInitialized(
+      {
+        config: normalizedConfig,
+        warnings,
+        warningMeta: buildWarningMetaList(warnings, metaByMessage),
+        students: normalizedConfig.students || [],
+        plugins: buildFrontendPluginRegistry(normalizedConfig, this._pluginHost, __dirname),
+      },
+      { identifier, sessionId }
+    );
+  },
+
+  // ---------------------------------------------------------------------------------------------
+  // SESSION_STATE / REFRESH
+  // ---------------------------------------------------------------------------------------------
+
   /**
-   * Handle REFRESH request - performs data refresh for already initialized module
-   *
-   * Flow:
-   *   1. Verify module is initialized (per session or per identifier)
-   *   2. Update session-specific config if provided (e.g., debugDate changes)
-   *   3. Delegate to _executeFetchForSession for actual data fetching
-   *
-   * Uses cached config and authentication, only fetches fresh data from WebUntis.
-   * Supports self-healing: if module not initialized but REFRESH received, re-runs CONFIGURE.
-   *
-   * @param {Object} payload - Fetch request from frontend (includes id, sessionId, optional debugDate)
-   * @returns {Promise<void>}
+   * Track frontend visibility per session (suspend/resume). The flag is bookkeeping plus a
+   * fetch gate for frontends that disabled background refresh.
+   */
+  _handleSessionState(payload = {}) {
+    this._ensureRuntime();
+    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
+    const state = payload.state === 'active' ? 'active' : 'paused';
+
+    // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
+    this._sessions.touch(sessionKey);
+    this._sessions.setPaused(sessionKey, state === 'paused');
+    this._mmLog(
+      'debug',
+      null,
+      `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${payload.reason || 'unspecified'})`
+    );
+  },
+
+  /**
+   * Handle REFRESH - data refresh for an initialized session.
+   * Self-healing: if the backend restarted and does not know the session, CONFIGURE is re-run
+   * from the incoming payload.
    */
   async _handleFetchData(payload) {
+    this._ensureRuntime();
     const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
     const fetchReason = payload?.reason || 'unspecified';
 
     this._mmLog('debug', null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
-
-    this._touchSession(sessionKey);
+    this._sessions.touch(sessionKey);
 
     // A hidden session may still ask for data: the shared frontend lifecycle keeps
     // refreshing in the background so the view is warm when it becomes visible.
     // Only a frontend that explicitly opted out of background refresh is gated here.
-    if (this._pausedSessions.has(sessionKey) && payload?.backgroundRefresh === false) {
+    if (this._sessions.isPaused(sessionKey) && payload?.backgroundRefresh === false) {
       this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
       return;
     }
 
-    // Track REFRESH requests to debug duplicate calls (silently)
-    const fetchTimestamp = Date.now();
-    this._lastFetchTimestamp = fetchTimestamp;
-
-    // Verify module is initialized and ensure session-specific config exists.
-    let normalizedConfig = this._getOrCreateSessionConfig(sessionKey, identifier);
-    if (!normalizedConfig) {
-      // Self-healing: if module not initialized but REFRESH received, re-run initialization
-      // This handles cases where backend restarted but frontend still thinks it's initialized
+    let config = this._sessions.getOrCreateSessionConfig(sessionKey);
+    if (!config) {
       this._mmLog(
         'warn',
         null,
         `[REFRESH] Module ${identifier} not initialized for session ${sessionId} - attempting re-init from incoming payload`
       );
-      // Attempt a self-heal by re-running initialization using the provided payload.
-      // This covers cases where the backend restarted but the frontend still thinks it is initialized.
       await this._handleInitModule(payload);
       return;
     }
 
-    // Update session-specific config if provided (e.g., debugDate changes for testing)
+    // Session-specific debugDate override (testing)
     if (payload.debugDate !== undefined) {
-      normalizedConfig = { ...normalizedConfig, debugDate: payload.debugDate };
-      this._configsBySession.set(sessionKey, normalizedConfig);
-      if (payload.debugDate) {
-        this._mmLog('debug', null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
-      }
+      config = { ...config, debugDate: payload.debugDate };
+      this._sessions.setSessionConfig(sessionKey, config);
+      if (payload.debugDate) this._mmLog('debug', null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
     }
 
-    // Execute fetch immediately
     await this._executeFetchForSession(sessionKey);
   },
 
   /**
-   * Execute fetch for a specific session
-   *
-   * Flow:
-   *   1. Verify session exists in _configsBySession
-   *   2. Wait for any pending session-wide re-authentication (AGGRESSIVE REAUTH)
-   *   3. Group students by credential key (share auth sessions)
-   *   4. Process each credential group (authenticate, fetch, send to frontend)
-   *
-   * This processes only the config for the given session (no cross-session contamination).
-   *
-   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
-   * @returns {Promise<void>}
+   * Group the session's students by credential key and process each group.
+   * Groups sharing credentials with an in-flight fetch (other session or instance) wait for it:
+   * they share one WebUntis session and would only race each other.
    */
   async _executeFetchForSession(sessionKey) {
-    const { identifier: sessionIdentifier } = this._parseSessionKey(sessionKey);
-    const config = this._getOrCreateSessionConfig(sessionKey, sessionIdentifier);
+    const config = this._sessions.getOrCreateSessionConfig(sessionKey);
     if (!config) {
       this._mmLog('warn', null, `Session ${sessionKey} not found, skipping fetch`);
       return;
     }
-
-    // Get AuthService reference (already initialized during CONFIGURE)
-    config._authService = this._getAuthServiceForIdentifier(sessionIdentifier);
+    config._authService = this._authService;
 
     try {
-      // AGGRESSIVE REAUTH: Wait for any session-wide authentication to complete
-      // This ensures all API requests are blocked until complete re-authentication finishes
-      // Prevents cascading failures from expired/corrupted tokens
-      const authService = config._authService;
-      if (authService && typeof authService.waitForSessionAuth === 'function') {
-        await authService.waitForSessionAuth(sessionKey);
-      }
-
       const groups = new Map();
-
-      const studentsList = Array.isArray(config.students) ? config.students : [];
-      for (const student of studentsList) {
-        const credKey = this._getCredentialKey(student, config, sessionKey);
+      (Array.isArray(config.students) ? config.students : []).forEach((student) => {
+        const credKey = getCredentialKey(student, config, sessionKey);
         if (!groups.has(credKey)) groups.set(credKey, []);
         groups.get(credKey).push(student);
-      }
+      });
 
       for (const [credKey, students] of groups.entries()) {
-        // If the same scoped credential group is already being fetched, wait for that
-        // fetch to finish before starting the next one.
         const pendingFetch = this._pendingFetchByCredKey.get(credKey);
         if (pendingFetch) {
           this._mmLog('debug', null, `Session ${sessionKey}: Another fetch is in progress for credKey=${credKey}, waiting...`);
-          // Swallow errors from another session's in-flight fetch to avoid cascading failures
           await pendingFetch.catch(() => {});
         }
 
-        const inFlightFetch = this.processGroup(credKey, students, sessionIdentifier, sessionKey, config);
+        const inFlightFetch = this._processGroup(credKey, students, sessionKey, config);
         this._pendingFetchByCredKey.set(credKey, inFlightFetch);
-
         try {
           await inFlightFetch;
         } finally {
-          if (this._pendingFetchByCredKey.get(credKey) === inFlightFetch) {
-            this._pendingFetchByCredKey.delete(credKey);
-          }
+          if (this._pendingFetchByCredKey.get(credKey) === inFlightFetch) this._pendingFetchByCredKey.delete(credKey);
         }
       }
     } catch (error) {
-      this._mmLog('error', null, `Error loading Untis data for session ${sessionKey}: ${error}`);
+      this._mmLog('error', null, `Error loading Untis data for session ${sessionKey}: ${this._formatErr(error)}`);
     }
   },
 
-  /**
-   * Build a stable credential key for session caching and grouping
-   * Students with the same credentials share a single WebUntis session to minimize API calls
-   *
-   * Uses sessionKey (identifier:sessionId) for full browser-session isolation.
-   * For parent accounts (studentId + module-level username), group by parent credentials.
-   * For direct student logins, group by student credentials.
-   *
-   * @param {Object} student - Student credential object
-   * @param {Object} moduleConfig - Module configuration
-   * @param {string} sessionKey - Session key (format: "identifier:sessionId")
-   * @returns {string} credential key for caching/grouping (e.g., "scope::parent:user@server/school")
-   */
-  _getCredentialKey(student, moduleConfig, sessionKey = 'default') {
-    // Use full sessionKey (identifier:sessionId) for complete browser-session isolation
-    // This prevents cross-contamination between different browser windows with same identifier
-    const scope = moduleConfig?.carouselId || sessionKey || 'default';
-    const scopePrefix = scope ? `${scope}::` : '';
-    const hasStudentId = student.studentId && Number.isFinite(Number(student.studentId));
-    const hasOwnCredentials = student.qrcode || (student.username && student.password && student.school && student.server);
-    const isParentMode = hasStudentId && !hasOwnCredentials;
+  // ---------------------------------------------------------------------------------------------
+  // Fetch per credential group
+  // ---------------------------------------------------------------------------------------------
 
-    // Parent account mode: group by module-level parent credentials
-    if (isParentMode && moduleConfig) {
-      return `${scopePrefix}parent:${moduleConfig.username || 'undefined'}@${moduleConfig.server || 'webuntis.com'}/${moduleConfig.school || 'undefined'}`;
+  /**
+   * Authenticate once per credential group, fetch every student of the group and emit one
+   * DATA_UPDATE per student. Failures are converted into warning-bearing payloads so the
+   * frontend always learns about them.
+   */
+  async _processGroup(credKey, students, sessionKey, config) {
+    const { identifier, sessionId } = parseSessionKey(sessionKey);
+    const warningsState = createGroupWarningCollector();
+    const sample = students[0];
+
+    let authSession;
+    try {
+      authSession = await createAuthSession(this._authService, sample, config, credKey);
+    } catch (err) {
+      this._handleGroupAuthFailure({ err, credKey, identifier, sessionId, students, config, warningsState });
+      return;
     }
 
-    // Direct student login: group by student credentials
-    if (student.qrcode) return `${scopePrefix}qrcode:${student.qrcode}`;
-    const server = student.server || 'default';
-    return `${scopePrefix}user:${student.username}@${server}/${student.school}`;
-  },
+    const { fetchTimegrid: wantsHolidays } = buildFetchFlags(config, this._pluginHost);
+    const compactHolidays = wantsHolidays ? extractHolidaysFromAppData(authSession.appData) : [];
 
-  /**
-   * Extract timegrid (time slots) from timetable data
-   * The REST API doesn't have a separate timegrid endpoint, but timetable includes time information
-   * This function derives the school's time schedule from lesson start/end times
-   *
-   * @param {Array} timetable - Timetable array from REST API
-   * @returns {Array} timegrid array with timeUnits {startTime, endTime, name}
-   */
-  _extractTimegridFromTimetable(timetable) {
-    if (!Array.isArray(timetable) || timetable.length === 0) return [];
-
-    // Extract unique START times from all lessons
-    const startTimes = new Set();
-    timetable.forEach((lesson) => {
-      if (lesson.startTime) {
-        startTimes.add(lesson.startTime);
+    for (const student of students) {
+      let payload;
+      try {
+        payload = await this._fetchStudentPayload({
+          student,
+          authSession,
+          identifier,
+          credKey,
+          compactHolidays,
+          config,
+          sessionKey,
+          warningsState,
+        });
+      } catch (err) {
+        payload = this._buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState });
       }
-    });
-
-    if (startTimes.size === 0) return [];
-
-    // Sort unique start times chronologically using shared HHMM normalization
-    const sortedStarts = Array.from(startTimes).sort((a, b) => {
-      const timeA = normalizeTimeToHHMM(a) || 0;
-      const timeB = normalizeTimeToHHMM(b) || 0;
-      return timeA - timeB;
-    });
-
-    // Create timeUnits (periods) from sorted start times
-    // Each period runs from one start time to the next, or to its lesson's end time for the last period
-    const timeUnits = [];
-    for (let i = 0; i < sortedStarts.length; i++) {
-      const startTime = sortedStarts[i];
-      // Estimate end time: either from next period or assume 45-minute period
-      let endTime = sortedStarts[i + 1];
-      if (!endTime) {
-        // For the last period, find the latest end time from lessons with this start
-        const lessonsWithThisStart = timetable.filter((l) => l.startTime === startTime);
-        endTime = lessonsWithThisStart.length > 0 ? lessonsWithThisStart[0].endTime : null;
-        if (!endTime) {
-          const [hh, mm] = startTime.split(':').map(Number);
-          endTime = `${String(hh).padStart(2, '0')}${String(mm + 45).padStart(2, '0')}`;
-        }
-      }
-
-      timeUnits.push({
-        startTime,
-        endTime,
-        name: `${i + 1}`, // Period number
-      });
+      if (payload) this._emitGotData(payload, { identifier, sessionId });
     }
-
-    return timeUnits;
   },
 
-  /**
-   * Main data fetch orchestrator for a single student
-   * Delegates orchestrating, API calls, and payload creation to WebUntisClient.
-   *
-   * @param {Object} params - Fetch parameters
-   * @param {Object} params.authSession - Authenticated session with server, school, cookies, token
-   * @param {Object} params.student - Student config object
-   * @param {string} params.identifier - Module instance identifier
-   * @param {string} params.credKey - Credential grouping key
-   * @param {Array} [params.compactHolidays] - Pre-extracted and compacted holidays (shared across students in group)
-   * @param {Object} params.config - Module configuration
-   * @param {string} params.sessionKey - Session key for API status tracking
-   * @returns {Promise<Object|null>} DATA_UPDATE payload object or null on error
-   */
-  async fetchData(params) {
-    const { authSession, student, identifier, credKey, compactHolidays = [], config, sessionKey, currentFetchWarnings } = params || {};
+  _handleGroupAuthFailure({ err, credKey, identifier, sessionId, students, config, warningsState }) {
+    const errorMsg = this._formatErr(err);
+    const networkFailure = isNetworkError(err);
+    const msg = networkFailure
+      ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
+      : `Authentication failed for ${credKey}: ${errorMsg}`;
+    this._mmLog('error', null, msg);
 
-    if (!authSession || !student || !identifier || !credKey || !config || !sessionKey) {
-      throw new Error('fetchData requires authSession, student, identifier, credKey, config, and sessionKey');
+    // Only the failing credentials are forced to re-login; other accounts keep their sessions.
+    if (this._authService?.invalidateCache(credKey)) {
+      this._mmLog('warn', null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
     }
 
-    const effectiveConfig = {
-      ...config,
-      ...student,
-      displayMode: student.displayMode || config.displayMode,
-      plugins: student.plugins || config.plugins,
-    };
-    const fetchFlags = this._buildFetchFlags(effectiveConfig);
-    const pluginConfigMap =
-      student?.plugins && typeof student.plugins === 'object' && !Array.isArray(student.plugins) ? student.plugins : {};
-    const gridConfig = pluginConfigMap.grid?.config || student.grid || {};
-    const lessonsConfig = pluginConfigMap.lessons?.config || student.lessons || {};
-    const examsConfig = pluginConfigMap.exams?.config || student.exams || {};
-    const absencesConfig = pluginConfigMap.absences?.config || student.absences || {};
-    const homeworkConfig = pluginConfigMap.homework?.config || student.homework || {};
-    const baseNow = this._calculateBaseNow(config);
-    const dateRanges = calculateFetchRanges({
-      baseNow,
-      fetchPlan: {
-        wantsGridWidget: Boolean(fetchFlags.wantsGridWidget),
-        wantsLessonsWidget: Boolean(fetchFlags.wantsLessonsWidget),
-        fetchExams: Boolean(fetchFlags.fetchExams),
-        fetchAbsences: Boolean(fetchFlags.fetchAbsences),
-      },
-      days: {
-        globalPastDays: student.pastDays,
-        globalNextDays: student.nextDays,
-        gridPastDays: gridConfig.pastDays,
-        gridNextDays: gridConfig.nextDays,
-        lessonsPastDays: lessonsConfig.pastDays,
-        lessonsNextDays: lessonsConfig.nextDays,
-        examsPastDays: examsConfig.pastDays ?? student.pastDays,
-        examsNextDays: examsConfig.nextDays,
-        absencesPastDays: absencesConfig.pastDays,
-        absencesNextDays: absencesConfig.nextDays,
-        homeworkPastDays: homeworkConfig.pastDays,
-        homeworkNextDays: homeworkConfig.nextDays,
-      },
-      options: {
-        gridWeekView: gridConfig.weekView,
-        gridHideWeekends: gridConfig.hideWeekends,
-        lessonsHideWeekends: lessonsConfig.hideWeekends,
-        debugDateEnabled: Boolean(config && typeof config.debugDate === 'string' && config.debugDate),
-      },
+    warningsState.addGroupWarning(msg, classifyWarningMetaFromError(err, { kind: networkFailure ? 'network' : 'auth' }));
+    students.forEach((student) => {
+      this._emitGotData(
+        this._buildErrorPayload({
+          identifier,
+          sessionId,
+          student,
+          config,
+          apiStatus: null,
+          warnings: warningsState.groupWarnings,
+          warningMetaByMessage: warningsState.groupWarningMetaByMessage,
+          warningFallbackMeta: { kind: 'generic', severity: 'warning' },
+        })
+      );
+    });
+  },
+
+  async _fetchStudentPayload({ student, authSession, identifier, credKey, compactHolidays, config, sessionKey, warningsState }) {
+    const studentWarnings = collectValidationWarnings(
+      validateStudentCredentials(student),
+      collectPluginValidationIssues(student, this._pluginHost).warnings
+    );
+    studentWarnings.forEach((warning) => {
+      this._mmLog('warn', student, warning);
+      warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
     });
 
-    const client = new WebUntisClient({
-      mmLog: this._mmLog.bind(this),
-      formatErr: this._formatErr.bind(this),
-      extractTimegridFromTimetable: this._extractTimegridFromTimetable.bind(this),
-      compactTimegrid: this._compactTimegrid.bind(this),
-      cleanupOldDebugDumps: this._cleanupOldDebugDumps.bind(this),
-      getApiStatus: (key) => {
-        const raw = this._apiStatusBySession.get(key) || {};
-        // Normalize to plain status numbers for frontend consumption
-        const result = {};
-        for (const [ep, record] of Object.entries(raw)) {
-          result[ep] = typeof record === 'object' ? record.status : record;
-        }
-        return result;
-      },
-      shouldSkipApi: this._shouldSkipApi.bind(this),
-      recordApiStatusFromError: this._recordApiStatusFromError.bind(this),
-      setApiStatus: (key, endpoint, status) => {
-        if (!this._apiStatusBySession.has(key)) {
-          this._apiStatusBySession.set(key, {});
-        }
-        const endpointStatuses = this._apiStatusBySession.get(key);
-        const previous = endpointStatuses[endpoint];
-        const previousCount = typeof previous === 'object' && Number.isFinite(previous.failureCount) ? previous.failureCount : 0;
-
-        // A success closes the circuit breaker; anything else keeps the streak intact so a
-        // recovery probe that fails again escalates instead of restarting at the first step.
-        const failureCount = this._isSuccessStatus(status) ? 0 : previousCount;
-
-        if (previousCount > 0 && failureCount === 0) {
-          this._mmLog('debug', null, `[${endpoint}] Recovered after ${previousCount} consecutive failures`);
-        }
-
-        endpointStatuses[endpoint] = { status, recordedAt: Date.now(), failureCount };
-      },
-    });
-
-    return client.fetchStudentData({
+    const fetchFlags = buildFetchFlags(buildEffectiveStudentConfig(student, config), this._pluginHost);
+    const payload = await this._client.fetchStudentData({
       authSession,
       student,
       identifier,
       credKey,
       compactHolidays,
       config,
-      plan: {
-        authService: config._authService,
-        homeworkFilter: {
-          pastDays: student.homework?.pastDays,
-          nextDays: student.homework?.nextDays,
-        },
-        fetchFlags: {
-          fetchTimegrid: Boolean(fetchFlags.fetchTimegrid),
-          fetchTimetable: Boolean(fetchFlags.fetchTimetable),
-          fetchExams: Boolean(fetchFlags.fetchExams),
-          fetchHomeworks: Boolean(fetchFlags.fetchHomeworks),
-          fetchAbsences: Boolean(fetchFlags.fetchAbsences),
-          fetchMessagesOfDay: Boolean(fetchFlags.fetchMessagesOfDay),
-        },
-        baseNow,
-        dateRanges,
-        flagsCtx: {
-          debugApi: Boolean(config.debugApi),
-          dumpRawApiResponses: Boolean(config.dumpRawApiResponses),
-        },
-      },
+      plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService }),
       sessionKey,
-      currentFetchWarnings,
+      currentFetchWarnings: new Set(),
     });
+
+    if (!payload) {
+      this._mmLog('warn', student, `fetchStudentData returned empty payload for ${student.title}`);
+      return null;
+    }
+    return {
+      ...mergeGroupWarningsIntoPayload(payload, warningsState.groupWarnings, warningsState.groupWarningMetaByMessage),
+      id: identifier,
+    };
+  },
+
+  _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
+    this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
+
+    const warningMsg = convertRestErrorToWarning(err, {
+      studentTitle: student.title,
+      school: student.school || config?.school,
+      server: student.server || config?.server || 'webuntis.com',
+    });
+    if (warningMsg) {
+      warningsState.addGroupWarning(warningMsg, classifyWarningMetaFromError(err));
+      this._mmLog('warn', student, warningMsg);
+    }
+
+    return this._buildErrorPayload({
+      identifier,
+      sessionId,
+      student,
+      config,
+      apiStatus: this._apiStatus.buildSnapshot(sessionKey),
+      warnings: mergeUniqueWarnings(warningsState.groupWarnings, warningMsg),
+      warningMetaByMessage: warningsState.groupWarningMetaByMessage,
+      warningFallbackMeta: classifyWarningMetaFromError(err),
+    });
+  },
+
+  _buildErrorPayload({ identifier, sessionId, student, config, apiStatus, warnings, warningMetaByMessage, warningFallbackMeta }) {
+    return buildStudentErrorPayload({
+      identifier,
+      sessionId,
+      student,
+      config,
+      fetchFlags: buildFetchFlags(buildEffectiveStudentConfig(student, config), this._pluginHost),
+      apiStatus: apiStatus || {},
+      warnings,
+      warningMetaByMessage,
+      warningFallbackMeta,
+    });
+  },
+
+  // ---------------------------------------------------------------------------------------------
+  // Logging
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Forward to MagicMirror's Log with an optional [student] tag. MagicMirror decides which
+   * levels are emitted; nothing is filtered here.
+   */
+  _mmLog(level, student, message) {
+    const studentTag = student?.title ? `[${String(student.title).trim()}] ` : '';
+    const formatted = `${studentTag}${message}`;
+    if (level === 'debug') return Log.debug(formatted);
+    if (level === 'error') return Log.error(formatted);
+    if (level === 'warn') return Log.warn(formatted);
+    return Log.info(formatted);
+  },
+
+  _formatErr(err) {
+    return formatError(err);
   },
 });

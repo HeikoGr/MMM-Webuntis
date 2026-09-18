@@ -157,8 +157,8 @@ async function cmdFetch(flags) {
   if (verbose) setLogLevel('debug');
 
   try {
-    if (nodeHelper.cacheManager) {
-      nodeHelper.cacheManager.clearAll();
+    if (nodeHelper._client?.cacheManager) {
+      nodeHelper._client.cacheManager.clearAll();
       Log.wrapper_info('🔄 Cleared all caches for fresh data');
     }
 
@@ -197,11 +197,11 @@ async function cmdFetch(flags) {
 
         await nodeHelper._handleInitModule(initPayload);
 
-        if (!nodeHelper._configsByIdentifier.has(cliIdentifier)) {
+        if (!nodeHelper._sessions.configsByIdentifier.has(cliIdentifier)) {
           throw new Error('Config initialization failed - no config stored after _handleInitModule');
         }
 
-        const moduleConfig = nodeHelper._configsByIdentifier.get(cliIdentifier);
+        const moduleConfig = nodeHelper._sessions.configsByIdentifier.get(cliIdentifier);
 
         const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
         if (Array.isArray(moduleConfig.students)) {

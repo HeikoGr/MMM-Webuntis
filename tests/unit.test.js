@@ -81,6 +81,12 @@ function loadNodeHelper() {
 }
 
 const helper = loadNodeHelper();
+const { ApiStatusTracker, getTransientBackoffMs, extractHttpStatus } = require('../lib/apiStatusTracker');
+const { SessionRegistry, getSessionTtlMs } = require('../lib/sessionRegistry');
+const warningUtils = require('../lib/warningUtils');
+const { buildFetchFlags } = require('../lib/moduleConfig');
+const { buildStudentErrorPayload } = require('../lib/mmm-adapter/mmmPayloadMapper');
+const { calculateBaseNow } = require('../lib/webuntisClient');
 
 test('sanitizeRichText preserves the formatting whitelist and removes unsafe markup', () => {
   const result = sanitizeRichText('<p>Hello <strong onclick="alert(1)">World</strong><br><script>alert(1)</script><img src=x></p>');
@@ -139,9 +145,8 @@ test('mergeGroupWarningsIntoPayload deduplicates warnings and upgrades generic m
     },
   };
 
-  const result = helper._mergeGroupWarningsIntoPayload(
+  const result = warningUtils.mergeGroupWarningsIntoPayload(
     payload,
-    'module-1',
     ['auth warning', 'config warning'],
     new Map([
       ['auth warning', { kind: 'auth', severity: 'critical' }],
@@ -149,7 +154,6 @@ test('mergeGroupWarningsIntoPayload deduplicates warnings and upgrades generic m
     ])
   );
 
-  assert.equal(result.id, 'module-1');
   assert.deepEqual(result.state.warnings, ['auth warning', 'config warning']);
   assert.deepEqual(result.state.warningMeta, [
     { message: 'auth warning', kind: 'auth', severity: 'critical' },
@@ -158,17 +162,23 @@ test('mergeGroupWarningsIntoPayload deduplicates warnings and upgrades generic m
 });
 
 test('buildStudentErrorPayload returns empty API snapshot and fallback warning metadata', () => {
-  const payload = helper._buildStudentErrorPayload({
+  const payload = buildStudentErrorPayload({
     identifier: 'module-1',
     sessionId: 'session-1',
-    sessionKey: 'module-1:session-1',
     student: { title: 'Student A' },
     config: { displayMode: 'lessons' },
+    fetchFlags: { fetchTimetable: true },
+    apiStatus: {},
     warnings: ['plain warning'],
-    groupWarningMetaByMessage: new Map(),
+    warningMetaByMessage: new Map(),
     warningFallbackMeta: { kind: 'generic', severity: 'warning' },
-    includeApiSnapshot: false,
   });
+
+  assert.equal(payload.contractVersion, 3);
+  assert.equal(payload.id, 'module-1');
+  assert.equal(payload.context.student.title, 'Student A');
+  assert.deepEqual(payload.data.lessons, []);
+  assert.equal(payload.state.fetch.timetable, true);
 
   assert.deepEqual(payload.state.api, {
     timetable: null,
@@ -181,7 +191,7 @@ test('buildStudentErrorPayload returns empty API snapshot and fallback warning m
 });
 
 test('createGroupWarningCollector stores one warning entry per message', () => {
-  const collector = helper._createGroupWarningCollector();
+  const collector = warningUtils.createGroupWarningCollector();
 
   collector.addGroupWarning('network issue', { kind: 'network', severity: 'critical' });
   collector.addGroupWarning('network issue', { kind: 'config', severity: 'warning' });
@@ -242,12 +252,11 @@ test('emit helpers preserve or override route metadata as intended', () => {
 });
 
 test('handleSessionState uses default route values for missing payload metadata', () => {
-  helper._pausedSessions = new Set();
   helper._mmLog = () => {};
-
+  helper._runtimeReady = false;
   helper._handleSessionState({ state: 'paused' });
 
-  assert.equal(helper._pausedSessions.has('default:unknown'), true);
+  assert.equal(helper._sessions.isPaused('default:unknown'), true);
 });
 
 const { parseCliArgs } = require('../scripts/node_helper_wrapper');
@@ -340,7 +349,7 @@ test('buildFetchFlags derives fetch flags from active plugin capabilities', () =
     ],
   };
 
-  const flags = helper._buildFetchFlags({ plugins: { exams: { enabled: true }, homework: { enabled: false } } });
+  const flags = buildFetchFlags({ plugins: { exams: { enabled: true }, homework: { enabled: false } } }, helper._pluginHost);
 
   assert.equal(flags.fetchExams, true);
   assert.equal(flags.wantsExamsWidget, true);
@@ -399,73 +408,75 @@ test('frontendShared namespace members are callable', () => {
   assert.equal(shared.time.DEFAULT_TIMEZONE, 'Europe/Berlin');
 });
 
+let tracker;
 function seedApiStatus() {
-  helper._mmLog = () => {};
-  helper._apiStatusBySession = new Map();
+  tracker = new ApiStatusTracker({ logger: () => {} });
   return 'mirror:session';
 }
 
 function failEndpoint(sessionKey, endpoint, status, times = 1) {
   for (let i = 0; i < times; i++) {
-    helper._recordApiStatusFromError(sessionKey, endpoint, { status });
+    tracker.recordError(sessionKey, endpoint, { status });
   }
 }
 
 function ageRecord(sessionKey, endpoint, ms) {
-  helper._apiStatusBySession.get(sessionKey)[endpoint].recordedAt -= ms;
+  tracker._bySession.get(sessionKey)[endpoint].recordedAt -= ms;
 }
 
 test('shouldSkipApi keeps retrying isolated 5xx blips', () => {
   const sessionKey = seedApiStatus();
 
   failEndpoint(sessionKey, 'homework', 500, 1);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), false);
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), false);
 
   failEndpoint(sessionKey, 'homework', 500, 1);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), false, 'two failures must not open the breaker');
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), false, 'two failures must not open the breaker');
 });
 
 test('shouldSkipApi backs off after repeated 5xx and escalates the window', () => {
   const sessionKey = seedApiStatus();
 
   failEndpoint(sessionKey, 'homework', 500, 3);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), true, 'third failure opens the breaker');
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), true, 'third failure opens the breaker');
 
   // Still inside the first 15min window.
   ageRecord(sessionKey, 'homework', 10 * 60 * 1000);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), true);
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), true);
 
   // Window elapsed - one probe is allowed through.
   ageRecord(sessionKey, 'homework', 6 * 60 * 1000);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), false);
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), false);
 
   // Probe fails again -> escalate to the 1h step.
   failEndpoint(sessionKey, 'homework', 500, 1);
   ageRecord(sessionKey, 'homework', 30 * 60 * 1000);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), true, '30min must not clear the 1h step');
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), true, '30min must not clear the 1h step');
 
   ageRecord(sessionKey, 'homework', 31 * 60 * 1000);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'homework'), false);
+  assert.equal(tracker.shouldSkip(sessionKey, 'homework'), false);
 });
 
 test('getTransientBackoffMs caps the escalation', () => {
-  assert.equal(helper._getTransientBackoffMs(2), 0);
-  assert.equal(helper._getTransientBackoffMs(3), 15 * 60 * 1000);
-  assert.equal(helper._getTransientBackoffMs(4), 60 * 60 * 1000);
-  assert.equal(helper._getTransientBackoffMs(5), 6 * 60 * 60 * 1000);
-  assert.equal(helper._getTransientBackoffMs(50), 6 * 60 * 60 * 1000, 'capped at the last step');
+  assert.equal(getTransientBackoffMs(2), 0);
+  assert.equal(getTransientBackoffMs(3), 15 * 60 * 1000);
+  assert.equal(getTransientBackoffMs(4), 60 * 60 * 1000);
+  assert.equal(getTransientBackoffMs(5), 6 * 60 * 60 * 1000);
+  assert.equal(getTransientBackoffMs(50), 6 * 60 * 60 * 1000, 'capped at the last step');
 });
 
 test('recordApiStatusFromError counts only consecutive failures', () => {
   const sessionKey = seedApiStatus();
 
   failEndpoint(sessionKey, 'homework', 500, 2);
-  assert.equal(helper._apiStatusBySession.get(sessionKey).homework.failureCount, 2);
+  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 2);
 
   // A success in between must restart the streak.
-  helper._apiStatusBySession.get(sessionKey).homework = { status: 200, recordedAt: Date.now(), failureCount: 0 };
+  tracker.recordStatus(sessionKey, 'homework', 200);
+  assert.equal(typeof tracker.getRecords(sessionKey).homework.lastSuccessAt, 'number');
   failEndpoint(sessionKey, 'homework', 500, 1);
-  assert.equal(helper._apiStatusBySession.get(sessionKey).homework.failureCount, 1);
+  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 1);
+  assert.equal(typeof tracker.getRecords(sessionKey).homework.lastSuccessAt, 'number', 'last success survives later failures');
 });
 
 test('shouldSkipApi still treats permanent errors as permanent', () => {
@@ -473,35 +484,34 @@ test('shouldSkipApi still treats permanent errors as permanent', () => {
 
   // A single 403 skips immediately - no threshold, unlike transient errors.
   failEndpoint(sessionKey, 'timetable', 403, 1);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'timetable'), true);
+  assert.equal(tracker.shouldSkip(sessionKey, 'timetable'), true);
 
   // ...but is re-probed after the 24h license window.
   ageRecord(sessionKey, 'timetable', 25 * 60 * 60 * 1000);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'timetable'), false);
-  assert.equal('timetable' in helper._apiStatusBySession.get(sessionKey), false, 'expired record is cleared');
+  assert.equal(tracker.shouldSkip(sessionKey, 'timetable'), false);
+  assert.equal('timetable' in tracker.getRecords(sessionKey), false, 'expired record is cleared');
 });
 
 test('shouldSkipApi never skips an endpoint whose last call succeeded', () => {
   const sessionKey = seedApiStatus();
 
   failEndpoint(sessionKey, 'exams', 500, 5);
-  assert.equal(helper._shouldSkipApi(sessionKey, 'exams'), true);
+  assert.equal(tracker.shouldSkip(sessionKey, 'exams'), true);
 
-  helper._apiStatusBySession.get(sessionKey).exams = { status: 200, recordedAt: Date.now(), failureCount: 0 };
-  assert.equal(helper._shouldSkipApi(sessionKey, 'exams'), false);
+  tracker.recordStatus(sessionKey, 'exams', 200);
+  assert.equal(tracker.shouldSkip(sessionKey, 'exams'), false);
 });
 
+let sessions;
+let sessionStatus;
 function seedSessionState(sessionKeys = []) {
-  helper._mmLog = () => {};
-  helper._configsBySession = new Map();
-  helper._apiStatusBySession = new Map();
-  helper._pausedSessions = new Set();
-  helper._sessionLastSeenAt = new Map();
+  sessionStatus = new ApiStatusTracker({ logger: () => {} });
+  sessions = new SessionRegistry({ logger: () => {}, onRelease: (key) => sessionStatus.release(key) });
 
   for (const [sessionKey, lastSeenAt] of sessionKeys) {
-    helper._configsBySession.set(sessionKey, { updateInterval: 300000 });
-    helper._apiStatusBySession.set(sessionKey, { timetable: { status: 403, recordedAt: 0 } });
-    helper._sessionLastSeenAt.set(sessionKey, lastSeenAt);
+    sessions.configsBySession.set(sessionKey, { updateInterval: 300000 });
+    sessionStatus.recordError(sessionKey, 'timetable', { status: 403 });
+    sessions.lastSeenAt.set(sessionKey, lastSeenAt);
   }
 }
 
@@ -515,17 +525,17 @@ test('storeInitSessionConfig releases session state left behind by frontend relo
     ['other:oldsession', now - 60 * 60 * 1000],
   ]);
 
-  helper._storeInitSessionConfig('mirror:newsession', { updateInterval: 300000 });
+  sessions.storeInitConfig('mirror:newsession', { updateInterval: 300000 });
 
-  const remaining = Array.from(helper._configsBySession.keys()).sort();
+  const remaining = Array.from(sessions.configsBySession.keys()).sort();
   assert.deepEqual(remaining, ['mirror:livesession', 'mirror:newsession', 'other:oldsession']);
 
   // Per-session side tables must be released together with the config clone.
-  assert.equal(helper._apiStatusBySession.has('mirror:oldsession1'), false);
-  assert.equal(helper._sessionLastSeenAt.has('mirror:oldsession2'), false);
+  assert.equal(sessionStatus.sessionKeys().includes('mirror:oldsession1'), false);
+  assert.equal(sessions.lastSeenAt.has('mirror:oldsession2'), false);
 
   // A different identifier is never touched, even when it is equally stale.
-  assert.equal(helper._apiStatusBySession.has('other:oldsession'), true);
+  assert.equal(sessionStatus.sessionKeys().includes('other:oldsession'), true);
 });
 
 test('storeInitSessionConfig keeps concurrent clients of the same identifier alive', () => {
@@ -533,17 +543,17 @@ test('storeInitSessionConfig keeps concurrent clients of the same identifier ali
   seedSessionState([['mirror:phoneclient', now - 2 * 60 * 1000]]);
 
   // Second client attaches under the same identifier while the first is still refreshing.
-  helper._storeInitSessionConfig('mirror:mirrorclient', { updateInterval: 300000 });
+  sessions.storeInitConfig('mirror:mirrorclient', { updateInterval: 300000 });
 
-  assert.equal(helper._configsBySession.has('mirror:phoneclient'), true);
-  assert.equal(helper._configsBySession.has('mirror:mirrorclient'), true);
+  assert.equal(sessions.configsBySession.has('mirror:phoneclient'), true);
+  assert.equal(sessions.configsBySession.has('mirror:mirrorclient'), true);
 });
 
 test('getSessionTtlMs clamps the eviction window', () => {
-  assert.equal(helper._getSessionTtlMs({ updateInterval: 300000 }), 10 * 60 * 1000); // 2x, raised to min
-  assert.equal(helper._getSessionTtlMs({ updateInterval: 20 * 60 * 1000 }), 40 * 60 * 1000); // 2x, in range
-  assert.equal(helper._getSessionTtlMs({ updateInterval: 10 * 60 * 60 * 1000 }), 60 * 60 * 1000); // capped
-  assert.equal(helper._getSessionTtlMs({}), 10 * 60 * 1000); // no interval -> default, raised to min
+  assert.equal(getSessionTtlMs({ updateInterval: 300000 }), 10 * 60 * 1000); // 2x, raised to min
+  assert.equal(getSessionTtlMs({ updateInterval: 20 * 60 * 1000 }), 40 * 60 * 1000); // 2x, in range
+  assert.equal(getSessionTtlMs({ updateInterval: 10 * 60 * 60 * 1000 }), 60 * 60 * 1000); // capped
+  assert.equal(getSessionTtlMs({}), 10 * 60 * 1000); // no interval -> default, raised to min
 });
 
 test('getCurrentDateContext keeps wall clock time while overriding debug date', () => {
@@ -628,7 +638,7 @@ test('getCurrentDateContext keeps the school wall clock when debugDate crosses a
 });
 
 test('_calculateBaseNow uses normalized debug date context', () => {
-  const baseNow = helper._calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
+  const baseNow = calculateBaseNow({ debugDate: '20260302', timezone: 'UTC' });
 
   assert.equal(baseNow.getFullYear(), 2026);
   assert.equal(baseNow.getMonth(), 2);
@@ -699,7 +709,7 @@ test('_getDisplayWidgets treats the "list" alias as lessons+exams', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Session handling: login redirects, expired-session bodies, auth error classification
+// Session handling: shared credentials, login redirects, expired-session bodies
 // ---------------------------------------------------------------------------
 
 function withStubbedFetch(handler, fn) {
@@ -722,12 +732,12 @@ function jsonResponse(body, status = 200, headers = {}) {
 test('_extractHttpStatus never records a rejected login or expired session as success', () => {
   const loginRejected = Object.assign(new Error('bad credentials'), { code: 'AUTH_FAILED', isAuthError: true, httpStatus: 200 });
   const redirected = Object.assign(new Error('login page'), { code: 'SESSION_EXPIRED', isAuthError: true, status: 302 });
-  assert.equal(helper._extractHttpStatus(loginRejected), 401);
-  assert.equal(helper._extractHttpStatus(redirected), 401);
-  assert.equal(helper._extractHttpStatus(Object.assign(new Error('x'), { status: 503 })), 503);
-  assert.equal(helper._extractHttpStatus(new Error('no status')), 0);
+  assert.equal(extractHttpStatus(loginRejected), 401);
+  assert.equal(extractHttpStatus(redirected), 401);
+  assert.equal(extractHttpStatus(Object.assign(new Error('x'), { status: 503 })), 503);
+  assert.equal(extractHttpStatus(new Error('no status')), 0);
 
-  const meta = helper._classifyWarningMetaFromError(loginRejected);
+  const meta = warningUtils.classifyWarningMetaFromError(loginRejected);
   assert.equal(meta.kind, 'auth');
   assert.equal(meta.severity, 'critical');
 });
