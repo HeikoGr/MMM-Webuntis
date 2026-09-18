@@ -70,16 +70,17 @@ The frontend should not know WebUntis endpoint details.
 ### MagicMirror Adapter Layer
 
 Files:
-- `node_helper.js`
-- `lib/pluginLoader.js`
-- `lib/pluginHostBackend.js`
-- `lib/pluginCapabilityResolver.js`
-- `lib/pluginManifestValidator.js`
-- `lib/pluginValidationUtils.js`
-- `lib/webuntisClient.js`
+- `node_helper.js` - socket protocol, session lifecycle, per-credential fetch loop (nothing else)
+- `lib/moduleConfig.js` - legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
+- `lib/sessionRegistry.js` - session configs, paused flags, TTL-based eviction
+- `lib/apiStatusTracker.js` - per-session endpoint status, 24h permanent-error skip, transient circuit breaker
+- `lib/authSession.js` - credential fingerprint, auth session creation, parent auth
+- `lib/studentDiscovery.js` - parent-account student auto-discovery
+- `lib/warningUtils.js` - warning classification, group collectors, payload merge
+- `lib/pluginLoader.js`, `lib/pluginHostBackend.js`, `lib/pluginCapabilityResolver.js`, `lib/pluginManifestValidator.js`, `lib/pluginValidationUtils.js`
+- `lib/webuntisClient.js` - public facade: fetch plan + core client + payload mapping
 - `lib/configValidator.js`
 - `lib/widgetConfigValidator.js` (student credentials only; plugin config is validated by the plugins)
-- `lib/warningUtils.js`
 - `lib/runtime-utils.js`
 - `lib/mmm-shared/mmm-shared.js` (git submodule, see [Shared Submodule](#shared-submodule))
 
@@ -89,7 +90,8 @@ Responsibilities:
 - normalize legacy `displayMode` and namespaced widget config into canonical `plugins.<id>` config
 - manage session identifiers and lifecycle
 - derive fetch capabilities from active plugins
-- coordinate fetches per configured module instance
+- coordinate fetches per credential group; one process-wide `AuthService` shares a WebUntis session
+  between every module instance and browser session that uses the same account
 - compose WebUntis core results with the MMM payload adapter
 - convert backend results into MagicMirror socket notifications
 
@@ -153,12 +155,16 @@ Consequences for contributors:
 ## Main Control Flow
 
 1. `MMM-Webuntis.js` sends `CONFIGURE`.
-2. `node_helper.js` validates config and prepares session state.
-3. `node_helper.js` triggers the first fetch automatically.
-4. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
-5. `lib/webuntisClient.js` maps the normalized bundle into the `DATA_UPDATE` payload.
-6. `node_helper.js` emits `DATA_UPDATE`.
-7. Frontend plugin renderers consume the normalized result.
+2. `node_helper.js` normalizes and validates the config, registers the session and immediately
+   emits `MODULE_READY` (duplicate `CONFIGURE`s for a running init are ignored).
+3. `lib/studentDiscovery.js` auto-discovers students for parent accounts (may log in).
+4. `node_helper.js` triggers the first fetch automatically.
+5. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
+6. `lib/webuntisClient.js` maps the normalized bundle into the `DATA_UPDATE` payload, including
+   `state.collections` (per-collection `ok` / `unavailable` / `disabled`).
+7. `node_helper.js` emits `DATA_UPDATE`.
+8. Frontend keeps previous data for `unavailable` collections and renders "data unavailable" when
+   it has nothing to keep; plugin renderers consume the normalized result.
 
 Current compatibility note:
 
@@ -195,6 +201,8 @@ Because the demo registry is built in the frontend, the plugin ID list is hardco
 
 - Authentication happens through `authService` and `httpClient`, not ad-hoc network calls.
 - REST endpoint calls go through `webuntisApiService` and `restClient`.
+- `fetchClient` never follows redirects; a redirect to the WebUntis login page, a `200` login-state
+  body and HTML instead of JSON are all `SESSION_EXPIRED` auth errors - never empty data.
 - Runtime retry and skip behavior belongs to the request-flow layer, not the frontend.
 
 ### Contract Rules

@@ -361,6 +361,17 @@ Design rule:
 
 These collections remain explicit because they are reusable primitives for multiple frontend derivations.
 
+`dayNotices[]` entries are `{ date, kind, status }` derived from the per-day status WebUntis returns
+with every timetable response:
+
+| `kind` | Upstream `status` | Meaning |
+| --- | --- | --- |
+| `timetable-restricted` | `NOT_ALLOWED` | The school locks this day for viewing ("Plan gesperrt") |
+| `no-data` | `NO_DATA` | WebUntis confirms there is nothing scheduled (weekend, outside the school year) |
+
+Days with `REGULAR` status carry no notice; an empty `REGULAR` day is a day without entries. A day
+that is missing from the response altogether was not fetched - see `state.collections.lessons`.
+
 Examples:
 - lessons plugins can derive empty-day states from `lessons[]`, `dayNotices[]`, and `holidays`
 - grid can derive headers, day boundaries, and time-based placement from `timeUnits[]`
@@ -420,6 +431,13 @@ Representative shape:
 		"absences": 200,
 		"messages": 200
 	},
+	"collections": {
+		"lessons": { "status": "ok", "httpStatus": 200, "lastSuccessAt": "2026-03-10T06:00:00.000Z" },
+		"exams": { "status": "ok", "httpStatus": 200, "lastSuccessAt": "2026-03-10T06:00:00.000Z" },
+		"homework": { "status": "unavailable", "httpStatus": 401, "lastSuccessAt": "2026-03-10T05:50:00.000Z" },
+		"absences": { "status": "ok", "httpStatus": 200, "lastSuccessAt": "2026-03-10T06:00:00.000Z" },
+		"messages": { "status": "disabled", "httpStatus": null, "lastSuccessAt": null }
+	},
 	"warnings": [],
 	"warningMeta": []
 }
@@ -428,10 +446,38 @@ Representative shape:
 Required fields:
 - `fetch`
 - `api`
+- `collections`
 - `warnings`
 - `warningMeta`
 
-No plugin-specific changes are required here.
+### 9.1 `state.collections`
+
+One entry per canonical collection (`lessons`, `exams`, `homework`, `absences`, `messages`); it is
+the authoritative signal for "did this fetch succeed", independent of `state.api` and warning texts.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `ok` - the latest call succeeded (2xx, structurally valid); `unavailable` - the latest call failed, was skipped (circuit breaker, 24h permanent-error window), had no REST target, or the whole fetch failed before reaching the endpoint; `disabled` - the collection is not fetched for this student |
+| `httpStatus` | Last recorded HTTP status for the endpoint, `null` when it never ran in this session |
+| `lastSuccessAt` | ISO timestamp of the last successful call in this session, `null` if none; survives later failures |
+
+Frontend rules derived from it:
+- data is replaced only when `status === 'ok'`; on `unavailable` the previously displayed data is
+  kept and flagged stale, a collection without previous data is rendered as "data unavailable"
+- `state.api` remains a diagnostic snapshot; it is no longer used to decide whether data is kept
+
+### 9.2 `state.api` values
+
+`state.api.<collection>` is the last HTTP status the backend recorded for the endpoint in this
+session. `0` means the call failed without an HTTP status (network error, timeout, unusable
+response), `401` is also recorded for rejected re-logins (JSON-RPC reports those inside a 200
+body), `null` means the endpoint was never called in this session.
+
+### 9.3 `warningMeta.kind`
+
+`network`, `auth`, `server`, `client`, `rate_limit` (from fetch/auth errors), `config` (validation)
+and `generic` (fallback). `network`, `auth` and `server` are critical and displayed immediately;
+other kinds are shown once they persist across two consecutive payloads.
 
 ---
 

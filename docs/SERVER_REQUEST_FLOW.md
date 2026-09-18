@@ -134,7 +134,7 @@ sequenceDiagram
     AU-->>API: token + cookies + tenantId + schoolYearId
     API->>RC: callRestAPI()
 
-    loop Internal REST retry, max 3 attempts total
+    loop Internal REST retry, max 4 attempts total
         RC->>FC: request(timeout=25000)
         FC->>WU: HTTPS GET endpoint
         alt HTTP 2xx
@@ -144,7 +144,7 @@ sequenceDiagram
         else 429, 5xx, timeout, or network error
             WU-->>FC: error or retryable status
             FC-->>RC: throws error
-            RC->>RC: wait 350ms * attempt
+            RC->>RC: exponential backoff ~1s/2s/4s (±25% jitter)
         else 4xx non-auth error
             WU-->>FC: 4xx response
             FC-->>RC: throws error
@@ -191,20 +191,28 @@ These are the internal status signals between frontend and backend.
 
 1. Frontend sends `CONFIGURE`.
 2. `node_helper.js` applies legacy mappings and validates config.
-3. An identifier-scoped `AuthService` instance is created.
+3. The process-wide `AuthService` is attached (one instance for all module instances and browser sessions).
 4. If parent credentials are present, `app/data` may be used to auto-discover students.
 5. Backend emits `MODULE_READY`.
 6. Backend immediately runs `_handleFetchData()` for the first fetch.
 
 ### Phase 2: Auth Session Creation
 
-`node_helper.js` creates an auth session per credential group.
+`node_helper.js` creates an auth session per credential group. The group key
+(`_getCredentialKey()`) is the credential fingerprint only — `parent:<user>@<server>/<school>`,
+`user:<user>@<server>/<school>` or `qrcode:<url>` — and is deliberately not scoped by module
+instance, browser session or `carouselId`: every consumer of the same account shares one
+WebUntis session and one login. Parallel fetches with the same key are serialized
+(`_pendingFetchByCredKey`), parallel logins are deduplicated inside `AuthService` (`_pendingAuth`).
+On shutdown `stop()` logs every cached session out (`AuthService.logoutAll()`).
 
 Possible paths:
 - QR code auth via `httpClient.authenticateWithQRCode()`
 - username/password auth via `httpClient.authenticateWithCredentials()`
 - token bootstrap via `httpClient.getBearerToken()`
 - metadata enrichment via `authService._fetchAppData()`
+
+Note on `app/data`: a `200` response with an empty or non-JSON body does **not** fail authentication. `tenantId` and `schoolYearId` stay `null`, the result is cached for the full token TTL, and subsequent REST calls are sent without the `Tenant-Id` / `X-Webuntis-Api-School-Year-Id` headers (see `docs/AUDIT_2026-09-18.md`, F2).
 
 Returned auth session fields include:
 - `token`
@@ -260,15 +268,29 @@ Teacher-target note:
 | JSON-RPC auth | `httpClient.authenticateWithQRCode()` | `10000ms` | QR login call and follow-up `api/app/config` use 10s |
 | JSON-RPC auth | `httpClient.authenticateWithCredentials()` | `10000ms` | Login request uses 10s |
 | Token bootstrap | `httpClient.getBearerToken()` | `10000ms` | `api/token/new` uses 10s |
-| REST app/data | `authService._fetchAppData()` | `15000ms` | Uses `fetchClient.get()` |
-| General REST | `restClient.callRestAPI()` | `15000ms` | Passes timeout to `fetchClient.request()` |
+| REST app/data | `authService._fetchAppData()` | `25000ms` | Uses `fetchClient.get()` with `API_TIMEOUT_MS` |
+| General REST | `restClient.callRestAPI()` | `25000ms` | `API_TIMEOUT_MS` from `transportConstants.js`, passed to `fetchClient.request()` |
 | Generic defaults | `fetchClient.get/post/request()` | `30000ms` default | Usually overridden by the call sites above |
+
+### Measured WebUntis Session Lifetimes (2026-09-18, `bachgymnasium.webuntis.com`)
+
+| Credential | Lifetime | Behaviour after expiry |
+|------------|----------|------------------------|
+| Bearer JWT | 900s from issue (`exp - iat`) | `timetable/entries` → `401` |
+| Classic session cookie (`/api/exams`, `/api/homeworks/lessons`, `/api/classreg/absences/students`, `api/token/new`) | idle timeout between 4 and 6 min | `302 → /WebUntis/index.do` (or `200` + login state / HTML) — surfaced as `SESSION_EXPIRED`, which triggers a re-login |
+| REST session (`timetable/entries`, cookie + JWT) | idle timeout between 8 and 10 min | `401` |
+
+Consequences: the timetable-first auth canary only covers the JWT/REST session. Between ~5 and ~9
+minutes of inactivity the timetable still succeeds while exams, homework and absences hit the dead
+cookie; each of them now raises `SESSION_EXPIRED` and retries once after a shared re-login. Several
+parallel logins of the same user do **not** invalidate each other, and `logout` only ends the
+session it is sent from. See `docs/AUDIT_2026-09-18.md` section 5.
 
 ### Important Timeout Nuances
 
 - `fetchClient.request()` protects the full operation with one `AbortController`, including body parsing. This is used by the REST data endpoints.
 - `fetchClient.get()` and `fetchClient.post()` use `fetchWithTimeout()` and then parse the body afterwards. In those paths the timeout primarily covers the fetch call itself.
-- `restClient.callRestAPI()` logs a slow-response warning when the response takes more than `10000ms`, even if it still finishes before the `15000ms` hard timeout.
+- `restClient.callRestAPI()` logs a slow-response warning when the response takes more than `10000ms`, even if it still finishes before the `25000ms` hard timeout.
 
 ## 6. Retry Rules
 
@@ -296,10 +318,22 @@ After the fourth and final attempt fails, `restClient` does not schedule any fur
 
 If an endpoint fails with auth semantics, the API layer retries the endpoint once with fresh auth.
 
-Auth-trigger conditions:
+Auth-trigger conditions (`errorHandler.isAuthError()`):
 - `error.isAuthError === true`
 - error code in `AUTH_FAILED`, `SESSION_EXPIRED`, `TOKEN_REQUEST_FAILED`, `TOKEN_INVALID`
 - HTTP `401`
+
+Where `SESSION_EXPIRED` comes from:
+- `fetchClient` never follows redirects; a `3xx` to `/WebUntis/index.do` (dead session cookie on
+  the classic `/api/*` endpoints) is thrown as `SESSION_EXPIRED`
+- `restClient` throws `SESSION_EXPIRED` when a `200` body is the login state
+  (`{"loginError":"","state":"LOGIN_ERROR"}`) or an HTML document
+- `httpClient.getBearerToken()` throws it when `api/token/new` answers with HTML
+
+If the re-login itself fails, the resulting error keeps `isAuthError`; `node_helper._extractHttpStatus()`
+records it as `401` even though JSON-RPC reports rejected logins inside a `200` body, and
+`convertRestErrorToWarning()` emits an authentication warning. The frontend therefore preserves
+its previous data instead of rendering an empty plan.
 
 Action:
 1. call `onAuthError()`
@@ -358,7 +392,8 @@ Why this exists:
 - especially relevant for school licensing gaps such as exams or absences
 
 Important detail:
-- `403` is handled gracefully in `webuntisClient`: it returns an empty array and logs that the endpoint will be skipped in future cycles
+- `403` is recorded in `webuntisClient._executeRestEndpoint()` and then propagated, so the orchestrator's `wrapAsync()` returns the empty default **and** adds the user-facing warning
+- on every skipped cycle the endpoint re-raises a `quiet` 403 error, which keeps the warning in the payload (the frontend only shows non-critical warnings that persist across payloads) without logging an error each time and without resetting the 24h window
 - `404` and `410` are also recorded and therefore become skip candidates for later fetches
 
 ### 7.2 Circuit Breaker for Repeated Temporary Errors
@@ -392,10 +427,13 @@ permanent errors — no exception reaches the payload builder.
 | Status / condition | Layer interpretation | Retry? | Future skip? |
 |--------------------|----------------------|--------|--------------|
 | `200` | success | no | no |
+| `200` with login-state JSON or HTML body | `SESSION_EXPIRED` (auth error) | endpoint retry once with fresh auth | no |
+| `200` timetable body without `days[]` | `INVALID_RESPONSE`; recorded as status `0`, warning emitted, previous data preserved by the frontend | no | after 3 consecutive failures (breaker) |
+| `3xx` to `/WebUntis/index.do` | `SESSION_EXPIRED` (auth error); redirects are never followed | endpoint retry once with fresh auth | no |
 | `201` | success | no | no |
 | `204` | success without body | no | no |
 | `400` | client request problem | no | no |
-| `401` | expired or invalid auth | endpoint retry once with fresh auth | no |
+| `401` | expired or invalid auth; also recorded for rejected re-logins (JSON-RPC error inside a `200` body) | endpoint retry once with fresh auth | no |
 | `403` | permanent permission or licensing problem | no immediate retry | yes, for 24h |
 | `404` | endpoint or resource unavailable | no immediate retry | yes, for 24h |
 | `410` | endpoint/resource gone | no immediate retry | yes, for 24h |
@@ -437,6 +475,9 @@ Any success closes it immediately.
 | Trigger | Warning text |
 |---------|--------------|
 | `403` | `Endpoint not available for "<student>": your school may not have licensed this feature.` |
+| `SESSION_EXPIRED` | `WebUntis session expired for "<student>". Re-login is attempted on the next fetch.` |
+| rejected re-login (`AUTH_FAILED` etc.) | `Authentication failed for "<student>": <message>` |
+| `INVALID_RESPONSE` | `WebUntis returned an unusable response for "<student>": ...` |
 | `401` | `Authentication failed for "<student>": Invalid credentials or insufficient permissions.` |
 | network / timeout | `Cannot connect to WebUntis server "<server>". Check server name and network connection.` |
 | `503` | `WebUntis API temporarily unavailable (HTTP 503). Retrying on next fetch...` |
@@ -448,7 +489,7 @@ Any success closes it immediately.
 | Situation | Typical log message |
 |----------|---------------------|
 | slow REST response | `Slow API response: <path> took <elapsed>ms (timeout: <timeout>ms)` |
-| internal REST retry | `[REST] GET <path> failed on attempt X/3 (...), retrying in <backoff>ms` |
+| internal REST retry | `[REST] GET <path> failed on attempt X/4 (...), retrying in <backoff>ms` |
 | timeout after retries | `Connection timeout to WebUntis server "<server>" after <timeout>ms: check network or try again` |
 | network failure | `Cannot connect to WebUntis server "<server>": check server name and network` |
 | auth refresh | `[<endpoint>] Authentication token expired, invalidating cache and retrying...` |
@@ -480,7 +521,7 @@ The server request model is intentionally layered:
 3. `dataFetchOrchestrator.js` enforces timetable-first auth validation and one controlled rerun after auth refresh.
 4. `webuntisApiService.js` performs one auth-based endpoint retry.
 5. `restClient.js` performs transport retries for rate limits, server failures, and network issues.
-6. `authService.js` caches tokens for 14 minutes with a 5-minute safety buffer to avoid stale-token requests.
+6. `authService.js` caches one session per credential fingerprint for 14 minutes with a 5-minute safety buffer; the session is shared by every module instance using that account, and any endpoint that sees the login page (`302`, `LOGIN_ERROR`, HTML) forces a re-login.
 
 This combination gives the module three distinct stability layers:
 - proactive auth avoidance through token buffering

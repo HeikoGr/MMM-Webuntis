@@ -270,10 +270,19 @@ option, which is what makes deterministic screenshots and fixture-based demo mod
 `renderContext` provides:
 - `moduleId`
 - `mode`
-- `pluginConfig`
-- `students`
+- `students` (each with `student`, `context.config`, `data.*`, `state.warnings`)
 - `warnings`
-- `runtime`
+- `runtime` (currently empty)
+
+`students[].state.collections.<name>` carries `{ status, httpStatus, lastSuccessAt, stale }` per
+collection (`lessons`, `exams`, `homework`, `absences`, `messages`): `status` is `ok`,
+`unavailable` or `disabled` as reported by the backend, `stale` is `true` when the host kept older
+data because the latest fetch failed. Use it to render "data unavailable" instead of an empty
+state: `getEmptyDayState()` already does this for days without lessons, and the list plugins
+render an `unavailable` row when their collection failed and nothing older is shown.
+
+Not provided: `pluginConfig` (read it from `students[].context.config.plugins.<id>.config`),
+`state.api` and `state.fetch`.
 
 ## Backend Host API
 

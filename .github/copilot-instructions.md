@@ -3,17 +3,18 @@
 # MMM-Webuntis: AI Agent Coding Guidelines
 
 **Purpose**: Guide AI agents toward productive, high-quality contributions.
-**Status**: Production module (~17,700 LOC, 14 backend/core services, 6 first-party plugins).
-**Last Updated**: 2026-08-14
+**Status**: Production module (~18,900 LOC, 14 backend/core services, 6 first-party plugins).
+**Last Updated**: 2026-09-18
 
 ## Architecture Overview (Critical to Understand)
 
 **Frontend → Backend Socket Flow**:
 ```
 MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="CONFIGURE")
-  → node_helper.js:socketNotificationReceived() [~L1421] → _handleInitModule()
-    → validate + applyLegacyMappings → auto-discover students (optional)
-    → socketNotification("MMM-Webuntis_EVENT", action="MODULE_READY") to FE
+  → node_helper.js:socketNotificationReceived() → _handleInitModule()
+    → moduleConfig.normalizeModuleConfig() + validateNormalizedConfig()
+    → socketNotification("MMM-Webuntis_EVENT", action="MODULE_READY") to FE (immediately)
+    → studentDiscovery.ensureStudentsFromAppData() (optional, may log in)
     → _handleFetchData() auto-runs first fetch (no FE action="REFRESH" needed)
       → orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
       → buildUpdatePayload() → socketNotification("MMM-Webuntis_EVENT", action="DATA_UPDATE", data)
@@ -21,10 +22,10 @@ MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="C
 ```
 
 **Critical Services** (ordered by importance):
-1. **authService.js** - Auth + 14min token caching with 5min buffer (QR code, credentials, parent accounts)
+1. **authService.js** - Auth + 14min token caching with 5min buffer (QR code, credentials, parent accounts); ONE instance process-wide, cache keyed by credential fingerprint (`node_helper._getCredentialKey()`), so every module instance using the same account shares a single WebUntis session
 2. **webuntisApiService.js** - REST endpoint wrappers (getTimetable, getExams, getHomework, etc.)
 3. **dataFetchOrchestrator.js** - Timetable-first + parallel fetching (prevents silent token failures)
-4. **node_helper.js** - API status tracking per session (skips permanent errors 403/404/410)
+4. **apiStatusTracker.js** - API status tracking per session (skips permanent errors 403/404/410, circuit breaker); `node_helper.js` is only the socket adapter
 5. **dataOrchestration.js** - Data normalization (timetable→lessons, dates→YYYYMMDD integers)
 
 **REST API Strategy**: Migrate away from deprecated JSON-RPC. Use REST for all data; JSON-RPC only for auth/OTP.
@@ -37,6 +38,8 @@ MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="C
 - QR code auth: extract `person_id` from JWT token via `extractPersonIdFromToken()`
 - Parent account: fetches app/data to auto-discover student IDs
 - On token expiry: `onAuthError` callback invalidates cache automatically
+- `fetchClient` never follows redirects: `302 → index.do`, a `200 {"state":"LOGIN_ERROR"}` body or HTML are thrown as `SESSION_EXPIRED` (auth error) — never treat them as empty data
+- Rejected logins arrive as HTTP 200 (JSON-RPC error body); use `errorHandler.isAuthError()` before looking at numeric statuses, and never record such an error as status 200
 - Race condition protection: `_forceReauth` Set is cleared after use, `_pendingAuth` Map coordinates parallel requests
 
 ### REST API Calls
@@ -50,9 +53,10 @@ MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="C
 ### API Status Tracking & Fetch Strategy
 - **Timetable-first strategy**: Timetable API reliably returns 401 on expired tokens; other APIs return 200 OK with empty arrays (silent failures)
 - Fetch order: Timetable first (sequential, token validation), then 4 remaining APIs in parallel
-- **Status tracking**: `node_helper.js#_apiStatusBySession` Map tracks HTTP status per endpoint/session
+- **Status tracking**: `lib/apiStatusTracker.js` tracks HTTP status + `lastSuccessAt` per endpoint/session; the payload reports it as `state.collections.<name>.status` (`ok`/`unavailable`/`disabled`) and the frontend keeps previous data on `unavailable`
 - **Permanent errors** (403, 404, 410): API calls skipped on next fetch (no retry)
 - **Temporary errors** (5xx, 429, 401): Retried on next fetch
+- A timetable body without `days[]` is an `INVALID_RESPONSE` error, not an empty timetable (WebUntis always returns one `days[]` entry per requested day with a `status` of `REGULAR`, `NO_DATA` or `NOT_ALLOWED`)
 - Status tracking prevents wasted API calls to endpoints with permanent permission errors
 
 ### Data Transformation
@@ -111,7 +115,13 @@ console.warn('[feature] Warning:', error);
 ## File Organization (Updated: `lib/webuntis/` contains internal WebUntis API logic)
 
 **Essential files** (most editing happens here):
-- `node_helper.js` (1,803 LOC) - Socket listener, data fetch orchestrator, API status tracking
+- `node_helper.js` (~530 LOC) - Socket protocol, session lifecycle, per-credential fetch loop - nothing else; adapter logic lives in the `lib/` modules below
+- `lib/moduleConfig.js` - Legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
+- `lib/sessionRegistry.js` - Frontend session configs, paused flags, TTL eviction
+- `lib/apiStatusTracker.js` - Per-session endpoint status (`lastSuccessAt`), 24h permanent-error skip, circuit breaker
+- `lib/authSession.js` - Credential fingerprint (`getCredentialKey`), auth session creation, parent auth
+- `lib/studentDiscovery.js` - Parent-account student auto-discovery
+- `lib/warningUtils.js` - Warning classification (`classifyWarningMetaFromError`), group collectors, payload merge
 - `lib/webuntisClient.js` - Public WebUntis entry point for backend consumers
 - `lib/webuntis/authService.js` - Auth, QR code, token caching (14min TTL, 5min buffer)
 - `lib/webuntis/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
@@ -147,6 +157,7 @@ Boundary rule:
 - `docs/SERVER_REQUEST_FLOW.md` - Runtime request order, retries, skip rules, and statuses
 - `docs/API_V3_MANIFEST.md` - Currently shipped frontend/backend payload contract
 - `docs/PLUGINS.md` - Plugin runtime contract, manifest model, and host APIs
+- `docs/AUDIT_2026-09-18.md` - Audit findings: silent empty-timetable paths, auth-cache poisoning, node_helper inventory
 
 ## Quality bar
 
