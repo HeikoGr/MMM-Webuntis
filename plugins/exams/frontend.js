@@ -120,13 +120,29 @@
 
           for (const studentSlice of students) {
             const exams = Array.isArray(studentSlice?.data?.exams) ? studentSlice.data.exams : [];
-            if (exams.length === 0) {
-              continue;
-            }
-
             const studentConfig = resolveStudentConfig(studentSlice);
             const examConfig = resolveExamConfig(studentConfig);
             if (normalizeDays(examConfig?.nextDays, 0) <= 0) {
+              continue;
+            }
+
+            if (exams.length === 0) {
+              if (studentSlice?.state?.collections?.exams?.status === 'unavailable') {
+                const studentTitle = String(studentSlice?.student?.title || '').trim();
+                const verboseMode = isVerboseMode(studentConfig);
+                const container = createContainer();
+                if (verboseMode && studentTitle) {
+                  addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
+                }
+                addRow(
+                  container,
+                  'examRowEmpty unavailable-notice',
+                  verboseMode ? '' : escapeHtml(studentTitle),
+                  escapeHtml(translate(pluginContext, 'unavailable', 'data unavailable'))
+                );
+                wrapper.appendChild(container);
+                renderedContainers += 1;
+              }
               continue;
             }
 

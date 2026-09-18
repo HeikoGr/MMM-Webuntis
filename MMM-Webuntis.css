@@ -957,8 +957,28 @@
   content: var(--wu-icon-no-lessons);
 }
 
-.MMM-Webuntis .day-notice-icon-timetable-restricted::before {
+.MMM-Webuntis .day-notice-icon-timetable-restricted::before,
+.MMM-Webuntis .day-notice-icon-unavailable::before {
   content: var(--wu-icon-warning);
+}
+
+/* Inline icon variants used by empty-day rows (lessons plugin) and module warnings */
+.MMM-Webuntis .wu-inline-icon--warning::before {
+  content: var(--wu-icon-warning);
+}
+
+.MMM-Webuntis .wu-inline-icon--no-lessons::before {
+  content: var(--wu-icon-no-lessons);
+}
+
+.MMM-Webuntis .wu-inline-icon--holiday::before {
+  content: var(--wu-icon-holiday);
+}
+
+/* "Data unavailable" rows/notices: dimmed so they read as status, not as content */
+.MMM-Webuntis .unavailable-notice {
+  opacity: 0.75;
+  font-style: italic;
 }
 
 .MMM-Webuntis .wu-icon-warning::before {

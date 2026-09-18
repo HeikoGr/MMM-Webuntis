@@ -183,6 +183,9 @@ function getModuleRootElement(ctx) {
       dayNoticeMapByStudent: {
         [studentTitle]: buildDayNoticeMap(dayNotices),
       },
+      collectionStateByStudent: {
+        [studentTitle]: studentSlice?.state?.collections || {},
+      },
       preprocessedByStudent: {
         [studentTitle]: {
           rawGroupedByDate: buildGroupedRawLessons(studentSlice?.data?.lessons),
@@ -2161,7 +2164,7 @@ function getModuleRootElement(ctx) {
       const resolvedState = emptyDayState || { noticeType: 'no-lessons', label: ctx.translate('no-lessons') };
       const noticeType = resolvedState?.noticeType || 'no-lessons';
       const noticeText = `<b>${escapeHtml(resolvedState?.label || ctx.translate('no-lessons'))}</b>`;
-      const iconSize = resolvedState?.type === 'holiday' ? '2em' : '1.5em';
+      const iconSize = resolvedState?.type === 'holiday' || resolvedState?.type === 'unavailable' ? '2em' : '1.5em';
       addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
       return;
     }

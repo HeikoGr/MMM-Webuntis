@@ -3,5 +3,6 @@
   "no_absences": "no absences",
   "excused": "excused",
   "unexcused": "unexcused",
-  "absences_unavailable_parent_account": "absences are not available with parent accounts (WebUntis API limitation)"
+  "absences_unavailable_parent_account": "absences are not available with parent accounts (WebUntis API limitation)",
+  "unavailable": "Absences unavailable"
 }

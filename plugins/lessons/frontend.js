@@ -198,6 +198,9 @@
       dayNoticeMapByStudent: {
         [studentTitle]: buildDayNoticeMap(dayNotices),
       },
+      collectionStateByStudent: {
+        [studentTitle]: studentSlice?.state?.collections || {},
+      },
       _currentTodayYmd: dateContext.ymd,
       getCurrentDateContext(configOverride = null) {
         return getCurrentDateContext(configOverride || effectiveConfig);

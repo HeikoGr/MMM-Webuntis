@@ -421,7 +421,7 @@ module.exports = NodeHelper.create({
     try {
       authSession = await createAuthSession(this._authService, sample, config, credKey);
     } catch (err) {
-      this._handleGroupAuthFailure({ err, credKey, identifier, sessionId, students, config, warningsState });
+      this._handleGroupAuthFailure({ err, credKey, identifier, sessionKey, sessionId, students, config, warningsState });
       return;
     }
 
@@ -448,7 +448,7 @@ module.exports = NodeHelper.create({
     }
   },
 
-  _handleGroupAuthFailure({ err, credKey, identifier, sessionId, students, config, warningsState }) {
+  _handleGroupAuthFailure({ err, credKey, identifier, sessionKey, sessionId, students, config, warningsState }) {
     const errorMsg = this._formatErr(err);
     const networkFailure = isNetworkError(err);
     const msg = networkFailure
@@ -470,6 +470,7 @@ module.exports = NodeHelper.create({
           student,
           config,
           apiStatus: null,
+          apiRecords: this._apiStatus.getRecords(sessionKey),
           warnings: warningsState.groupWarnings,
           warningMetaByMessage: warningsState.groupWarningMetaByMessage,
           warningFallbackMeta: { kind: 'generic', severity: 'warning' },
@@ -530,13 +531,24 @@ module.exports = NodeHelper.create({
       student,
       config,
       apiStatus: this._apiStatus.buildSnapshot(sessionKey),
+      apiRecords: this._apiStatus.getRecords(sessionKey),
       warnings: mergeUniqueWarnings(warningsState.groupWarnings, warningMsg),
       warningMetaByMessage: warningsState.groupWarningMetaByMessage,
       warningFallbackMeta: classifyWarningMetaFromError(err),
     });
   },
 
-  _buildErrorPayload({ identifier, sessionId, student, config, apiStatus, warnings, warningMetaByMessage, warningFallbackMeta }) {
+  _buildErrorPayload({
+    identifier,
+    sessionId,
+    student,
+    config,
+    apiStatus,
+    apiRecords,
+    warnings,
+    warningMetaByMessage,
+    warningFallbackMeta,
+  }) {
     return buildStudentErrorPayload({
       identifier,
       sessionId,
@@ -544,6 +556,7 @@ module.exports = NodeHelper.create({
       config,
       fetchFlags: buildFetchFlags(buildEffectiveStudentConfig(student, config), this._pluginHost),
       apiStatus: apiStatus || {},
+      apiRecords: apiRecords || {},
       warnings,
       warningMetaByMessage,
       warningFallbackMeta,

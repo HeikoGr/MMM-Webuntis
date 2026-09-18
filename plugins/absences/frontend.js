@@ -145,7 +145,15 @@
             }
 
             if (!Array.isArray(absences) || absences.length === 0) {
-              addRow(container, 'absenceRowEmpty', studentLabelText, escapeHtml(translate(pluginContext, 'no_absences', 'no absences')));
+              const unavailable = studentSlice?.state?.collections?.absences?.status === 'unavailable';
+              addRow(
+                container,
+                unavailable ? 'absenceRowEmpty unavailable-notice' : 'absenceRowEmpty',
+                studentLabelText,
+                escapeHtml(
+                  translate(pluginContext, unavailable ? 'unavailable' : 'no_absences', unavailable ? 'data unavailable' : 'no absences')
+                )
+              );
               wrapper.appendChild(container);
               renderedContainers += 1;
               continue;

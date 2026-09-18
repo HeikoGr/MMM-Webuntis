@@ -45,5 +45,6 @@
   "popover_lesson_fallback_title": "Lesson",
   "popover_raw_payload": "Raw lesson payload",
   "popover_empty": "No details available.",
-  "popover_close": "Close details"
+  "popover_close": "Close details",
+  "unavailable": "Data unavailable"
 }

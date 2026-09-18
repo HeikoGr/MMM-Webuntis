@@ -648,24 +648,69 @@ test('_calculateBaseNow uses normalized debug date context', () => {
 
 const frontend = loadFrontendModule();
 
-test('_shouldPreserveData keeps stale data during an outage but not on a clean empty result', () => {
+test('_shouldPreserveData keeps stale data while a collection is unavailable, never on ok', () => {
   // No previous data: nothing to preserve, even if the fetch failed.
-  assert.equal(frontend._shouldPreserveData([], [], true, 200, [], []), false);
+  assert.equal(frontend._shouldPreserveData([], [], { status: 'unavailable' }), false);
 
-  // Previous data + empty result + fetch skipped entirely -> preserve.
-  assert.equal(frontend._shouldPreserveData([], ['old'], false, undefined, [], []), true);
+  // Previous data + empty result + collection disabled (not fetched) -> preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], { status: 'disabled' }), true);
 
-  // Previous data + empty result + healthy 200 -> the class really emptied out, don't preserve.
-  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, [], []), false);
+  // Previous data + empty result + ok -> the class really emptied out, don't preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], { status: 'ok' }), false);
 
-  // Previous data + empty result + error status -> preserve.
-  assert.equal(frontend._shouldPreserveData([], ['old'], true, 500, [], []), true);
+  // Previous data + empty result + unavailable -> preserve.
+  assert.equal(frontend._shouldPreserveData([], ['old'], { status: 'unavailable', httpStatus: 500 }), true);
 
-  // Previous data + empty result + a critical-kind warning -> preserve even with a 200.
-  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, ['auth failed'], [{ message: 'auth failed', kind: 'auth' }]), true);
+  // Fresh data always wins, whatever the state says.
+  assert.equal(frontend._shouldPreserveData(['new'], ['old'], { status: 'unavailable' }), false);
 
-  // A failing timetable canary API taints an unrelated widget's empty result.
-  assert.equal(frontend._shouldPreserveData([], ['old'], true, 200, [], [], { timetable: 500 }, { timetable: false }), true);
+  // Missing state (should not happen with a synchronous deploy) is treated as ok.
+  assert.equal(frontend._shouldPreserveData([], ['old'], undefined), false);
+});
+
+test('_processPayloadData flags a collection unavailable and keeps stale data on later failures', () => {
+  frontend.timeUnitsByStudent = {};
+  frontend.timetableByStudent = {};
+  frontend.dayNoticesByStudent = {};
+  frontend.dayNoticeMapByStudent = {};
+  frontend.periodNamesByStudent = {};
+  frontend.preprocessedByStudent = {};
+  frontend.examsByStudent = {};
+  frontend.homeworksByStudent = {};
+  frontend.absencesByStudent = {};
+  frontend.messagesOfDayByStudent = {};
+  frontend.holidaysByStudent = {};
+  frontend.holidayMapByStudent = {};
+  frontend.collectionStateByStudent = {};
+  frontend._log = () => {};
+  frontend._buildDayNoticeMap = () => ({});
+  frontend._buildHolidayMapFromRanges = () => ({});
+  frontend._toMinutes = () => 0;
+
+  const failed = { status: 'unavailable', httpStatus: 401, lastSuccessAt: null };
+  const ok = { status: 'ok', httpStatus: 200, lastSuccessAt: '2026-09-18T10:00:00.000Z' };
+  const collections = (lessons) => ({ lessons, exams: ok, homework: ok, absences: ok, messages: { status: 'disabled' } });
+
+  // First payload fails: nothing to show, collection flagged unavailable (not stale).
+  frontend._processPayloadData('A', { data: { lessons: [] }, state: { collections: collections(failed) } });
+  assert.deepEqual(frontend.timetableByStudent.A, []);
+  assert.equal(frontend.collectionStateByStudent.A.lessons.status, 'unavailable');
+  assert.equal(frontend.collectionStateByStudent.A.lessons.stale, false);
+
+  // Then data arrives.
+  frontend._processPayloadData('A', { data: { lessons: [{ date: 20260918, startTime: 800 }] }, state: { collections: collections(ok) } });
+  assert.equal(frontend.timetableByStudent.A.length, 1);
+  assert.equal(frontend.collectionStateByStudent.A.lessons.status, 'ok');
+
+  // A later failure keeps the old lessons and marks them stale.
+  frontend._processPayloadData('A', { data: { lessons: [] }, state: { collections: collections(failed) } });
+  assert.equal(frontend.timetableByStudent.A.length, 1);
+  assert.equal(frontend.collectionStateByStudent.A.lessons.status, 'unavailable');
+  assert.equal(frontend.collectionStateByStudent.A.lessons.stale, true);
+
+  // A confirmed empty result replaces them.
+  frontend._processPayloadData('A', { data: { lessons: [] }, state: { collections: collections(ok) } });
+  assert.deepEqual(frontend.timetableByStudent.A, []);
 });
 
 test('_normalizeRuntimeWarnings drops recovered no_data warnings but keeps config warnings', () => {
@@ -860,7 +905,7 @@ test('getTimetable rejects a 200 body without days[] and retries once after an a
       assert.equal(calls, 2);
       assert.equal(result.status, 200);
       assert.equal(result.data.length, 0);
-      assert.deepEqual(result.data.dayNotices, []);
+      assert.deepEqual(result.data.dayNotices, [{ date: '2026-09-18', kind: 'no-data', status: 'NO_DATA' }]);
     }
   );
 });
@@ -885,4 +930,35 @@ test('AuthService.logoutAll logs every cached session out and clears the cache',
   assert.equal(count, 2);
   assert.deepEqual(loggedOut.sort(), ['school@srv:JSESSIONID=1', 'school@srv:JSESSIONID=2']);
   assert.equal(service._authCache.size, 0);
+});
+
+test('getEmptyDayState reports "unavailable" only when the lessons collection failed without stale data', () => {
+  const getEmptyDayState = loadFrontendShared().util.getEmptyDayState;
+  const monday = new Date(2026, 8, 21); // 2026-09-21, a Monday
+  const baseCtx = { translate: (key) => key, holidayMapByStudent: {}, dayNoticeMapByStudent: {} };
+
+  assert.equal(getEmptyDayState(baseCtx, 'A', monday).type, 'no-lessons');
+
+  const unavailableCtx = { ...baseCtx, collectionStateByStudent: { A: { lessons: { status: 'unavailable', stale: false } } } };
+  const state = getEmptyDayState(unavailableCtx, 'A', monday);
+  assert.equal(state.type, 'unavailable');
+  assert.equal(state.noticeType, 'unavailable');
+
+  // Stale data on display: days without lessons in that data are still "no lessons".
+  const staleCtx = { ...baseCtx, collectionStateByStudent: { A: { lessons: { status: 'unavailable', stale: true } } } };
+  assert.equal(getEmptyDayState(staleCtx, 'A', monday).type, 'no-lessons');
+
+  // Weekend, holiday and locked days keep their meaning even when data is unavailable.
+  assert.equal(getEmptyDayState(unavailableCtx, 'A', new Date(2026, 8, 19)).type, 'weekend');
+  const lockedCtx = {
+    ...unavailableCtx,
+    dayNoticeMapByStudent: { A: { 20260921: { kind: 'timetable-restricted', status: 'NOT_ALLOWED' } } },
+  };
+  assert.equal(getEmptyDayState(lockedCtx, 'A', monday).type, 'timetable-restricted');
+
+  // WebUntis' NO_DATA marks a server-confirmed lesson-free day.
+  const noDataCtx = { ...baseCtx, dayNoticeMapByStudent: { A: { 20260921: { kind: 'no-data', status: 'NO_DATA' } } } };
+  const confirmed = getEmptyDayState(noDataCtx, 'A', monday);
+  assert.equal(confirmed.type, 'no-lessons');
+  assert.equal(confirmed.confirmed, true);
 });

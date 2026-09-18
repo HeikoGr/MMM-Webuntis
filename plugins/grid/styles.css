@@ -535,7 +535,8 @@
   content: var(--wu-icon-no-lessons);
 }
 
-.wu-plugin-grid .day-notice-icon-timetable-restricted::before {
+.wu-plugin-grid .day-notice-icon-timetable-restricted::before,
+.wu-plugin-grid .day-notice-icon-unavailable::before {
   content: var(--wu-icon-warning);
 }
 

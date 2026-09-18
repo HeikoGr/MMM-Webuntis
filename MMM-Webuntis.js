@@ -473,6 +473,7 @@ Module.register('MMM-Webuntis', {
       },
       state: {
         warnings: this.runtimeWarningsByStudent?.[studentTitle] ? Array.from(this.runtimeWarningsByStudent[studentTitle]) : [],
+        collections: this.collectionStateByStudent?.[studentTitle] || {},
       },
       plugins: {},
     }));
@@ -1259,47 +1260,41 @@ Module.register('MMM-Webuntis', {
   },
 
   /**
-   * Decide whether to preserve previous data when new data is empty or fetch failed
-   * Preserves data if:
-   *   - Previous data exists AND new data is empty
-   *   - Data type wasn't fetched (fetchFlag=false)
-   *   - API returned error status (>= 400 or 0)
-   *   - Warnings contain critical errors (auth, connection)
+   * Decide whether to keep the previously displayed data of a collection.
    *
-   * This prevents blank widgets during temporary API outages
+   * The backend reports per collection whether the latest fetch succeeded
+   * (`state.collections.<name>.status`: `ok`, `unavailable`, `disabled`). Data is replaced only
+   * on `ok`; a failed or skipped fetch keeps whatever was shown before, so a temporary outage
+   * never blanks a widget. A collection without previous data stays empty and is flagged
+   * `unavailable` so plugins can render "data unavailable" instead of "no lessons".
    *
    * @param {Array} nextData - New data from backend
-   * @param {Array} prevData - Previous cached data
-   * @param {boolean} fetchFlag - Whether this data type was actually fetched
-   * @param {number} status - HTTP status code from the specific API
-   * @param {string[]} warnings - Warning messages from fetch
-   * @param {Object[]} warningMeta - Structured warning metadata from payload
-   * @param {Object} apiStatus - Aggregate API status snapshot from payload
-   * @param {Object} fetchFlags - Aggregate fetch flags from payload
+   * @param {Array} prevData - Previously displayed data
+   * @param {Object} collectionState - `state.collections.<name>` entry from the payload
    * @returns {boolean} True if previous data should be preserved
    */
-  _shouldPreserveData(nextData, prevData, fetchFlag, status, warnings, warningMeta = [], apiStatus = {}, fetchFlags = {}) {
-    const nextIsArray = Array.isArray(nextData);
-    const prevIsArray = Array.isArray(prevData);
-    const nextEmpty = nextIsArray && nextData.length === 0;
-    const prevHasData = prevIsArray && prevData.length > 0;
+  _shouldPreserveData(nextData, prevData, collectionState) {
+    const prevHasData = Array.isArray(prevData) && prevData.length > 0;
+    const nextHasData = Array.isArray(nextData) && nextData.length > 0;
+    if (!prevHasData || nextHasData) return false;
+    return String(collectionState?.status || 'ok') !== 'ok';
+  },
 
-    if (!prevHasData) return false;
-    if (!nextEmpty) return false;
-
-    if (fetchFlag === false) return true;
-
-    const numericStatus = Number(status);
-    const isBadStatus = Number.isFinite(numericStatus) && (numericStatus === 0 || numericStatus >= 400);
-    const hasCriticalMeta = this._hasCriticalWarningMeta(warnings, warningMeta);
-    const hasNetworkFallbackWarning = this._hasNetworkTextFallback(warnings, warningMeta);
-    const timetableCanaryStatus = Number(apiStatus?.timetable);
-    const hasCriticalTimetableCanaryFailure =
-      fetchFlags?.timetable !== true &&
-      Number.isFinite(timetableCanaryStatus) &&
-      (timetableCanaryStatus === 0 || timetableCanaryStatus === 401 || timetableCanaryStatus === 429 || timetableCanaryStatus >= 500);
-
-    return isBadStatus || hasCriticalMeta || hasNetworkFallbackWarning || hasCriticalTimetableCanaryFailure;
+  /**
+   * Effective collection state for the frontend: the backend state plus whether stale data is
+   * being shown in place of a failed fetch.
+   *
+   * @param {Object} collectionState - `state.collections.<name>` entry from the payload
+   * @param {boolean} preserved - Whether previous data was kept
+   * @returns {Object} { status, httpStatus, lastSuccessAt, stale }
+   */
+  _resolveCollectionState(collectionState, preserved) {
+    return {
+      status: String(collectionState?.status || 'ok'),
+      httpStatus: collectionState?.httpStatus ?? null,
+      lastSuccessAt: collectionState?.lastSuccessAt ?? null,
+      stale: Boolean(preserved),
+    };
   },
 
   /**
@@ -1408,6 +1403,7 @@ Module.register('MMM-Webuntis', {
     this.holidayMapByStudent = {};
     this.dayNoticeMapByStudent = {};
     this.preprocessedByStudent = {};
+    this.collectionStateByStudent = {};
 
     this.moduleWarningsSet = new Set();
     this.moduleWarningMetaByMessage = new Map();
@@ -1860,10 +1856,9 @@ Module.register('MMM-Webuntis', {
 
   _processPayloadData(title, payload) {
     let dataChanged = false;
-    const apiStatus = payload?.state?.api || {};
-    const fetchFlags = payload?.state?.fetch || {};
-    const warningsList = Array.isArray(payload?.state?.warnings) ? payload.state.warnings : [];
-    const warningMeta = Array.isArray(payload?.state?.warningMeta) ? payload.state.warningMeta : [];
+    const collections = payload?.state?.collections && typeof payload.state.collections === 'object' ? payload.state.collections : {};
+    const lessonsState = collections.lessons || {};
+    const nextCollectionState = {};
 
     let timeUnits = [];
     try {
@@ -1880,18 +1875,8 @@ Module.register('MMM-Webuntis', {
       this._log('warn', 'failed to build timeUnits from grid', e);
     }
 
-    if (
-      !this._shouldPreserveData(
-        timeUnits,
-        this.timeUnitsByStudent[title] || [],
-        fetchFlags.timegrid ?? fetchFlags.timetable ?? true,
-        apiStatus.timetable,
-        warningsList,
-        warningMeta,
-        apiStatus,
-        fetchFlags
-      )
-    ) {
+    // timeUnits, dayNotices and holidays travel with the timetable and follow its state.
+    if (!this._shouldPreserveData(timeUnits, this.timeUnitsByStudent[title] || [], lessonsState)) {
       this.timeUnitsByStudent[title] = timeUnits;
       dataChanged = true;
     }
@@ -1903,39 +1888,19 @@ Module.register('MMM-Webuntis', {
     this.periodNamesByStudent[title] = periodMap;
 
     const rawLessons = Array.isArray(payload?.data?.lessons) ? payload.data.lessons : [];
-    if (
-      !this._shouldPreserveData(
-        rawLessons,
-        this.timetableByStudent[title] || [],
-        fetchFlags.timetable ?? true,
-        apiStatus.timetable,
-        warningsList,
-        warningMeta,
-        apiStatus,
-        fetchFlags
-      )
-    ) {
+    const preserveLessons = this._shouldPreserveData(rawLessons, this.timetableByStudent[title] || [], lessonsState);
+    if (!preserveLessons) {
       this.timetableByStudent[title] = rawLessons;
       dataChanged = true;
     }
+    nextCollectionState.lessons = this._resolveCollectionState(lessonsState, preserveLessons);
     this._log(
       'debug',
       `[DATA_UPDATE] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`
     );
 
     const dayNotices = Array.isArray(payload?.data?.dayNotices) ? payload.data.dayNotices : [];
-    if (
-      !this._shouldPreserveData(
-        dayNotices,
-        this.dayNoticesByStudent[title] || [],
-        fetchFlags.timetable ?? true,
-        apiStatus.timetable,
-        warningsList,
-        warningMeta,
-        apiStatus,
-        fetchFlags
-      )
-    ) {
+    if (!this._shouldPreserveData(dayNotices, this.dayNoticesByStudent[title] || [], lessonsState)) {
       this.dayNoticesByStudent[title] = dayNotices;
       this.dayNoticeMapByStudent[title] = this._buildDayNoticeMap(dayNotices);
       dataChanged = true;
@@ -1954,57 +1919,35 @@ Module.register('MMM-Webuntis', {
     this.preprocessedByStudent[title] = { ...(this.preprocessedByStudent[title] || {}), rawGroupedByDate: groupedRaw };
 
     const dataMaps = [
-      { key: 'exams', source: payload?.data?.exams, target: this.examsByStudent, flag: fetchFlags.exams, status: apiStatus.exams },
-      {
-        key: 'homework',
-        source: payload?.data?.homework,
-        target: this.homeworksByStudent,
-        flag: fetchFlags.homework,
-        status: apiStatus.homework,
-      },
-      {
-        key: 'absences',
-        source: payload?.data?.absences,
-        target: this.absencesByStudent,
-        flag: fetchFlags.absences,
-        status: apiStatus.absences,
-      },
-      {
-        key: 'messages',
-        source: payload?.data?.messages,
-        target: this.messagesOfDayByStudent,
-        flag: fetchFlags.messages,
-        status: apiStatus.messages,
-      },
+      { key: 'exams', source: payload?.data?.exams, target: this.examsByStudent },
+      { key: 'homework', source: payload?.data?.homework, target: this.homeworksByStudent },
+      { key: 'absences', source: payload?.data?.absences, target: this.absencesByStudent },
+      { key: 'messages', source: payload?.data?.messages, target: this.messagesOfDayByStudent },
     ];
 
-    dataMaps.forEach(({ source, target, flag, status }) => {
+    dataMaps.forEach(({ key, source, target }) => {
       const parsedArray = Array.isArray(source) ? source : [];
-      if (
-        !this._shouldPreserveData(parsedArray, target[title] || [], flag ?? true, status, warningsList, warningMeta, apiStatus, fetchFlags)
-      ) {
+      const collectionState = collections[key] || {};
+      const preserve = this._shouldPreserveData(parsedArray, target[title] || [], collectionState);
+      if (!preserve) {
         target[title] = parsedArray;
         dataChanged = true;
       }
+      nextCollectionState[key] = this._resolveCollectionState(collectionState, preserve);
     });
 
     const holidays = Array.isArray(payload?.data?.holidays?.ranges) ? payload.data.holidays.ranges : [];
-    if (
-      !this._shouldPreserveData(
-        holidays,
-        this.holidaysByStudent[title] || [],
-        fetchFlags.timetable ?? true,
-        apiStatus.timetable,
-        warningsList,
-        warningMeta,
-        apiStatus,
-        fetchFlags
-      )
-    ) {
+    if (!this._shouldPreserveData(holidays, this.holidaysByStudent[title] || [], lessonsState)) {
       this.holidaysByStudent[title] = holidays;
       this.holidayMapByStudent[title] = this._buildHolidayMapFromRanges(holidays);
       dataChanged = true;
     }
+
+    const prevCollectionState = this.collectionStateByStudent[title];
+    if (JSON.stringify(prevCollectionState || null) !== JSON.stringify(nextCollectionState)) {
+      dataChanged = true;
+    }
+    this.collectionStateByStudent[title] = nextCollectionState;
 
     return dataChanged;
   },

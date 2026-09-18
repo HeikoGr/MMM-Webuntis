@@ -45,5 +45,6 @@
   "popover_lesson_fallback_title": "Unterricht",
   "popover_raw_payload": "Rohdaten Unterricht",
   "popover_empty": "Keine Details verfügbar.",
-  "popover_close": "Details schließen"
+  "popover_close": "Details schließen",
+  "unavailable": "Daten nicht verfügbar"
 }

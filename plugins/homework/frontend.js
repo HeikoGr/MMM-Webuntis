@@ -101,7 +101,15 @@
             }
 
             if (!Array.isArray(homeworks) || homeworks.length === 0) {
-              addRow(container, 'homeworkRowEmpty', studentLabelText, escapeHtml(translate(pluginContext, 'no_homework', 'no homework')));
+              const unavailable = studentSlice?.state?.collections?.homework?.status === 'unavailable';
+              addRow(
+                container,
+                unavailable ? 'homeworkRowEmpty unavailable-notice' : 'homeworkRowEmpty',
+                studentLabelText,
+                escapeHtml(
+                  translate(pluginContext, unavailable ? 'unavailable' : 'no_homework', unavailable ? 'data unavailable' : 'no homework')
+                )
+              );
               wrapper.appendChild(container);
               renderedContainers += 1;
               continue;

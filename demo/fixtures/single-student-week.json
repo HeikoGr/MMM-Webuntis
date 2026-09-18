@@ -1191,6 +1191,33 @@
       "absences": 200,
       "messages": 200
     },
+    "collections": {
+      "lessons": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+      },
+      "exams": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+      },
+      "homework": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+      },
+      "absences": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+      },
+      "messages": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+      }
+    },
     "warnings": [],
     "warningMeta": []
   }
