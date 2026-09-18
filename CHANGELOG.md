@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.0...v0.11.1) (2026-09-18)
+
+
+### 🧱 Refactoring
+
+* **debugDumpUtils:** export cleanupOldDumps function for broader usage ([8e03dd3](https://github.com/HeikoGr/MMM-Webuntis/commit/8e03dd353910e398df6143f97212219489bff722))
+
 ## [0.11.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.10.1...v0.11.0) (2026-09-18)
 
 
