@@ -62,6 +62,7 @@ module.exports = NodeHelper.create({
     this._sessions = new SessionRegistry({ logger: log, onRelease: (sessionKey) => this._apiStatus.release(sessionKey) });
     this._client = new WebUntisClient({ mmLog: log, formatErr: this._formatErr.bind(this), apiStatus: this._apiStatus });
     this._pendingFetchByCredKey = new Map(); // credKey -> in-flight processGroup() promise
+    this._initInFlightBySession = new Map(); // sessionKey -> in-flight _handleInitModule() promise
     this._pluginHost = initializeBackendPluginHost({ moduleRoot: __dirname, logger: log });
     this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
     this._pluginWarnings.forEach((warning) => {
@@ -85,6 +86,7 @@ module.exports = NodeHelper.create({
     this._sessions?.clear();
     this._apiStatus?.clear();
     this._pendingFetchByCredKey?.clear();
+    this._initInFlightBySession?.clear();
     this._runtimeReady = false;
     this._mmLog('debug', null, 'Node helper stopped');
   },
@@ -184,13 +186,27 @@ module.exports = NodeHelper.create({
    *
    * Flow:
    *   1. Normalize (legacy mappings, canonical plugins) and validate the config
-   *   2. Register the session, auto-discover students if parent credentials are present
-   *   3. Send MODULE_READY
+   *   2. Register the session and send MODULE_READY right away, so the frontend's init watchdog
+   *      is not coupled to WebUntis response times
+   *   3. Auto-discover students if parent credentials are present (may log in)
    *   4. Run the first fetch automatically (no separate REFRESH needed)
+   *
+   * A CONFIGURE that arrives for a session whose init is still running is ignored.
    */
   async _handleInitModule(payload) {
     this._ensureRuntime();
-    return this._runInitModule(payload);
+    const { sessionKey } = buildRouteMeta(payload);
+    const inFlight = this._initInFlightBySession.get(sessionKey);
+    if (inFlight) {
+      this._mmLog('debug', null, `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`);
+      return inFlight;
+    }
+
+    const run = this._runInitModule(payload).finally(() => {
+      if (this._initInFlightBySession.get(sessionKey) === run) this._initInFlightBySession.delete(sessionKey);
+    });
+    this._initInFlightBySession.set(sessionKey, run);
+    return run;
   },
 
   async _runInitModule(payload) {
@@ -233,6 +249,7 @@ module.exports = NodeHelper.create({
 
       this._sessions.configsByIdentifier.set(identifier, normalizedConfig);
       normalizedConfig._authService = this._authService;
+      this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
 
       await ensureStudentsFromAppData(normalizedConfig, {
         authService: this._authService,
@@ -240,7 +257,6 @@ module.exports = NodeHelper.create({
         formatError: this._formatErr.bind(this),
       });
 
-      this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
       await this._handleFetchData({ ...normalizedConfig, id: identifier, sessionId, reason: 'post-init-auto-fetch' });
     } catch (error) {
       this._mmLog('error', null, `[CONFIGURE] Initialization failed: ${this._formatErr(error)}`);
@@ -301,7 +317,7 @@ module.exports = NodeHelper.create({
   /**
    * Handle REFRESH - data refresh for an initialized session.
    * Self-healing: if the backend restarted and does not know the session, CONFIGURE is re-run
-   * from the incoming payload.
+   * from the incoming payload. A REFRESH that overlaps a running init waits for it.
    */
   async _handleFetchData(payload) {
     this._ensureRuntime();
@@ -317,6 +333,12 @@ module.exports = NodeHelper.create({
     if (this._sessions.isPaused(sessionKey) && payload?.backgroundRefresh === false) {
       this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
       return;
+    }
+
+    const inFlightInit = this._initInFlightBySession.get(sessionKey);
+    if (inFlightInit && fetchReason !== 'post-init-auto-fetch') {
+      this._mmLog('debug', null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
+      await inFlightInit.catch(() => {});
     }
 
     let config = this._sessions.getOrCreateSessionConfig(sessionKey);
