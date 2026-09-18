@@ -222,7 +222,7 @@ module.exports = NodeHelper.create({
       const { sessionId, sessionKey } = route;
 
       this._mmLog(
-        'info',
+        'debug',
         null,
         `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || 'unspecified'})`
       );
