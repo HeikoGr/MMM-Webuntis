@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.11.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.10.1...v0.11.0) (2026-09-18)
+
+
+### 🔌 Features
+
+* **contract:** report per-collection fetch state and render "data unavailable" ([11db56a](https://github.com/HeikoGr/MMM-Webuntis/commit/11db56a27cbd774af95a3c810434c6faa18edf92))
+
+
+### 🐛 Fixes
+
+* **auth:** share one WebUntis session per account across instances and sessions ([7881481](https://github.com/HeikoGr/MMM-Webuntis/commit/7881481caa038f52ce14295d087031f89f1ef518))
+* **auth:** surface expired WebUntis sessions instead of silently empty data ([d9e67fe](https://github.com/HeikoGr/MMM-Webuntis/commit/d9e67fec2ea9c5ed846932e386e6b053eb905ec9))
+* **init:** send MODULE_READY before student discovery and ignore duplicate CONFIGURE ([d408f5e](https://github.com/HeikoGr/MMM-Webuntis/commit/d408f5e8a5ee8417b584ef384e44d29389ae9df1))
+
+
+### 🧱 Refactoring
+
+* **css:** order lesson-content, ticker and hourline rules by ascending specificity ([4e02496](https://github.com/HeikoGr/MMM-Webuntis/commit/4e02496abb48a91aed05f409318762bc2cb111cc))
+* **node_helper:** move adapter logic into lib modules ([64c4016](https://github.com/HeikoGr/MMM-Webuntis/commit/64c4016d2aa857532e2fbacf31de489d8ad36e6c))
+
+
+### 📚 Documentation
+
+* audit of the empty-timetable failures, measured session lifetimes, updated contract ([81317b4](https://github.com/HeikoGr/MMM-Webuntis/commit/81317b4356cafe749aace536b49266b3772ab590))
+
 ## [0.10.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.10.0...v0.10.1) (2026-08-19)
 
 
