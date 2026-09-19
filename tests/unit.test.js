@@ -100,6 +100,11 @@ test('sanitizeRichText keeps Markdown markers only when requested', () => {
   assert.equal(sanitizeRichText('A *marked* _text_', true), 'A *marked* _text_');
 });
 
+test('sanitizeRichText decodes HTML entities instead of leaving them literal (issue #88)', () => {
+  assert.equal(sanitizeRichText('Aufgabe 3&amp;4 schriftlich'), 'Aufgabe 3&4 schriftlich');
+  assert.equal(sanitizeRichText('&auml;&ouml;&uuml;&szlig; &#228;'), 'äöüß ä');
+});
+
 test('single-student-week fixture matches the canonical V3 payload shape', () => {
   const { data, state } = singleStudentWeekFixture;
 
