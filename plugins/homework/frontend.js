@@ -124,7 +124,11 @@
               const rightSubject = right?.subject || null;
               return (
                 (Number(left?.dueDate) || 0) - (Number(right?.dueDate) || 0) ||
-                getFieldDisplayName(leftSubject, 'short').localeCompare(getFieldDisplayName(rightSubject, 'short'))
+                getFieldDisplayName(leftSubject, 'short').localeCompare(getFieldDisplayName(rightSubject, 'short')) ||
+                // WebUntis doesn't guarantee a stable order for entries tied on the criteria above,
+                // so fall back to the immutable homework id - keeps the order identical across
+                // refreshes instead of flipping (see issue #89).
+                (Number(left?.id) || 0) - (Number(right?.id) || 0)
               );
             });
 
