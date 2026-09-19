@@ -80,6 +80,8 @@ students: [
 
 Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, `demoDataFile`, `initRetryTimeout`, and `initRetryMaxAttempts` in the option table above.
 
+**`debugDate` and past school years:** pick a date inside the *current* school year. WebUntis serves homework only for the school year your session was opened in, so a `debugDate` in an earlier school year shows no homework, while the timetable and exams still appear. Normal operation is unaffected. Details: [API_REFERENCE.md](../docs/API_REFERENCE.md#known-limitation-debugdate).
+
 ## Canonical Plugin Config
 
 Plugin-specific options live under `plugins.<id>.config`.

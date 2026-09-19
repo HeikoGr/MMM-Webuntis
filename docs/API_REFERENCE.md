@@ -57,6 +57,44 @@ Flow:
 3. Request a REST bearer token via `/WebUntis/api/token/new`.
 4. Optionally read `/WebUntis/api/rest/view/v1/app/data` for parent-account auto-discovery.
 
+### Form Login (alternative, not used)
+
+The WebUntis web UI does not use JSON-RPC `authenticate`; it posts the credentials to a Spring
+Security form-login endpoint. **MMM-Webuntis does not use this path.** It is documented because
+`jsonrpc.do` is a legacy surface that WebUntis could retire, and because this flow yields the CSRF
+token required by [`jsonrpc_web/jsonCalendarService`](#jsonrpc_webjsoncalendarservice).
+
+Flow:
+1. `GET /WebUntis/?school=<school>` - sets a pre-auth session cookie and embeds the CSRF token
+   (see [CSRF Token](#csrf-token)).
+2. `POST /WebUntis/j_spring_security_check` with the CSRF header and
+   `Content-Type: application/x-www-form-urlencoded`:
+
+   ```text
+   school=<school>&j_username=<username>&j_password=<password>&token=
+   ```
+
+   The trailing `token` field stays empty for plain credential login.
+3. On success the response is `{"switchUI":true,"state":"SUCCESS"}` and the session cookie is
+   upgraded to an authenticated one.
+4. Continue as with JSON-RPC login: `/WebUntis/api/token/new`, then `app/data`.
+
+Verified working against a live tenant from plain Node (no browser required). The failure response
+shape was not probed; an implementation should treat anything other than `state: "SUCCESS"` as a
+failed login.
+
+### CSRF Token
+
+Several non-REST endpoints require a CSRF token. It is not a cookie and not a meta tag: the initial
+HTML of `GET /WebUntis/?school=<school>` embeds it in an inline JSON blob.
+
+```json
+{ "csrfHeader": "X-CSRF-TOKEN", "csrfToken": "<token>" }
+```
+
+Use the value of `csrfHeader` as the header name and `csrfToken` as its value. The token is bound to
+the session cookie of that same response, so both must be kept together.
+
 ### Token And Session Handling
 
 REST bearer tokens:
@@ -144,6 +182,29 @@ The module relies on:
 
 Normalization note:
 - homework items are joined with lesson metadata before transport to the frontend
+
+School-year scoping (important):
+- this endpoint is scoped by the **school year stored in the server-side session**, not by the
+  requested date range and not by the `X-Webuntis-Api-School-Year-Id` header
+- a session is pinned to the school year that was current at login; a request for a date range in
+  a different school year answers HTTP 200 with every collection empty:
+  `{"data":{"records":[],"homeworks":[],"teachers":[],"lessons":[]}}`
+- the WebUntis web UI works around this by calling `setSchoolyear` (see
+  [`jsonrpc_web/jsonCalendarService`](#jsonrpc_webjsoncalendarservice)) before it queries a date
+  outside the active school year
+- MMM-Webuntis does not call `setSchoolyear`, so homework is only retrievable for the school year
+  that is current at fetch time - see [Known Limitation: debugDate](#known-limitation-debugdate)
+
+Measured behavior on one session (identical request, only the session school year changed):
+
+| Session school year | homework | exams | timetable |
+| --- | --- | --- | --- |
+| current (at login) | 0 | 3 | 8 |
+| previous, via `setSchoolyear` | 43 | 3 | 8 |
+| current again | 0 | 3 | 8 |
+
+Exams and timetable were unaffected by the session school year in the same test; the timetable
+endpoint derives the school year from the requested date range.
 
 ### Absences
 
@@ -235,6 +296,44 @@ Minimal response fields used by the module:
 }
 ```
 
+### `jsonrpc_web/jsonCalendarService`
+
+A second, separate JSON-RPC surface used by the WebUntis web UI. **Not used by MMM-Webuntis** -
+documented because it is the only known way to reach data of a past school year (see
+[Homework](#homework)).
+
+```text
+POST /WebUntis/jsonrpc_web/jsonCalendarService
+```
+
+`setSchoolyear` switches the school year stored in the server-side session:
+
+```json
+{
+  "id": 6,
+  "method": "setSchoolyear",
+  "params": [9],
+  "jsonrpc": "2.0"
+}
+```
+
+Response:
+
+```json
+{ "jsonrpc": "2.0", "id": 6, "result": true }
+```
+
+Requirements:
+- an authenticated session cookie
+- `Content-Type: application/json`
+- a CSRF token header (see [CSRF Token](#csrf-token)); the request is rejected without it
+
+Notes:
+- the school year id comes from `GET /WebUntis/api/rest/view/v1/schoolyears`, which lists every
+  school year with `id`, `name`, and `dateRange`; ids are not contiguous per school
+- the call mutates shared session state: one session is shared by all module instances of an
+  account, so any implementation must account for instances targeting different school years
+
 ## Normalization Rules
 
 This section documents stable transformation rules that are intentionally applied before data enters the frontend contract.
@@ -301,6 +400,26 @@ Inputs may depend on:
 
 The exact internal range object is an implementation detail and is therefore not duplicated here.
 
+## Known Limitation: debugDate
+
+`debugDate` moves the module's calendar date for testing. When the chosen date lies in a **past
+school year**, homework comes back empty while timetable and exams still return data.
+
+This is the session-scoping behavior described under [Homework](#homework), not a module bug: a
+session is pinned to the school year current at login, and the module deliberately does not call
+[`setSchoolyear`](#jsonrpc_webjsoncalendarservice), because that call mutates session state shared
+by every module instance of the account.
+
+Practical consequence:
+- pick a `debugDate` inside the current school year to exercise homework
+- normal operation is unaffected, since live fetches always target the current date
+
+Ruled out during investigation (all reproduced against a live tenant):
+- sending `X-Webuntis-Api-School-Year-Id` with the correct id - no effect on this endpoint
+- passing `studentId` as a query parameter - the web UI does not send it either
+- bearer token vs. cookie-only auth, and the order of calls after login
+- the login method itself: the [form login](#form-login-alternative-not-used) behaves identically
+
 ## Coverage Summary
 
 | Capability | External API used | Notes |
@@ -309,7 +428,7 @@ The exact internal range object is an implementation detail and is therefore not
 | Timetable | REST timetable endpoint | Auth canary and primary lesson source |
 | Timegrid | REST `app/data` or derived fallback | No dedicated production endpoint used |
 | Exams | REST `/api/exams` | Direct endpoint |
-| Homework | REST `/api/homeworks/lessons` | Homework and lesson join |
+| Homework | REST `/api/homeworks/lessons` | Homework and lesson join; scoped to the session's school year |
 | Absences | REST class-register absences endpoint | Student-specific filtering when needed |
 | Messages | REST news widget endpoint | Normalized to internal `messages` |
 | Holidays | REST `app/data` | Derived from school-year and app-data payload |
