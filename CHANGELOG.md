@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.1...v0.11.2) (2026-09-19)
+
+
+### 🐛 Fixes
+
+* **homework:** sort by homework id as a stable tiebreaker ([9bda8ea](https://github.com/HeikoGr/MMM-Webuntis/commit/9bda8ea5fdb35b47b5caecf331c7472914a3a7d4)), closes [#89](https://github.com/HeikoGr/MMM-Webuntis/issues/89)
+* **text:** decode HTML entities in lesson/homework/exam/absence text ([f7ebcda](https://github.com/HeikoGr/MMM-Webuntis/commit/f7ebcda648b4cb293af3b398804ca25dbae293d5)), closes [#88](https://github.com/HeikoGr/MMM-Webuntis/issues/88)
+
+
+### 🧱 Refactoring
+
+* **auth:** change logging level from info to debug for various auth operations ([4bb1ac3](https://github.com/HeikoGr/MMM-Webuntis/commit/4bb1ac3f345fa37ce1926495d8f28c91c3384c6c))
+
 ## [0.11.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.0...v0.11.1) (2026-09-18)
 
 
