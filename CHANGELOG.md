@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.3...v0.12.0) (2026-09-22)
+
+
+### 🔌 Features
+
+* **config:** hide lessons by name and add own lessons via config ([#95](https://github.com/HeikoGr/MMM-Webuntis/issues/95)) ([f578b0e](https://github.com/HeikoGr/MMM-Webuntis/commit/f578b0ebb082862d1e3ab901c717ff67397c2abf))
+
 ## [0.11.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.2...v0.11.3) (2026-09-22)
 
 
