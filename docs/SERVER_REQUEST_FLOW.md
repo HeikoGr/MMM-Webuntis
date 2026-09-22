@@ -39,6 +39,7 @@ flowchart TD
     MODOK[EVENT: MODULE_READY]
     GOT[EVENT: DATA_UPDATE]
     INITERR[EVENT: MODULE_INIT_FAILED]
+    INITREQ[EVENT: INIT_REQUIRED]
 
     CFG[Config validation and legacy mapping]
     DISCOVER[Optional student auto-discovery via app/data]
@@ -64,7 +65,7 @@ flowchart TD
 
     STATUS[(session api status map)]
     SKIP{403/404/410 younger than 24h?\nor 3+ consecutive failures\nwithin backoff window?}
-    REFRESH{401 auth error?}
+    REAUTH{401 auth error?}
     RETRYORCH{auth refreshed during\ntimetable phase?}
 
     API[(WebUntis REST API)]
@@ -77,6 +78,7 @@ flowchart TD
     NH --> EXEC
 
     FE --> FETCH --> NH --> EXEC
+    NH -- session unknown --> INITREQ --> FE
     FE --> STATE --> NH
 
     EXEC --> GROUP --> AUTHSESSION --> FACADE
@@ -98,10 +100,10 @@ flowchart TD
     PAR --> SKIP
     SKIP -- yes --> STATUS
     SKIP -- no --> RESTCALL --> FETCHC --> API
-    RESTCALL --> REFRESH
-    REFRESH -- yes --> AUTH
-    REFRESH -- then retry endpoint once --> RESTCALL
-    REFRESH -- no --> STATUS
+    RESTCALL --> REAUTH
+    REAUTH -- yes --> AUTH
+    REAUTH -- then retry endpoint once --> RESTCALL
+    REAUTH -- no --> STATUS
     STATUS --> MAP
 
     CFG -- invalid --> INITERR --> FE
@@ -181,7 +183,8 @@ These are the internal status signals between frontend and backend.
 | `CONFIGURE` | frontend -> backend | Validate config, set up auth service, optionally auto-discover students, then trigger initial fetch |
 | `MODULE_READY` | backend -> frontend | Initialization finished successfully; includes normalized config, warnings, and students |
 | `MODULE_INIT_FAILED` | backend -> frontend | Initialization failed; includes `errors`, `warnings`, and `severity` |
-| `REFRESH` | frontend -> backend | Start a refresh for an already initialized session |
+| `REFRESH` | frontend -> backend | Start a refresh for an already initialized session. Carries only `id`, `sessionId`, `reason`, `debugDate` and `backgroundRefresh` - the config travels with `CONFIGURE` |
+| `INIT_REQUIRED` | backend -> frontend | A `REFRESH` arrived for a session the backend does not know (helper restarted). The frontend reopens its init gate and re-sends `CONFIGURE` |
 | `DATA_UPDATE` | backend -> frontend | Final payload after auth, fetch, normalization, and payload building |
 | `SESSION_STATE` | frontend -> backend | Mark session as `active` or `paused`; paused sessions ignore fetches |
 
@@ -212,7 +215,7 @@ Possible paths:
 - token bootstrap via `httpClient.getBearerToken()`
 - metadata enrichment via `authService._fetchAppData()`
 
-Note on `app/data`: a `200` response with an empty or non-JSON body does **not** fail authentication. `tenantId` and `schoolYearId` stay `null`, the result is cached for the full token TTL, and subsequent REST calls are sent without the `Tenant-Id` / `X-Webuntis-Api-School-Year-Id` headers (see `docs/AUDIT_2026-09-18.md`, F2).
+Note on `app/data`: a `200` response with an empty or non-JSON body does **not** fail authentication. `tenantId` and `schoolYearId` stay `null`, the result is cached for the full token TTL, and subsequent REST calls are sent without the `Tenant-Id` / `X-Webuntis-Api-School-Year-Id` headers.
 
 Returned auth session fields include:
 - `token`
@@ -284,7 +287,7 @@ Consequences: the timetable-first auth canary only covers the JWT/REST session. 
 minutes of inactivity the timetable still succeeds while exams, homework and absences hit the dead
 cookie; each of them now raises `SESSION_EXPIRED` and retries once after a shared re-login. Several
 parallel logins of the same user do **not** invalidate each other, and `logout` only ends the
-session it is sent from. See `docs/AUDIT_2026-09-18.md` section 5.
+session it is sent from.
 
 ### Important Timeout Nuances
 

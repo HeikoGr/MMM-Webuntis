@@ -10,6 +10,22 @@ Check these first:
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.
 5. Make sure the selected date range actually contains timetable data.
 
+## Which Log Level To Pick
+
+`logLevel: 'info'` is the level for "data disappears now and then". It stays quiet during normal
+operation and prints exactly two kinds of auth line:
+
+- one line per real login (`REST auth: logging in ...` or `QR Auth: Starting authentication ...`) -
+  cached sessions are reused silently, so every line here is an actual login
+- one line per invalidated session (`Invalidating expired token cache`)
+
+A login without a preceding invalidation means the token simply aged out. A login right after an
+invalidation means something rejected the session. Correlating those timestamps with the moment
+data vanished is usually enough to tell a session problem from an empty timetable.
+
+`logLevel: 'debug'` adds cache hits, per-request details and payload summaries - useful once you
+know where to look, too noisy to watch for hours.
+
 ## Empty View But Data May Have Failed To Load
 
 An empty timetable view does not always mean that there is really no school on that day.
@@ -51,7 +67,6 @@ and `data.dayNotices`:
 ok`; the raw `raw_api_*_timetable.json` dump written by `dumpRawApiResponses: true` shows the
 per-day status (`NO_DATA` vs. `NOT_ALLOWED`). Failed requests are dumped as
 `raw_api_*_<type>_error.json` with status, error code, redirect location and a body snippet.
-The audit that led to this matrix is in `docs/AUDIT_2026-09-18.md`.
 
 Useful references:
 

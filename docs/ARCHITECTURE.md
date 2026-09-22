@@ -59,8 +59,8 @@ Files:
 - `MMM-Webuntis.css`
 
 Responsibilities:
-- send `CONFIGURE` and `REFRESH`
-- receive `MODULE_READY`, `MODULE_INIT_FAILED`, and `DATA_UPDATE`
+- send `CONFIGURE` (full config) and `REFRESH` (routing, reason, `debugDate`, `backgroundRefresh`)
+- receive `MODULE_READY`, `MODULE_INIT_FAILED`, `INIT_REQUIRED`, and `DATA_UPDATE`
 - load frontend plugin assets and register plugin instances
 - render active plugins through the frontend plugin host
 - format already-normalized data for display
@@ -165,6 +165,10 @@ Consequences for contributors:
 7. `node_helper.js` emits `DATA_UPDATE`.
 8. Frontend keeps previous data for `unavailable` collections and renders "data unavailable" when
    it has nothing to keep; plugin renderers consume the normalized result.
+
+Subsequent refreshes repeat steps 5-8. Because `REFRESH` no longer carries the config, a helper
+that restarted under a running frontend answers the next `REFRESH` with `INIT_REQUIRED`; the
+frontend then reopens its init gate and the flow restarts at step 1.
 
 Current compatibility note:
 

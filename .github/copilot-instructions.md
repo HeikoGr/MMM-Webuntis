@@ -157,7 +157,6 @@ Boundary rule:
 - `docs/SERVER_REQUEST_FLOW.md` - Runtime request order, retries, skip rules, and statuses
 - `docs/API_V3_MANIFEST.md` - Currently shipped frontend/backend payload contract
 - `docs/PLUGINS.md` - Plugin runtime contract, manifest model, and host APIs
-- `docs/AUDIT_2026-09-18.md` - Audit findings: silent empty-timetable paths, auth-cache poisoning, node_helper inventory
 
 ## Quality bar
 

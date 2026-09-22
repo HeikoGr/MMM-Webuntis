@@ -967,3 +967,166 @@ test('getEmptyDayState reports "unavailable" only when the lessons collection fa
   assert.equal(confirmed.type, 'no-lessons');
   assert.equal(confirmed.confirmed, true);
 });
+
+test('AuthService logs exactly one info line per real login and one per invalidation', async () => {
+  const { AuthService } = require('../lib/webuntisClient');
+  const lines = [];
+  const service = new AuthService({ logger: (level, message) => lines.push({ level, message }) });
+
+  const cacheKey = 'test:rest';
+  const authResult = { token: 't', cookieString: 'c', tenantId: 1, schoolYearId: 2, personId: 3, role: 'STUDENT', appData: {} };
+  service._performAuth = async () => {
+    service._authCache.set(cacheKey, {
+      ...authResult,
+      school: 's',
+      server: 'srv',
+      expiresAt: Date.now() + 14 * 60 * 1000,
+      lastCookieValidation: Date.now(),
+    });
+    return authResult;
+  };
+
+  const infoLines = () => lines.filter((entry) => entry.level === 'info').map((entry) => entry.message);
+  const credentials = { school: 's', username: 'u', password: 'p', server: 'srv', options: { cacheKey } };
+
+  await service.getAuth(credentials);
+  assert.equal(infoLines().length, 1);
+  assert.match(infoLines()[0], /REST auth: .*logging in/);
+
+  // Cache hit: no second login, and therefore no second info line.
+  await service.getAuth(credentials);
+  assert.equal(infoLines().length, 1);
+
+  assert.equal(service.invalidateCache(cacheKey), true);
+  assert.equal(infoLines().length, 2);
+  assert.match(infoLines()[1], /Invalidating expired token cache/);
+
+  // Invalidating an unknown key is a no-op and stays silent at info level.
+  assert.equal(service.invalidateCache('unknown'), false);
+  assert.equal(infoLines().length, 2);
+});
+
+test('a request that hits its own timeout raises an error coded ETIMEDOUT', async () => {
+  const fetchClient = require('../lib/webuntis/fetchClient');
+  const { convertRestErrorToWarning } = require('../lib/webuntis/errorHandler');
+  const { isNetworkError } = warningUtils;
+
+  const previousFetch = global.fetch;
+  global.fetch = (_url, options) =>
+    new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        const abortError = new Error('This operation was aborted');
+        abortError.name = 'AbortError';
+        reject(abortError);
+      });
+    });
+
+  try {
+    const err = await fetchClient.get('https://example.invalid', { timeout: 5 }).then(
+      () => null,
+      (error) => error
+    );
+
+    assert.equal(err.code, 'ETIMEDOUT');
+    assert.equal(err.cause.name, 'AbortError');
+    assert.equal(isNetworkError(err), true);
+    assert.match(convertRestErrorToWarning(err, { studentTitle: 'A', server: 'srv' }), /timeout/i);
+    assert.deepEqual(warningUtils.classifyWarningMetaFromError(err), {
+      kind: 'network',
+      severity: 'critical',
+      status: null,
+      code: 'ETIMEDOUT',
+    });
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test('an empty REST target list surfaces its diagnosis as a config warning', () => {
+  const { WebUntisClient } = require('../lib/webuntisClient');
+  const client = new WebUntisClient({ mmLog: () => {} });
+
+  // Parent credentials without studentId: the classic cause of an empty target list.
+  const message = client._logEmptyTargets({ title: 'A' }, { username: 'parent', password: 'pw' }, { user: { students: [] } });
+  assert.match(message, /No REST targets built/);
+  assert.match(message, /student\.studentId is missing/);
+
+  const collector = warningUtils.createWarningCollector();
+  collector.addWarning(message, { kind: 'config', severity: 'warning' });
+  const payload = { state: {} };
+  collector.flushToPayload(payload);
+
+  assert.deepEqual(payload.state.warnings, [message]);
+  assert.equal(payload.state.warningMeta[0].kind, 'config');
+  assert.equal(payload.state.warningMeta[0].severity, 'warning');
+});
+
+test('REFRESH carries only routing and per-request overrides, not the full config', () => {
+  const sent = [];
+  frontend.identifier = 'module_1_MMM-Webuntis';
+  frontend._sessionId = 'session-abc';
+  frontend._initialized = true;
+  // The shared `frontend` object is mutated by earlier tests, so pin both layers explicitly.
+  frontend.defaults = { backgroundRefresh: true, debugDate: null };
+  frontend.config = { username: 'parent', password: 'secret', students: [{ title: 'A' }], debugDate: '2026-09-21' };
+  frontend.transport = { sendRequest: (action, data) => sent.push({ action, data }) };
+  frontend._isDemoModeEnabled = () => false;
+
+  frontend._sendFetchData('periodic');
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].action, 'REFRESH');
+  assert.deepEqual(sent[0].data, {
+    id: 'module_1_MMM-Webuntis',
+    sessionId: 'session-abc',
+    reason: 'periodic',
+    debugDate: '2026-09-21',
+    backgroundRefresh: true,
+  });
+
+  // No secrets and no students travel with a refresh.
+  assert.equal('password' in sent[0].data, false);
+  assert.equal('students' in sent[0].data, false);
+
+  // An explicit opt-out is carried; the backend gates paused sessions on it.
+  frontend.config = { backgroundRefresh: false };
+  frontend._sendFetchData('resume');
+  assert.equal(sent[1].data.backgroundRefresh, false);
+  assert.equal(sent[1].data.debugDate, null);
+});
+
+test('a REFRESH for an unknown session asks the frontend to re-CONFIGURE', async () => {
+  helper.notifications = { EVENT: 'MMM-Webuntis_EVENT' };
+  helper._mmLog = () => {};
+  const emitted = [];
+  helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
+
+  await helper._handleFetchData({ id: 'ghost-module', sessionId: 'ghost-session', reason: 'periodic' });
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].payload.action, 'INIT_REQUIRED');
+  assert.equal(emitted[0].payload.data.id, 'ghost-module');
+  assert.equal(emitted[0].payload.data.sessionId, 'ghost-session');
+  assert.equal(emitted[0].payload.data.reason, 'session-config-missing');
+});
+
+test('INIT_REQUIRED reopens the init gate and re-sends CONFIGURE', () => {
+  const sent = [];
+  frontend._log = () => {};
+  frontend._initialized = true;
+  frontend._initRequested = true;
+  frontend._initAttemptCount = 3;
+  frontend._initWatchdogTimer = null;
+  frontend.transport = { sendRequest: (action, data) => sent.push({ action, data }) };
+  frontend._isDemoModeEnabled = () => false;
+  frontend._buildSendConfig = () => ({ id: frontend.identifier });
+  frontend._armInitWatchdog = () => {};
+
+  frontend._handleInitRequired({ reason: 'session-config-missing' });
+
+  assert.equal(frontend._initialized, false);
+  assert.equal(frontend._initRequested, true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].action, 'CONFIGURE');
+  assert.equal(sent[0].data.reason, 'backend-init-required');
+});

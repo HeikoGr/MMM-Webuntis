@@ -1,4 +1,9 @@
-## Plan: ICS- und CalDAV-Bereitstellung für MMM-Webuntis
+# Proposal: ICS- und CalDAV-Bereitstellung für MMM-Webuntis
+
+> **Status: Entwurf, nicht implementiert** (Stand 2026-07-21, unverändert übernommen beim
+> Umbenennen von `docs/plan.md` am 2026-09-22). Dieses Dokument beschreibt einen Vorschlag,
+> keinen ausgelieferten Funktionsumfang.
+
 
 Ziel ist ein robustes Feed-System, das tatsächlich stattfindende Stunden und Klausuren als getrennte Kalender bereitstellt, primär für das MagicMirror-Standardmodul calendar über ICS. Die Umsetzung erfolgt in zwei Stufen: Phase 1 liefert stabile, schülerbezogene ICS-Feeds (plus .ical-Alias), Phase 2 ergänzt optional CalDAV. Dadurch wird der direkte Mehrwert für MagicMirror schnell erreicht, ohne die erste Version durch CalDAV-Komplexität zu verzögern.
 

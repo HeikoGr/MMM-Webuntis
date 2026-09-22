@@ -15,8 +15,6 @@ Out of scope:
 - historical compatibility fields
 - CSS, DOM, animation, or widget layout details
 
-For the historical V2 contract, see [API_V2_MANIFEST.md](API_V2_MANIFEST.md).
-
 ---
 
 ## 1. Contract Principles

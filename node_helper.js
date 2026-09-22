@@ -140,6 +140,14 @@ module.exports = NodeHelper.create({
   },
 
   /**
+   * Ask a frontend session to re-run the CONFIGURE handshake. Sent when a REFRESH arrives for a
+   * session this helper knows nothing about (helper restarted under a live frontend).
+   */
+  _emitInitRequired(payload, route = {}) {
+    this._emitSocketNotification('INIT_REQUIRED', payload, route, { preserveExistingRoute: true });
+  },
+
+  /**
    * Send an EVENT envelope with consistent id/session routing metadata.
    *
    * @param {string} notification - Action name
@@ -257,7 +265,14 @@ module.exports = NodeHelper.create({
         formatError: this._formatErr.bind(this),
       });
 
-      await this._handleFetchData({ ...normalizedConfig, id: identifier, sessionId, reason: 'post-init-auto-fetch' });
+      // Same shape as a REFRESH from the frontend - the handler reads nothing else from it, and
+      // the session config it needs was just registered above.
+      await this._handleFetchData({
+        id: identifier,
+        sessionId,
+        reason: 'post-init-auto-fetch',
+        backgroundRefresh: normalizedConfig.backgroundRefresh,
+      });
     } catch (error) {
       this._mmLog('error', null, `[CONFIGURE] Initialization failed: ${this._formatErr(error)}`);
       this._emitInitError(
@@ -317,7 +332,7 @@ module.exports = NodeHelper.create({
   /**
    * Handle REFRESH - data refresh for an initialized session.
    * Self-healing: if the backend restarted and does not know the session, CONFIGURE is re-run
-   * from the incoming payload. A REFRESH that overlaps a running init waits for it.
+   * via an INIT_REQUIRED event. A REFRESH that overlaps a running init waits for it.
    */
   async _handleFetchData(payload) {
     this._ensureRuntime();
@@ -343,12 +358,15 @@ module.exports = NodeHelper.create({
 
     let config = this._sessions.getOrCreateSessionConfig(sessionKey);
     if (!config) {
+      // The helper has no config for this session - it was restarted while the frontend kept
+      // running. REFRESH no longer carries the full config, so ask the frontend to redo the
+      // CONFIGURE handshake instead of re-initializing from this payload.
       this._mmLog(
         'warn',
         null,
-        `[REFRESH] Module ${identifier} not initialized for session ${sessionId} - attempting re-init from incoming payload`
+        `[REFRESH] Module ${identifier} not initialized for session ${sessionId} - requesting CONFIGURE from frontend`
       );
-      await this._handleInitModule(payload);
+      this._emitInitRequired({ id: identifier, sessionId, reason: 'session-config-missing' }, { identifier, sessionId });
       return;
     }
 

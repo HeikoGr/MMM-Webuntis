@@ -72,7 +72,9 @@ Module.register('MMM-Webuntis', {
 
     return globalThis.MMModuleRuntimeUtils.createLevelLogger({
       prefix: `[${moduleName}]`,
-      getLevel: () => window.MMMWebuntisLogLevel || 'info',
+      // This instance's own level, not the window global: two instances may be configured with
+      // different logLevels, and the global can only hold one value (see getScripts).
+      getLevel: () => this.config?.logLevel || this.defaults?.logLevel || 'none',
     });
   },
 
@@ -173,7 +175,17 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of JavaScript file paths
    */
   getScripts() {
-    window.MMMWebuntisLogLevel = this.config?.logLevel || this.defaults.logLevel || 'info';
+    // Shared widget code (lib/frontendShared.js log(), plugin frontends without a renderContext)
+    // has no instance to ask, so it reads this global. With two instances there is only one
+    // value to hold, and silently taking the last one started would swallow the other one's
+    // logs - so keep the most verbose level any instance asked for. Instance-scoped logging
+    // (_log, _createFrontendLogger, renderContext.runtime.logLevel) is unaffected by this.
+    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
+    const own = this.config?.logLevel || this.defaults.logLevel || 'none';
+    const current = window.MMMWebuntisLogLevel;
+    if (levels[current] === undefined || (levels[own] ?? -1) > levels[current]) {
+      window.MMMWebuntisLogLevel = own;
+    }
 
     const scripts = [
       this.file('lib/mmm-shared/mmm-shared.js'),
@@ -807,9 +819,9 @@ Module.register('MMM-Webuntis', {
    */
   _log(level, ...args) {
     try {
-      const frontendFactory = this._createFrontendLogger;
-      if (frontendFactory && !this.frontendLogger) {
-        this.frontendLogger = frontendFactory('MMM-Webuntis');
+      if (!this.frontendLogger) {
+        // Call bound: the logger reads this instance's configured level.
+        this.frontendLogger = this._createFrontendLogger('MMM-Webuntis');
       }
       if (this.frontendLogger && typeof this.frontendLogger.log === 'function') {
         const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
@@ -1596,9 +1608,15 @@ Module.register('MMM-Webuntis', {
       return;
     }
 
+    // REFRESH carries only what the backend reads from it - routing, the reason, and the two
+    // per-request overrides. The full config travels with CONFIGURE; a backend that has lost the
+    // session answers with INIT_REQUIRED instead of re-initializing from this payload.
     this.transport.sendRequest('REFRESH', {
-      ...this._buildSendConfig(),
+      id: this.identifier,
+      sessionId: this._sessionId,
       reason,
+      debugDate: this.config?.debugDate ?? this.defaults.debugDate,
+      backgroundRefresh: this.config?.backgroundRefresh ?? this.defaults.backgroundRefresh,
     });
   },
 
@@ -1718,6 +1736,10 @@ Module.register('MMM-Webuntis', {
         this._handleInitError(eventData);
         break;
 
+      case 'INIT_REQUIRED':
+        this._handleInitRequired(eventData);
+        break;
+
       case 'DATA_UPDATE':
         this._handleGotData(eventData);
         break;
@@ -1736,6 +1758,24 @@ Module.register('MMM-Webuntis', {
     if (routed?.id && !routed?.sessionId && this.identifier !== routed.id) return false;
     if (payload?.identifier && this.identifier !== payload.identifier) return false;
     return true;
+  },
+
+  /**
+   * Backend lost this session's config (helper restart) and asked for a new CONFIGURE handshake.
+   * Reopen the init gate and re-send the full config; the watchdog takes over from there.
+   *
+   * @param {Object} payload - Event payload ({ reason })
+   */
+  _handleInitRequired(payload) {
+    this._log('warn', `[INIT_REQUIRED] Backend requested re-initialization (reason=${payload?.reason || 'unspecified'})`);
+    this._initialized = false;
+    this._initRequested = false;
+    this._initAttemptCount = 0;
+    if (this._initWatchdogTimer) {
+      clearTimeout(this._initWatchdogTimer);
+      this._initWatchdogTimer = null;
+    }
+    this._requestInitIfNeeded('backend-init-required');
   },
 
   _handleModuleInitialized(payload) {
