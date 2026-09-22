@@ -47,6 +47,7 @@ The old top-level namespace `lessons: { ... }` is still accepted for compatibili
 - Past lessons are hidden in normal operation. If `logLevel` is `debug`, past entries stay visible for troubleshooting.
 - If `showStartTime` is `false`, the plugin uses timetable period labels when the backend provides time-unit data.
 - `hideWeekends` only removes empty weekend days. Weekend days with lessons still appear.
+- Lessons can be hidden with `excludeLessons` (this also hides homework and exams of the same subject) and own lessons added with `addLessons`, see [Hiding and Adding Lessons](Configuration#hiding-and-adding-lessons).
 
 ## Typical Config
 

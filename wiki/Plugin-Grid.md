@@ -56,6 +56,7 @@ The old top-level namespace `grid: { ... }` is still accepted for compatibility,
 - `pxPerMinute` is supported even though it is not shown in every example config. Use smaller values for denser grids and larger values for taller grids.
 - Invalid `fields.*` values fall back to the plugin defaults.
 - `hideWeekends` matters mostly for rolling mode. In `weekView`, the plugin already uses Monday to Friday.
+- Lessons can be hidden with `excludeLessons` (this also hides homework and exams of the same subject) and own lessons added with `addLessons`, see [Hiding and Adding Lessons](Configuration#hiding-and-adding-lessons).
 
 ## Typical Config
 

@@ -49,6 +49,19 @@ const config = {
         mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
         useClassTimetable: false,
 
+        // === LESSON FILTER / OWN LESSONS (can also be set per student) ===
+        // Hide lessons whose subject, student group or lesson text contains one of these strings
+        // (case-insensitive). Use '/pattern/flags' for a regular expression, e.g. '/^AG$/i'.
+        // NOTE: also hides HOMEWORK and EXAMS whose subject matches (not only timetable lessons).
+        excludeLessons: [], // e.g. ['Förderunterricht', 'AG Chor']
+        // Add own lessons that WebUntis does not know about. Use `weekday` (recurring; 'mon'..'sun',
+        // 'mo'..'so' or 1-7, also as array) or `date` ('YYYY-MM-DD', once). Optional: subjectShort,
+        // teacher, room, text, from/until ('YYYY-MM-DD'), showInHolidays (default: false).
+        addLessons: [
+          // { weekday: 'tue', startTime: '15:30', endTime: '16:15', subject: 'Violin', room: 'Music school' },
+          // { date: '2026-10-07', startTime: '14:00', endTime: '15:00', subject: 'Tutoring', teacher: 'Mr. Smith' },
+        ],
+
         // === AUTHENTICATION ===
         // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)
         // password: 'your password', // WebUntis password (leave empty if using studentId/qrcode)

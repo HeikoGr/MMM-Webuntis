@@ -139,6 +139,7 @@ console.warn('[feature] Warning:', error);
 - `lib/webuntis/httpClient.js` - JSON-RPC client (auth only)
 - `lib/webuntis/cacheManager.js` - TTL cache
 - `lib/mmm-adapter/mmmPayloadMapper.js` - MMM adapter: compaction schemas, payload mapping, and debug dumps
+- `lib/mmm-adapter/lessonAdjustments.js` - Config-driven `excludeLessons` filter and `addLessons` (own lessons), applied to compacted lessons + validation warnings
 - `lib/webuntis/errorHandler.js` - Error mapping + warnings
 - `lib/webuntis/errorUtils.js` - Shared async/error helpers for internal API modules
 - `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)

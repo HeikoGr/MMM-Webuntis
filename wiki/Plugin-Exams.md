@@ -41,6 +41,7 @@ The old top-level namespace `exams: { ... }` is still accepted for compatibility
 - In normal operation, past exams are hidden. With `logLevel: 'debug'`, old exams remain visible for troubleshooting.
 - If `nextDays` is `0`, the plugin skips rendering.
 - `pastDays` is supported by validation and compatibility mappings even though the built-in defaults do not set it explicitly.
+- `excludeLessons` (module or student level) also hides exams whose subject matches, see [Hiding and Adding Lessons](Configuration#hiding-and-adding-lessons).
 
 ## Typical Config
 
