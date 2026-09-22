@@ -124,6 +124,48 @@
               "type": "boolean",
               "description": "Prefer class timetable endpoints when they are available."
             },
+            "excludeLessons": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Hide lessons whose subject, student group or lesson text contains one of these strings (case-insensitive) – ALSO hides homework and exams of matching subjects; '/pattern/flags' for a regular expression."
+            },
+            "addLessons": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "weekday": {
+                    "oneOf": [
+                      { "type": "string" },
+                      { "type": "integer", "minimum": 1, "maximum": 7 },
+                      {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "oneOf": [{ "type": "string" }, { "type": "integer", "minimum": 1, "maximum": 7 }]
+                        }
+                      }
+                    ],
+                    "description": "Recurring weekday: mon, tue, wed, thu, fri, sat, sun (or 1-7). Leave empty when using date."
+                  },
+                  "date": { "type": "string", "description": "Single date YYYY-MM-DD. Leave empty when using weekday." },
+                  "startTime": { "type": "string", "description": "Start time HH:MM." },
+                  "endTime": { "type": "string", "description": "End time HH:MM." },
+                  "subject": { "type": "string", "description": "Subject (long name)." },
+                  "subjectShort": { "type": "string", "description": "Optional short subject name." },
+                  "teacher": { "type": "string", "description": "Optional teacher." },
+                  "room": { "type": "string", "description": "Optional room or location." },
+                  "text": { "type": "string", "description": "Optional lesson text." },
+                  "from": { "type": "string", "description": "Optional first date YYYY-MM-DD." },
+                  "until": { "type": "string", "description": "Optional last date YYYY-MM-DD." },
+                  "showInHolidays": {
+                    "type": "boolean",
+                    "description": "Also show during school holidays (holidays are only known when the grid widget is enabled)."
+                  }
+                }
+              },
+              "description": "Own lessons that WebUntis does not know about (e.g. music school, tutoring)."
+            },
             "username": {
               "type": "string",
               "description": "WebUntis username used for authentication."
@@ -172,6 +214,48 @@
                   "server": {
                     "type": "string",
                     "description": "WebUntis server hostname without http/https."
+                  },
+                  "excludeLessons": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Hide lessons whose subject, student group or lesson text contains one of these strings (case-insensitive) – ALSO hides homework and exams of matching subjects; '/pattern/flags' for a regular expression."
+                  },
+                  "addLessons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "weekday": {
+                          "oneOf": [
+                            { "type": "string" },
+                            { "type": "integer", "minimum": 1, "maximum": 7 },
+                            {
+                              "type": "array",
+                              "minItems": 1,
+                              "items": {
+                                "oneOf": [{ "type": "string" }, { "type": "integer", "minimum": 1, "maximum": 7 }]
+                              }
+                            }
+                          ],
+                          "description": "Recurring weekday: mon, tue, wed, thu, fri, sat, sun (or 1-7). Leave empty when using date."
+                        },
+                        "date": { "type": "string", "description": "Single date YYYY-MM-DD. Leave empty when using weekday." },
+                        "startTime": { "type": "string", "description": "Start time HH:MM." },
+                        "endTime": { "type": "string", "description": "End time HH:MM." },
+                        "subject": { "type": "string", "description": "Subject (long name)." },
+                        "subjectShort": { "type": "string", "description": "Optional short subject name." },
+                        "teacher": { "type": "string", "description": "Optional teacher." },
+                        "room": { "type": "string", "description": "Optional room or location." },
+                        "text": { "type": "string", "description": "Optional lesson text." },
+                        "from": { "type": "string", "description": "Optional first date YYYY-MM-DD." },
+                        "until": { "type": "string", "description": "Optional last date YYYY-MM-DD." },
+                        "showInHolidays": {
+                          "type": "boolean",
+                          "description": "Also show during school holidays (holidays are only known when the grid widget is enabled)."
+                        }
+                      }
+                    },
+                    "description": "Own lessons that WebUntis does not know about (e.g. music school, tutoring)."
                   },
                   "plugins": {
                     "type": "object",
@@ -748,6 +832,16 @@
           "description": "Prefer class timetable endpoints when they are available."
         },
         {
+          "key": "MMM-Webuntis.config.excludeLessons",
+          "title": "excludeLessons",
+          "description": "Hide lessons whose subject, student group or lesson text contains one of these strings (case-insensitive) – ALSO hides homework and exams of matching subjects; '/pattern/flags' for a regular expression."
+        },
+        {
+          "key": "MMM-Webuntis.config.addLessons",
+          "title": "addLessons",
+          "description": "Own lessons that WebUntis does not know about (e.g. music school, tutoring)."
+        },
+        {
           "type": "fieldset",
           "title": "auth",
           "items": [
@@ -815,6 +909,16 @@
                 "key": "MMM-Webuntis.config.students[].server",
                 "title": "server",
                 "description": "WebUntis server hostname without http/https."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].excludeLessons",
+                "title": "excludeLessons",
+                "description": "Per-student override of excludeLessons (also hides homework and exams of matching subjects)."
+              },
+              {
+                "key": "MMM-Webuntis.config.students[].addLessons",
+                "title": "addLessons",
+                "description": "Per-student override of addLessons."
               }
             ]
           }
@@ -1151,6 +1255,8 @@
       "displayMode": "lessons, exams",
       "mode": "verbose",
       "useClassTimetable": false,
+      "excludeLessons": [],
+      "addLessons": [],
       "username": "",
       "password": "",
       "school": "",

@@ -40,6 +40,7 @@ The old top-level namespace `homework: { ... }` is still accepted for compatibil
 - Homework is sorted by due date and then by subject.
 - If a student has no homework entries, the plugin renders a `no homework` placeholder row.
 - `showText: false` is useful when you only want a compact reminder list.
+- `excludeLessons` (module or student level) also hides homework whose subject matches, see [Hiding and Adding Lessons](Configuration#hiding-and-adding-lessons).
 
 ## Typical Config
 

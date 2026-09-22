@@ -26,6 +26,8 @@ Module.register('MMM-Webuntis', {
     displayMode: 'lessons, exams', // Legacy widget activation string.
     mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
     useClassTimetable: false, // Prefer class timetable endpoints when available.
+    excludeLessons: [], // Hide lessons by subject/student group/lesson text, e.g. ['Förder', '/^AG$/i']; also hides homework and exams of matching subjects (per student: students[].excludeLessons)
+    addLessons: [], // Own lessons, e.g. [{ weekday: 'tue', startTime: '15:30', endTime: '16:15', subject: 'Violin', room: 'Music school' }]
 
     // === AUTHENTICATION ===
     // username: 'your username', // WebUntis username (leave empty if using studentId/qrcode)

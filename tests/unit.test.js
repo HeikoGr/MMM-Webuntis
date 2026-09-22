@@ -1130,3 +1130,243 @@ test('INIT_REQUIRED reopens the init gate and re-sends CONFIGURE', () => {
   assert.equal(sent[0].action, 'CONFIGURE');
   assert.equal(sent[0].data.reason, 'backend-init-required');
 });
+
+// ---------------------------------------------------------------------------------------------
+// excludeLessons / addLessons (issue #91)
+// ---------------------------------------------------------------------------------------------
+
+const lessonAdjustments = require('../lib/mmm-adapter/lessonAdjustments');
+const { mapBundleToMmmPayload } = require('../lib/mmm-adapter/mmmPayloadMapper');
+const { validateConfig } = require('../lib/configValidator');
+
+const makeLesson = (subject, extra = {}) => ({
+  date: 20260922,
+  startTime: 800,
+  endTime: 845,
+  subjects: [{ name: subject.slice(0, 3), longname: subject }],
+  studentGroups: [],
+  lessonText: '',
+  ...extra,
+});
+
+test('filterExcludedLessons matches substrings case-insensitively and /regex/ entries', () => {
+  const lessons = [
+    makeLesson('Mathematik'),
+    makeLesson('Förderunterricht'),
+    makeLesson('AG Chor'),
+    makeLesson('AG'),
+    makeLesson('Deutsch', { lessonText: 'Förderstunde Lesen' }),
+    makeLesson('Englisch', { studentGroups: [{ name: 'E_Förd', longname: 'Englisch Förder' }] }),
+  ];
+
+  const bySubstring = lessonAdjustments.filterExcludedLessons(lessons, ['förder']);
+  assert.deepEqual(
+    bySubstring.map((l) => l.subjects[0].longname),
+    ['Mathematik', 'AG Chor', 'AG']
+  );
+
+  const byRegex = lessonAdjustments.filterExcludedLessons(lessons, ['/^ag$/i']);
+  assert.deepEqual(
+    byRegex.map((l) => l.subjects[0].longname),
+    ['Mathematik', 'Förderunterricht', 'AG Chor', 'Deutsch', 'Englisch']
+  );
+
+  assert.equal(lessonAdjustments.filterExcludedLessons(lessons, ['', 42, '/[/']).length, lessons.length);
+});
+
+test('buildCustomLessons expands weekdays inside the range and respects from/until and holidays', () => {
+  // 2026-09-21 is a Monday
+  const lessons = lessonAdjustments.buildCustomLessons(
+    [
+      { weekday: 'tue', startTime: '15:30', endTime: '16:15', subject: 'Geige', room: 'Musikschule' },
+      { weekday: ['mo', 4], startTime: '16:00', endTime: '17:00', subject: 'Fußball', from: '2026-09-24' },
+      { date: '2026-09-23', startTime: '14:00', endTime: '15:00', subject: 'Nachhilfe', teacher: 'Hr. Maier', text: 'Mathe' },
+      { weekday: 'fri', startTime: '14:00', endTime: '15:00', subject: 'Schwimmen' },
+      { weekday: 'fri', startTime: '14:00', endTime: '15:00', subject: 'Chor', showInHolidays: true },
+      { date: '2026-12-01', startTime: '14:00', endTime: '15:00', subject: 'Out of range' },
+      { weekday: 'xyz', startTime: '14:00', endTime: '15:00', subject: 'Invalid' },
+    ],
+    {
+      startYmd: 20260921,
+      endYmd: 20261004,
+      holidays: [{ startDate: 20260925, endDate: 20260925 }],
+    }
+  );
+
+  const summary = lessons.map((l) => `${l.date} ${l.startTime} ${l.subjects[0].longname}`);
+  assert.deepEqual(summary, [
+    '20260922 1530 Geige',
+    '20260929 1530 Geige',
+    '20260924 1600 Fußball',
+    '20260928 1600 Fußball',
+    '20261001 1600 Fußball',
+    '20260923 1400 Nachhilfe',
+    '20261002 1400 Schwimmen',
+    '20260925 1400 Chor',
+    '20261002 1400 Chor',
+  ]);
+
+  const nachhilfe = lessons.find((l) => l.subjects[0].longname === 'Nachhilfe');
+  assert.deepEqual(nachhilfe.teachers, [{ name: 'Hr. Maier', longname: 'Hr. Maier' }]);
+  assert.equal(nachhilfe.lessonText, 'Mathe');
+  assert.equal(nachhilfe.status, 'REGULAR');
+  assert.equal(nachhilfe.id, 'custom-2-20260923');
+});
+
+test('validateConfig warns about invalid excludeLessons/addLessons entries without failing', () => {
+  const result = validateConfig({
+    username: 'u',
+    password: 'p',
+    school: 's',
+    server: 'x.webuntis.com',
+    excludeLessons: ['AG', '/[/'],
+    addLessons: [
+      { weekday: 'tue', startTime: '15:30', endTime: '16:15', subject: 'Geige' },
+      { weekday: 'tue', date: '2026-09-22', startTime: '15:30', endTime: '16:15', subject: 'Both' },
+      { weekday: 'tue', startTime: '16:30', endTime: '16:15', subject: 'Backwards' },
+    ],
+    students: [{ title: 'A', addLessons: 'nope' }],
+  });
+
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.warnings, [
+    'excludeLessons[1]: must be a non-empty string or a valid "/regex/" – entry ignored',
+    'addLessons[1]: needs either "weekday" or "date" – entry ignored',
+    'addLessons[2]: "endTime" must be after "startTime" – entry ignored',
+    'students[0].addLessons must be an array of lesson objects – option ignored',
+  ]);
+});
+
+test('DATA_UPDATE payload applies excludeLessons and addLessons (student overrides module)', () => {
+  const bundle = (student) => ({
+    identifier: 'mod1',
+    sessionKey: 'mod1:sess1',
+    student,
+    config: { excludeLessons: ['Förder'], addLessons: [] },
+    compactHolidays: [],
+    coreData: {
+      dateRanges: { timetable: { start: new Date(2026, 8, 21), end: new Date(2026, 8, 25) } },
+      todayYmd: 20260921,
+      activeHoliday: null,
+      fetchFlags: { fetchTimetable: true },
+      apiStatus: { timetable: 200 },
+      apiRecords: {},
+      configWarnings: [],
+      data: {
+        grid: [],
+        timetable: [
+          { ...makeLesson('Förderunterricht'), id: 1, startTime: 1000 },
+          { ...makeLesson('Mathematik'), id: 2, startTime: 800 },
+        ],
+        rawExams: [],
+        hwResult: [],
+        rawAbsences: [],
+        rawMessagesOfDay: [],
+      },
+    },
+  });
+
+  const moduleLevel = mapBundleToMmmPayload(bundle({ title: 'A' }), { mmLog: () => {} });
+  assert.deepEqual(
+    moduleLevel.data.lessons.map((l) => l.subjects[0].longname),
+    ['Mathematik']
+  );
+
+  const studentLevel = mapBundleToMmmPayload(
+    bundle({
+      title: 'B',
+      excludeLessons: [],
+      addLessons: [{ weekday: 'mon', startTime: '07:00', endTime: '07:45', subject: 'Frühsport' }],
+    }),
+    { mmLog: () => {} }
+  );
+  assert.deepEqual(
+    studentLevel.data.lessons.map((l) => `${l.date} ${l.startTime} ${l.subjects[0].longname}`),
+    ['20260921 700 Frühsport', '20260922 800 Mathematik', '20260922 1000 Förderunterricht']
+  );
+});
+
+test('excludeLessons also hides homework and exams of the excluded subjects', () => {
+  const payload = mapBundleToMmmPayload(
+    {
+      identifier: 'mod1',
+      sessionKey: 'mod1:sess1',
+      student: { title: 'A' },
+      config: { excludeLessons: ['Förder'] },
+      compactHolidays: [],
+      coreData: {
+        dateRanges: { timetable: { start: new Date(2026, 8, 21), end: new Date(2026, 8, 25) } },
+        todayYmd: 20260921,
+        activeHoliday: null,
+        fetchFlags: { fetchTimetable: true, fetchExams: true, fetchHomeworks: true },
+        apiStatus: {},
+        apiRecords: {},
+        configWarnings: [],
+        data: {
+          grid: [],
+          timetable: [],
+          rawExams: [
+            { examDate: 20260923, subject: 'Förderunterricht', name: 'Test' },
+            { examDate: 20260924, subject: 'Mathematik', name: 'Klassenarbeit' },
+          ],
+          hwResult: [
+            { id: 1, dueDate: 20260923, subject: { name: 'FÖ', longname: 'Förderunterricht' }, text: 'Blatt 1' },
+            { id: 2, dueDate: 20260923, subject: { name: 'M', longname: 'Mathematik' }, text: 'S. 12' },
+          ],
+          rawAbsences: [],
+          rawMessagesOfDay: [],
+        },
+      },
+    },
+    { mmLog: () => {} }
+  );
+
+  assert.deepEqual(
+    payload.data.exams.map((e) => e.subject),
+    ['Mathematik']
+  );
+  assert.deepEqual(
+    payload.data.homework.map((h) => h.subject.longname),
+    ['Mathematik']
+  );
+});
+
+test('addLessons stops before the exclusive timetable end date', () => {
+  const payload = mapBundleToMmmPayload(
+    {
+      identifier: 'mod1',
+      sessionKey: 'mod1:sess1',
+      student: { title: 'A', addLessons: [{ weekday: [1, 5], startTime: '15:00', endTime: '16:00', subject: 'Chor' }] },
+      config: {},
+      compactHolidays: [],
+      coreData: {
+        // Mon 2026-09-21 .. Fri 2026-09-25 exclusive (the API end date is exclusive)
+        dateRanges: { timetable: { start: new Date(2026, 8, 21), end: new Date(2026, 8, 25) } },
+        todayYmd: 20260921,
+        activeHoliday: null,
+        fetchFlags: { fetchTimetable: true },
+        apiStatus: {},
+        apiRecords: {},
+        configWarnings: [],
+        data: { grid: [], timetable: [], rawExams: [], hwResult: [], rawAbsences: [], rawMessagesOfDay: [] },
+      },
+    },
+    { mmLog: () => {} }
+  );
+
+  assert.deepEqual(
+    payload.data.lessons.map((l) => l.date),
+    [20260921]
+  );
+});
+
+test('validateConfig rejects addLessons entries whose from date is after until', () => {
+  const { warnings } = validateConfig({
+    username: 'u',
+    password: 'p',
+    school: 's',
+    server: 'x.webuntis.com',
+    addLessons: [{ weekday: 'mon', startTime: '15:00', endTime: '16:00', subject: 'Chor', from: '2026-10-01', until: '2026-09-01' }],
+  });
+  assert.deepEqual(warnings, ['addLessons[0]: "from" must not be after "until" – entry ignored']);
+});

@@ -257,6 +257,10 @@ Representative fields:
 - `previousTeachers[]`
 - `previousRooms[]`
 
+Config-driven adjustments (`lib/mmm-adapter/lessonAdjustments.js`) run before the payload is emitted:
+- lessons matching `excludeLessons` are removed, as are `homework[]` and `exams[]` entries whose subject matches
+- `addLessons` entries are expanded into regular lessons (`status: 'REGULAR'`) with a string `id` of the form `custom-<index>-<YYYYMMDD>`; WebUntis lessons keep numeric ids
+
 Field naming rule for V3 lesson data:
 - `subjects[]` replaces `su[]`
 - `teachers[]` replaces `te[]`
