@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.2...v0.11.3) (2026-09-22)
+
+
+### 🐛 Fixes
+
+* **auth:** resolve the school year id against the queried date ([069c79b](https://github.com/HeikoGr/MMM-Webuntis/commit/069c79bfbbd6b7416f460c2b3890430dbcae9046))
+* restore auth diagnostics, slim the REFRESH payload, clean up the docs ([dcde3b7](https://github.com/HeikoGr/MMM-Webuntis/commit/dcde3b7406d51a0a5d6cfd79f852e6d3e19fb69d))
+
+
+### 📚 Documentation
+
+* **api:** document session-scoped school year and the form login path ([2173d26](https://github.com/HeikoGr/MMM-Webuntis/commit/2173d264c6ba9be9dc6089353eab85ee7dc39d35))
+
 ## [0.11.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.11.1...v0.11.2) (2026-09-19)
 
 
