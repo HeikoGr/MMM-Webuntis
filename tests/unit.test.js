@@ -1330,3 +1330,43 @@ test('excludeLessons also hides homework and exams of the excluded subjects', ()
     ['Mathematik']
   );
 });
+
+test('addLessons stops before the exclusive timetable end date', () => {
+  const payload = mapBundleToMmmPayload(
+    {
+      identifier: 'mod1',
+      sessionKey: 'mod1:sess1',
+      student: { title: 'A', addLessons: [{ weekday: [1, 5], startTime: '15:00', endTime: '16:00', subject: 'Chor' }] },
+      config: {},
+      compactHolidays: [],
+      coreData: {
+        // Mon 2026-09-21 .. Fri 2026-09-25 exclusive (the API end date is exclusive)
+        dateRanges: { timetable: { start: new Date(2026, 8, 21), end: new Date(2026, 8, 25) } },
+        todayYmd: 20260921,
+        activeHoliday: null,
+        fetchFlags: { fetchTimetable: true },
+        apiStatus: {},
+        apiRecords: {},
+        configWarnings: [],
+        data: { grid: [], timetable: [], rawExams: [], hwResult: [], rawAbsences: [], rawMessagesOfDay: [] },
+      },
+    },
+    { mmLog: () => {} }
+  );
+
+  assert.deepEqual(
+    payload.data.lessons.map((l) => l.date),
+    [20260921]
+  );
+});
+
+test('validateConfig rejects addLessons entries whose from date is after until', () => {
+  const { warnings } = validateConfig({
+    username: 'u',
+    password: 'p',
+    school: 's',
+    server: 'x.webuntis.com',
+    addLessons: [{ weekday: 'mon', startTime: '15:00', endTime: '16:00', subject: 'Chor', from: '2026-10-01', until: '2026-09-01' }],
+  });
+  assert.deepEqual(warnings, ['addLessons[0]: "from" must not be after "until" – entry ignored']);
+});
