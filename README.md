@@ -103,7 +103,7 @@ Technical background documentation remains in `docs/`:
 
 - Issues: [GitHub Issues](https://github.com/HeikoGr/MMM-Webuntis/issues)
 - Documentation: start with the [project wiki](https://github.com/HeikoGr/MMM-Webuntis/wiki)
-- Logs: enable `logLevel: 'debug'` in your config
+- Logs: set `logLevel: 'debug'` in the module config and make sure the global `logLevel` in `config.js` contains `DEBUG`
 
 ## License
 

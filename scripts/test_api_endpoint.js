@@ -28,42 +28,46 @@
  *   --raw         Output raw JSON only (no formatting)
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const AuthService = require('../lib/webuntis/authService');
-const { callRestAPI } = require('../lib/webuntis/restClient');
+const fs = require("node:fs");
+const path = require("node:path");
+const AuthService = require("../lib/webuntis/authService");
+const { callRestAPI } = require("../lib/webuntis/restClient");
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
 const options = {
-  debug: args.includes('--debug'),
-  raw: args.includes('--raw'),
+  debug: args.includes("--debug"),
+  raw: args.includes("--raw"),
   studentIndex: null,
 };
 
 // Extract --student=N
-const studentArg = args.find((arg) => arg.startsWith('--student='));
+const studentArg = args.find((arg) => arg.startsWith("--student="));
 if (studentArg) {
-  options.studentIndex = parseInt(studentArg.split('=')[1], 10);
+  options.studentIndex = parseInt(studentArg.split("=")[1], 10);
 }
 
 // Filter out option flags
-const positionalArgs = args.filter((arg) => !arg.startsWith('--'));
+const positionalArgs = args.filter((arg) => !arg.startsWith("--"));
 const apiPath = positionalArgs[0];
-const queryParams = positionalArgs[1] || '';
+const queryParams = positionalArgs[1] || "";
 
 if (!apiPath) {
-  console.error('Usage: node scripts/test_api_endpoint.js <path> [queryParams] [options]');
-  console.error('');
-  console.error('Examples:');
-  console.error('  node scripts/test_api_endpoint.js "/WebUntis/api/rest/view/v2/calendar-entry/733133/detail?homeworkOption=DUE"');
-  console.error('  node scripts/test_api_endpoint.js "/api/rest/view/v2/calendar-entry/detail" "elementId=7211&elementType=5" --debug');
-  console.error('');
-  console.error('Options:');
-  console.error('  --debug       Enable detailed debug output');
-  console.error('  --student=N   Use specific student index (0-based)');
-  console.error('  --raw         Output raw JSON only');
-  throw new Error('Missing required argument: <path>');
+  console.error("Usage: node scripts/test_api_endpoint.js <path> [queryParams] [options]");
+  console.error("");
+  console.error("Examples:");
+  console.error(
+    '  node scripts/test_api_endpoint.js "/WebUntis/api/rest/view/v2/calendar-entry/733133/detail?homeworkOption=DUE"',
+  );
+  console.error(
+    '  node scripts/test_api_endpoint.js "/api/rest/view/v2/calendar-entry/detail" "elementId=7211&elementType=5" --debug',
+  );
+  console.error("");
+  console.error("Options:");
+  console.error("  --debug       Enable detailed debug output");
+  console.error("  --student=N   Use specific student index (0-based)");
+  console.error("  --raw         Output raw JSON only");
+  throw new Error("Missing required argument: <path>");
 }
 
 // Logger function
@@ -76,14 +80,16 @@ function log(level, message) {
 
 function debugLog(message) {
   if (options.debug) {
-    log('debug', message);
+    log("debug", message);
   }
 }
 
 // Load config
-const configPath = path.join(__dirname, '../config/config.js');
+const configPath = path.join(__dirname, "../config/config.js");
 if (!fs.existsSync(configPath)) {
-  throw new Error(`Config file not found: ${configPath}. Please create config/config.js from config/config.template.js`);
+  throw new Error(
+    `Config file not found: ${configPath}. Please create config/config.js from config/config.template.js`,
+  );
 }
 
 debugLog(`Loading config from ${configPath}`);
@@ -93,23 +99,23 @@ const configExport = require(configPath);
 const mmConfig = configExport.config || configExport;
 
 // Find MMM-Webuntis module config
-const webuntisModule = mmConfig.modules?.find((m) => m.module === 'MMM-Webuntis');
+const webuntisModule = mmConfig.modules?.find((m) => m.module === "MMM-Webuntis");
 if (!webuntisModule) {
-  throw new Error('MMM-Webuntis module not found in config.js');
+  throw new Error("MMM-Webuntis module not found in config.js");
 }
 
 const config = webuntisModule.config;
-debugLog('Config loaded successfully');
+debugLog("Config loaded successfully");
 
 // Parse query params from string
 function parseQueryParams(queryString) {
   if (!queryString) return {};
 
   const params = {};
-  queryString.split('&').forEach((pair) => {
-    const [key, value] = pair.split('=');
+  queryString.split("&").forEach((pair) => {
+    const [key, value] = pair.split("=");
     if (key) {
-      params[key] = decodeURIComponent(value || '');
+      params[key] = decodeURIComponent(value || "");
     }
   });
   return params;
@@ -117,22 +123,22 @@ function parseQueryParams(queryString) {
 
 // Extract query params from path if present
 function splitPathAndQuery(fullPath) {
-  const [path, query] = fullPath.split('?');
-  return { path, query: query || '' };
+  const [path, query] = fullPath.split("?");
+  return { path, query: query || "" };
 }
 
 // Generate endpoint name for filename from path
 function getEndpointName(path) {
   // Extract meaningful parts from path
   // e.g., "/WebUntis/api/rest/view/v2/calendar-entry/detail" -> "calendar-entry-detail"
-  const parts = path.split('/').filter(Boolean);
+  const parts = path.split("/").filter(Boolean);
   const relevantParts = parts.slice(-3); // Take last 3 parts
-  return relevantParts.join('-').replace(/[^a-zA-Z0-9-]/g, '_');
+  return relevantParts.join("-").replace(/[^a-zA-Z0-9-]/g, "_");
 }
 
 // Save API response to debug_dumps directory (like MMM module dumps)
 function saveToDumpFile(endpoint, params, response, authConfig, elapsed) {
-  const dumpDir = path.join(__dirname, '../debug_dumps');
+  const dumpDir = path.join(__dirname, "../debug_dumps");
 
   // Create directory if it doesn't exist
   if (!fs.existsSync(dumpDir)) {
@@ -140,7 +146,7 @@ function saveToDumpFile(endpoint, params, response, authConfig, elapsed) {
   }
 
   // Generate filename with timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // Remove milliseconds
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5); // Remove milliseconds
   const endpointName = getEndpointName(endpoint);
   const filename = `${timestamp}_${endpointName}_api-test.json`;
   const filePath = path.join(dumpDir, filename);
@@ -157,14 +163,14 @@ function saveToDumpFile(endpoint, params, response, authConfig, elapsed) {
         school: authConfig.school,
         server: authConfig.server,
         studentId: authConfig.studentId || null,
-        username: authConfig.username ? '***' : null,
+        username: authConfig.username ? "***" : null,
       },
     },
     response: response.data,
   };
 
   // Write to file
-  fs.writeFileSync(filePath, JSON.stringify(dumpData, null, 2), 'utf8');
+  fs.writeFileSync(filePath, JSON.stringify(dumpData, null, 2), "utf8");
 
   return path.relative(process.cwd(), filePath);
 }
@@ -180,7 +186,7 @@ async function main() {
       ...parseQueryParams(queryParams),
     };
 
-    log('info', `Testing endpoint: ${cleanPath}`);
+    log("info", `Testing endpoint: ${cleanPath}`);
     if (Object.keys(allQueryParams).length > 0) {
       debugLog(`Query params: ${JSON.stringify(allQueryParams, null, 2)}`);
     }
@@ -195,7 +201,7 @@ async function main() {
         throw new Error(`Student index ${index} out of range (0-${config.students.length - 1})`);
       }
       studentConfig = config.students[index];
-      log('info', `Using student config (index ${index}): ${studentConfig.title || studentConfig.name || 'unnamed'}`);
+      log("info", `Using student config (index ${index}): ${studentConfig.title || studentConfig.name || "unnamed"}`);
 
       // Merge global config with student-specific config
       authConfig = {
@@ -209,7 +215,7 @@ async function main() {
     } else {
       // Single student mode
       studentConfig = config;
-      log('info', 'Using single-student config');
+      log("info", "Using single-student config");
       authConfig = {
         username: config.username,
         password: config.password,
@@ -221,14 +227,14 @@ async function main() {
     }
 
     debugLog(
-      `Auth config: username=${authConfig.username ? '***' : 'none'}, school=${authConfig.school}, server=${authConfig.server}, studentId=${authConfig.studentId || 'none'}`
+      `Auth config: username=${authConfig.username ? "***" : "none"}, school=${authConfig.school}, server=${authConfig.server}, studentId=${authConfig.studentId || "none"}`,
     );
 
     // Initialize AuthService
-    debugLog('Initializing AuthService...');
+    debugLog("Initializing AuthService...");
     const authService = new AuthService({
       logger: (level, msg) => {
-        if (options.debug || level === 'error' || level === 'warn') {
+        if (options.debug || level === "error" || level === "warn") {
           log(level, msg);
         }
       },
@@ -238,7 +244,7 @@ async function main() {
     const getAuth = async () => {
       const authResult = await authService.getAuth(authConfig);
 
-      debugLog('Authentication successful');
+      debugLog("Authentication successful");
       debugLog(`  Token: ${authResult.token?.substring(0, 20)}...`);
       debugLog(`  Server: ${authResult.server}`);
       debugLog(`  Tenant ID: ${authResult.tenantId}`);
@@ -249,18 +255,18 @@ async function main() {
     };
 
     // Get auth
-    log('info', 'Authenticating...');
+    log("info", "Authenticating...");
     const auth = await getAuth();
-    log('info', '✓ Authentication successful');
+    log("info", "✓ Authentication successful");
 
     // Make API call
-    log('info', 'Calling API endpoint...');
+    log("info", "Calling API endpoint...");
     const startTime = Date.now();
 
     const response = await callRestAPI({
       server: auth.server || authConfig.server,
       path: cleanPath,
-      method: 'GET',
+      method: "GET",
       params: allQueryParams,
       token: auth.token,
       cookies: auth.cookieString,
@@ -271,12 +277,12 @@ async function main() {
     });
 
     const elapsed = Date.now() - startTime;
-    log('info', `✓ API call completed (${elapsed}ms)`);
-    log('info', `  Status: ${response.status}`);
+    log("info", `✓ API call completed (${elapsed}ms)`);
+    log("info", `  Status: ${response.status}`);
 
     // Save response to debug_dumps directory
     const dumpPath = saveToDumpFile(cleanPath, allQueryParams, response, authConfig, elapsed);
-    log('info', `  Saved: ${dumpPath}`);
+    log("info", `  Saved: ${dumpPath}`);
 
     // Output response
     if (options.raw) {
@@ -284,28 +290,28 @@ async function main() {
       console.log(JSON.stringify(response.data, null, 2));
     } else {
       // Formatted output with metadata
-      console.log(`\n${'='.repeat(80)}`);
-      console.log('API RESPONSE');
-      console.log('='.repeat(80));
+      console.log(`\n${"=".repeat(80)}`);
+      console.log("API RESPONSE");
+      console.log("=".repeat(80));
       console.log(`Endpoint: ${cleanPath}`);
       console.log(`Status:   ${response.status}`);
       console.log(`Duration: ${elapsed}ms`);
       if (Object.keys(allQueryParams).length > 0) {
         console.log(`Params:   ${JSON.stringify(allQueryParams)}`);
       }
-      console.log('='.repeat(80));
-      console.log('\nResponse Data:');
+      console.log("=".repeat(80));
+      console.log("\nResponse Data:");
       console.log(JSON.stringify(response.data, null, 2));
-      console.log(`\n${'='.repeat(80)}`);
+      console.log(`\n${"=".repeat(80)}`);
 
       // Analysis hints
-      if (response.data && typeof response.data === 'object') {
-        console.log('\n📊 Response Analysis:');
+      if (response.data && typeof response.data === "object") {
+        console.log("\n📊 Response Analysis:");
         if (Array.isArray(response.data)) {
           console.log(`  - Array with ${response.data.length} items`);
         } else {
           const keys = Object.keys(response.data);
-          console.log(`  - Object with ${keys.length} keys: ${keys.join(', ')}`);
+          console.log(`  - Object with ${keys.length} keys: ${keys.join(", ")}`);
 
           // Special analysis for calendar-entry responses
           if (response.data.calendarEntries) {
@@ -326,15 +332,15 @@ async function main() {
       }
 
       // Suggest next steps
-      console.log('\n💡 Next Steps:');
+      console.log("\n💡 Next Steps:");
       console.log(`  - Dump saved to: ${dumpPath}`);
       console.log('  - To test different student: node scripts/test_api_endpoint.js <path> "" --student=1');
       console.log('  - To see detailed logs: node scripts/test_api_endpoint.js <path> "" --debug');
     }
   } catch (error) {
-    log('error', `Failed to test endpoint: ${error.message}`);
+    log("error", `Failed to test endpoint: ${error.message}`);
     if (options.debug) {
-      console.error('\nStack trace:');
+      console.error("\nStack trace:");
       console.error(error.stack);
     }
     throw error;

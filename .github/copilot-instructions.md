@@ -107,15 +107,18 @@ webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
 logger('debug', null, `[feature] Message ${variable}`);  // null = no student context
 logger('warn', 'StudentName', `Warning for student`);    // include student name for context
 
-// Frontend: use console for debugging
-console.debug('[feature]', data);
-console.warn('[feature] Warning:', error);
+// Frontend: use the instance logger. Everything goes through MagicMirror's Log (global
+// logLevel); the instance's own logLevel can only narrow it
+this._log('debug', '[feature]', data);
+this._log('warn', '[feature] Warning:', error);
+// Plugins: use `log` from `MMMWebuntisFrontendShared` (lib/frontendShared.js), not console
 ```
 
 ## File Organization (Updated: `lib/webuntis/` contains internal WebUntis API logic)
 
 **Essential files** (most editing happens here):
-- `node_helper.js` (~530 LOC) - Socket protocol, session lifecycle, per-credential fetch loop - nothing else; adapter logic lives in the `lib/` modules below
+- `node_helper.js` (~600 LOC) - Socket protocol, session lifecycle, per-credential fetch loop - nothing else; adapter logic lives in the `lib/` modules below
+- `lib/mmm-shared/` - Git submodule shared by all of the author's modules (`createTransport`, `createLogger`, `createLifecycle`). Do not edit it here. `MMM-Webuntis.js` `_createLifecycle()` wires `createLifecycle` for the refresh timer, suspend/resume, deferred init and `SESSION_STATE`; do not add own timers or visibility logic next to it
 - `lib/moduleConfig.js` - Legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
 - `lib/sessionRegistry.js` - Frontend session configs, paused flags, TTL eviction
 - `lib/apiStatusTracker.js` - Per-session endpoint status (`lastSuccessAt`), 24h permanent-error skip, circuit breaker

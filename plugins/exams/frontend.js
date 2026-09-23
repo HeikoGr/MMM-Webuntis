@@ -1,7 +1,7 @@
 (function registerExamsPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
   const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== 'function' || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
     return;
   }
 
@@ -9,14 +9,14 @@
 
   function formatFallbackDate(ymd) {
     const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, '0');
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, '0');
+    const fallbackDay = String(numeric % 100).padStart(2, "0");
+    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
     return `${fallbackDay}.${fallbackMonth}.`;
   }
 
   function formatDisplayDateValue(ymd, format) {
     const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
-    if (typeof formatter === 'function') {
+    if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
     return formatFallbackDate(ymd);
@@ -37,22 +37,22 @@
     return (Number(left?.startTime) || 0) - (Number(right?.startTime) || 0);
   }
 
-  function getFieldDisplayName(entry, format = 'short') {
-    if (entry === null || entry === undefined) return '';
+  function getFieldDisplayName(entry, format = "short") {
+    if (entry === null || entry === undefined) return "";
 
-    if (typeof entry === 'string' || typeof entry === 'number') {
+    if (typeof entry === "string" || typeof entry === "number") {
       return String(entry).trim();
     }
 
-    if (typeof entry !== 'object') return '';
+    if (typeof entry !== "object") return "";
 
-    const shortName = String(entry.name ?? '').trim();
-    const longName = String(entry.longname ?? '').trim();
-    return format === 'long' ? longName || shortName : shortName || longName;
+    const shortName = String(entry.name ?? "").trim();
+    const longName = String(entry.longname ?? "").trim();
+    return format === "long" ? longName || shortName : shortName || longName;
   }
 
-  function getFirstFieldName(entries, format = 'short') {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
+  function getFirstFieldName(entries, format = "short") {
+    if (!Array.isArray(entries) || entries.length === 0) return "";
     return getFieldDisplayName(entries[0], format);
   }
 
@@ -64,7 +64,7 @@
 
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    if (!config || typeof config !== "object" || Array.isArray(config)) {
       return {};
     }
     return config;
@@ -72,7 +72,7 @@
 
   function resolveExamConfig(studentConfig) {
     const pluginConfig =
-      studentConfig?.plugins?.exams?.config && typeof studentConfig.plugins.exams.config === 'object'
+      studentConfig?.plugins?.exams?.config && typeof studentConfig.plugins.exams.config === "object"
         ? studentConfig.plugins.exams.config
         : {};
 
@@ -81,41 +81,41 @@
 
   function isVerboseMode(studentConfig) {
     return (
-      String(studentConfig?.mode ?? 'compact')
+      String(studentConfig?.mode ?? "compact")
         .trim()
-        .toLowerCase() === 'verbose'
+        .toLowerCase() === "verbose"
     );
   }
 
   function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== 'function') return fallback;
+    if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
     return translated && translated !== key ? translated : fallback;
   }
 
   function buildHeaderTitle(pluginContext, studentName, examConfig) {
-    const title = escapeHtml(translate(pluginContext, 'exams', 'Exams'));
-    const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
+    const title = escapeHtml(translate(pluginContext, "exams", "Exams"));
+    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(examConfig?.nextDays, 0);
     const filterLabel = `+${nextDays} ${daysLabel}`;
-    const normalizedStudent = String(studentName || '').trim();
+    const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
     return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
   }
 
   host.registerFrontendPlugin({
-    id: 'exams',
+    id: "exams",
     hostApiVersion: 1,
 
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement('section', 'wu-plugin wu-plugin-exams');
+          const wrapper = createElement("section", "wu-plugin wu-plugin-exams");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
-          const logLevel = String(renderContext?.runtime?.logLevel || root.MMMWebuntisLogLevel || '')
+          const logLevel = String(renderContext?.runtime?.logLevel || root.MMMWebuntisLogLevel || "")
             .trim()
             .toLowerCase();
-          const includePastExams = logLevel === 'debug';
+          const includePastExams = logLevel === "debug";
           let renderedContainers = 0;
 
           for (const studentSlice of students) {
@@ -127,8 +127,8 @@
             }
 
             if (exams.length === 0) {
-              if (studentSlice?.state?.collections?.exams?.status === 'unavailable') {
-                const studentTitle = String(studentSlice?.student?.title || '').trim();
+              if (studentSlice?.state?.collections?.exams?.status === "unavailable") {
+                const studentTitle = String(studentSlice?.student?.title || "").trim();
                 const verboseMode = isVerboseMode(studentConfig);
                 const container = createContainer();
                 if (verboseMode && studentTitle) {
@@ -136,9 +136,9 @@
                 }
                 addRow(
                   container,
-                  'examRowEmpty unavailable-notice',
-                  verboseMode ? '' : escapeHtml(studentTitle),
-                  escapeHtml(translate(pluginContext, 'unavailable', 'data unavailable'))
+                  "examRowEmpty unavailable-notice",
+                  verboseMode ? "" : escapeHtml(studentTitle),
+                  escapeHtml(translate(pluginContext, "unavailable", "data unavailable")),
                 );
                 wrapper.appendChild(container);
                 renderedContainers += 1;
@@ -166,9 +166,9 @@
               continue;
             }
 
-            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const studentTitle = String(studentSlice?.student?.title || "").trim();
             const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? '' : escapeHtml(studentTitle);
+            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
             const container = createContainer();
 
             if (verboseMode && studentTitle) {
@@ -178,7 +178,9 @@
             for (const exam of visibleExams) {
               const examYmd = Number(exam?.examDate) || 0;
               const formattedDate = formatDisplayDateValue(examYmd, examConfig?.dateFormat);
-              const dateTimeCell = formattedDate ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>` : '';
+              const dateTimeCell = formattedDate
+                ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>`
+                : "";
 
               let nameCell = `<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;
               if (showSubject) {
@@ -186,7 +188,7 @@
               }
 
               if (showTeacher) {
-                const teacher = getFirstFieldName(exam?.teachers, 'short');
+                const teacher = getFirstFieldName(exam?.teachers, "short");
                 if (teacher) {
                   nameCell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
                 }
@@ -196,7 +198,7 @@
                 nameCell += `<br/><span class="wu-exam__description">${escapeHtml(exam.text)}</span>`;
               }
 
-              addRow(container, 'examRow', studentLabelText, dateTimeCell, nameCell);
+              addRow(container, "examRow", studentLabelText, dateTimeCell, nameCell);
             }
 
             wrapper.appendChild(container);
@@ -208,4 +210,4 @@
       };
     },
   });
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+})(typeof globalThis !== "undefined" ? globalThis : this);

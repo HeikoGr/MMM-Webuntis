@@ -1,14 +1,14 @@
 (function registerHomeworkPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
   const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== 'function' || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
     return;
   }
 
   const { addHeader, addRow, createContainer, createElement, escapeHtml } = sharedDom;
 
   function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== 'function') return fallback;
+    if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
     return translated && translated !== key ? translated : fallback;
   }
@@ -19,38 +19,38 @@
     return Math.max(0, parsed);
   }
 
-  function getFieldDisplayName(entry, format = 'short') {
-    if (entry === null || entry === undefined) return '';
-    if (typeof entry === 'string' || typeof entry === 'number') {
+  function getFieldDisplayName(entry, format = "short") {
+    if (entry === null || entry === undefined) return "";
+    if (typeof entry === "string" || typeof entry === "number") {
       return String(entry).trim();
     }
-    if (typeof entry !== 'object') return '';
-    const shortName = String(entry.name ?? '').trim();
-    const longName = String(entry.longname ?? '').trim();
-    return format === 'long' ? longName || shortName : shortName || longName;
+    if (typeof entry !== "object") return "";
+    const shortName = String(entry.name ?? "").trim();
+    const longName = String(entry.longname ?? "").trim();
+    return format === "long" ? longName || shortName : shortName || longName;
   }
 
   function formatDisplayDateValue(ymd, format) {
     const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
-    if (typeof formatter === 'function') {
+    if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
 
     const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, '0');
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, '0');
+    const fallbackDay = String(numeric % 100).padStart(2, "0");
+    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
     return `${fallbackDay}.${fallbackMonth}.`;
   }
 
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
     return config;
   }
 
   function resolveHomeworkConfig(studentConfig) {
     const pluginConfig =
-      studentConfig?.plugins?.homework?.config && typeof studentConfig.plugins.homework.config === 'object'
+      studentConfig?.plugins?.homework?.config && typeof studentConfig.plugins.homework.config === "object"
         ? studentConfig.plugins.homework.config
         : {};
 
@@ -59,31 +59,31 @@
 
   function isVerboseMode(studentConfig) {
     return (
-      String(studentConfig?.mode ?? 'compact')
+      String(studentConfig?.mode ?? "compact")
         .trim()
-        .toLowerCase() === 'verbose'
+        .toLowerCase() === "verbose"
     );
   }
 
   function buildHeaderTitle(pluginContext, studentName, homeworkConfig) {
-    const title = escapeHtml(translate(pluginContext, 'homework', 'Homework'));
-    const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
+    const title = escapeHtml(translate(pluginContext, "homework", "Homework"));
+    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(homeworkConfig?.nextDays, 0);
     const pastDays = normalizeDays(homeworkConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
-    const normalizedStudent = String(studentName || '').trim();
+    const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
     return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
   }
 
   host.registerFrontendPlugin({
-    id: 'homework',
+    id: "homework",
     hostApiVersion: 1,
 
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement('section', 'wu-plugin wu-plugin-homework');
+          const wrapper = createElement("section", "wu-plugin wu-plugin-homework");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           let renderedContainers = 0;
 
@@ -91,9 +91,9 @@
             const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
             const studentConfig = resolveStudentConfig(studentSlice);
             const homeworkConfig = resolveHomeworkConfig(studentConfig);
-            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const studentTitle = String(studentSlice?.student?.title || "").trim();
             const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? '' : escapeHtml(studentTitle);
+            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
             const container = createContainer();
 
             if (verboseMode && studentTitle) {
@@ -101,14 +101,18 @@
             }
 
             if (!Array.isArray(homeworks) || homeworks.length === 0) {
-              const unavailable = studentSlice?.state?.collections?.homework?.status === 'unavailable';
+              const unavailable = studentSlice?.state?.collections?.homework?.status === "unavailable";
               addRow(
                 container,
-                unavailable ? 'homeworkRowEmpty unavailable-notice' : 'homeworkRowEmpty',
+                unavailable ? "homeworkRowEmpty unavailable-notice" : "homeworkRowEmpty",
                 studentLabelText,
                 escapeHtml(
-                  translate(pluginContext, unavailable ? 'unavailable' : 'no_homework', unavailable ? 'data unavailable' : 'no homework')
-                )
+                  translate(
+                    pluginContext,
+                    unavailable ? "unavailable" : "no_homework",
+                    unavailable ? "data unavailable" : "no homework",
+                  ),
+                ),
               );
               wrapper.appendChild(container);
               renderedContainers += 1;
@@ -124,7 +128,7 @@
               const rightSubject = right?.subject || null;
               return (
                 (Number(left?.dueDate) || 0) - (Number(right?.dueDate) || 0) ||
-                getFieldDisplayName(leftSubject, 'short').localeCompare(getFieldDisplayName(rightSubject, 'short')) ||
+                getFieldDisplayName(leftSubject, "short").localeCompare(getFieldDisplayName(rightSubject, "short")) ||
                 // WebUntis doesn't guarantee a stable order for entries tied on the criteria above,
                 // so fall back to the immutable homework id - keeps the order identical across
                 // refreshes instead of flipping (see issue #89).
@@ -133,22 +137,23 @@
             });
 
             for (const homework of sorted) {
-              const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, dateFormat) : '';
+              const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, dateFormat) : "";
               const subject = homework?.subject || null;
-              const subjectLabel = showSubject ? getFieldDisplayName(subject, 'long') : '';
-              const text = showText ? String(homework?.text || '').trim() : '';
+              const subjectLabel = showSubject ? getFieldDisplayName(subject, "long") : "";
+              const text = showText ? String(homework?.text || "").trim() : "";
               const left = due
                 ? `<span class="wu-homework__date">${escapeHtml(due)}</span>`
-                : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, 'homework', 'Homework'))}</span>`;
+                : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
               const rightParts = [];
               if (subjectLabel) rightParts.push(`<b class="wu-homework__subject">${escapeHtml(subjectLabel)}</b>`);
-              if (text) rightParts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, '<br>')}</span>`);
+              if (text)
+                rightParts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, "<br>")}</span>`);
               const right =
                 rightParts.length > 0
-                  ? rightParts.join(': ')
-                  : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, 'homework', 'Homework'))}</span>`;
+                  ? rightParts.join(": ")
+                  : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
 
-              addRow(container, 'homeworkRow', studentLabelText, left, right);
+              addRow(container, "homeworkRow", studentLabelText, left, right);
             }
 
             wrapper.appendChild(container);
@@ -160,4 +165,4 @@
       };
     },
   });
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+})(typeof globalThis !== "undefined" ? globalThis : this);

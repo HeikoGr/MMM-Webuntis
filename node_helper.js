@@ -1,10 +1,22 @@
-const NodeHelper = require('node_helper');
-const Log = require('logger');
-const shared = require('./lib/mmm-shared/mmm-shared');
+const NodeHelper = require("node_helper");
+const Log = require("logger");
+const shared = require("./lib/mmm-shared/mmm-shared");
 
-const { AuthService, WebUntisClient, formatError, convertRestErrorToWarning, buildFetchPlan } = require('./lib/webuntisClient');
-const { ApiStatusTracker } = require('./lib/apiStatusTracker');
-const { SessionRegistry, buildRouteMeta, parseSessionKey, DEFAULT_IDENTIFIER, DEFAULT_SESSION_ID } = require('./lib/sessionRegistry');
+const {
+  AuthService,
+  WebUntisClient,
+  formatError,
+  convertRestErrorToWarning,
+  buildFetchPlan,
+} = require("./lib/webuntisClient");
+const { ApiStatusTracker } = require("./lib/apiStatusTracker");
+const {
+  SessionRegistry,
+  buildRouteMeta,
+  parseSessionKey,
+  DEFAULT_IDENTIFIER,
+  DEFAULT_SESSION_ID,
+} = require("./lib/sessionRegistry");
 const {
   buildEffectiveStudentConfig,
   buildFetchFlags,
@@ -12,11 +24,11 @@ const {
   collectPluginValidationIssues,
   normalizeModuleConfig,
   validateNormalizedConfig,
-} = require('./lib/moduleConfig');
-const { createAuthSession, getCredentialKey } = require('./lib/authSession');
-const { ensureStudentsFromAppData } = require('./lib/studentDiscovery');
-const { extractHolidaysFromAppData } = require('./lib/webuntis/dataOrchestration');
-const { buildStudentErrorPayload } = require('./lib/mmm-adapter/mmmPayloadMapper');
+} = require("./lib/moduleConfig");
+const { createAuthSession, getCredentialKey } = require("./lib/authSession");
+const { ensureStudentsFromAppData } = require("./lib/studentDiscovery");
+const { extractHolidaysFromAppData } = require("./lib/webuntis/dataOrchestration");
+const { buildStudentErrorPayload } = require("./lib/mmm-adapter/mmmPayloadMapper");
 const {
   buildWarningMetaEntries,
   buildWarningMetaList,
@@ -27,9 +39,11 @@ const {
   isNetworkError,
   mergeGroupWarningsIntoPayload,
   mergeUniqueWarnings,
-} = require('./lib/warningUtils');
-const { initializeBackendPluginHost } = require('./lib/pluginHostBackend');
-const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
+} = require("./lib/warningUtils");
+const { initializeBackendPluginHost } = require("./lib/pluginHostBackend");
+const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
+
+const LOG_LEVEL_WEIGHTS = Object.freeze({ none: -1, error: 0, warn: 1, info: 2, debug: 3 });
 
 /**
  * MagicMirror adapter for MMM-Webuntis.
@@ -44,7 +58,7 @@ const { validateStudentCredentials } = require('./lib/widgetConfigValidator');
 module.exports = NodeHelper.create({
   start() {
     this._ensureRuntime();
-    this._mmLog('debug', null, 'Node helper started');
+    this._mmLog("debug", null, "Node helper started");
   },
 
   /**
@@ -56,17 +70,24 @@ module.exports = NodeHelper.create({
     this._runtimeReady = true;
 
     const log = this._mmLog.bind(this);
-    this.notifications = shared.buildNotifications('MMM-Webuntis');
+    this.notifications = shared.buildNotifications("MMM-Webuntis");
     this._authService = new AuthService({ logger: (level, message) => log(level, null, `[lib] ${message}`) });
     this._apiStatus = new ApiStatusTracker({ logger: log });
-    this._sessions = new SessionRegistry({ logger: log, onRelease: (sessionKey) => this._apiStatus.release(sessionKey) });
-    this._client = new WebUntisClient({ mmLog: log, formatErr: this._formatErr.bind(this), apiStatus: this._apiStatus });
+    this._sessions = new SessionRegistry({
+      logger: log,
+      onRelease: (sessionKey) => this._apiStatus.release(sessionKey),
+    });
+    this._client = new WebUntisClient({
+      mmLog: log,
+      formatErr: formatError,
+      apiStatus: this._apiStatus,
+    });
     this._pendingFetchByCredKey = new Map(); // credKey -> in-flight processGroup() promise
     this._initInFlightBySession = new Map(); // sessionKey -> in-flight _handleInitModule() promise
     this._pluginHost = initializeBackendPluginHost({ moduleRoot: __dirname, logger: log });
     this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
     this._pluginWarnings.forEach((warning) => {
-      log('warn', null, warning);
+      log("warn", null, warning);
     });
   },
 
@@ -80,7 +101,7 @@ module.exports = NodeHelper.create({
     this._authService = null;
     if (authService) {
       authService.logoutAll().catch((error) => {
-        this._mmLog('debug', null, `Logout on shutdown failed: ${this._formatErr(error)}`);
+        this._mmLog("debug", null, `Logout on shutdown failed: ${formatError(error)}`);
       });
     }
     this._sessions?.clear();
@@ -88,7 +109,7 @@ module.exports = NodeHelper.create({
     this._pendingFetchByCredKey?.clear();
     this._initInFlightBySession?.clear();
     this._runtimeReady = false;
-    this._mmLog('debug', null, 'Node helper stopped');
+    this._mmLog("debug", null, "Node helper stopped");
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -123,20 +144,20 @@ module.exports = NodeHelper.create({
     try {
       await handler();
     } catch (error) {
-      this._mmLog('error', null, `[${action}] Unhandled failure: ${this._formatErr(error)}`);
+      this._mmLog("error", null, `[${action}] Unhandled failure: ${formatError(error)}`);
     }
   },
 
   _emitGotData(payload, route = {}) {
-    this._emitSocketNotification('DATA_UPDATE', payload, route, { preserveExistingRoute: false });
+    this._emitSocketNotification("DATA_UPDATE", payload, route, { preserveExistingRoute: false });
   },
 
   _emitInitError(payload, route = {}) {
-    this._emitSocketNotification('MODULE_INIT_FAILED', payload, route, { preserveExistingRoute: true });
+    this._emitSocketNotification("MODULE_INIT_FAILED", payload, route, { preserveExistingRoute: true });
   },
 
   _emitModuleInitialized(payload, route = {}) {
-    this._emitSocketNotification('MODULE_READY', payload, route, { preserveExistingRoute: true });
+    this._emitSocketNotification("MODULE_READY", payload, route, { preserveExistingRoute: true });
   },
 
   /**
@@ -144,7 +165,7 @@ module.exports = NodeHelper.create({
    * session this helper knows nothing about (helper restarted under a live frontend).
    */
   _emitInitRequired(payload, route = {}) {
-    this._emitSocketNotification('INIT_REQUIRED', payload, route, { preserveExistingRoute: true });
+    this._emitSocketNotification("INIT_REQUIRED", payload, route, { preserveExistingRoute: true });
   },
 
   /**
@@ -157,7 +178,7 @@ module.exports = NodeHelper.create({
    * @param {boolean} [options.preserveExistingRoute=false] - Keep id/sessionId already set on the payload
    */
   _emitSocketNotification(notification, payload, route = {}, options = {}) {
-    if (!payload || typeof payload !== 'object') return;
+    if (!payload || typeof payload !== "object") return;
     this._ensureRuntime();
 
     const { preserveExistingRoute = false } = options;
@@ -170,7 +191,7 @@ module.exports = NodeHelper.create({
       nextPayload.sessionId = route.sessionId;
     }
 
-    const isFailure = String(notification).includes('FAILED');
+    const isFailure = String(notification).includes("FAILED");
     this.sendSocketNotification(
       this.notifications.EVENT,
       shared.createEnvelope({
@@ -181,7 +202,7 @@ module.exports = NodeHelper.create({
         data: nextPayload,
         error: isFailure ? nextPayload : null,
         meta: {},
-      })
+      }),
     );
   },
 
@@ -206,7 +227,7 @@ module.exports = NodeHelper.create({
     const { sessionKey } = buildRouteMeta(payload);
     const inFlight = this._initInFlightBySession.get(sessionKey);
     if (inFlight) {
-      this._mmLog('debug', null, `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`);
+      this._mmLog("debug", null, `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`);
       return inFlight;
     }
 
@@ -225,32 +246,38 @@ module.exports = NodeHelper.create({
         pluginHost: this._pluginHost,
         logger: this._mmLog.bind(this),
       });
+      // The backend is shared by all instances: the most recent CONFIGURE sets its own logLevel.
+      this._logLevel = normalizedConfig.logLevel;
       const route = buildRouteMeta({ id: normalizedConfig.id, sessionId: payload.sessionId });
       identifier = route.identifier;
       const { sessionId, sessionKey } = route;
 
       this._mmLog(
-        'debug',
+        "debug",
         null,
-        `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || 'unspecified'})`
+        `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || "unspecified"})`,
       );
       this._sessions.storeInitConfig(sessionKey, normalizedConfig);
       if (normalizedConfig.debugDate) {
-        this._mmLog('debug', null, `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`);
+        this._mmLog(
+          "debug",
+          null,
+          `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`,
+        );
       }
 
       const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
       if (!validation.valid) {
-        this._mmLog('error', null, `[CONFIGURE] Config validation failed for ${identifier}`);
+        this._mmLog("error", null, `[CONFIGURE] Config validation failed for ${identifier}`);
         this._emitInitError(
           {
             errors: validation.errors,
             warnings: validation.warnings,
             warningMeta: validation.warningMeta,
-            severity: 'ERROR',
-            message: 'Configuration validation failed',
+            severity: "ERROR",
+            message: "Configuration validation failed",
           },
-          { identifier, sessionId }
+          { identifier, sessionId },
         );
         return;
       }
@@ -262,7 +289,7 @@ module.exports = NodeHelper.create({
       await ensureStudentsFromAppData(normalizedConfig, {
         authService: this._authService,
         logger: this._mmLog.bind(this),
-        formatError: this._formatErr.bind(this),
+        formatError: formatError,
       });
 
       // Same shape as a REFRESH from the frontend - the handler reads nothing else from it, and
@@ -270,19 +297,19 @@ module.exports = NodeHelper.create({
       await this._handleFetchData({
         id: identifier,
         sessionId,
-        reason: 'post-init-auto-fetch',
+        reason: "post-init-auto-fetch",
         backgroundRefresh: normalizedConfig.backgroundRefresh,
       });
     } catch (error) {
-      this._mmLog('error', null, `[CONFIGURE] Initialization failed: ${this._formatErr(error)}`);
+      this._mmLog("error", null, `[CONFIGURE] Initialization failed: ${formatError(error)}`);
       this._emitInitError(
         {
-          errors: [error.message || 'Unknown initialization error'],
+          errors: [error.message || "Unknown initialization error"],
           warnings: [],
-          severity: 'ERROR',
-          message: 'Module initialization failed',
+          severity: "ERROR",
+          message: "Module initialization failed",
         },
-        { identifier: identifier || 'unknown', sessionId: payload?.sessionId }
+        { identifier: identifier || "unknown", sessionId: payload?.sessionId },
       );
     }
   },
@@ -290,7 +317,7 @@ module.exports = NodeHelper.create({
   _emitInitSuccess(normalizedConfig, identifier, sessionId, validationWarnings, validationWarningMeta = []) {
     const warnings = mergeUniqueWarnings(validationWarnings, this._pluginWarnings || []);
     const metaByMessage = createWarningMetaMap(validationWarningMeta);
-    buildWarningMetaEntries(warnings, { kind: 'config', severity: 'warning' }).forEach((entry) => {
+    buildWarningMetaEntries(warnings, { kind: "config", severity: "warning" }).forEach((entry) => {
       if (!metaByMessage.has(entry.message)) metaByMessage.set(entry.message, entry);
     });
 
@@ -302,7 +329,7 @@ module.exports = NodeHelper.create({
         students: normalizedConfig.students || [],
         plugins: buildFrontendPluginRegistry(normalizedConfig, this._pluginHost, __dirname),
       },
-      { identifier, sessionId }
+      { identifier, sessionId },
     );
   },
 
@@ -317,15 +344,15 @@ module.exports = NodeHelper.create({
   _handleSessionState(payload = {}) {
     this._ensureRuntime();
     const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
-    const state = payload.state === 'active' ? 'active' : 'paused';
+    const state = payload.state === "active" ? "active" : "paused";
 
     // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
     this._sessions.touch(sessionKey);
-    this._sessions.setPaused(sessionKey, state === 'paused');
+    this._sessions.setPaused(sessionKey, state === "paused");
     this._mmLog(
-      'debug',
+      "debug",
       null,
-      `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${payload.reason || 'unspecified'})`
+      `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${payload.reason || "unspecified"})`,
     );
   },
 
@@ -337,22 +364,26 @@ module.exports = NodeHelper.create({
   async _handleFetchData(payload) {
     this._ensureRuntime();
     const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
-    const fetchReason = payload?.reason || 'unspecified';
+    const fetchReason = payload?.reason || "unspecified";
 
-    this._mmLog('debug', null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+    this._mmLog("debug", null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
     this._sessions.touch(sessionKey);
 
     // A hidden session may still ask for data: the shared frontend lifecycle keeps
     // refreshing in the background so the view is warm when it becomes visible.
     // Only a frontend that explicitly opted out of background refresh is gated here.
     if (this._sessions.isPaused(sessionKey) && payload?.backgroundRefresh === false) {
-      this._mmLog('debug', null, `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+      this._mmLog(
+        "debug",
+        null,
+        `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`,
+      );
       return;
     }
 
     const inFlightInit = this._initInFlightBySession.get(sessionKey);
-    if (inFlightInit && fetchReason !== 'post-init-auto-fetch') {
-      this._mmLog('debug', null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
+    if (inFlightInit && fetchReason !== "post-init-auto-fetch") {
+      this._mmLog("debug", null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
       await inFlightInit.catch(() => {});
     }
 
@@ -362,11 +393,14 @@ module.exports = NodeHelper.create({
       // running. REFRESH no longer carries the full config, so ask the frontend to redo the
       // CONFIGURE handshake instead of re-initializing from this payload.
       this._mmLog(
-        'warn',
+        "warn",
         null,
-        `[REFRESH] Module ${identifier} not initialized for session ${sessionId} - requesting CONFIGURE from frontend`
+        `[REFRESH] ${identifier} not initialized for session ${sessionId}; requesting CONFIGURE`,
       );
-      this._emitInitRequired({ id: identifier, sessionId, reason: 'session-config-missing' }, { identifier, sessionId });
+      this._emitInitRequired(
+        { id: identifier, sessionId, reason: "session-config-missing" },
+        { identifier, sessionId },
+      );
       return;
     }
 
@@ -374,7 +408,8 @@ module.exports = NodeHelper.create({
     if (payload.debugDate !== undefined) {
       config = { ...config, debugDate: payload.debugDate };
       this._sessions.setSessionConfig(sessionKey, config);
-      if (payload.debugDate) this._mmLog('debug', null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
+      if (payload.debugDate)
+        this._mmLog("debug", null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
     }
 
     await this._executeFetchForSession(sessionKey);
@@ -388,7 +423,7 @@ module.exports = NodeHelper.create({
   async _executeFetchForSession(sessionKey) {
     const config = this._sessions.getOrCreateSessionConfig(sessionKey);
     if (!config) {
-      this._mmLog('warn', null, `Session ${sessionKey} not found, skipping fetch`);
+      this._mmLog("warn", null, `Session ${sessionKey} not found, skipping fetch`);
       return;
     }
     config._authService = this._authService;
@@ -404,7 +439,7 @@ module.exports = NodeHelper.create({
       for (const [credKey, students] of groups.entries()) {
         const pendingFetch = this._pendingFetchByCredKey.get(credKey);
         if (pendingFetch) {
-          this._mmLog('debug', null, `Session ${sessionKey}: Another fetch is in progress for credKey=${credKey}, waiting...`);
+          this._mmLog("debug", null, `Session ${sessionKey}: waiting for running fetch of credKey=${credKey}`);
           await pendingFetch.catch(() => {});
         }
 
@@ -417,7 +452,7 @@ module.exports = NodeHelper.create({
         }
       }
     } catch (error) {
-      this._mmLog('error', null, `Error loading Untis data for session ${sessionKey}: ${this._formatErr(error)}`);
+      this._mmLog("error", null, `Error loading Untis data for session ${sessionKey}: ${formatError(error)}`);
     }
   },
 
@@ -439,7 +474,16 @@ module.exports = NodeHelper.create({
     try {
       authSession = await createAuthSession(this._authService, sample, config, credKey);
     } catch (err) {
-      this._handleGroupAuthFailure({ err, credKey, identifier, sessionKey, sessionId, students, config, warningsState });
+      this._handleGroupAuthFailure({
+        err,
+        credKey,
+        identifier,
+        sessionKey,
+        sessionId,
+        students,
+        config,
+        warningsState,
+      });
       return;
     }
 
@@ -460,26 +504,37 @@ module.exports = NodeHelper.create({
           warningsState,
         });
       } catch (err) {
-        payload = this._buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState });
+        payload = this._buildStudentFetchFailurePayload({
+          err,
+          student,
+          identifier,
+          sessionId,
+          sessionKey,
+          config,
+          warningsState,
+        });
       }
       if (payload) this._emitGotData(payload, { identifier, sessionId });
     }
   },
 
   _handleGroupAuthFailure({ err, credKey, identifier, sessionKey, sessionId, students, config, warningsState }) {
-    const errorMsg = this._formatErr(err);
+    const errorMsg = formatError(err);
     const networkFailure = isNetworkError(err);
     const msg = networkFailure
       ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
       : `Authentication failed for ${credKey}: ${errorMsg}`;
-    this._mmLog('error', null, msg);
+    this._mmLog("error", null, msg);
 
     // Only the failing credentials are forced to re-login; other accounts keep their sessions.
     if (this._authService?.invalidateCache(credKey)) {
-      this._mmLog('warn', null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
+      this._mmLog("warn", null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
     }
 
-    warningsState.addGroupWarning(msg, classifyWarningMetaFromError(err, { kind: networkFailure ? 'network' : 'auth' }));
+    warningsState.addGroupWarning(
+      msg,
+      classifyWarningMetaFromError(err, { kind: networkFailure ? "network" : "auth" }),
+    );
     students.forEach((student) => {
       this._emitGotData(
         this._buildErrorPayload({
@@ -491,20 +546,29 @@ module.exports = NodeHelper.create({
           apiRecords: this._apiStatus.getRecords(sessionKey),
           warnings: warningsState.groupWarnings,
           warningMetaByMessage: warningsState.groupWarningMetaByMessage,
-          warningFallbackMeta: { kind: 'generic', severity: 'warning' },
-        })
+          warningFallbackMeta: { kind: "generic", severity: "warning" },
+        }),
       );
     });
   },
 
-  async _fetchStudentPayload({ student, authSession, identifier, credKey, compactHolidays, config, sessionKey, warningsState }) {
+  async _fetchStudentPayload({
+    student,
+    authSession,
+    identifier,
+    credKey,
+    compactHolidays,
+    config,
+    sessionKey,
+    warningsState,
+  }) {
     const studentWarnings = collectValidationWarnings(
       validateStudentCredentials(student),
-      collectPluginValidationIssues(student, this._pluginHost).warnings
+      collectPluginValidationIssues(student, this._pluginHost).warnings,
     );
     studentWarnings.forEach((warning) => {
-      this._mmLog('warn', student, warning);
-      warningsState.addGroupWarning(warning, { kind: 'config', severity: 'warning' });
+      this._mmLog("warn", student, warning);
+      warningsState.addGroupWarning(warning, { kind: "config", severity: "warning" });
     });
 
     const fetchFlags = buildFetchFlags(buildEffectiveStudentConfig(student, config), this._pluginHost);
@@ -521,7 +585,7 @@ module.exports = NodeHelper.create({
     });
 
     if (!payload) {
-      this._mmLog('warn', student, `fetchStudentData returned empty payload for ${student.title}`);
+      this._mmLog("warn", student, `fetchStudentData returned empty payload for ${student.title}`);
       return null;
     }
     return {
@@ -531,16 +595,16 @@ module.exports = NodeHelper.create({
   },
 
   _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
-    this._mmLog('error', student, `Error fetching data for ${student.title}: ${this._formatErr(err)}`);
+    this._mmLog("error", student, `Error fetching data for ${student.title}: ${formatError(err)}`);
 
     const warningMsg = convertRestErrorToWarning(err, {
       studentTitle: student.title,
       school: student.school || config?.school,
-      server: student.server || config?.server || 'webuntis.com',
+      server: student.server || config?.server || "webuntis.com",
     });
     if (warningMsg) {
       warningsState.addGroupWarning(warningMsg, classifyWarningMetaFromError(err));
-      this._mmLog('warn', student, warningMsg);
+      this._mmLog("warn", student, warningMsg);
     }
 
     return this._buildErrorPayload({
@@ -586,19 +650,17 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Forward to MagicMirror's Log with an optional [student] tag. MagicMirror decides which
-   * levels are emitted; nothing is filtered here.
+   * Forward to MagicMirror's Log with an optional [student] tag. MagicMirror's global logLevel
+   * decides; the module's own logLevel (most recent CONFIGURE) can only narrow it.
    */
   _mmLog(level, student, message) {
-    const studentTag = student?.title ? `[${String(student.title).trim()}] ` : '';
+    const own = LOG_LEVEL_WEIGHTS[String(this._logLevel || "").toLowerCase()];
+    if (own !== undefined && (LOG_LEVEL_WEIGHTS[level] ?? LOG_LEVEL_WEIGHTS.info) > own) return;
+    const studentTag = student?.title ? `[${String(student.title).trim()}] ` : "";
     const formatted = `${studentTag}${message}`;
-    if (level === 'debug') return Log.debug(formatted);
-    if (level === 'error') return Log.error(formatted);
-    if (level === 'warn') return Log.warn(formatted);
+    if (level === "debug") return Log.debug(formatted);
+    if (level === "error") return Log.error(formatted);
+    if (level === "warn") return Log.warn(formatted);
     return Log.info(formatted);
-  },
-
-  _formatErr(err) {
-    return formatError(err);
   },
 });

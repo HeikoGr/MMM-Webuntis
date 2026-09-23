@@ -6,11 +6,14 @@ Check these first:
 
 1. Verify the Node version is at least `22.22.1`.
 2. Confirm the auth method matches the account type.
-3. Set `logLevel: 'debug'`.
+3. Set `logLevel: 'debug'` (and add `DEBUG` to the global `logLevel` in `config.js`).
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.
 5. Make sure the selected date range actually contains timetable data.
 
 ## Which Log Level To Pick
+
+All output goes through MagicMirror's `Log`: the global `logLevel` in `config.js` is the upper
+bound, the module's `logLevel` can only narrow it. Debug lines need `DEBUG` in the global list.
 
 `logLevel: 'info'` is the level for "data disappears now and then". It stays quiet during normal
 operation and prints exactly two kinds of auth line:

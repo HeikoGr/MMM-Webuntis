@@ -30,15 +30,15 @@ function getNowLineState(ctx) {
 }
 
 function getModuleRootElement(ctx) {
-  if (!ctx || typeof document === 'undefined') return null;
-  const id = typeof ctx.identifier === 'string' ? ctx.identifier : null;
+  if (!ctx || typeof document === "undefined") return null;
+  const id = typeof ctx.identifier === "string" ? ctx.identifier : null;
   if (!id) return null;
   return document.getElementById(id);
 }
 
 (function registerGridPlugin(globalRoot) {
   const host = globalRoot.MMMWebuntisPluginHost;
-  if (!host || typeof host.registerFrontendPlugin !== 'function') {
+  if (!host || typeof host.registerFrontendPlugin !== "function") {
     return;
   }
 
@@ -71,10 +71,10 @@ function getModuleRootElement(ctx) {
   function getSharedLessonPopoverController() {
     if (sharedLessonPopover) return sharedLessonPopover;
     const createPopoverController = root?.util?.createPopoverController;
-    if (typeof createPopoverController !== 'function') return null;
+    if (typeof createPopoverController !== "function") return null;
     sharedLessonPopover = createPopoverController({
-      baseClassName: 'wu-shared-popover wu-shared-popover--grid',
-      presentation: 'modal',
+      baseClassName: "wu-shared-popover wu-shared-popover--grid",
+      presentation: "modal",
     });
     return sharedLessonPopover;
   }
@@ -84,28 +84,32 @@ function getModuleRootElement(ctx) {
   }
 
   function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== 'function') return fallback;
+    if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
     return translated && translated !== key ? translated : fallback;
   }
 
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
     return config;
   }
 
   function resolveGridConfig(studentConfig) {
     const pluginConfig =
-      studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === 'object'
+      studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === "object"
         ? studentConfig.plugins.grid.config
         : {};
 
     const pluginFields =
-      pluginConfig?.fields && typeof pluginConfig.fields === 'object' && !Array.isArray(pluginConfig.fields) ? pluginConfig.fields : {};
+      pluginConfig?.fields && typeof pluginConfig.fields === "object" && !Array.isArray(pluginConfig.fields)
+        ? pluginConfig.fields
+        : {};
 
     const pluginFormat =
-      pluginFields?.format && typeof pluginFields.format === 'object' && !Array.isArray(pluginFields.format) ? pluginFields.format : {};
+      pluginFields?.format && typeof pluginFields.format === "object" && !Array.isArray(pluginFields.format)
+        ? pluginFields.format
+        : {};
 
     return {
       ...pluginConfig,
@@ -120,10 +124,11 @@ function getModuleRootElement(ctx) {
 
   function buildEffectiveGridStudentConfig(studentConfig, gridConfig) {
     const plugins =
-      studentConfig?.plugins && typeof studentConfig.plugins === 'object' && !Array.isArray(studentConfig.plugins)
+      studentConfig?.plugins && typeof studentConfig.plugins === "object" && !Array.isArray(studentConfig.plugins)
         ? studentConfig.plugins
         : {};
-    const gridPlugin = plugins?.grid && typeof plugins.grid === 'object' && !Array.isArray(plugins.grid) ? plugins.grid : {};
+    const gridPlugin =
+      plugins?.grid && typeof plugins.grid === "object" && !Array.isArray(plugins.grid) ? plugins.grid : {};
 
     return {
       ...studentConfig,
@@ -141,7 +146,7 @@ function getModuleRootElement(ctx) {
   function buildGroupedRawLessons(lessons) {
     const grouped = {};
     (Array.isArray(lessons) ? lessons : []).forEach((lesson) => {
-      const key = lesson?.date != null ? String(lesson.date) : '';
+      const key = lesson?.date != null ? String(lesson.date) : "";
       if (!key) return;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(lesson);
@@ -165,16 +170,18 @@ function getModuleRootElement(ctx) {
       ...studentConfig,
       language:
         studentConfig?.language ||
-        (typeof globalThis.config !== 'undefined' && globalThis.config?.language ? globalThis.config.language : undefined),
-      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || 'info',
+        (typeof globalThis.config !== "undefined" && globalThis.config?.language
+          ? globalThis.config.language
+          : undefined),
+      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
     };
     const dateContext = getCurrentDateContext(effectiveConfig);
-    const studentTitle = String(studentSlice?.student?.title || '').trim();
+    const studentTitle = String(studentSlice?.student?.title || "").trim();
     const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
     const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
 
     return {
-      identifier: `${renderContext?.moduleId || 'mmm-webuntis'}-grid-plugin`,
+      identifier: `${renderContext?.moduleId || "mmm-webuntis"}-grid-plugin`,
       config: effectiveConfig,
       studentConfig: effectiveConfig,
       holidayMapByStudent: {
@@ -195,9 +202,9 @@ function getModuleRootElement(ctx) {
       _paused: false,
       _hasWidget(name) {
         return (
-          String(name || '')
+          String(name || "")
             .trim()
-            .toLowerCase() === 'grid'
+            .toLowerCase() === "grid"
         );
       },
       _getWidgetApi() {
@@ -264,8 +271,8 @@ function getModuleRootElement(ctx) {
       hasRoom,
       hasClass,
       hasStudentGroup,
-      primaryInfo: isTeacherView ? 'class' : 'subject',
-      secondaryInfo: isTeacherView ? 'room' : 'teacher',
+      primaryInfo: isTeacherView ? "class" : "subject",
+      secondaryInfo: isTeacherView ? "room" : "teacher",
       showStudentGroup: hasStudentGroup && !isTeacherView,
     };
   }
@@ -283,44 +290,46 @@ function getModuleRootElement(ctx) {
   function resolveFieldConfig(config) {
     const gridConfig = config?.grid?.fields || {};
     const defaultFields = {
-      primary: 'subject',
-      secondary: 'teacher',
-      additional: ['room'],
+      primary: "subject",
+      secondary: "teacher",
+      additional: ["room"],
       format: {
-        subject: 'long',
-        teacher: 'long',
-        class: 'short',
-        room: 'short',
-        studentGroup: 'short',
+        subject: "long",
+        teacher: "long",
+        class: "short",
+        room: "short",
+        studentGroup: "short",
       },
     };
-    const validFieldTypes = ['subject', 'teacher', 'room', 'class', 'studentGroup', 'info', 'none'];
-    const validFormats = ['short', 'long'];
+    const validFieldTypes = ["subject", "teacher", "room", "class", "studentGroup", "info", "none"];
+    const validFormats = ["short", "long"];
 
     const normalizeFieldType = (value, fallback) => {
-      const normalized = typeof value === 'string' ? value.trim() : '';
+      const normalized = typeof value === "string" ? value.trim() : "";
       return validFieldTypes.includes(normalized) ? normalized : fallback;
     };
 
-    const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ['room'];
+    const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ["room"];
     const inputAdditional = Array.isArray(gridConfig.additional) ? gridConfig.additional : fallbackAdditional;
-    const additional = inputAdditional.map((field) => normalizeFieldType(field, null)).filter((field) => typeof field === 'string');
+    const additional = inputAdditional
+      .map((field) => normalizeFieldType(field, null))
+      .filter((field) => typeof field === "string");
 
-    const defaultFormat = defaultFields.format && typeof defaultFields.format === 'object' ? defaultFields.format : {};
-    const localFormat = gridConfig.format && typeof gridConfig.format === 'object' ? gridConfig.format : {};
+    const defaultFormat = defaultFields.format && typeof defaultFields.format === "object" ? defaultFields.format : {};
+    const localFormat = gridConfig.format && typeof gridConfig.format === "object" ? gridConfig.format : {};
     const rawFormat = { ...defaultFormat, ...localFormat };
     const format = {};
     Object.keys(rawFormat).forEach((key) => {
       if (!validFieldTypes.includes(key)) return;
-      const value = String(rawFormat[key] || '').trim();
+      const value = String(rawFormat[key] || "").trim();
       if (validFormats.includes(value)) {
         format[key] = value;
       }
     });
 
     return {
-      primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, 'subject')),
-      secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, 'teacher')),
+      primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, "subject")),
+      secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, "teacher")),
       additional: additional.length > 0 ? additional : fallbackAdditional,
       format,
     };
@@ -336,27 +345,27 @@ function getModuleRootElement(ctx) {
    * @returns {string} Extracted field value or empty string if not found/invalid type
    */
   function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
-    if (!lesson || !fieldType || fieldType === 'none') return '';
+    if (!lesson || !fieldType || fieldType === "none") return "";
 
-    const format = fieldConfig?.format?.[fieldType] || 'short';
+    const format = fieldConfig?.format?.[fieldType] || "short";
 
     switch (fieldType) {
-      case 'subject':
+      case "subject":
         return getSubject(lesson, format);
-      case 'teacher': {
+      case "teacher": {
         const teachers = getTeachers(lesson, format);
-        return teachers.length > 0 ? teachers[0] : '';
+        return teachers.length > 0 ? teachers[0] : "";
       }
-      case 'room':
+      case "room":
         return getRoom(lesson, format);
-      case 'class':
+      case "class":
         return getClass(lesson, format);
-      case 'studentGroup':
+      case "studentGroup":
         return getStudentGroup(lesson, format);
-      case 'info':
+      case "info":
         return getInfo(lesson, format);
       default:
-        return '';
+        return "";
     }
   }
 
@@ -402,7 +411,7 @@ function getModuleRootElement(ctx) {
    */
   function startNowLineUpdater(ctx) {
     if (!ctx || ctx._paused) return;
-    if (!ctx._hasWidget('grid')) return;
+    if (!ctx._hasWidget("grid")) return;
     const state = getNowLineState(ctx);
     if (state.timer || state.initialTimeout) return;
 
@@ -417,11 +426,11 @@ function getModuleRootElement(ctx) {
         const gridWidget = ctx._getWidgetApi()?.grid;
         const moduleRoot = getModuleRootElement(ctx);
         if (gridWidget) {
-          if (typeof gridWidget.updateNowLinesAll === 'function') gridWidget.updateNowLinesAll(ctx, moduleRoot);
-          if (typeof gridWidget.refreshPastMasks === 'function') gridWidget.refreshPastMasks(ctx, moduleRoot);
+          if (typeof gridWidget.updateNowLinesAll === "function") gridWidget.updateNowLinesAll(ctx, moduleRoot);
+          if (typeof gridWidget.refreshPastMasks === "function") gridWidget.refreshPastMasks(ctx, moduleRoot);
         }
       } catch (err) {
-        log('debug', 'minute tick update failed', err);
+        log("debug", "minute tick update failed", err);
       }
     };
 
@@ -434,7 +443,7 @@ function getModuleRootElement(ctx) {
         state.timer = setInterval(tick, 60 * 1000);
         state.initialTimeout = null;
       },
-      Math.max(0, msToNextMinute)
+      Math.max(0, msToNextMinute),
     );
 
     tick();
@@ -478,18 +487,21 @@ function getModuleRootElement(ctx) {
    */
   function validateAndExtractGridConfig(ctx, studentConfig) {
     const getGridConfig = (key) => {
-      return getWidgetConfigResolved(studentConfig, ctx, 'grid', key);
+      return getWidgetConfigResolved(studentConfig, ctx, "grid", key);
     };
 
-    const weekView = Boolean(getGridConfig('weekView'));
-    const configuredNext = getGridConfig('nextDays');
-    const configuredPast = getGridConfig('pastDays');
-    const gridDateFormat = getGridConfig('dateFormat');
-    const hideWeekends = Boolean(getGridConfig('hideWeekends'));
-    const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig('maxLessons') ?? 0)));
-    const rawPxPerMinute = getGridConfig('pxPerMinute');
+    const weekView = Boolean(getGridConfig("weekView"));
+    const configuredNext = getGridConfig("nextDays");
+    const configuredPast = getGridConfig("pastDays");
+    const gridDateFormat = getGridConfig("dateFormat");
+    const hideWeekends = Boolean(getGridConfig("hideWeekends"));
+    const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig("maxLessons") ?? 0)));
+    const rawPxPerMinute = getGridConfig("pxPerMinute");
     const pxPerMinute =
-      rawPxPerMinute !== undefined && rawPxPerMinute !== null && Number.isFinite(Number(rawPxPerMinute)) && Number(rawPxPerMinute) > 0
+      rawPxPerMinute !== undefined &&
+      rawPxPerMinute !== null &&
+      Number.isFinite(Number(rawPxPerMinute)) &&
+      Number(rawPxPerMinute) > 0
         ? Number(rawPxPerMinute)
         : 0.8;
 
@@ -497,7 +509,7 @@ function getModuleRootElement(ctx) {
 
     if (weekView) {
       let baseDate;
-      if (ctx._currentTodayYmd && typeof ctx._currentTodayYmd === 'number') {
+      if (ctx._currentTodayYmd && typeof ctx._currentTodayYmd === "number") {
         const s = String(ctx._currentTodayYmd);
         const by = parseInt(s.substring(0, 4), 10);
         const bm = parseInt(s.substring(4, 6), 10) - 1;
@@ -676,27 +688,27 @@ function getModuleRootElement(ctx) {
    * @returns {Object} Object with header element and gridTemplateColumns string
    */
   function createGridHeader(displayDates, gridDateFormat, ctx, { formatDisplayDate }) {
-    const header = document.createElement('div');
-    header.className = 'grid-days-header';
+    const header = document.createElement("div");
+    header.className = "grid-days-header";
 
-    const cols = ['minmax(80px,auto)'];
+    const cols = ["minmax(80px,auto)"];
     for (let d = 0; d < displayDates.length; d++) {
-      cols.push('1fr');
+      cols.push("1fr");
     }
-    header.style.gridTemplateColumns = cols.join(' ');
+    header.style.gridTemplateColumns = cols.join(" ");
 
-    const emptyHeader = document.createElement('div');
-    emptyHeader.className = 'grid-days-header-empty';
+    const emptyHeader = document.createElement("div");
+    emptyHeader.className = "grid-days-header-empty";
     header.appendChild(emptyHeader);
 
     for (let d = 0; d < displayDates.length; d++) {
       const dayDate = displayDates[d];
-      const dayLabel = document.createElement('div');
-      dayLabel.className = 'grid-daylabel';
+      const dayLabel = document.createElement("div");
+      dayLabel.className = "grid-daylabel";
 
       const dayLabelText = formatDisplayDate
         ? formatDisplayDate(dayDate, gridDateFormat)
-        : dayDate.toLocaleDateString(ctx.config.language, { weekday: 'short', day: 'numeric', month: 'numeric' });
+        : dayDate.toLocaleDateString(ctx.config.language, { weekday: "short", day: "numeric", month: "numeric" });
 
       dayLabel.innerText = dayLabelText;
       const col = 2 + d;
@@ -704,25 +716,25 @@ function getModuleRootElement(ctx) {
       header.appendChild(dayLabel);
     }
 
-    return { header, gridTemplateColumns: cols.join(' ') };
+    return { header, gridTemplateColumns: cols.join(" ") };
   }
 
   function formatAxisTime(value) {
-    const raw = String(value ?? '').trim();
-    if (!raw) return '';
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
 
-    const digits = raw.replace(/\D/g, '');
-    if (!digits) return '';
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return "";
 
-    const padded = digits.padStart(4, '0');
+    const padded = digits.padStart(4, "0");
     return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
   }
 
   function resolveAxisLabelMode(unitHeightPx) {
-    if (!Number.isFinite(unitHeightPx) || unitHeightPx <= 0) return 'compact';
-    if (unitHeightPx < 18) return 'tight';
-    if (unitHeightPx < 34) return 'compact';
-    return 'roomy';
+    if (!Number.isFinite(unitHeightPx) || unitHeightPx <= 0) return "compact";
+    if (unitHeightPx < 18) return "tight";
+    if (unitHeightPx < 34) return "compact";
+    return "roomy";
   }
 
   /**
@@ -738,12 +750,12 @@ function getModuleRootElement(ctx) {
    * @returns {HTMLElement} Time axis div element
    */
   function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
-    const timeAxis = document.createElement('div');
-    timeAxis.className = 'grid-timecell';
-    const timeInner = document.createElement('div');
-    timeInner.style.position = 'relative';
+    const timeAxis = document.createElement("div");
+    timeAxis.className = "grid-timecell";
+    const timeInner = document.createElement("div");
+    timeInner.style.position = "relative";
     timeInner.style.height = `${totalHeight}px`;
-    timeInner.style.width = '100%';
+    timeInner.style.width = "100%";
 
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
       for (let ui = 0; ui < timeUnits.length; ui++) {
@@ -752,12 +764,12 @@ function getModuleRootElement(ctx) {
         if (startMin === null) continue;
 
         const top = Math.round(((startMin - allStart) / totalMinutes) * totalHeight);
-        const lab = document.createElement('div');
-        lab.style.position = 'absolute';
+        const lab = document.createElement("div");
+        lab.style.position = "absolute";
         lab.style.top = `${top}px`;
-        lab.style.left = '4px';
+        lab.style.left = "4px";
         lab.style.zIndex = 2;
-        lab.className = 'grid-timeunit-label';
+        lab.className = "grid-timeunit-label";
 
         const unitHeightPx =
           Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
@@ -766,15 +778,15 @@ function getModuleRootElement(ctx) {
         const labelMode = resolveAxisLabelMode(unitHeightPx);
         lab.classList.add(`is-${labelMode}`);
 
-        const unitName = String(u?.name ?? '').trim();
+        const unitName = String(u?.name ?? "").trim();
         const startText = formatAxisTime(u?.startTime);
         const endText = formatAxisTime(u?.endTime);
 
         if (unitName) {
           const periodText = escapeHtml(formatTimeUnitPeriodText(unitName, ctx));
-          if (labelMode === 'tight') {
+          if (labelMode === "tight") {
             lab.innerHTML = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
-          } else if (labelMode === 'compact') {
+          } else if (labelMode === "compact") {
             const compactTime = startText || endText;
             lab.innerHTML = compactTime
               ? `<span class='grid-timeunit-period'>${periodText}</span><span class='grid-timeunit-time'>${compactTime}</span>`
@@ -790,7 +802,7 @@ function getModuleRootElement(ctx) {
             lab.title = startText && endText ? `${startText}-${endText}` : startText || endText;
           }
         } else {
-          const fallbackTime = startText || endText || '';
+          const fallbackTime = startText || endText || "";
           lab.innerHTML = `<span class='grid-timeunit-time'>${fallbackTime}</span>`;
           if (fallbackTime) lab.title = fallbackTime;
         }
@@ -798,8 +810,8 @@ function getModuleRootElement(ctx) {
 
         if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
           const lineTop = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
-          const tline = document.createElement('div');
-          tline.className = 'grid-hourline';
+          const tline = document.createElement("div");
+          tline.className = "grid-hourline";
           tline.style.top = `${lineTop}px`;
           timeInner.appendChild(tline);
         }
@@ -807,34 +819,34 @@ function getModuleRootElement(ctx) {
     } else {
       for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
         const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-        const lab = document.createElement('div');
-        lab.style.position = 'absolute';
+        const lab = document.createElement("div");
+        lab.style.position = "absolute";
         lab.style.top = `${top}px`;
         lab.style.zIndex = 2;
-        lab.style.left = '4px';
-        lab.style.fontSize = '0.85em';
-        lab.style.color = '#666';
-        const hh = String(Math.floor(m / 60)).padStart(2, '0');
-        const mm = String(m % 60).padStart(2, '0');
+        lab.style.left = "4px";
+        lab.style.fontSize = "0.85em";
+        lab.style.color = "#666";
+        const hh = String(Math.floor(m / 60)).padStart(2, "0");
+        const mm = String(m % 60).padStart(2, "0");
         lab.innerText = `${hh}:${mm}`;
         timeInner.appendChild(lab);
 
-        const tline = document.createElement('div');
-        tline.className = 'grid-hourline';
+        const tline = document.createElement("div");
+        tline.className = "grid-hourline";
         tline.style.top = `${top}px`;
         timeInner.appendChild(tline);
       }
     }
 
     timeAxis.appendChild(timeInner);
-    timeAxis.style.gridColumn = '1';
+    timeAxis.style.gridColumn = "1";
 
     return timeAxis;
   }
 
   function formatEnglishOrdinal(value) {
     const number = Number(value);
-    if (!Number.isInteger(number) || number <= 0) return String(value || '');
+    if (!Number.isInteger(number) || number <= 0) return String(value || "");
     const mod100 = number % 100;
     if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
     const mod10 = number % 10;
@@ -845,20 +857,20 @@ function getModuleRootElement(ctx) {
   }
 
   function formatTimeUnitPeriodText(unitName, ctx) {
-    const normalizedUnitName = String(unitName || '').trim();
-    if (!normalizedUnitName) return '';
+    const normalizedUnitName = String(unitName || "").trim();
+    if (!normalizedUnitName) return "";
 
-    const language = String(ctx?.config?.language || '')
+    const language = String(ctx?.config?.language || "")
       .trim()
       .toLowerCase();
-    const isEnglish = language === 'en' || language.startsWith('en-');
+    const isEnglish = language === "en" || language.startsWith("en-");
 
     if (isEnglish) {
-      const periodUnit = translate(ctx, 'period_unit', 'period');
+      const periodUnit = translate(ctx, "period_unit", "period");
       return `${formatEnglishOrdinal(normalizedUnitName)} ${periodUnit}`.trim();
     }
 
-    const periodSuffix = translate(ctx, 'period_suffix', ctx?.translate?.('period') || '').trim();
+    const periodSuffix = translate(ctx, "period_suffix", ctx?.translate?.("period") || "").trim();
     return periodSuffix ? `${normalizedUnitName}.${periodSuffix}` : normalizedUnitName;
   }
 
@@ -888,25 +900,25 @@ function getModuleRootElement(ctx) {
         dateStr: String(el.date),
         startMin: ctx._toMinutes(el.startTime),
         endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
-        startTime: el.startTime ? String(el.startTime).padStart(4, '0') : '',
-        endTime: el.endTime ? String(el.endTime).padStart(4, '0') : null,
-        subjectShort: getSubject(el, 'short') || 'N/A',
-        subject: getSubject(el, 'long') || 'N/A',
-        teacherInitial: getTeachers(el, 'short')[0] || 'N/A',
-        teacher: getTeachers(el, 'long')[0] || 'N/A',
-        room: getRoom(el, 'short') || '',
-        roomLong: getRoom(el, 'long') || '',
-        class: getClass(el, 'short') || '',
-        classLong: getClass(el, 'long') || '',
-        studentGroup: getStudentGroup(el, 'short') || '',
-        studentGroupLong: getStudentGroup(el, 'long') || '',
-        infoShort: getInfo(el, 'short') || '',
-        infoLong: getInfo(el, 'long') || '',
+        startTime: el.startTime ? String(el.startTime).padStart(4, "0") : "",
+        endTime: el.endTime ? String(el.endTime).padStart(4, "0") : null,
+        subjectShort: getSubject(el, "short") || "N/A",
+        subject: getSubject(el, "long") || "N/A",
+        teacherInitial: getTeachers(el, "short")[0] || "N/A",
+        teacher: getTeachers(el, "long")[0] || "N/A",
+        room: getRoom(el, "short") || "",
+        roomLong: getRoom(el, "long") || "",
+        class: getClass(el, "short") || "",
+        classLong: getClass(el, "long") || "",
+        studentGroup: getStudentGroup(el, "short") || "",
+        studentGroupLong: getStudentGroup(el, "long") || "",
+        infoShort: getInfo(el, "short") || "",
+        infoLong: getInfo(el, "long") || "",
         isTeacherView: displayMode.isTeacherView,
         isStudentView: displayMode.isStudentView,
-        code: el.code || '',
-        substitutionText: el.substitutionText || '',
-        text: el.lessonText || '',
+        code: el.code || "",
+        substitutionText: el.substitutionText || "",
+        text: el.lessonText || "",
         lessonId: el.id ?? null,
       };
     });
@@ -927,9 +939,9 @@ function getModuleRootElement(ctx) {
 
       if (curr.startMin === undefined || curr.startMin === null) {
         log(
-          'debug',
-          'Lesson missing startMin; backend should provide numeric startMin/endMin',
-          curr.lessonId ? { lessonId: curr.lessonId } : curr
+          "debug",
+          "Lesson missing startMin; backend should provide numeric startMin/endMin",
+          curr.lessonId ? { lessonId: curr.lessonId } : curr,
         );
       }
 
@@ -966,7 +978,7 @@ function getModuleRootElement(ctx) {
     }
     if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
       return dayLessons.filter((lesson) => {
-        if (lesson.status === 'CANCELLED' || isIrregularStatus(lesson.status)) {
+        if (lesson.status === "CANCELLED" || isIrregularStatus(lesson.status)) {
           return true;
         }
         const s = lesson.startMin;
@@ -1006,7 +1018,11 @@ function getModuleRootElement(ctx) {
           }
         }
 
-        if (matchedIndex === -1 && timeUnits.length > 0 && s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)) {
+        if (
+          matchedIndex === -1 &&
+          timeUnits.length > 0 &&
+          s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)
+        ) {
           matchedIndex = timeUnits.length - 1;
         }
 
@@ -1024,9 +1040,9 @@ function getModuleRootElement(ctx) {
       const hidden = dayLessons.length - filtered.length;
       log(
         ctx,
-        'debug',
+        "debug",
         `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`
+          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`,
       );
     }
 
@@ -1049,51 +1065,51 @@ function getModuleRootElement(ctx) {
    * @returns {boolean} True if lesson is an exam
    */
   function lessonHasExam(lesson) {
-    return lessonHasDisplayIcon(lesson, 'EXAM');
+    return lessonHasDisplayIcon(lesson, "EXAM");
   }
 
   function lessonIsBreakSupervision(lesson) {
-    return lessonHasDisplayIcon(lesson, 'BREAK_SUPERVISION');
+    return lessonHasDisplayIcon(lesson, "BREAK_SUPERVISION");
   }
 
   function lessonIsEvent(lesson) {
-    return lessonHasDisplayIcon(lesson, 'EVENT');
+    return lessonHasDisplayIcon(lesson, "EVENT");
   }
 
   function lessonIsMoved(lesson) {
-    return lessonHasDisplayIcon(lesson, 'MOVED');
+    return lessonHasDisplayIcon(lesson, "MOVED");
   }
 
-  function getPopoverFieldDisplayName(entry, format = 'short') {
-    if (entry === null || entry === undefined) return '';
-    if (typeof entry === 'string' || typeof entry === 'number') return String(entry).trim();
-    if (typeof entry !== 'object') return '';
-    const shortName = String(entry.name ?? '').trim();
-    const longName = String(entry.longname ?? '').trim();
-    return format === 'long' ? longName || shortName : shortName || longName;
+  function getPopoverFieldDisplayName(entry, format = "short") {
+    if (entry === null || entry === undefined) return "";
+    if (typeof entry === "string" || typeof entry === "number") return String(entry).trim();
+    if (typeof entry !== "object") return "";
+    const shortName = String(entry.name ?? "").trim();
+    const longName = String(entry.longname ?? "").trim();
+    return format === "long" ? longName || shortName : shortName || longName;
   }
 
-  function joinNamedEntries(entries, format = 'long') {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
+  function joinNamedEntries(entries, format = "long") {
+    if (!Array.isArray(entries) || entries.length === 0) return "";
     return entries
       .map((entry) => getPopoverFieldDisplayName(entry, format))
       .filter(Boolean)
-      .join(', ');
+      .join(", ");
   }
 
   function joinStringList(values) {
-    if (!Array.isArray(values) || values.length === 0) return '';
+    if (!Array.isArray(values) || values.length === 0) return "";
     return values
-      .map((value) => String(value || '').trim())
+      .map((value) => String(value || "").trim())
       .filter(Boolean)
-      .join(', ');
+      .join(", ");
   }
 
   function describeLessonStatus(lesson, ctx) {
-    const status = String(lesson?.status || '')
+    const status = String(lesson?.status || "")
       .trim()
       .toUpperCase();
-    if (!status) return '';
+    if (!status) return "";
 
     const key = `lesson_status_${status.toLowerCase()}`;
     const translated = ctx?.translate?.(key);
@@ -1101,54 +1117,68 @@ function getModuleRootElement(ctx) {
 
     return status
       .toLowerCase()
-      .replace(/_/g, ' ')
+      .replace(/_/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
   function buildLessonPopoverSections(lesson, ctx) {
-    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)].filter(Boolean).join(' - ');
+    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
+      .filter(Boolean)
+      .join(" - ");
 
     const displayIcons = joinStringList(lesson?.displayIcons);
     const changedFields = joinStringList(lesson?.changedFields);
 
     return [
       {
-        title: translate(ctx, 'popover_section_general', 'General'),
+        title: translate(ctx, "popover_section_general", "General"),
         entries: [
-          { label: translate(ctx, 'popover_date', 'Date'), value: formatDisplayDate(lesson?.date, 'EEEE, dd.MM.yyyy') },
-          { label: translate(ctx, 'popover_time', 'Time'), value: timeLabel },
-          { label: translate(ctx, 'popover_period', 'Period'), value: lesson?.periodText || '' },
-          { label: translate(ctx, 'popover_status', 'Status'), value: describeLessonStatus(lesson, ctx) },
-          { label: translate(ctx, 'popover_activity', 'Activity'), value: lesson?.activityType || '' },
-          { label: translate(ctx, 'popover_icons', 'Icons'), value: displayIcons },
+          { label: translate(ctx, "popover_date", "Date"), value: formatDisplayDate(lesson?.date, "EEEE, dd.MM.yyyy") },
+          { label: translate(ctx, "popover_time", "Time"), value: timeLabel },
+          { label: translate(ctx, "popover_period", "Period"), value: lesson?.periodText || "" },
+          { label: translate(ctx, "popover_status", "Status"), value: describeLessonStatus(lesson, ctx) },
+          { label: translate(ctx, "popover_activity", "Activity"), value: lesson?.activityType || "" },
+          { label: translate(ctx, "popover_icons", "Icons"), value: displayIcons },
         ],
       },
       {
-        title: translate(ctx, 'popover_section_people', 'People & Context'),
+        title: translate(ctx, "popover_section_people", "People & Context"),
         entries: [
-          { label: translate(ctx, 'popover_subject', 'Subject'), value: joinNamedEntries(lesson?.subjects, 'long') },
-          { label: translate(ctx, 'popover_teacher', 'Teacher'), value: joinNamedEntries(lesson?.teachers, 'long') },
-          { label: translate(ctx, 'popover_room', 'Room'), value: joinNamedEntries(lesson?.rooms, 'long') },
-          { label: translate(ctx, 'popover_class', 'Class'), value: joinNamedEntries(lesson?.classes, 'long') },
-          { label: translate(ctx, 'popover_student_group', 'Student Group'), value: joinNamedEntries(lesson?.studentGroups, 'long') },
-          { label: translate(ctx, 'popover_info', 'Info'), value: joinNamedEntries(lesson?.info, 'long') },
+          { label: translate(ctx, "popover_subject", "Subject"), value: joinNamedEntries(lesson?.subjects, "long") },
+          { label: translate(ctx, "popover_teacher", "Teacher"), value: joinNamedEntries(lesson?.teachers, "long") },
+          { label: translate(ctx, "popover_room", "Room"), value: joinNamedEntries(lesson?.rooms, "long") },
+          { label: translate(ctx, "popover_class", "Class"), value: joinNamedEntries(lesson?.classes, "long") },
+          {
+            label: translate(ctx, "popover_student_group", "Student Group"),
+            value: joinNamedEntries(lesson?.studentGroups, "long"),
+          },
+          { label: translate(ctx, "popover_info", "Info"), value: joinNamedEntries(lesson?.info, "long") },
         ],
       },
       {
-        title: translate(ctx, 'popover_section_changes', 'Changes'),
+        title: translate(ctx, "popover_section_changes", "Changes"),
         entries: [
-          { label: translate(ctx, 'popover_changed_fields', 'Changed Fields'), value: changedFields },
+          { label: translate(ctx, "popover_changed_fields", "Changed Fields"), value: changedFields },
           {
-            label: translate(ctx, 'popover_previous_subject', 'Previous Subject'),
-            value: joinNamedEntries(lesson?.previousSubjects, 'long'),
+            label: translate(ctx, "popover_previous_subject", "Previous Subject"),
+            value: joinNamedEntries(lesson?.previousSubjects, "long"),
           },
           {
-            label: translate(ctx, 'popover_previous_teacher', 'Previous Teacher'),
-            value: joinNamedEntries(lesson?.previousTeachers, 'long'),
+            label: translate(ctx, "popover_previous_teacher", "Previous Teacher"),
+            value: joinNamedEntries(lesson?.previousTeachers, "long"),
           },
-          { label: translate(ctx, 'popover_previous_room', 'Previous Room'), value: joinNamedEntries(lesson?.previousRooms, 'long') },
-          { label: translate(ctx, 'popover_substitution_text', 'Substitution Text'), value: lesson?.substitutionText || '' },
-          { label: translate(ctx, 'popover_lesson_text', 'Lesson Text'), value: lesson?.lessonText || lesson?.text || '' },
+          {
+            label: translate(ctx, "popover_previous_room", "Previous Room"),
+            value: joinNamedEntries(lesson?.previousRooms, "long"),
+          },
+          {
+            label: translate(ctx, "popover_substitution_text", "Substitution Text"),
+            value: lesson?.substitutionText || "",
+          },
+          {
+            label: translate(ctx, "popover_lesson_text", "Lesson Text"),
+            value: lesson?.lessonText || lesson?.text || "",
+          },
         ],
       },
     ];
@@ -1159,27 +1189,29 @@ function getModuleRootElement(ctx) {
     if (!popover || !lesson || !anchorEl) return;
 
     const primaryTitle =
-      getSubject(lesson, 'long') ||
-      getClass(lesson, 'long') ||
-      getStudentGroup(lesson, 'long') ||
+      getSubject(lesson, "long") ||
+      getClass(lesson, "long") ||
+      getStudentGroup(lesson, "long") ||
       describeLessonStatus(lesson, ctx) ||
-      translate(ctx, 'popover_lesson_fallback_title', 'Lesson');
+      translate(ctx, "popover_lesson_fallback_title", "Lesson");
 
-    const dateLabel = formatDisplayDate(lesson?.date, 'EEE dd.MM.yyyy');
-    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)].filter(Boolean).join(' - ');
-    const subtitle = [dateLabel, timeLabel].filter(Boolean).join(' • ');
+    const dateLabel = formatDisplayDate(lesson?.date, "EEE dd.MM.yyyy");
+    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
+      .filter(Boolean)
+      .join(" - ");
+    const subtitle = [dateLabel, timeLabel].filter(Boolean).join(" • ");
 
     popover.toggle({
       anchorEl,
-      toggleKey: `${lesson?.id ?? lesson?.lessonId ?? 'noid'}_${lesson?.date ?? ''}_${lesson?.startTime ?? ''}_${lesson?.endTime ?? ''}`,
+      toggleKey: `${lesson?.id ?? lesson?.lessonId ?? "noid"}_${lesson?.date ?? ""}_${lesson?.startTime ?? ""}_${lesson?.endTime ?? ""}`,
       title: primaryTitle,
       subtitle,
       sections: buildLessonPopoverSections(lesson, ctx),
       rawData: lesson,
-      rawLabel: translate(ctx, 'popover_raw_payload', 'Raw lesson payload'),
-      emptyLabel: translate(ctx, 'popover_empty', 'No details available.'),
-      closeLabel: translate(ctx, 'popover_close', 'Close details'),
-      className: 'wu-shared-popover--grid',
+      rawLabel: translate(ctx, "popover_raw_payload", "Raw lesson payload"),
+      emptyLabel: translate(ctx, "popover_empty", "No details available."),
+      closeLabel: translate(ctx, "popover_close", "Close details"),
+      className: "wu-shared-popover--grid",
     });
   }
 
@@ -1203,22 +1235,22 @@ function getModuleRootElement(ctx) {
           if (lineMin < allStart || lineMin > allEnd) continue;
 
           const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
-          const line = document.createElement('div');
-          line.className = 'grid-hourline';
+          const line = document.createElement("div");
+          line.className = "grid-hourline";
           line.style.top = `${top}px`;
           inner.appendChild(line);
         }
       } else {
         for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
           const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-          const line = document.createElement('div');
-          line.className = 'grid-hourline';
+          const line = document.createElement("div");
+          line.className = "grid-hourline";
           line.style.top = `${top}px`;
           inner.appendChild(line);
         }
       }
     } catch (e) {
-      log('debug', 'failed to draw hour lines', e);
+      log("debug", "failed to draw hour lines", e);
     }
   }
 
@@ -1233,9 +1265,9 @@ function getModuleRootElement(ctx) {
    * @param {number} totalHeight - Total height in pixels
    */
   function addNowLineToColumn(inner, allStart, allEnd, totalHeight) {
-    const nowLine = document.createElement('div');
-    nowLine.className = 'grid-nowline';
-    nowLine.style.display = 'none';
+    const nowLine = document.createElement("div");
+    nowLine.className = "grid-nowline";
+    nowLine.style.display = "none";
     inner.appendChild(nowLine);
 
     inner._nowLine = nowLine;
@@ -1254,17 +1286,17 @@ function getModuleRootElement(ctx) {
    * @param {string} text - Notice text (HTML allowed)
    * @param {string} iconSize - Icon font size (default: '1.5em')
    */
-  function addDayNotice(inner, totalHeight, noticeType, text, iconSize = '1.5em') {
-    const notice = document.createElement('div');
-    notice.className = 'grid-lesson lesson lesson-content no-lesson';
+  function addDayNotice(inner, totalHeight, noticeType, text, iconSize = "1.5em") {
+    const notice = document.createElement("div");
+    notice.className = "grid-lesson lesson lesson-content no-lesson";
     notice.style.height = `${totalHeight}px`;
-    const icon = document.createElement('span');
+    const icon = document.createElement("span");
     icon.className = `day-notice-icon day-notice-icon-${noticeType}`;
-    icon.setAttribute('aria-hidden', 'true');
+    icon.setAttribute("aria-hidden", "true");
     icon.style.fontSize = iconSize;
 
-    const label = document.createElement('div');
-    label.style.fontWeight = 'bold';
+    const label = document.createElement("div");
+    label.style.fontWeight = "bold";
     label.innerHTML = text;
 
     notice.appendChild(icon);
@@ -1281,11 +1313,15 @@ function getModuleRootElement(ctx) {
    * @param {Object} ctx - Main module context (provides translate)
    */
   function addMoreBadge(inner, hiddenCount, ctx) {
-    const moreBadge = document.createElement('div');
-    moreBadge.className = 'grid-more-badge';
-    moreBadge.innerText = ctx.translate('more');
-    const hiddenLessonsKey = hiddenCount > 1 ? 'hidden_lessons_plural' : 'hidden_lessons';
-    const hiddenLessonsLabel = ctx.translate ? ctx.translate(hiddenLessonsKey) : hiddenCount > 1 ? 'more lessons' : 'more lesson';
+    const moreBadge = document.createElement("div");
+    moreBadge.className = "grid-more-badge";
+    moreBadge.innerText = ctx.translate("more");
+    const hiddenLessonsKey = hiddenCount > 1 ? "hidden_lessons_plural" : "hidden_lessons";
+    const hiddenLessonsLabel = ctx.translate
+      ? ctx.translate(hiddenLessonsKey)
+      : hiddenCount > 1
+        ? "more lessons"
+        : "more lesson";
     moreBadge.title = `${hiddenCount} ${hiddenLessonsLabel}`;
     inner.appendChild(moreBadge);
   }
@@ -1307,9 +1343,9 @@ function getModuleRootElement(ctx) {
     const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
 
     if (lessonIsBreakSupervision(lesson)) {
-      element.classList.add('lesson-break-supervision');
-    } else if (lesson.status === 'CANCELLED') {
-      element.classList.add('lesson-cancelled');
+      element.classList.add("lesson-break-supervision");
+    } else if (lesson.status === "CANCELLED") {
+      element.classList.add("lesson-cancelled");
     } else if (isIrregularStatus(lesson.status)) {
       // CHANGED lessons where only teacher and/or room differ are kept in the
       // regular colour — the inline change markers still highlight the diff.
@@ -1317,10 +1353,12 @@ function getModuleRootElement(ctx) {
       // with a more significant field (subject, class, …) keeps the blue tint.
       const changedFields = getChangedFieldSet(lesson);
       const isMinorChange =
-        lesson.status === 'CHANGED' && changedFields.size > 0 && [...changedFields].every((f) => f === 'teacher' || f === 'room');
-      element.classList.add(isMinorChange ? 'lesson-regular' : 'lesson-substitution');
+        lesson.status === "CHANGED" &&
+        changedFields.size > 0 &&
+        [...changedFields].every((f) => f === "teacher" || f === "room");
+      element.classList.add(isMinorChange ? "lesson-regular" : "lesson-substitution");
     } else {
-      element.classList.add('lesson-regular');
+      element.classList.add("lesson-regular");
     }
 
     if (additionalClasses.length > 0) {
@@ -1338,8 +1376,8 @@ function getModuleRootElement(ctx) {
       }
     }
 
-    if (lessonIsPast) element.classList.add('past');
-    if (hasExam) element.classList.add('has-exam');
+    if (lessonIsPast) element.classList.add("past");
+    if (hasExam) element.classList.add("has-exam");
   }
 
   /**
@@ -1353,12 +1391,12 @@ function getModuleRootElement(ctx) {
    * @returns { HTMLElement } Lesson cell div
    */
   function createLessonCell(topPx, heightPx, dateStr, eMin) {
-    const cell = document.createElement('div');
-    cell.className = 'grid-lesson lesson';
+    const cell = document.createElement("div");
+    cell.className = "grid-lesson lesson";
     cell.style.top = `${topPx}px`;
     cell.style.height = `${heightPx}px`;
-    cell.setAttribute('data-date', dateStr);
-    cell.setAttribute('data-end-min', String(eMin));
+    cell.setAttribute("data-date", dateStr);
+    cell.setAttribute("data-end-min", String(eMin));
     return cell;
   }
 
@@ -1375,9 +1413,9 @@ function getModuleRootElement(ctx) {
    */
   function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
     if (lessonIsBreakSupervision(lesson)) {
-      const breakSupervisionLabel = ctx.translate ? ctx.translate('break_supervision') : 'Break Supervision';
-      const shortLabel = breakSupervisionLabel === 'Pausenaufsicht' ? 'PA' : 'BS';
-      const supervisedArea = lesson.room || lesson.roomLong || '';
+      const breakSupervisionLabel = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
+      const shortLabel = breakSupervisionLabel === "Pausenaufsicht" ? "PA" : "BS";
+      const supervisedArea = lesson.room || lesson.roomLong || "";
       const displayText = supervisedArea ? `${shortLabel} (${supervisedArea})` : shortLabel;
       return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
     }
@@ -1386,22 +1424,25 @@ function getModuleRootElement(ctx) {
     // These are injected INLINE into the existing primary/secondary/additional lines
     // (not appended as a new row) to avoid overflow in compact grid cells.
     const changedFields = getChangedFieldSet(lesson);
-    const hasUnknownChangedDetails = lesson.status === 'CHANGED' && changedFields.size === 0;
+    const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
 
     const hasMovedBadge = lessonIsMoved(lesson);
-    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : '';
-    const changedBadge = hasUnknownChangedDetails ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>` : '';
-    const iconsHtml = movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : '';
-    const lessonContentClass = movedBadge || changedBadge ? 'lesson-content has-icons' : 'lesson-content';
+    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : "";
+    const changedBadge = hasUnknownChangedDetails
+      ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>`
+      : "";
+    const iconsHtml =
+      movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : "";
+    const lessonContentClass = movedBadge || changedBadge ? "lesson-content has-icons" : "lesson-content";
 
-    const naText = String(lessonConfig?.grid?.naText ?? 'N/A');
+    const naText = String(lessonConfig?.grid?.naText ?? "N/A");
 
     try {
       const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
       let primaryHtml;
-      if (changedFields.has('subject')) {
-        const newSubject = lesson.subjects?.[0]?.name || '';
+      if (changedFields.has("subject")) {
+        const newSubject = lesson.subjects?.[0]?.name || "";
         const oldSubject = getFirstFieldName(lesson.previousSubjects);
         if (newSubject) {
           primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
@@ -1411,12 +1452,12 @@ function getModuleRootElement(ctx) {
           primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         }
       } else {
-        primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : '';
+        primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : "";
       }
 
       let secondaryHtml;
-      if (changedFields.has('teacher')) {
-        const newTeacher = lesson.teachers?.[0]?.name || '';
+      if (changedFields.has("teacher")) {
+        const newTeacher = lesson.teachers?.[0]?.name || "";
         const oldTeacher = getFirstFieldName(lesson.previousTeachers);
         if (newTeacher) {
           secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
@@ -1426,12 +1467,12 @@ function getModuleRootElement(ctx) {
           secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
         }
       } else {
-        secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : '';
+        secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : "";
       }
 
-      let additionalHtml = '';
-      if (changedFields.has('room')) {
-        const newRoom = lesson.rooms?.[0]?.name || '';
+      let additionalHtml = "";
+      if (changedFields.has("room")) {
+        const newRoom = lesson.rooms?.[0]?.name || "";
         const oldRoom = getFirstFieldName(lesson.previousRooms);
         if (newRoom) {
           additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
@@ -1444,7 +1485,7 @@ function getModuleRootElement(ctx) {
         const additionalParts = displayParts.additional
           .filter(Boolean)
           .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
-          .join(' ');
+          .join(" ");
         if (additionalParts) {
           additionalHtml = ` ${additionalParts}`;
         }
@@ -1456,7 +1497,7 @@ function getModuleRootElement(ctx) {
 
       const normalizedLessonText = normalizeComparableText(lesson.text);
       const shouldShowLessonText =
-        normalizedLessonText !== '' &&
+        normalizedLessonText !== "" &&
         normalizedLessonText !== normalizeComparableText(displayParts.primary) &&
         normalizedLessonText !== normalizeComparableText(displayParts.secondary) &&
         !(
@@ -1465,18 +1506,25 @@ function getModuleRootElement(ctx) {
         );
 
       const subst = lesson.substitutionText
-        ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, '<br>')}</span>`
-        : '';
-      const txt = shouldShowLessonText ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, '<br>')}</span>` : '';
+        ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, "<br>")}</span>`
+        : "";
+      const txt = shouldShowLessonText
+        ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, "<br>")}</span>`
+        : "";
 
       const secondaryLine =
-        secondaryHtml || additionalHtml ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>` : '';
+        secondaryHtml || additionalHtml
+          ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>`
+          : "";
 
       return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
     } catch (err) {
-      log('error', `[grid] makeLessonInnerHTML failed for lesson ${lesson?.id ?? lesson?.lessonId ?? 'unknown'}: ${err?.message || err}`);
+      log(
+        "error",
+        `[grid] makeLessonInnerHTML failed for lesson ${lesson?.id ?? lesson?.lessonId ?? "unknown"}: ${err?.message || err}`,
+      );
       return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'><span class='lesson-changed-new'>${escapeHtml(
-        naText
+        naText,
       )}</span></span></div>`;
     }
   }
@@ -1488,7 +1536,7 @@ function getModuleRootElement(ctx) {
    * @returns {boolean} True if the timetable marked this lesson with HOMEWORK
    */
   function checkHomeworkMatch(lesson) {
-    return lessonHasDisplayIcon(lesson, 'HOMEWORK');
+    return lessonHasDisplayIcon(lesson, "HOMEWORK");
   }
 
   /**
@@ -1498,18 +1546,18 @@ function getModuleRootElement(ctx) {
    * @param {HTMLElement} cell - Lesson cell element
    */
   function addHomeworkIcon(cell) {
-    const icon = document.createElement('span');
-    icon.className = 'homework-icon';
-    icon.setAttribute('aria-hidden', 'true');
+    const icon = document.createElement("span");
+    icon.className = "homework-icon";
+    icon.setAttribute("aria-hidden", "true");
     if (cell?.innerHTML) {
-      const iconContainer = cell.querySelector('.lesson-content') || cell;
-      let icons = iconContainer.querySelector('.lesson-icons');
+      const iconContainer = cell.querySelector(".lesson-content") || cell;
+      let icons = iconContainer.querySelector(".lesson-icons");
       if (!icons) {
-        icons = document.createElement('span');
-        icons.className = 'lesson-icons';
+        icons = document.createElement("span");
+        icons.className = "lesson-icons";
         iconContainer.appendChild(icons);
       }
-      iconContainer.classList.add('has-homework', 'has-icons');
+      iconContainer.classList.add("has-homework", "has-icons");
       icons.appendChild(icon.cloneNode(true));
     }
   }
@@ -1571,14 +1619,22 @@ function getModuleRootElement(ctx) {
     const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
     const { ctx, escapeHtml, lessonConfig } = rendering;
     const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
-    const placement = getVisibleTimeBlockPlacement(lesson.startMin, lesson.endMin, allStart, allEnd, totalMinutes, totalHeight, {
-      minHeightPx: 12,
-    });
+    const placement = getVisibleTimeBlockPlacement(
+      lesson.startMin,
+      lesson.endMin,
+      allStart,
+      allEnd,
+      totalMinutes,
+      totalHeight,
+      {
+        minHeightPx: 12,
+      },
+    );
     if (!placement) return null;
 
     const { visibleEnd, topPx, heightPx } = placement;
     const lessonYmd = Number(lesson.dateStr) || 0;
-    const resolvedIsPast = typeof isPast === 'boolean' ? isPast : calcIsPast(lessonYmd, visibleEnd, nowYmd, nowMin);
+    const resolvedIsPast = typeof isPast === "boolean" ? isPast : calcIsPast(lessonYmd, visibleEnd, nowYmd, nowMin);
 
     const cell = createLessonCell(topPx, heightPx, lesson.dateStr, visibleEnd);
     applyLessonClasses(cell, lesson, {
@@ -1588,15 +1644,15 @@ function getModuleRootElement(ctx) {
     });
     cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
     cell.tabIndex = 0;
-    cell.setAttribute('role', 'button');
-    cell.setAttribute('aria-label', `${getSubject(lesson, 'long') || 'Lesson'} details`);
-    cell.addEventListener('click', (event) => {
+    cell.setAttribute("role", "button");
+    cell.setAttribute("aria-label", `${getSubject(lesson, "long") || "Lesson"} details`);
+    cell.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       openLessonPopover(cell, lesson, ctx);
     });
-    cell.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
+    cell.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       openLessonPopover(cell, lesson, ctx);
     });
@@ -1658,7 +1714,7 @@ function getModuleRootElement(ctx) {
 
             const candidate = sorted[j];
             const hasOverlap = overlappingGroup.some(
-              (groupLesson) => candidate.startMin < groupLesson.endMin && candidate.endMin > groupLesson.startMin
+              (groupLesson) => candidate.startMin < groupLesson.endMin && candidate.endMin > groupLesson.startMin,
             );
 
             if (hasOverlap) {
@@ -1697,15 +1753,27 @@ function getModuleRootElement(ctx) {
    * @param {number} nowYmd - Current date as YYYYMMDD integer
    * @param {number} nowMin - Current time in minutes since midnight
    */
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, escapeHtml, _isPast, nowYmd, nowMin, tickerData, lessonConfig) {
+  function createTickerAnimation(
+    lessons,
+    topPx,
+    heightPx,
+    container,
+    ctx,
+    escapeHtml,
+    _isPast,
+    nowYmd,
+    nowMin,
+    tickerData,
+    lessonConfig,
+  ) {
     const subjectGroups = new Map();
     for (let index = 0; index < lessons.length; index++) {
       const lesson = lessons[index];
-      const subject = getSubject(lesson, 'short') || null;
-      const studentGroup = getStudentGroup(lesson, 'short') || null;
-      const className = getClass(lesson, 'short') || null;
+      const subject = getSubject(lesson, "short") || null;
+      const studentGroup = getStudentGroup(lesson, "short") || null;
+      const className = getClass(lesson, "short") || null;
 
-      const groupKey = `${subject || 'unknown'}_${studentGroup || className || 'noGroup'}`;
+      const groupKey = `${subject || "unknown"}_${studentGroup || className || "noGroup"}`;
 
       if (!subjectGroups.has(groupKey)) {
         subjectGroups.set(groupKey, []);
@@ -1721,13 +1789,15 @@ function getModuleRootElement(ctx) {
     if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
       const pairMap = new Map();
       for (const cancelled of tickerData.cancelledLessons) {
-        const matchingReplacements = tickerData.replacements.filter((r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin);
+        const matchingReplacements = tickerData.replacements.filter(
+          (r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin,
+        );
 
         if (matchingReplacements.length > 0) {
           const replacementKey = matchingReplacements
-            .map((r) => `${r.id ?? r.lessonId ?? 'noId'}_${r.startMin}_${r.endMin}_${r.status || ''}`)
+            .map((r) => `${r.id ?? r.lessonId ?? "noId"}_${r.startMin}_${r.endMin}_${r.status || ""}`)
             .sort()
-            .join('|');
+            .join("|");
 
           if (!pairMap.has(replacementKey)) {
             pairMap.set(replacementKey, {
@@ -1761,19 +1831,19 @@ function getModuleRootElement(ctx) {
       }
     }
 
-    const tickerWrapper = document.createElement('div');
-    tickerWrapper.className = 'lesson-ticker-wrapper';
+    const tickerWrapper = document.createElement("div");
+    tickerWrapper.className = "lesson-ticker-wrapper";
     tickerWrapper.style.top = `${topPx}px`;
     tickerWrapper.style.height = `${heightPx}px`;
-    tickerWrapper.style.position = 'absolute';
-    tickerWrapper.style.left = '0.15rem';
-    tickerWrapper.style.right = '0.15rem';
-    tickerWrapper.style.zIndex = '10';
-    tickerWrapper.setAttribute('data-date', lessons[0].dateStr);
-    tickerWrapper.setAttribute('data-end-min', String(Math.max(...lessons.map((l) => l.endMin))));
+    tickerWrapper.style.position = "absolute";
+    tickerWrapper.style.left = "0.15rem";
+    tickerWrapper.style.right = "0.15rem";
+    tickerWrapper.style.zIndex = "10";
+    tickerWrapper.setAttribute("data-date", lessons[0].dateStr);
+    tickerWrapper.setAttribute("data-end-min", String(Math.max(...lessons.map((l) => l.endMin))));
 
-    const tickerTrack = document.createElement('div');
-    tickerTrack.className = 'ticker-track';
+    const tickerTrack = document.createElement("div");
+    tickerTrack.className = "ticker-track";
 
     const itemCount = subjectGroups.size + splitViewPairs.length;
     const itemWidthPercent = 100;
@@ -1783,22 +1853,22 @@ function getModuleRootElement(ctx) {
 
     for (let copy = 0; copy < 2; copy++) {
       for (const [, subjectLessons] of subjectGroups.entries()) {
-        const tickerItem = document.createElement('div');
-        tickerItem.className = 'ticker-item';
+        const tickerItem = document.createElement("div");
+        tickerItem.className = "ticker-item";
         const groupHasExam = subjectLessons.some((lesson) => lessonHasExam(lesson));
-        if (groupHasExam) tickerItem.classList.add('has-exam');
+        if (groupHasExam) tickerItem.classList.add("has-exam");
 
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
-        tickerItem.style.position = 'relative';
-        tickerItem.style.height = '100%';
+        tickerItem.style.position = "relative";
+        tickerItem.style.height = "100%";
 
         const groupStartMin = Math.min(...subjectLessons.map((l) => l.startMin));
         const groupEndMin = Math.max(...subjectLessons.map((l) => l.endMin));
         const totalGroupMinutes = groupEndMin - groupStartMin;
 
         for (const lesson of subjectLessons) {
-          const lessonDiv = document.createElement('div');
-          lessonDiv.className = 'lesson-content';
+          const lessonDiv = document.createElement("div");
+          lessonDiv.className = "lesson-content";
 
           const lessonStartOffset = lesson.startMin - groupStartMin;
           const lessonDuration = lesson.endMin - lesson.startMin;
@@ -1814,11 +1884,11 @@ function getModuleRootElement(ctx) {
             heightPercent = (lessonDuration / totalGroupMinutes) * 100;
           }
 
-          lessonDiv.style.position = 'absolute';
+          lessonDiv.style.position = "absolute";
           lessonDiv.style.top = `${topPercent}%`;
           lessonDiv.style.height = `${heightPercent}%`;
-          lessonDiv.style.left = '0';
-          lessonDiv.style.right = '0';
+          lessonDiv.style.left = "0";
+          lessonDiv.style.right = "0";
 
           applyLessonClasses(lessonDiv, lesson, {
             hasExam: lessonHasExam(lesson),
@@ -1839,25 +1909,31 @@ function getModuleRootElement(ctx) {
       }
 
       for (const pair of splitViewPairs) {
-        const tickerItem = document.createElement('div');
-        tickerItem.className = 'ticker-item ticker-item-split';
+        const tickerItem = document.createElement("div");
+        tickerItem.className = "ticker-item ticker-item-split";
         const pairHasExam = [...pair.replacements, ...pair.cancelledLessons].some((lesson) => lessonHasExam(lesson));
-        if (pairHasExam) tickerItem.classList.add('has-exam');
+        if (pairHasExam) tickerItem.classList.add("has-exam");
 
         tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
-        tickerItem.style.position = 'relative';
-        tickerItem.style.height = '100%';
+        tickerItem.style.position = "relative";
+        tickerItem.style.height = "100%";
 
-        const splitContainer = document.createElement('div');
-        splitContainer.className = 'lesson-both-inner';
-        splitContainer.style.position = 'absolute';
-        splitContainer.style.top = '0';
-        splitContainer.style.left = '0';
-        splitContainer.style.right = '0';
-        splitContainer.style.height = '100%';
+        const splitContainer = document.createElement("div");
+        splitContainer.className = "lesson-both-inner";
+        splitContainer.style.position = "absolute";
+        splitContainer.style.top = "0";
+        splitContainer.style.left = "0";
+        splitContainer.style.right = "0";
+        splitContainer.style.height = "100%";
 
-        const pairStartMin = Math.min(...pair.cancelledLessons.map((c) => c.startMin), ...pair.replacements.map((r) => r.startMin));
-        const pairEndMin = Math.max(...pair.cancelledLessons.map((c) => c.endMin), ...pair.replacements.map((r) => r.endMin));
+        const pairStartMin = Math.min(
+          ...pair.cancelledLessons.map((c) => c.startMin),
+          ...pair.replacements.map((r) => r.startMin),
+        );
+        const pairEndMin = Math.max(
+          ...pair.cancelledLessons.map((c) => c.endMin),
+          ...pair.replacements.map((r) => r.endMin),
+        );
         const pairTotalMinutes = Math.max(1, pairEndMin - pairStartMin);
 
         const toPairPercent = (lesson) => {
@@ -1870,20 +1946,20 @@ function getModuleRootElement(ctx) {
         };
 
         for (const replacement of pair.replacements) {
-          const replacementDiv = document.createElement('div');
-          replacementDiv.className = 'lesson-content split-left';
+          const replacementDiv = document.createElement("div");
+          replacementDiv.className = "lesson-content split-left";
           const replacementPos = toPairPercent(replacement);
-          replacementDiv.style.position = 'absolute';
+          replacementDiv.style.position = "absolute";
           replacementDiv.style.top = `${replacementPos.top}%`;
           replacementDiv.style.height = `${replacementPos.height}%`;
-          replacementDiv.style.left = '0';
-          replacementDiv.style.width = '50%';
+          replacementDiv.style.left = "0";
+          replacementDiv.style.width = "50%";
 
           applyLessonClasses(replacementDiv, replacement, {
             hasExam: lessonHasExam(replacement),
             nowYmd,
             nowMin,
-            additionalClasses: ['split-left'],
+            additionalClasses: ["split-left"],
           });
 
           replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx, lessonConfig);
@@ -1895,20 +1971,20 @@ function getModuleRootElement(ctx) {
         }
 
         for (const cancelled of pair.cancelledLessons) {
-          const cancelledDiv = document.createElement('div');
-          cancelledDiv.className = 'lesson-content split-right';
+          const cancelledDiv = document.createElement("div");
+          cancelledDiv.className = "lesson-content split-right";
           const cancelledPos = toPairPercent(cancelled);
-          cancelledDiv.style.position = 'absolute';
+          cancelledDiv.style.position = "absolute";
           cancelledDiv.style.top = `${cancelledPos.top}%`;
           cancelledDiv.style.height = `${cancelledPos.height}%`;
-          cancelledDiv.style.right = '0';
-          cancelledDiv.style.width = '50%';
+          cancelledDiv.style.right = "0";
+          cancelledDiv.style.width = "50%";
 
           applyLessonClasses(cancelledDiv, cancelled, {
             hasExam: lessonHasExam(cancelled),
             nowYmd,
             nowMin,
-            additionalClasses: ['split-right'],
+            additionalClasses: ["split-right"],
           });
 
           cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
@@ -1926,7 +2002,8 @@ function getModuleRootElement(ctx) {
 
     tickerWrapper.appendChild(tickerTrack);
 
-    const prefersReducedMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion =
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!prefersReducedMotion) {
       const duration = Math.max(10, itemCount * 3);
       tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
@@ -1946,7 +2023,7 @@ function getModuleRootElement(ctx) {
    */
   function calcIsPast(ymd, endMin, nowYmd, nowMin) {
     if (ymd < nowYmd) return true;
-    if (ymd === nowYmd && typeof endMin === 'number' && !Number.isNaN(endMin) && endMin <= nowMin) return true;
+    if (ymd === nowYmd && typeof endMin === "number" && !Number.isNaN(endMin) && endMin <= nowMin) return true;
     return false;
   }
 
@@ -1959,8 +2036,8 @@ function getModuleRootElement(ctx) {
   function lessonHasStudentGroupOrClassHint(lesson) {
     const studentGroups = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups : [];
     const classes = Array.isArray(lesson?.classes) ? lesson.classes : [];
-    const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || '').trim().length > 0);
-    const hasClass = classes.some((group) => (group?.name || group?.longname || '').trim().length > 0);
+    const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || "").trim().length > 0);
+    const hasClass = classes.some((group) => (group?.name || group?.longname || "").trim().length > 0);
     return hasStudentGroup || hasClass;
   }
 
@@ -1987,22 +2064,28 @@ function getModuleRootElement(ctx) {
    * @returns {Object} Rendering classification metadata.
    */
   function classifyLessonRenderGroup(lessons) {
-    const cancelledLessons = lessons.filter((lesson) => lesson.status === 'CANCELLED');
-    const addedLessons = lessons.filter((lesson) => lesson.status === 'ADDITIONAL');
-    const substLessons = lessons.filter((lesson) => lesson.status === 'SUBSTITUTION');
+    const cancelledLessons = lessons.filter((lesson) => lesson.status === "CANCELLED");
+    const addedLessons = lessons.filter((lesson) => lesson.status === "ADDITIONAL");
+    const substLessons = lessons.filter((lesson) => lesson.status === "SUBSTITUTION");
     const eventLessons = lessons.filter((lesson) => lessonIsEvent(lesson));
     const tickerCandidates = lessons.filter((lesson) => !lessonIsEvent(lesson));
     const plannedParallelCandidates = tickerCandidates.filter((lesson) => {
-      const status = String(lesson.status || '').toUpperCase();
-      return status === 'REGULAR' || status === 'CHANGED' || status === 'CANCELLED';
+      const status = String(lesson.status || "").toUpperCase();
+      return status === "REGULAR" || status === "CHANGED" || status === "CANCELLED";
     });
 
     const substitutionTriggersSplit = substLessons.some((lesson) => !lessonHasStudentGroupOrClassHint(lesson));
-    const isSplitView = cancelledLessons.length >= 1 && (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
+    const isSplitView =
+      cancelledLessons.length >= 1 &&
+      (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
 
-    const tcGroupStart = tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((lesson) => lesson.startMin)) : Infinity;
-    const tcGroupEnd = tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((lesson) => lesson.endMin)) : -Infinity;
-    const spanningLessons = tickerCandidates.filter((lesson) => lesson.startMin <= tcGroupStart && lesson.endMin >= tcGroupEnd);
+    const tcGroupStart =
+      tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((lesson) => lesson.startMin)) : Infinity;
+    const tcGroupEnd =
+      tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((lesson) => lesson.endMin)) : -Infinity;
+    const spanningLessons = tickerCandidates.filter(
+      (lesson) => lesson.startMin <= tcGroupStart && lesson.endMin >= tcGroupEnd,
+    );
     const subPeriodLessons = tickerCandidates.filter((lesson) => !spanningLessons.includes(lesson));
     const isSpanSplitLayout =
       !isSplitView &&
@@ -2130,15 +2213,15 @@ function getModuleRootElement(ctx) {
    * @returns {{bothWrap: HTMLElement, bothInner: HTMLElement}} Day column elements.
    */
   function createDayColumnWrapper(col, totalHeight, isToday) {
-    const bothWrap = document.createElement('div');
+    const bothWrap = document.createElement("div");
     bothWrap.style.gridColumn = `${col}`;
-    bothWrap.style.gridRow = '1';
+    bothWrap.style.gridRow = "1";
 
-    const bothInner = document.createElement('div');
-    bothInner.className = 'day-column-inner';
+    const bothInner = document.createElement("div");
+    bothInner.className = "day-column-inner";
     bothInner.style.height = `${totalHeight}px`;
-    bothInner.style.position = 'relative';
-    if (isToday) bothInner.classList.add('is-today');
+    bothInner.style.position = "relative";
+    if (isToday) bothInner.classList.add("is-today");
 
     bothWrap.appendChild(bothInner);
     return { bothWrap, bothInner };
@@ -2161,15 +2244,25 @@ function getModuleRootElement(ctx) {
     studentConfig,
   }) {
     if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-      const resolvedState = emptyDayState || { noticeType: 'no-lessons', label: ctx.translate('no-lessons') };
-      const noticeType = resolvedState?.noticeType || 'no-lessons';
-      const noticeText = `<b>${escapeHtml(resolvedState?.label || ctx.translate('no-lessons'))}</b>`;
-      const iconSize = resolvedState?.type === 'holiday' || resolvedState?.type === 'unavailable' ? '2em' : '1.5em';
+      const resolvedState = emptyDayState || { noticeType: "no-lessons", label: ctx.translate("no-lessons") };
+      const noticeType = resolvedState?.noticeType || "no-lessons";
+      const noticeText = `<b>${escapeHtml(resolvedState?.label || ctx.translate("no-lessons"))}</b>`;
+      const iconSize = resolvedState?.type === "holiday" || resolvedState?.type === "unavailable" ? "2em" : "1.5em";
       addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
       return;
     }
 
-    renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, studentConfig);
+    renderLessonCells(
+      lessonsToRender,
+      { bothInner },
+      allStart,
+      allEnd,
+      totalMinutes,
+      totalHeight,
+      ctx,
+      escapeHtml,
+      studentConfig,
+    );
   }
 
   /**
@@ -2224,7 +2317,15 @@ function getModuleRootElement(ctx) {
     let dayLessons = extractDayLessons(sourceForDay, ctx);
     dayLessons = validateAndNormalizeLessons(dayLessons, log);
 
-    const lessonsToRender = filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dayYmdStr, ctx, allEnd);
+    const lessonsToRender = filterLessonsByMaxPeriods(
+      dayLessons,
+      maxGridLessons,
+      timeUnits,
+      studentTitle,
+      dayYmdStr,
+      ctx,
+      allEnd,
+    );
     const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
     const hiddenCount = dayLessons.length - lessonsToRender.length;
     const col = 2 + dayIndex;
@@ -2263,14 +2364,14 @@ function getModuleRootElement(ctx) {
     setTimeout(() => {
       try {
         const gridWidget = ctx?._getWidgetApi?.()?.grid;
-        if (gridWidget && typeof gridWidget.updateNowLinesAll === 'function') {
+        if (gridWidget && typeof gridWidget.updateNowLinesAll === "function") {
           gridWidget.updateNowLinesAll(ctx, wrapper);
         }
-        if (gridWidget && typeof gridWidget.refreshPastMasks === 'function') {
+        if (gridWidget && typeof gridWidget.refreshPastMasks === "function") {
           gridWidget.refreshPastMasks(ctx, wrapper);
         }
       } catch (e) {
-        log('warn', 'initial now-line/past-mask update failed', e);
+        log("warn", "initial now-line/past-mask update failed", e);
       }
     }, 0);
   }
@@ -2291,7 +2392,17 @@ function getModuleRootElement(ctx) {
    * @param {Function} escapeHtml - HTML escaping helper.
    * @param {Object} lessonConfig - Grid rendering configuration.
    */
-  function renderLessonCells(lessonsToRender, containers, allStart, allEnd, totalMinutes, totalHeight, ctx, escapeHtml, lessonConfig) {
+  function renderLessonCells(
+    lessonsToRender,
+    containers,
+    allStart,
+    allEnd,
+    totalMinutes,
+    totalHeight,
+    ctx,
+    escapeHtml,
+    lessonConfig,
+  ) {
     const { bothInner } = containers;
 
     const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
@@ -2308,7 +2419,7 @@ function getModuleRootElement(ctx) {
         lesson,
         { allStart, allEnd, totalMinutes, totalHeight },
         { ctx, escapeHtml, lessonConfig },
-        { nowYmd, nowMin }
+        { nowYmd, nowMin },
       );
     };
 
@@ -2327,9 +2438,17 @@ function getModuleRootElement(ctx) {
       const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
       const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
 
-      const placement = getVisibleTimeBlockPlacement(tickerStart, tickerEnd, allStart, allEnd, totalMinutes, totalHeight, {
-        minHeightPx: 12,
-      });
+      const placement = getVisibleTimeBlockPlacement(
+        tickerStart,
+        tickerEnd,
+        allStart,
+        allEnd,
+        totalMinutes,
+        totalHeight,
+        {
+          minHeightPx: 12,
+        },
+      );
       if (placement) {
         createTickerAnimation(
           tickerCandidates,
@@ -2342,7 +2461,7 @@ function getModuleRootElement(ctx) {
           nowYmd,
           nowMin,
           tickerData,
-          lessonConfig
+          lessonConfig,
         );
       }
 
@@ -2350,7 +2469,9 @@ function getModuleRootElement(ctx) {
         if (tickerCandidates.includes(lesson)) continue;
         if (cancelledLessons.includes(lesson)) continue;
         const isReplacement = tickerData.replacements.includes(lesson);
-        const overlapsCancelled = cancelledLessons.some((c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin);
+        const overlapsCancelled = cancelledLessons.some(
+          (c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin,
+        );
         if (isReplacement && overlapsCancelled) continue;
         renderSingleLesson(lesson);
       }
@@ -2369,7 +2490,7 @@ function getModuleRootElement(ctx) {
           repl,
           { allStart, allEnd, totalMinutes, totalHeight },
           { ctx, escapeHtml, lessonConfig },
-          { isPast, additionalClasses: ['split-left'] }
+          { isPast, additionalClasses: ["split-left"] },
         );
       }
 
@@ -2379,7 +2500,7 @@ function getModuleRootElement(ctx) {
           cancelled,
           { allStart, allEnd, totalMinutes, totalHeight },
           { ctx, escapeHtml, lessonConfig },
-          { isPast, additionalClasses: ['split-right'] }
+          { isPast, additionalClasses: ["split-right"] },
         );
       }
 
@@ -2401,7 +2522,7 @@ function getModuleRootElement(ctx) {
           spanning,
           { allStart, allEnd, totalMinutes, totalHeight },
           { ctx, escapeHtml, lessonConfig },
-          { isPast, additionalClasses: ['split-left'] }
+          { isPast, additionalClasses: ["split-left"] },
         );
       }
 
@@ -2411,7 +2532,7 @@ function getModuleRootElement(ctx) {
           sub,
           { allStart, allEnd, totalMinutes, totalHeight },
           { ctx, escapeHtml, lessonConfig },
-          { isPast, additionalClasses: ['split-right'] }
+          { isPast, additionalClasses: ["split-right"] },
         );
       }
 
@@ -2458,26 +2579,26 @@ function getModuleRootElement(ctx) {
    * @returns {HTMLElement} Absence overlay div
    */
   function createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence) {
-    const overlay = document.createElement('div');
-    overlay.className = 'grid-absence-overlay';
+    const overlay = document.createElement("div");
+    overlay.className = "grid-absence-overlay";
     overlay.style.top = `${topPx}px`;
     overlay.style.height = `${heightPx}px`;
-    overlay.setAttribute('data-date', dateStr);
+    overlay.setAttribute("data-date", dateStr);
 
-    const excusedLabel = absence.excused ? ctx.translate('excused') : ctx.translate('unexcused');
-    const reasonText = absence.reason || ctx.translate('no_reason');
-    const absenceLabel = ctx.translate('absence_label');
+    const excusedLabel = absence.excused ? ctx.translate("excused") : ctx.translate("unexcused");
+    const reasonText = absence.reason || ctx.translate("no_reason");
+    const absenceLabel = ctx.translate("absence_label");
 
-    overlay.setAttribute('title', `${absenceLabel}: ${reasonText} (${excusedLabel})`);
+    overlay.setAttribute("title", `${absenceLabel}: ${reasonText} (${excusedLabel})`);
 
-    const icon = document.createElement('span');
-    icon.className = 'absence-icon';
-    icon.setAttribute('aria-hidden', 'true');
+    const icon = document.createElement("span");
+    icon.className = "absence-icon";
+    icon.setAttribute("aria-hidden", "true");
     overlay.appendChild(icon);
 
     if (absence.reason) {
-      const reasonText = document.createElement('span');
-      reasonText.className = 'absence-reason';
+      const reasonText = document.createElement("span");
+      reasonText.className = "absence-reason";
       reasonText.textContent = absence.reason;
       overlay.appendChild(reasonText);
     }
@@ -2511,20 +2632,20 @@ function getModuleRootElement(ctx) {
           allStart,
           allEnd,
           totalMinutes,
-          totalHeight
+          totalHeight,
         );
 
         if (!placement) {
           continue;
         }
 
-        const dateStr = String(absence?.date || '');
+        const dateStr = String(absence?.date || "");
 
         const overlay = createAbsenceOverlay(ctx, placement.topPx, placement.heightPx, dateStr, absence);
         bothInner.appendChild(overlay);
       }
     } catch (e) {
-      log('debug', 'failed to render absence overlays', e);
+      log("debug", "failed to render absence overlays", e);
     }
   }
 
@@ -2570,13 +2691,13 @@ function getModuleRootElement(ctx) {
           return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
         })
       : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
-    const wrapper = document.createElement('div');
+    const wrapper = document.createElement("div");
 
-    const widgetCtx = createWidgetContext('grid', studentConfig, root.util || {}, ctx);
-    if (widgetCtx.isVerbose && studentTitle && typeof addHeader === 'function') {
-      const headerContainer = document.createElement('div');
-      headerContainer.className = 'wu-widget-container bright small light';
-      addHeader(headerContainer, buildWidgetHeaderTitle(ctx, 'grid', widgetCtx, studentTitle));
+    const widgetCtx = createWidgetContext("grid", studentConfig, root.util || {}, ctx);
+    if (widgetCtx.isVerbose && studentTitle && typeof addHeader === "function") {
+      const headerContainer = document.createElement("div");
+      headerContainer.className = "wu-widget-container bright small light";
+      addHeader(headerContainer, buildWidgetHeaderTitle(ctx, "grid", widgetCtx, studentTitle));
       wrapper.appendChild(headerContainer);
     }
 
@@ -2588,8 +2709,8 @@ function getModuleRootElement(ctx) {
 
     wrapper.appendChild(header);
 
-    const grid = document.createElement('div');
-    grid.className = 'grid-combined';
+    const grid = document.createElement("div");
+    grid.className = "grid-combined";
     grid.style.gridTemplateColumns = gridTemplateColumns;
     const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
     grid.appendChild(timeAxis);
@@ -2635,43 +2756,46 @@ function getModuleRootElement(ctx) {
       if (!ctx) return;
       const nowContext = getModuleDateContext(ctx);
       const nowLocal = nowContext.date;
-      const todayYmd = typeof ctx._currentTodayYmd === 'number' && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
+      const todayYmd =
+        typeof ctx._currentTodayYmd === "number" && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-      const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
+      const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
 
       const getElementPastState = (element) => {
-        const dateValue = element?.getAttribute?.('data-date');
+        const dateValue = element?.getAttribute?.("data-date");
         if (!dateValue) return null;
-        const rawEndMin = element.getAttribute('data-end-min');
+        const rawEndMin = element.getAttribute("data-end-min");
         const endMin = rawEndMin !== null && rawEndMin !== undefined ? Number(rawEndMin) : NaN;
         return calcIsPast(Number(dateValue) || 0, endMin, todayYmd, nowMin);
       };
 
       const togglePastClass = (element, isPast) => {
-        if (!element?.classList || typeof isPast !== 'boolean') return;
-        if (isPast) element.classList.add('past');
-        else element.classList.remove('past');
+        if (!element?.classList || typeof isPast !== "boolean") return;
+        if (isPast) element.classList.add("past");
+        else element.classList.remove("past");
       };
 
-      const lessons = scope.querySelectorAll('.grid-combined .grid-lesson');
+      const lessons = scope.querySelectorAll(".grid-combined .grid-lesson");
       lessons.forEach((ln) => {
         togglePastClass(ln, getElementPastState(ln));
       });
 
-      const tickers = scope.querySelectorAll('.grid-combined .lesson-ticker-wrapper');
+      const tickers = scope.querySelectorAll(".grid-combined .lesson-ticker-wrapper");
       tickers.forEach((ticker) => {
         const isPast = getElementPastState(ticker);
 
         // Update only top-level lesson cells within ticker.
         // Nested `.lesson-content` nodes from makeLessonInnerHTML() must not receive
         // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
-        const lessonDivs = Array.from(ticker.querySelectorAll('.lesson-content')).filter((div) => div.style.position === 'absolute');
+        const lessonDivs = Array.from(ticker.querySelectorAll(".lesson-content")).filter(
+          (div) => div.style.position === "absolute",
+        );
         lessonDivs.forEach((div) => {
           togglePastClass(div, isPast);
         });
       });
     } catch (e) {
-      log('warn', 'failed to refresh past masks', e);
+      log("warn", "failed to refresh past masks", e);
     }
   }
 
@@ -2688,25 +2812,25 @@ function getModuleRootElement(ctx) {
   function updateNowLinesAll(ctx, rootEl = null) {
     try {
       if (!ctx) return;
-      const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, 'grid', 'showNowLine');
+      const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, "grid", "showNowLine");
       if (showNowLine === false) {
-        const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
-        const inners = scope.querySelectorAll('.day-column-inner');
+        const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+        const inners = scope.querySelectorAll(".day-column-inner");
         inners.forEach((inner) => {
           const nl = inner._nowLine;
-          if (nl) nl.style.display = 'none';
+          if (nl) nl.style.display = "none";
         });
         return 0;
       }
-      const scope = rootEl && typeof rootEl.querySelectorAll === 'function' ? rootEl : document;
-      const inners = scope.querySelectorAll('.day-column-inner');
+      const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+      const inners = scope.querySelectorAll(".day-column-inner");
       const nowLocal = getModuleDateContext(ctx).date;
       const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
       let updated = 0;
       inners.forEach((inner) => {
-        if (!inner.classList?.contains('is-today')) {
+        if (!inner.classList?.contains("is-today")) {
           const nl = inner._nowLine;
-          if (nl) nl.style.display = 'none';
+          if (nl) nl.style.display = "none";
           return;
         }
         const nl = inner._nowLine;
@@ -2715,17 +2839,17 @@ function getModuleRootElement(ctx) {
         const h = inner._totalHeight;
         if (!nl || allS === undefined || allE === undefined || h === undefined) return;
         if (nowMin < allS || nowMin >= allE) {
-          nl.style.display = 'none';
+          nl.style.display = "none";
           return;
         }
-        nl.style.display = 'block';
+        nl.style.display = "block";
         const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
         nl.style.top = `${top}px`;
         updated++;
       });
       return updated;
     } catch (e) {
-      log('warn', 'updateNowLinesAll failed', e);
+      log("warn", "updateNowLinesAll failed", e);
       return 0;
     }
   }
@@ -2738,14 +2862,14 @@ function getModuleRootElement(ctx) {
   };
 
   host.registerFrontendPlugin({
-    id: 'grid',
+    id: "grid",
     hostApiVersion: 1,
 
     create(pluginContext) {
       return {
         render(renderContext) {
-          const section = document.createElement('section');
-          section.className = 'wu-plugin wu-plugin-grid';
+          const section = document.createElement("section");
+          section.className = "wu-plugin wu-plugin-grid";
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           let renderedContainers = 0;
 
@@ -2756,22 +2880,29 @@ function getModuleRootElement(ctx) {
             const lessons = Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [];
             const timeUnits = Array.isArray(studentSlice?.data?.timeUnits) ? studentSlice.data.timeUnits : [];
             const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
-            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges)
+              ? studentSlice.data.holidays.ranges
+              : [];
             const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
 
             if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
               continue;
             }
 
-            const pluginRuntimeContext = createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, effectiveStudentConfig);
-            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const pluginRuntimeContext = createGridPluginRuntimeContext(
+              pluginContext,
+              renderContext,
+              studentSlice,
+              effectiveStudentConfig,
+            );
+            const studentTitle = String(studentSlice?.student?.title || "").trim();
             const gridElement = renderGridForStudent(
               pluginRuntimeContext,
               studentTitle,
               effectiveStudentConfig,
               lessons,
               timeUnits,
-              absences
+              absences,
             );
 
             if (gridElement) {
@@ -2785,4 +2916,4 @@ function getModuleRootElement(ctx) {
       };
     },
   });
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+})(typeof globalThis !== "undefined" ? globalThis : this);

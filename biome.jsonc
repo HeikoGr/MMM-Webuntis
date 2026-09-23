@@ -1,3 +1,6 @@
+// Shared Biome configuration of the MagicMirror modules (mmm-shared, MMM-CalDAV-Tasks,
+// MMM-HomeConnect2, MMM-LibraryMonitor, MMM-Photoprism2, MMM-Webuntis). Keep it identical across the repos;
+// only defaultBranch, the asset ignores and module-specific globals differ.
 {
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "vcs": {
@@ -8,13 +11,21 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/node_modules", "!**/*.png", "!**/*.md", "!**/.mm-module-checker", "!lib/mmm-shared"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.mm-module-checker",
+      "!lib/mmm-shared",
+      "!**/*.md",
+      "!**/*.png",
+      "!debug_dumps"
+    ]
   },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineWidth": 140,
+    "lineWidth": 120,
     "lineEnding": "lf",
     "useEditorconfig": false
   },
@@ -30,7 +41,7 @@
       },
       "correctness": {
         "noUndeclaredVariables": "error",
-        "noUnusedFunctionParameters": "on",
+        "noUnusedFunctionParameters": "warn",
         "noUnusedVariables": "error"
       },
       "style": {
@@ -59,21 +70,13 @@
   },
   "javascript": {
     "formatter": {
-      "quoteStyle": "single",
+      "quoteStyle": "double",
       "jsxQuoteStyle": "double",
-      "trailingCommas": "es5",
+      "trailingCommas": "all",
       "semicolons": "always",
       "arrowParentheses": "always",
-      "bracketSameLine": true
+      "bracketSameLine": false
     },
     "globals": ["Log", "Module", "config"]
-  },
-  "overrides": [
-    {
-      "includes": ["MMM-Webuntis.js"],
-      "javascript": {
-        "globals": ["Log", "Module", "config"]
-      }
-    }
-  ]
+  }
 }

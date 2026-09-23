@@ -1,14 +1,14 @@
 (function registerAbsencesPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
   const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== 'function' || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
     return;
   }
 
   const { addHeader, addRow, createContainer, createElement, escapeHtml } = sharedDom;
 
   function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== 'function') return fallback;
+    if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
     return translated && translated !== key ? translated : fallback;
   }
@@ -21,26 +21,26 @@
 
   function formatDisplayDateValue(ymd, format) {
     const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
-    if (typeof formatter === 'function') {
+    if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
 
     const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, '0');
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, '0');
+    const fallbackDay = String(numeric % 100).padStart(2, "0");
+    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
     return `${fallbackDay}.${fallbackMonth}.`;
   }
 
   function formatDisplayTimeValue(value) {
     const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayTime;
-    if (typeof formatter === 'function') {
+    if (typeof formatter === "function") {
       return formatter(value);
     }
 
-    const digits = String(value || '')
-      .replace(/\D/g, '')
-      .padStart(4, '0');
-    return digits.trim() ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}` : '';
+    const digits = String(value || "")
+      .replace(/\D/g, "")
+      .padStart(4, "0");
+    return digits.trim() ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}` : "";
   }
 
   function compareByDateAndStartTime(left, right) {
@@ -49,19 +49,19 @@
     return (Number(left?.startTime) || 0) - (Number(right?.startTime) || 0);
   }
 
-  function getFieldDisplayName(entry, format = 'short') {
-    if (entry === null || entry === undefined) return '';
-    if (typeof entry === 'string' || typeof entry === 'number') {
+  function getFieldDisplayName(entry, format = "short") {
+    if (entry === null || entry === undefined) return "";
+    if (typeof entry === "string" || typeof entry === "number") {
       return String(entry).trim();
     }
-    if (typeof entry !== 'object') return '';
-    const shortName = String(entry.name ?? '').trim();
-    const longName = String(entry.longname ?? '').trim();
-    return format === 'long' ? longName || shortName : shortName || longName;
+    if (typeof entry !== "object") return "";
+    const shortName = String(entry.name ?? "").trim();
+    const longName = String(entry.longname ?? "").trim();
+    return format === "long" ? longName || shortName : shortName || longName;
   }
 
-  function getFirstFieldName(entries, format = 'short') {
-    if (!Array.isArray(entries) || entries.length === 0) return '';
+  function getFirstFieldName(entries, format = "short") {
+    if (!Array.isArray(entries) || entries.length === 0) return "";
     return getFieldDisplayName(entries[0], format);
   }
 
@@ -71,13 +71,13 @@
 
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
     return config;
   }
 
   function resolveAbsencesConfig(studentConfig) {
     const pluginConfig =
-      studentConfig?.plugins?.absences?.config && typeof studentConfig.plugins.absences.config === 'object'
+      studentConfig?.plugins?.absences?.config && typeof studentConfig.plugins.absences.config === "object"
         ? studentConfig.plugins.absences.config
         : {};
 
@@ -86,44 +86,44 @@
 
   function isVerboseMode(studentConfig) {
     return (
-      String(studentConfig?.mode ?? 'compact')
+      String(studentConfig?.mode ?? "compact")
         .trim()
-        .toLowerCase() === 'verbose'
+        .toLowerCase() === "verbose"
     );
   }
 
   function buildHeaderTitle(pluginContext, studentName, absencesConfig) {
-    const title = escapeHtml(translate(pluginContext, 'absences', 'Absences'));
-    const daysLabel = translate(pluginContext, 'widget_filter_days', 'days');
+    const title = escapeHtml(translate(pluginContext, "absences", "Absences"));
+    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(absencesConfig?.nextDays, 0);
     const pastDays = normalizeDays(absencesConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
-    const normalizedStudent = String(studentName || '').trim();
+    const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
     return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
   }
 
   function createWarningInfo(pluginContext) {
-    const infoDiv = createElement('div', 'dimmed small wu-absence__unavailable-info absences-unavailable-info');
-    const icon = createElement('span', 'wu-inline-icon wu-inline-icon--warning');
-    icon.setAttribute('aria-hidden', 'true');
+    const infoDiv = createElement("div", "dimmed small wu-absence__unavailable-info absences-unavailable-info");
+    const icon = createElement("span", "wu-inline-icon wu-inline-icon--warning");
+    icon.setAttribute("aria-hidden", "true");
     infoDiv.replaceChildren(
       icon,
       document.createTextNode(
-        ` ${translate(pluginContext, 'absences_unavailable_parent_account', 'Absences unavailable for parent account')}`
-      )
+        ` ${translate(pluginContext, "absences_unavailable_parent_account", "Absences unavailable for parent account")}`,
+      ),
     );
     return infoDiv;
   }
 
   host.registerFrontendPlugin({
-    id: 'absences',
+    id: "absences",
     hostApiVersion: 1,
 
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement('section', 'wu-plugin wu-plugin-absences');
+          const wrapper = createElement("section", "wu-plugin wu-plugin-absences");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           if (students.some((studentSlice) => studentSlice?.state?.absencesUnavailable === true)) {
             wrapper.appendChild(createWarningInfo(pluginContext));
@@ -135,9 +135,9 @@
             const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
             const studentConfig = resolveStudentConfig(studentSlice);
             const absencesConfig = resolveAbsencesConfig(studentConfig);
-            const studentTitle = String(studentSlice?.student?.title || '').trim();
+            const studentTitle = String(studentSlice?.student?.title || "").trim();
             const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? '' : escapeHtml(studentTitle);
+            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
             const container = createContainer();
 
             if (verboseMode && studentTitle) {
@@ -145,14 +145,18 @@
             }
 
             if (!Array.isArray(absences) || absences.length === 0) {
-              const unavailable = studentSlice?.state?.collections?.absences?.status === 'unavailable';
+              const unavailable = studentSlice?.state?.collections?.absences?.status === "unavailable";
               addRow(
                 container,
-                unavailable ? 'absenceRowEmpty unavailable-notice' : 'absenceRowEmpty',
+                unavailable ? "absenceRowEmpty unavailable-notice" : "absenceRowEmpty",
                 studentLabelText,
                 escapeHtml(
-                  translate(pluginContext, unavailable ? 'unavailable' : 'no_absences', unavailable ? 'data unavailable' : 'no absences')
-                )
+                  translate(
+                    pluginContext,
+                    unavailable ? "unavailable" : "no_absences",
+                    unavailable ? "data unavailable" : "no absences",
+                  ),
+                ),
               );
               wrapper.appendChild(container);
               renderedContainers += 1;
@@ -199,51 +203,56 @@
             for (const absence of sorted) {
               if (Number.isFinite(maxItems) && maxItems > 0 && visibleCount >= maxItems) break;
 
-              const dateStr = absence?.date ? formatDisplayDateValue(absence.date, dateFormat) : '';
+              const dateStr = absence?.date ? formatDisplayDateValue(absence.date, dateFormat) : "";
               const start = formatDisplayTimeValue(absence?.startTime);
               const end = formatDisplayTimeValue(absence?.endTime);
-              const timeRange = start && end ? `${start}-${end}` : start || end || '';
-              const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], 'long');
-              const reason = String(absence?.reason || '').trim();
+              const timeRange = start && end ? `${start}-${end}` : start || end || "";
+              const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], "long");
+              const reason = String(absence?.reason || "").trim();
               const isExcused = absence?.excused === true;
               const isUnexcused = absence?.excused === false;
-              const meta = showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : '';
+              const meta = showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : "";
 
-              let statusLabel = '';
-              let statusClass = '';
+              let statusLabel = "";
+              let statusClass = "";
               if (showExcused) {
                 if (isExcused) {
-                  statusLabel = translate(pluginContext, 'excused', 'excused');
-                  statusClass = 'absence-excused';
+                  statusLabel = translate(pluginContext, "excused", "excused");
+                  statusClass = "absence-excused";
                 } else if (isUnexcused) {
-                  statusLabel = translate(pluginContext, 'unexcused', 'unexcused');
-                  statusClass = 'absence-unexcused';
+                  statusLabel = translate(pluginContext, "unexcused", "unexcused");
+                  statusClass = "absence-unexcused";
                 }
               }
 
               const dataParts = [];
               if (timeRange) dataParts.push(`<b class="wu-absence__time">${escapeHtml(timeRange)}</b>`);
               if (subject) {
-                const note = statusLabel ? ` <span class="${statusClass} wu-absence__status">(${escapeHtml(statusLabel)})</span>` : '';
+                const note = statusLabel
+                  ? ` <span class="${statusClass} wu-absence__status">(${escapeHtml(statusLabel)})</span>`
+                  : "";
                 dataParts.push(`<span class="wu-absence__subject">${escapeHtml(subject)}</span>${note}`);
               } else if (statusLabel) {
                 dataParts.push(`<span class="${statusClass} wu-absence__status">${escapeHtml(statusLabel)}</span>`);
               }
               if (showReason && reason) {
-                dataParts.push(`<br><span class="wu-absence__reason">${escapeHtml(reason).replace(/\n/g, '<br>')}</span>`);
+                dataParts.push(
+                  `<br><span class="wu-absence__reason">${escapeHtml(reason).replace(/\n/g, "<br>")}</span>`,
+                );
               }
 
               const data =
                 dataParts.length > 0
-                  ? dataParts.join(' ')
-                  : `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, 'absences', 'Absences'))}</span>`;
+                  ? dataParts.join(" ")
+                  : `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, "absences", "Absences"))}</span>`;
 
               addRow(
                 container,
-                'absenceRow',
+                "absenceRow",
                 studentLabelText,
-                meta || `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, 'absences', 'Absences'))}</span>`,
-                data
+                meta ||
+                  `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, "absences", "Absences"))}</span>`,
+                data,
               );
 
               visibleCount += 1;
@@ -258,4 +267,4 @@
       };
     },
   });
-})(typeof globalThis !== 'undefined' ? globalThis : this);
+})(typeof globalThis !== "undefined" ? globalThis : this);

@@ -1,18 +1,20 @@
-Module.register('MMM-Webuntis', {
-  _cacheVersion: '2.0.2',
+Module.register("MMM-Webuntis", {
+  _cacheVersion: "2.0.2",
 
-  _demoPluginIds: ['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'],
+  _demoPluginIds: ["grid", "lessons", "exams", "homework", "absences", "messagesofday"],
 
   defaults: {
     // === GLOBAL OPTIONS ===
-    header: 'MMM-Webuntis', // displayed as module title in MagicMirror
+    header: "MMM-Webuntis", // displayed as module title in MagicMirror
     updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
     backgroundRefresh: true, // keep refreshing while hidden (e.g. under MMM-Carousel)
     quietHours: null, // optional window without polling, e.g. { from: '22:00', to: '06:00' }
-    timezone: 'Europe/Berlin', // timezone for date calculations
+    timezone: "Europe/Berlin", // timezone for date calculations
 
     // === DEBUG OPTIONS ===
-    logLevel: 'none', // Logging level: none, error, warn, info, debug.
+    // Optional: none, error, warn, info, debug. Output goes through MagicMirror's Log, so the
+    // global logLevel decides; this can only narrow it. Unset (null) = the global level alone.
+    logLevel: null,
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
     initRetryTimeout: 5000, // timeout for CONFIGURE -> MODULE_READY watchdog (milliseconds)
@@ -23,8 +25,8 @@ Module.register('MMM-Webuntis', {
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).
     // Supported widgets: grid, lessons, exams, homework, absences, messagesofday
-    displayMode: 'lessons, exams', // Legacy widget activation string.
-    mode: 'verbose', // 'verbose' (per-student sections) or 'compact' (combined view)
+    displayMode: "lessons, exams", // Legacy widget activation string.
+    mode: "verbose", // 'verbose' (per-student sections) or 'compact' (combined view)
     useClassTimetable: false, // Prefer class timetable endpoints when available.
     excludeLessons: [], // Hide lessons by subject/student group/lesson text, e.g. ['Förder', '/^AG$/i']; also hides homework and exams of matching subjects (per student: students[].excludeLessons)
     addLessons: [], // Own lessons, e.g. [{ weekday: 'tue', startTime: '15:30', endTime: '16:15', subject: 'Violin', room: 'Music school' }]
@@ -67,7 +69,7 @@ Module.register('MMM-Webuntis', {
    * @param {string} moduleName - Module name for log prefixes (default: 'MMM-Webuntis')
    * @returns {Object|null} Logger object with log(level, msg) method, or null if unavailable
    */
-  _createFrontendLogger(moduleName = 'MMM-Webuntis') {
+  _createFrontendLogger(moduleName = "MMM-Webuntis") {
     if (!globalThis.MMModuleRuntimeUtils?.createLevelLogger) {
       return null;
     }
@@ -76,7 +78,7 @@ Module.register('MMM-Webuntis', {
       prefix: `[${moduleName}]`,
       // This instance's own level, not the window global: two instances may be configured with
       // different logLevels, and the global can only hold one value (see getScripts).
-      getLevel: () => this.config?.logLevel || this.defaults?.logLevel || 'none',
+      getLevel: () => this.config?.logLevel,
     });
   },
 
@@ -90,7 +92,7 @@ Module.register('MMM-Webuntis', {
   getCurrentDateContext(configOverride = null) {
     if (globalThis.MMModuleRuntimeUtils?.getCurrentDateContext) {
       return globalThis.MMModuleRuntimeUtils.getCurrentDateContext(configOverride || this.config || {}, {
-        defaultTimezone: this.defaults?.timezone || 'Europe/Berlin',
+        defaultTimezone: this.defaults?.timezone || "Europe/Berlin",
       });
     }
 
@@ -102,9 +104,9 @@ Module.register('MMM-Webuntis', {
     return {
       date: now,
       ymd: now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate(),
-      isoDate: `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+      isoDate: `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
       isDebug: false,
-      timezone: configOverride?.timezone || this.config?.timezone || this.defaults?.timezone || 'Europe/Berlin',
+      timezone: configOverride?.timezone || this.config?.timezone || this.defaults?.timezone || "Europe/Berlin",
     };
   },
 
@@ -130,20 +132,20 @@ Module.register('MMM-Webuntis', {
    */
   _generateSessionId(length = 9) {
     if (globalThis.MMModuleRuntimeUtils?.generateScopedId) {
-      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId('wu', length);
-      return scopedId.startsWith('wu_') ? scopedId.slice(3) : scopedId;
+      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId("wu", length);
+      return scopedId.startsWith("wu_") ? scopedId.slice(3) : scopedId;
     }
 
-    const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+    const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
 
     const cryptoObj =
-      (typeof window !== 'undefined' && window.crypto) ||
-      (typeof self !== 'undefined' && self.crypto) ||
-      (typeof crypto !== 'undefined' && crypto);
+      (typeof window !== "undefined" && window.crypto) ||
+      (typeof self !== "undefined" && self.crypto) ||
+      (typeof crypto !== "undefined" && crypto);
 
-    let result = '';
+    let result = "";
 
-    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
       const array = new Uint8Array(length);
       cryptoObj.getRandomValues(array);
       for (let i = 0; i < length; i += 1) {
@@ -167,7 +169,7 @@ Module.register('MMM-Webuntis', {
    * @returns {string[]} Array of CSS file paths
    */
   getStyles() {
-    return [this.file('MMM-Webuntis.css')];
+    return [this.file("MMM-Webuntis.css")];
   },
 
   /**
@@ -182,18 +184,19 @@ Module.register('MMM-Webuntis', {
     // value to hold, and silently taking the last one started would swallow the other one's
     // logs - so keep the most verbose level any instance asked for. Instance-scoped logging
     // (_log, _createFrontendLogger, renderContext.runtime.logLevel) is unaffected by this.
-    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    const own = this.config?.logLevel || this.defaults.logLevel || 'none';
+    // Unset ("") means "no own filter" and so ranks above debug.
+    const levels = { none: -1, error: 0, warn: 1, info: 2, debug: 3, "": 4 };
+    const own = this.config?.logLevel || "";
     const current = window.MMMWebuntisLogLevel;
-    if (levels[current] === undefined || (levels[own] ?? -1) > levels[current]) {
+    if (levels[current] === undefined || (levels[own] ?? 4) > levels[current]) {
       window.MMMWebuntisLogLevel = own;
     }
 
     const scripts = [
-      this.file('lib/mmm-shared/mmm-shared.js'),
-      this.file('lib/runtime-utils.js'),
-      this.file('lib/pluginHostFrontend.js'),
-      this.file('lib/frontendShared.js'),
+      this.file("lib/mmm-shared/mmm-shared.js"),
+      this.file("lib/runtime-utils.js"),
+      this.file("lib/pluginHostFrontend.js"),
+      this.file("lib/frontendShared.js"),
     ];
 
     return scripts;
@@ -207,20 +210,20 @@ Module.register('MMM-Webuntis', {
    */
   getTranslations() {
     return {
-      en: 'translations/en.json',
-      de: 'translations/de.json',
+      en: "translations/en.json",
+      de: "translations/de.json",
     };
   },
 
   _getPluginTranslationEntry(pluginId, key) {
-    const translations = this._pluginTranslationsById?.get(String(pluginId || '').trim());
-    if (!translations || typeof translations !== 'object') return undefined;
+    const translations = this._pluginTranslationsById?.get(String(pluginId || "").trim());
+    if (!translations || typeof translations !== "object") return undefined;
     return Object.hasOwn(translations, key) ? translations[key] : undefined;
   },
 
   _applyTranslationReplacements(template, replacements) {
-    const source = String(template ?? '');
-    if (!replacements || typeof replacements !== 'object' || Array.isArray(replacements)) {
+    const source = String(template ?? "");
+    if (!replacements || typeof replacements !== "object" || Array.isArray(replacements)) {
       return source;
     }
 
@@ -240,14 +243,16 @@ Module.register('MMM-Webuntis', {
   },
 
   _getPluginTranslationLoadOrder() {
-    const configuredLanguage = String(globalThis.config?.language || this.config?.language || navigator?.language || 'en').trim();
-    const normalizedLanguage = configuredLanguage || 'en';
-    const baseLanguage = normalizedLanguage.split('-')[0];
-    return Array.from(new Set(['en', baseLanguage, normalizedLanguage].filter(Boolean)));
+    const configuredLanguage = String(
+      globalThis.config?.language || this.config?.language || navigator?.language || "en",
+    ).trim();
+    const normalizedLanguage = configuredLanguage || "en";
+    const baseLanguage = normalizedLanguage.split("-")[0];
+    return Array.from(new Set(["en", baseLanguage, normalizedLanguage].filter(Boolean)));
   },
 
   async _loadPluginTranslations(pluginEntry) {
-    const pluginId = String(pluginEntry?.id || '').trim();
+    const pluginId = String(pluginEntry?.id || "").trim();
     if (!pluginId) return;
 
     if (!this._pluginTranslationsById) {
@@ -255,9 +260,9 @@ Module.register('MMM-Webuntis', {
     }
     if (this._pluginTranslationsById.has(pluginId)) return;
 
-    const frontendEntry = String(pluginEntry?.entry?.frontend || '').trim();
-    const lastSlash = frontendEntry.lastIndexOf('/');
-    const pluginRoot = lastSlash === -1 ? '' : frontendEntry.slice(0, lastSlash);
+    const frontendEntry = String(pluginEntry?.entry?.frontend || "").trim();
+    const lastSlash = frontendEntry.lastIndexOf("/");
+    const pluginRoot = lastSlash === -1 ? "" : frontendEntry.slice(0, lastSlash);
     if (!pluginRoot) {
       this._pluginTranslationsById.set(pluginId, {});
       return;
@@ -270,22 +275,28 @@ Module.register('MMM-Webuntis', {
       const url = this.file(relativePath);
 
       try {
-        const response = await fetch(url, { cache: 'no-store' });
+        const response = await fetch(url, { cache: "no-store" });
         if (response.status === 404) continue;
         if (!response.ok) {
-          this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath} (${response.status})`);
+          this._log(
+            "warn",
+            `[plugins] ${pluginId}: failed to load translations from ${relativePath} (${response.status})`,
+          );
           continue;
         }
 
         const json = await response.json();
-        if (!json || typeof json !== 'object' || Array.isArray(json)) {
-          this._log('warn', `[plugins] ${pluginId}: ignoring non-object translations in ${relativePath}`);
+        if (!json || typeof json !== "object" || Array.isArray(json)) {
+          this._log("warn", `[plugins] ${pluginId}: ignoring non-object translations in ${relativePath}`);
           continue;
         }
 
         Object.assign(mergedTranslations, json);
       } catch (error) {
-        this._log('warn', `[plugins] ${pluginId}: failed to load translations from ${relativePath}: ${error?.message || error}`);
+        this._log(
+          "warn",
+          `[plugins] ${pluginId}: failed to load translations from ${relativePath}: ${error?.message || error}`,
+        );
       }
     }
 
@@ -319,28 +330,28 @@ Module.register('MMM-Webuntis', {
     this._pluginRegistryById = new Map();
     const entries = Array.isArray(pluginEntries) ? pluginEntries : [];
     entries.forEach((entry) => {
-      const pluginId = String(entry?.id || '').trim();
+      const pluginId = String(entry?.id || "").trim();
       if (!pluginId) return;
       this._pluginRegistryById.set(pluginId, entry);
     });
   },
 
   _getPluginRegistryEntry(pluginId) {
-    return this._pluginRegistryById?.get(String(pluginId || '').trim()) || null;
+    return this._pluginRegistryById?.get(String(pluginId || "").trim()) || null;
   },
 
   _getLegacyDisplayTokens(configSource = this.config || {}) {
     const parseDisplayModeTokens = globalThis.MMModuleRuntimeUtils?.parseDisplayModeTokens;
-    if (typeof parseDisplayModeTokens === 'function') {
+    if (typeof parseDisplayModeTokens === "function") {
       return parseDisplayModeTokens(configSource?.displayMode);
     }
 
     const raw = configSource?.displayMode;
-    const displayMode = raw === undefined || raw === null ? '' : String(raw).toLowerCase().trim();
-    if (displayMode === 'grid') return ['grid'];
-    if (displayMode === 'list') return ['list', 'lessons', 'exams'];
+    const displayMode = raw === undefined || raw === null ? "" : String(raw).toLowerCase().trim();
+    if (displayMode === "grid") return ["grid"];
+    if (displayMode === "list") return ["list", "lessons", "exams"];
     return displayMode
-      .split(',')
+      .split(",")
       .map((part) => part.trim())
       .filter(Boolean);
   },
@@ -350,7 +361,7 @@ Module.register('MMM-Webuntis', {
   },
 
   _hasWidget(name) {
-    const normalizedName = String(name || '')
+    const normalizedName = String(name || "")
       .trim()
       .toLowerCase();
     if (!normalizedName) return false;
@@ -361,13 +372,13 @@ Module.register('MMM-Webuntis', {
     if (!this._pluginAssetStateById) {
       this._pluginAssetStateById = new Map();
     }
-    const normalizedPluginId = String(pluginId || '').trim();
+    const normalizedPluginId = String(pluginId || "").trim();
     if (!this._pluginAssetStateById.has(normalizedPluginId)) {
       this._pluginAssetStateById.set(normalizedPluginId, {
         loaded: false,
         failed: false,
         promise: null,
-        errorMessage: '',
+        errorMessage: "",
       });
     }
     return this._pluginAssetStateById.get(normalizedPluginId);
@@ -378,8 +389,8 @@ Module.register('MMM-Webuntis', {
     styles.forEach((stylePath) => {
       const href = this.file(stylePath);
       if (document.querySelector(`link[data-wu-plugin-style="${href}"]`)) return;
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
       link.href = href;
       link.dataset.wuPluginStyle = href;
       document.head.appendChild(link);
@@ -390,35 +401,39 @@ Module.register('MMM-Webuntis', {
     return new Promise((resolve, reject) => {
       const scriptPath = pluginEntry?.entry?.frontend;
       if (!scriptPath) {
-        reject(new Error(`Plugin ${pluginEntry?.id || 'unknown'} is missing a frontend entry.`));
+        reject(new Error(`Plugin ${pluginEntry?.id || "unknown"} is missing a frontend entry.`));
         return;
       }
 
       const src = this.file(scriptPath);
       const existing = document.querySelector(`script[data-wu-plugin-script="${src}"]`);
       if (existing) {
-        if (existing.dataset.wuPluginLoaded === 'true') {
+        if (existing.dataset.wuPluginLoaded === "true") {
           resolve();
           return;
         }
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), {
+          once: true,
+        });
         return;
       }
 
-      const script = document.createElement('script');
+      const script = document.createElement("script");
       script.src = src;
       script.async = false;
       script.dataset.wuPluginScript = src;
       script.addEventListener(
-        'load',
+        "load",
         () => {
-          script.dataset.wuPluginLoaded = 'true';
+          script.dataset.wuPluginLoaded = "true";
           resolve();
         },
-        { once: true }
+        { once: true },
       );
-      script.addEventListener('error', () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), { once: true });
+      script.addEventListener("error", () => reject(new Error(`Failed to load plugin script ${scriptPath}`)), {
+        once: true,
+      });
       document.head.appendChild(script);
     });
   },
@@ -441,12 +456,12 @@ Module.register('MMM-Webuntis', {
         .then(() => {
           state.loaded = true;
           state.failed = false;
-          state.errorMessage = '';
+          state.errorMessage = "";
         })
         .catch((error) => {
           state.failed = true;
           state.errorMessage = error?.message || String(error);
-          this._log('error', `[plugins] ${pluginEntry.id}: ${state.errorMessage}`);
+          this._log("error", `[plugins] ${pluginEntry.id}: ${state.errorMessage}`);
         })
         .finally(() => {
           state.promise = null;
@@ -460,7 +475,7 @@ Module.register('MMM-Webuntis', {
         this.lifecycle.render();
       })
       .catch((error) => {
-        this._log('error', '[plugins] failed to initialize plugin widgets', error);
+        this._log("error", "[plugins] failed to initialize plugin widgets", error);
       });
   },
 
@@ -486,7 +501,9 @@ Module.register('MMM-Webuntis', {
         dayNotices: this.dayNoticesByStudent?.[studentTitle] || [],
       },
       state: {
-        warnings: this.runtimeWarningsByStudent?.[studentTitle] ? Array.from(this.runtimeWarningsByStudent[studentTitle]) : [],
+        warnings: this.runtimeWarningsByStudent?.[studentTitle]
+          ? Array.from(this.runtimeWarningsByStudent[studentTitle])
+          : [],
         collections: this.collectionStateByStudent?.[studentTitle] || {},
       },
       plugins: {},
@@ -507,7 +524,10 @@ Module.register('MMM-Webuntis', {
   _createFrontendPluginContext(pluginEntry) {
     const shared = this._getWidgetApi();
     if (!shared) {
-      this._log('warn', `[plugins] ${pluginEntry.id}: shared frontend API unavailable; context namespaces will be empty`);
+      this._log(
+        "warn",
+        `[plugins] ${pluginEntry.id}: shared frontend API unavailable; context namespaces will be empty`,
+      );
     }
 
     return {
@@ -537,16 +557,16 @@ Module.register('MMM-Webuntis', {
 
     const state = this._ensurePluginAssetState(pluginId);
     if (state.failed) {
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'wu-widget__error widget-error dimmed';
+      const errorDiv = document.createElement("div");
+      errorDiv.className = "wu-widget__error widget-error dimmed";
       errorDiv.textContent = state.errorMessage || `Plugin ${pluginId} failed to load`;
       return errorDiv;
     }
 
     const pluginHost = this._getPluginHost();
     if (!state.loaded || !pluginHost?.hasFrontendPlugin?.(pluginId)) {
-      const loadingDiv = document.createElement('div');
-      loadingDiv.className = 'wu-widget__info dimmed';
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "wu-widget__info dimmed";
       loadingDiv.textContent = `${pluginEntry.title || pluginId} plugin is loading...`;
       return loadingDiv;
     }
@@ -557,19 +577,22 @@ Module.register('MMM-Webuntis', {
 
     let pluginInstance = this._frontendPluginInstancesById.get(pluginId);
     if (!pluginInstance) {
-      pluginInstance = pluginHost.createFrontendPluginInstance(pluginId, this._createFrontendPluginContext(pluginEntry));
+      pluginInstance = pluginHost.createFrontendPluginInstance(
+        pluginId,
+        this._createFrontendPluginContext(pluginEntry),
+      );
       this._frontendPluginInstancesById.set(pluginId, pluginInstance);
     }
 
     const renderContext = {
       moduleId: this.identifier,
-      mode: this.config?.mode || 'verbose',
+      mode: this.config?.mode || "verbose",
       students: this._buildPluginStudentRuntimeSlices(studentTitles),
       warnings: this._getRuntimeWarnings(),
       runtime: {},
     };
 
-    return typeof pluginInstance?.render === 'function' ? pluginInstance.render(renderContext) : null;
+    return typeof pluginInstance?.render === "function" ? pluginInstance.render(renderContext) : null;
   },
 
   /**
@@ -579,7 +602,7 @@ Module.register('MMM-Webuntis', {
    */
   _isDemoModeEnabled() {
     const raw = this.config?.demoDataFile;
-    return typeof raw === 'string' && raw.trim() !== '';
+    return typeof raw === "string" && raw.trim() !== "";
   },
 
   /**
@@ -588,9 +611,9 @@ Module.register('MMM-Webuntis', {
    * @returns {string|null} Fixture URL or null when demo mode is disabled.
    */
   _getDemoDataUrl() {
-    const raw = String(this.config?.demoDataFile || '')
+    const raw = String(this.config?.demoDataFile || "")
       .trim()
-      .replace(/^\/+/, '');
+      .replace(/^\/+/, "");
     if (!raw) return null;
     return this.file(raw);
   },
@@ -611,17 +634,21 @@ Module.register('MMM-Webuntis', {
   async _loadDemoPluginRegistry() {
     const displayTokens = this._getLegacyDisplayTokens(this.config || {});
     const explicitPlugins =
-      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+      this.config?.plugins && typeof this.config.plugins === "object" && !Array.isArray(this.config.plugins)
+        ? this.config.plugins
+        : {};
 
     const entries = await Promise.all(
       this._demoPluginIds.map(async (pluginId) => {
-        const response = await fetch(this.file(`plugins/${pluginId}/manifest.json`), { cache: 'no-store' });
+        const response = await fetch(this.file(`plugins/${pluginId}/manifest.json`), { cache: "no-store" });
         if (!response.ok) {
           throw new Error(`Failed to load demo plugin manifest for "${pluginId}" (${response.status}).`);
         }
 
         const manifest = await response.json();
-        const aliases = Array.isArray(manifest?.activation?.displayAliases) ? manifest.activation.displayAliases : [manifest.id];
+        const aliases = Array.isArray(manifest?.activation?.displayAliases)
+          ? manifest.activation.displayAliases
+          : [manifest.id];
         const explicitConfig = explicitPlugins[manifest.id];
         const active = explicitConfig?.enabled === true || aliases.some((alias) => displayTokens.includes(alias));
 
@@ -635,10 +662,12 @@ Module.register('MMM-Webuntis', {
           active,
           entry: {
             frontend: `plugins/${pluginId}/${manifest.entry.frontend}`,
-            styles: Array.isArray(manifest.entry.styles) ? manifest.entry.styles.map((style) => `plugins/${pluginId}/${style}`) : [],
+            styles: Array.isArray(manifest.entry.styles)
+              ? manifest.entry.styles.map((style) => `plugins/${pluginId}/${style}`)
+              : [],
           },
         };
-      })
+      }),
     );
 
     this._setPluginRegistry(entries);
@@ -654,12 +683,16 @@ Module.register('MMM-Webuntis', {
     const demoUrl = this._getDemoDataUrl();
     if (!demoUrl) return [];
 
-    const cacheKey = String(this.config?.demoDataFile || '').trim();
-    if (this._demoPayloadCacheKey === cacheKey && Array.isArray(this._demoPayloadCache) && this._demoPayloadCache.length > 0) {
+    const cacheKey = String(this.config?.demoDataFile || "").trim();
+    if (
+      this._demoPayloadCacheKey === cacheKey &&
+      Array.isArray(this._demoPayloadCache) &&
+      this._demoPayloadCache.length > 0
+    ) {
       return this._demoPayloadCache;
     }
 
-    const response = await fetch(demoUrl, { cache: 'no-store' });
+    const response = await fetch(demoUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Failed to load demo fixture (${response.status}) from ${demoUrl}`);
     }
@@ -681,7 +714,7 @@ Module.register('MMM-Webuntis', {
    * @param {string} [reason='manual'] - Trigger reason for logging/debugging context.
    * @returns {Promise<void>}
    */
-  async _emitDemoPayload(reason = 'manual') {
+  async _emitDemoPayload(reason = "manual") {
     try {
       const payloads = await this._loadDemoPayloads();
       const statusDefaults = {
@@ -701,7 +734,8 @@ Module.register('MMM-Webuntis', {
       };
 
       payloads.forEach((entry, index) => {
-        const fallbackTitle = this.config?.students?.[index]?.title || this.config?.students?.[0]?.title || `Demo Student ${index + 1}`;
+        const fallbackTitle =
+          this.config?.students?.[index]?.title || this.config?.students?.[0]?.title || `Demo Student ${index + 1}`;
         const payload = {
           ...(entry || {}),
           title: String(entry?.title || fallbackTitle),
@@ -715,15 +749,15 @@ Module.register('MMM-Webuntis', {
         this.socketNotificationReceived(this.notifications.EVENT, {
           identifier: this.identifier,
           instanceId: this.identifier,
-          action: 'DATA_UPDATE',
+          action: "DATA_UPDATE",
           data: payload,
         });
       });
 
-      this._log('debug', `[DEMO] Rendered ${payloads.length} demo payload(s) (${reason})`);
+      this._log("debug", `[DEMO] Rendered ${payloads.length} demo payload(s) (${reason})`);
     } catch (error) {
       const msg = `Demo mode failed: ${error?.message || String(error)}`;
-      this._log('error', msg);
+      this._log("error", msg);
       this.moduleWarningsSet = this.moduleWarningsSet || new Set();
       this.moduleWarningsSet.add(msg);
       this.lifecycle.render();
@@ -744,12 +778,16 @@ Module.register('MMM-Webuntis', {
   _getDisplayWidgets() {
     const displayTokens = this._getLegacyDisplayTokens(this.config || {});
     const explicitPlugins =
-      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins) ? this.config.plugins : {};
+      this.config?.plugins && typeof this.config.plugins === "object" && !Array.isArray(this.config.plugins)
+        ? this.config.plugins
+        : {};
     const explicitEnabled = Object.entries(explicitPlugins)
       .filter(([, entry]) => entry?.enabled === true)
       .map(([pluginId]) => pluginId);
-    const defaultDisplayMode = typeof this.defaults?.displayMode === 'string' ? this.defaults.displayMode.toLowerCase().trim() : '';
-    const currentDisplayMode = typeof this.config?.displayMode === 'string' ? this.config.displayMode.toLowerCase().trim() : '';
+    const defaultDisplayMode =
+      typeof this.defaults?.displayMode === "string" ? this.defaults.displayMode.toLowerCase().trim() : "";
+    const currentDisplayMode =
+      typeof this.config?.displayMode === "string" ? this.config.displayMode.toLowerCase().trim() : "";
 
     if (explicitEnabled.length > 0 && currentDisplayMode === defaultDisplayMode) {
       return explicitEnabled;
@@ -768,11 +806,11 @@ Module.register('MMM-Webuntis', {
           .sort((left, right) => {
             const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
             if (orderDelta !== 0) return orderDelta;
-            return String(left?.id || '').localeCompare(String(right?.id || ''));
+            return String(left?.id || "").localeCompare(String(right?.id || ""));
           });
 
         for (const match of matches) {
-          const pluginId = String(match?.id || '');
+          const pluginId = String(match?.id || "");
           if (!pluginId || enabledFromDisplayMode.includes(pluginId)) continue;
           enabledFromDisplayMode.push(pluginId);
         }
@@ -787,7 +825,7 @@ Module.register('MMM-Webuntis', {
         .sort((left, right) => {
           const orderDelta = Number(left?.order || 1000) - Number(right?.order || 1000);
           if (orderDelta !== 0) return orderDelta;
-          return String(left?.id || '').localeCompare(String(right?.id || ''));
+          return String(left?.id || "").localeCompare(String(right?.id || ""));
         })
         .map((entry) => String(entry.id));
       if (activePlugins.length > 0) return activePlugins;
@@ -799,16 +837,19 @@ Module.register('MMM-Webuntis', {
 
     const enabled = [];
     for (const token of displayTokens) {
-      if (token === 'list') {
-        if (!enabled.includes('lessons')) enabled.push('lessons');
-        if (!enabled.includes('exams')) enabled.push('exams');
+      if (token === "list") {
+        if (!enabled.includes("lessons")) enabled.push("lessons");
+        if (!enabled.includes("exams")) enabled.push("exams");
         continue;
       }
-      if (['grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'].includes(token) && !enabled.includes(token)) {
+      if (
+        ["grid", "lessons", "exams", "homework", "absences", "messagesofday"].includes(token) &&
+        !enabled.includes(token)
+      ) {
         enabled.push(token);
       }
     }
-    return enabled.length > 0 ? enabled : ['lessons', 'exams'];
+    return enabled.length > 0 ? enabled : ["lessons", "exams"];
   },
 
   /**
@@ -823,10 +864,10 @@ Module.register('MMM-Webuntis', {
     try {
       if (!this.frontendLogger) {
         // Call bound: the logger reads this instance's configured level.
-        this.frontendLogger = this._createFrontendLogger('MMM-Webuntis');
+        this.frontendLogger = this._createFrontendLogger("MMM-Webuntis");
       }
-      if (this.frontendLogger && typeof this.frontendLogger.log === 'function') {
-        const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+      if (this.frontendLogger && typeof this.frontendLogger.log === "function") {
+        const msg = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
         this.frontendLogger.log(level, msg);
         return;
       }
@@ -834,23 +875,22 @@ Module.register('MMM-Webuntis', {
       void 0;
     }
 
+    // Fallback without the runtime utils: same rule - MagicMirror's Log applies the global
+    // level, an own logLevel can only narrow it.
     const levels = this._getWidgetApi()?.util?.logLevelWeights || { none: -1, error: 0, warn: 1, info: 2, debug: 3 };
-    const configured = this.config?.logLevel || this.defaults.logLevel || 'none';
-    const configuredLevel = levels[configured] !== undefined ? configured : 'none';
-    const msgLevel = levels[level] !== undefined ? level : 'info';
-    if (levels[msgLevel] <= levels[configuredLevel]) {
-      try {
-        if (msgLevel === 'error') console.error('[MMM-Webuntis]', ...args);
-        else if (msgLevel === 'warn') console.warn('[MMM-Webuntis]', ...args);
-        else console.warn('[MMM-Webuntis]', ...args);
-      } catch {
-        void 0;
-      }
+    const configured = levels[this.config?.logLevel];
+    const msgLevel = levels[level] !== undefined ? level : "info";
+    if (configured !== undefined && levels[msgLevel] > configured) return;
+    try {
+      const sink = globalThis.Log || console;
+      (sink[msgLevel] || sink.log).call(sink, "[MMM-Webuntis]", ...args);
+    } catch {
+      void 0;
     }
   },
 
   _getSortedStudentTitles() {
-    if (!this.timetableByStudent || typeof this.timetableByStudent !== 'object') return [];
+    if (!this.timetableByStudent || typeof this.timetableByStudent !== "object") return [];
     return Object.keys(this.timetableByStudent).sort();
   },
 
@@ -878,9 +918,9 @@ Module.register('MMM-Webuntis', {
    */
   _buildSendConfig() {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
-    const widgetKeys = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+    const widgetKeys = ["lessons", "grid", "exams", "homework", "absences", "messagesofday"];
     const explicitPlugins =
-      this.config?.plugins && typeof this.config.plugins === 'object' && !Array.isArray(this.config.plugins)
+      this.config?.plugins && typeof this.config.plugins === "object" && !Array.isArray(this.config.plugins)
         ? this.config.plugins
         : undefined;
 
@@ -923,22 +963,24 @@ Module.register('MMM-Webuntis', {
   _validateAndWarnConfig(config) {
     const warnings = [];
 
-    const validWidgets = ['list', 'grid', 'lessons', 'exams', 'homework', 'absences', 'messagesofday'];
-    if (config.displayMode && typeof config.displayMode === 'string') {
+    const validWidgets = ["list", "grid", "lessons", "exams", "homework", "absences", "messagesofday"];
+    if (config.displayMode && typeof config.displayMode === "string") {
       const widgets = config.displayMode
-        .split(',')
+        .split(",")
         .map((w) => w.trim())
         .filter(Boolean)
         .map((w) => w.toLowerCase());
       const invalid = widgets.filter((w) => !validWidgets.includes(w));
       if (invalid.length > 0) {
-        warnings.push(`displayMode contains unknown widgets: "${invalid.join(', ')}". Supported: ${validWidgets.join(', ')}`);
+        warnings.push(
+          `displayMode contains unknown widgets: "${invalid.join(", ")}". Supported: ${validWidgets.join(", ")}`,
+        );
       }
     }
 
-    const validLogLevels = ['none', 'error', 'warn', 'info', 'debug'];
+    const validLogLevels = ["none", "error", "warn", "info", "debug"];
     if (config.logLevel && !validLogLevels.includes(String(config.logLevel).toLowerCase())) {
-      warnings.push(`Invalid logLevel "${config.logLevel}". Use one of: ${validLogLevels.join(', ')}`);
+      warnings.push(`Invalid logLevel "${config.logLevel}". Use one of: ${validLogLevels.join(", ")}`);
     }
 
     if (Number.isFinite(config.nextDays) && config.nextDays < 0) {
@@ -967,16 +1009,16 @@ Module.register('MMM-Webuntis', {
     if (!Array.isArray(config.students) || config.students.length === 0) {
       if (!hasParentCreds) {
         warnings.push(
-          'No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.'
+          "No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.",
         );
       } else {
-        this._log('info', 'Empty students[] with parent credentials: waiting for auto-discovery from backend...');
+        this._log("info", "Empty students[] with parent credentials: waiting for auto-discovery from backend...");
       }
     }
 
     warnings.forEach((warning) => {
-      this._upsertModuleWarnings([warning], [], { kind: 'config', severity: 'warning' });
-      this._log('warn', warning);
+      this._upsertModuleWarnings([warning], [], { kind: "config", severity: "warning" });
+      this._log("warn", warning);
     });
   },
 
@@ -986,7 +1028,7 @@ Module.register('MMM-Webuntis', {
    * @param {string[]} warningsList - Warning messages returned by the backend
    */
   _updateRuntimeWarnings(studentTitle, warningsList) {
-    const key = studentTitle || '__module__';
+    const key = studentTitle || "__module__";
     this.runtimeWarningsByStudent = this.runtimeWarningsByStudent || {};
     const nextWarnings = Array.isArray(warningsList) && warningsList.length > 0 ? new Set(warningsList) : null;
     const prevWarnings = this.runtimeWarningsByStudent[key] instanceof Set ? this.runtimeWarningsByStudent[key] : null;
@@ -1042,7 +1084,7 @@ Module.register('MMM-Webuntis', {
     warningsList.forEach((warning) => {
       if (!this._runtimeWarningsLogged.has(warning)) {
         this._runtimeWarningsLogged.add(warning);
-        this._log('warn', `Runtime warning: ${warning}`);
+        this._log("warn", `Runtime warning: ${warning}`);
       }
     });
   },
@@ -1059,18 +1101,18 @@ Module.register('MMM-Webuntis', {
    */
   _toMinutes(t) {
     const util = this._getWidgetApi()?.util;
-    if (util && typeof util.toMinutesSinceMidnight === 'function') {
+    if (util && typeof util.toMinutesSinceMidnight === "function") {
       return util.toMinutesSinceMidnight(t);
     }
     if (t === null || t === undefined) return NaN;
     const s = String(t).trim();
-    if (s.includes(':')) {
-      const parts = s.split(':').map((p) => p.replace(/\D/g, ''));
+    if (s.includes(":")) {
+      const parts = s.split(":").map((p) => p.replace(/\D/g, ""));
       const hh = parseInt(parts[0], 10) || 0;
-      const mm = parseInt(parts[1] || '0', 10) || 0;
+      const mm = parseInt(parts[1] || "0", 10) || 0;
       return hh * 60 + mm;
     }
-    const digits = s.replace(/\D/g, '').padStart(4, '0');
+    const digits = s.replace(/\D/g, "").padStart(4, "0");
     const hh = parseInt(digits.slice(0, 2), 10) || 0;
     const mm = parseInt(digits.slice(2), 10) || 0;
     return hh * 60 + mm;
@@ -1083,7 +1125,7 @@ Module.register('MMM-Webuntis', {
    * @param {Object[]} warningMeta - Optional warning metadata entries
    * @param {Object} [fallbackMeta] - Meta used when no entry exists for a message
    */
-  _upsertModuleWarnings(warnings = [], warningMeta = [], fallbackMeta = { kind: 'config', severity: 'warning' }) {
+  _upsertModuleWarnings(warnings = [], warningMeta = [], fallbackMeta = { kind: "config", severity: "warning" }) {
     this.moduleWarningsSet = this.moduleWarningsSet || new Set();
     this.moduleWarningMetaByMessage = this.moduleWarningMetaByMessage || new Map();
 
@@ -1096,13 +1138,13 @@ Module.register('MMM-Webuntis', {
     }
 
     (Array.isArray(warnings) ? warnings : []).forEach((warning) => {
-      const message = String(warning || '').trim();
+      const message = String(warning || "").trim();
       if (!message) return;
       this.moduleWarningsSet.add(message);
 
       const nextMeta = metaByMessage.get(message) || { message, ...fallbackMeta };
       const prevMeta = this.moduleWarningMetaByMessage.get(message);
-      if (!prevMeta || prevMeta.kind === 'generic') {
+      if (!prevMeta || prevMeta.kind === "generic") {
         this.moduleWarningMetaByMessage.set(message, { message, ...nextMeta });
       }
     });
@@ -1110,7 +1152,7 @@ Module.register('MMM-Webuntis', {
 
   _isCriticalModuleWarning(message) {
     const meta = this.moduleWarningMetaByMessage?.get(String(message));
-    return meta?.severity === 'critical' || meta?.level === 'error';
+    return meta?.severity === "critical" || meta?.level === "error";
   },
 
   /**
@@ -1122,7 +1164,7 @@ Module.register('MMM-Webuntis', {
    */
   _hasCriticalWarningMeta(warnings = [], warningMeta = []) {
     if (!Array.isArray(warnings) || warnings.length === 0) return false;
-    const criticalKinds = new Set(['network', 'auth', 'server']);
+    const criticalKinds = new Set(["network", "auth", "server"]);
     const metaByMessage = new Map();
     if (Array.isArray(warningMeta)) {
       warningMeta.forEach((entry) => {
@@ -1134,7 +1176,7 @@ Module.register('MMM-Webuntis', {
     return warnings.some((warning) => {
       const meta = metaByMessage.get(String(warning));
       if (!meta) return false;
-      return meta.severity === 'critical' || meta.level === 'error' || criticalKinds.has(String(meta.kind || ''));
+      return meta.severity === "critical" || meta.level === "error" || criticalKinds.has(String(meta.kind || ""));
     });
   },
 
@@ -1179,7 +1221,8 @@ Module.register('MMM-Webuntis', {
       });
     }
 
-    const pattern = /(cannot connect|cannot reach|fetch failed|network error|timeout|econnrefused|enotfound|ehostunreach)/i;
+    const pattern =
+      /(cannot connect|cannot reach|fetch failed|network error|timeout|econnrefused|enotfound|ehostunreach)/i;
     // Fallback should only apply where no structured metadata exists for that warning.
     return warnings.some((w) => {
       const message = String(w);
@@ -1212,23 +1255,23 @@ Module.register('MMM-Webuntis', {
 
     const metaByMessage = new Map();
     warningMeta.forEach((entry) => {
-      const message = String(entry?.message || '');
+      const message = String(entry?.message || "");
       if (!message) return;
       metaByMessage.set(message, entry);
     });
 
     const typeAlias = {
-      lesson: 'lessons',
-      lessons: 'lessons',
-      exam: 'exams',
-      exams: 'exams',
-      homework: 'homework',
-      homeworks: 'homework',
-      absence: 'absences',
-      absences: 'absences',
-      message: 'messages',
-      messages: 'messages',
-      messagesofday: 'messages',
+      lesson: "lessons",
+      lessons: "lessons",
+      exam: "exams",
+      exams: "exams",
+      homework: "homework",
+      homeworks: "homework",
+      absence: "absences",
+      absences: "absences",
+      message: "messages",
+      messages: "messages",
+      messagesofday: "messages",
     };
 
     const isStatusOk = (status) => {
@@ -1244,19 +1287,21 @@ Module.register('MMM-Webuntis', {
       { enabled: fetchFlags.messages, status: apiStatus.messages },
     ].filter((entry) => entry.enabled === true);
 
-    const allFetchedApisHealthy = fetchedApiChecks.length > 0 && fetchedApiChecks.every((entry) => isStatusOk(entry.status));
+    const allFetchedApisHealthy =
+      fetchedApiChecks.length > 0 && fetchedApiChecks.every((entry) => isStatusOk(entry.status));
 
     return warningsList.filter((warning) => {
-      const warningText = String(warning || '');
+      const warningText = String(warning || "");
       const warningMetaEntry = metaByMessage.get(warningText) || null;
 
-      if (warningMetaEntry?.kind === 'config') {
+      if (warningMetaEntry?.kind === "config") {
         return true;
       }
 
-      if (warningMetaEntry?.kind === 'no_data') {
+      if (warningMetaEntry?.kind === "no_data") {
         const canonicalType =
-          typeAlias[String(warningMetaEntry.dataType || '').toLowerCase()] || String(warningMetaEntry.dataType || '').toLowerCase();
+          typeAlias[String(warningMetaEntry.dataType || "").toLowerCase()] ||
+          String(warningMetaEntry.dataType || "").toLowerCase();
         const currentData = effectiveData[canonicalType];
         if (Array.isArray(currentData) && currentData.length > 0) {
           return false;
@@ -1291,7 +1336,7 @@ Module.register('MMM-Webuntis', {
     const prevHasData = Array.isArray(prevData) && prevData.length > 0;
     const nextHasData = Array.isArray(nextData) && nextData.length > 0;
     if (!prevHasData || nextHasData) return false;
-    return String(collectionState?.status || 'ok') !== 'ok';
+    return String(collectionState?.status || "ok") !== "ok";
   },
 
   /**
@@ -1304,7 +1349,7 @@ Module.register('MMM-Webuntis', {
    */
   _resolveCollectionState(collectionState, preserved) {
     return {
-      status: String(collectionState?.status || 'ok'),
+      status: String(collectionState?.status || "ok"),
       httpStatus: collectionState?.httpStatus ?? null,
       lastSuccessAt: collectionState?.lastSuccessAt ?? null,
       stale: Boolean(preserved),
@@ -1322,7 +1367,7 @@ Module.register('MMM-Webuntis', {
   _createWidgetRenderers(wrapper, studentTitles, appendWidgetError) {
     const renderPluginWidget = (pluginId, widgetLabel) => {
       if (!this._isPluginActive(pluginId)) {
-        this._log('warn', `[plugins] ${pluginId} is not active; skipping ${widgetLabel} render path.`);
+        this._log("warn", `[plugins] ${pluginId} is not active; skipping ${widgetLabel} render path.`);
         return 0;
       }
       try {
@@ -1338,12 +1383,12 @@ Module.register('MMM-Webuntis', {
     };
 
     return {
-      grid: () => renderPluginWidget('grid', 'Grid'),
-      lessons: () => renderPluginWidget('lessons', 'Lessons'),
-      exams: () => renderPluginWidget('exams', 'Exams'),
-      homework: () => renderPluginWidget('homework', 'Homework'),
-      absences: () => renderPluginWidget('absences', 'Absences'),
-      messagesofday: () => renderPluginWidget('messagesofday', 'Messages of Day'),
+      grid: () => renderPluginWidget("grid", "Grid"),
+      lessons: () => renderPluginWidget("lessons", "Lessons"),
+      exams: () => renderPluginWidget("exams", "Exams"),
+      homework: () => renderPluginWidget("homework", "Homework"),
+      absences: () => renderPluginWidget("absences", "Absences"),
+      messagesofday: () => renderPluginWidget("messagesofday", "Messages of Day"),
     };
   },
 
@@ -1362,14 +1407,8 @@ Module.register('MMM-Webuntis', {
    */
   start() {
     this.shared = globalThis.MMModuleShared;
-    this.sharedContext = this.shared.createModuleContext('MMM-Webuntis', this.identifier, {
-      instanceId: this.identifier,
-      logLevel: this.config.logLevel || this.defaults.logLevel || 'info',
-      logStructured: true,
-      logRedaction: true,
-    });
     this.transport = this.shared.createTransport({
-      moduleName: 'MMM-Webuntis',
+      moduleName: "MMM-Webuntis",
       identifier: this.identifier,
       instanceId: this.identifier,
       sendSocketNotification: this.sendSocketNotification.bind(this),
@@ -1383,25 +1422,31 @@ Module.register('MMM-Webuntis', {
     // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
     // Without explicit identifiers, MagicMirror will auto-assign them (MMM-Webuntis_0, MMM-Webuntis_1, etc)
     if (this.identifier) {
-      this._log('debug', `[start] Using explicit identifier from config: ${this.identifier}`);
+      this._log("debug", `[start] Using explicit identifier from config: ${this.identifier}`);
     } else {
-      this._log('warn', '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js');
+      this._log(
+        "warn",
+        '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js',
+      );
     }
-    this._log('info', `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`);
+    this._log(
+      "info",
+      `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`,
+    );
 
     try {
-      if (!this.config.language && typeof config !== 'undefined' && config?.language) {
+      if (!this.config.language && typeof config !== "undefined" && config?.language) {
         this.config.language = config.language;
       }
     } catch (err) {
       // Language config is optional; ignore errors silently
-      this._log('debug', `[init] Failed to apply language config: ${err?.message}`);
+      this._log("debug", `[init] Failed to apply language config: ${err?.message}`);
     }
 
     const startDateContext = this.getCurrentDateContext();
     this._currentTodayYmd = startDateContext.ymd;
     if (startDateContext.isDebug) {
-      this._log('debug', `[start] debugDate="${startDateContext.isoDate}" (frozen test mode)`);
+      this._log("debug", `[start] debugDate="${startDateContext.isoDate}" (frozen test mode)`);
     }
 
     this.timetableByStudent = {};
@@ -1440,28 +1485,31 @@ Module.register('MMM-Webuntis', {
     if (this._isDemoModeEnabled()) {
       this._initialized = true;
       this._initializedAt = Date.now();
-      this._log('info', `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
+      this._log("info", `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
       this._loadDemoPluginRegistry()
         .then((pluginEntries) => this._initializeActivePlugins(pluginEntries))
-        .then(() => this._emitDemoPayload('start'))
+        .then(() => this._emitDemoPayload("start"))
         .catch((error) => {
           const msg = `Demo mode failed: ${error?.message || String(error)}`;
-          this._log('error', msg);
+          this._log("error", msg);
           this.moduleWarningsSet.add(msg);
           this.lifecycle.render();
         });
     }
 
     this.lifecycle.start();
-    // Deliberately unredacted: this only reaches the browser DevTools console, gated behind
-    // logLevel: 'info'/'debug' (default 'none'), and its whole purpose is to let a user see -
+    // Deliberately unredacted: this only reaches the browser DevTools console, and only when the
+    // module's own logLevel is explicitly 'info' or 'debug' - never by the global level alone,
+    // which is on INFO in a default MagicMirror. Its whole purpose is to let a user see -
     // and paste to the maintainer for support - the exact config MagicMirror is running with.
     // MagicMirror already round-trips this config in plaintext between server and frontend, so
     // there is nothing left to protect by redacting it here. Persisted artifacts are a different
     // story and ARE redacted before being written to disk - see redactSensitiveFields() in
     // lib/mmm-adapter/mmmPayloadMapper.js, used by dumpBackendPayloads/dumpRawApiResponses -
     // because those files get sent back to the maintainer and must not leak credentials.
-    this._log('info', 'MMM-Webuntis initializing with config:', this.config);
+    if (["info", "debug"].includes(String(this.config?.logLevel || "").toLowerCase())) {
+      this._log("info", "MMM-Webuntis initializing with config:", this.config);
+    }
   },
 
   /**
@@ -1484,17 +1532,18 @@ Module.register('MMM-Webuntis', {
       quietHours: this.config?.quietHours,
       getDayKey: () => {
         const context = this.getCurrentDateContext();
-        return this._usesLiveClock(context) ? String(context?.ymd ?? '') : null;
+        return this._usesLiveClock(context) ? String(context?.ymd ?? "") : null;
       },
       onDayChange: ({ previous, current }) => {
-        this._log('debug', `[lifecycle] Day change detected: ${previous} -> ${current}`);
+        this._log("debug", `[lifecycle] Day change detected: ${previous} -> ${current}`);
         this._handleClockDrivenDayRollover();
       },
       onVisible: () => this._startNowLineUpdater(),
       onHidden: () => {
         this._stopNowLineUpdater();
       },
-      onSessionState: ({ state, reason }) => this.transport.sendRequest('SESSION_STATE', { sessionId: this._sessionId, state, reason }),
+      onSessionState: ({ state, reason }) =>
+        this.transport.sendRequest("SESSION_STATE", { sessionId: this._sessionId, state, reason }),
       onFetch: ({ reason }) => this._sendFetchData(reason),
       deferredInit: {
         run: (reason) => this._requestInitIfNeeded(reason),
@@ -1513,7 +1562,7 @@ Module.register('MMM-Webuntis', {
   _startNowLineUpdater() {
     if (this.config?.grid?.showNowLine === false) return;
     const fn = this._getWidgetApi()?.grid?.startNowLineUpdater;
-    if (typeof fn === 'function') fn(this);
+    if (typeof fn === "function") fn(this);
   },
 
   /**
@@ -1522,7 +1571,7 @@ Module.register('MMM-Webuntis', {
    */
   _stopNowLineUpdater() {
     const fn = this._getWidgetApi()?.grid?.stopNowLineUpdater;
-    if (typeof fn === 'function') fn(this);
+    if (typeof fn === "function") fn(this);
   },
 
   /**
@@ -1532,10 +1581,10 @@ Module.register('MMM-Webuntis', {
    *
    * @param {string} reason - Reason for initialization trigger
    */
-  _sendInit(reason = 'manual') {
+  _sendInit(reason = "manual") {
     this._initAttemptCount += 1;
-    this._log('debug', `[CONFIGURE] Sending to backend (reason=${reason})`);
-    this.transport.sendRequest('CONFIGURE', {
+    this._log("debug", `[CONFIGURE] Sending to backend (reason=${reason})`);
+    this.transport.sendRequest("CONFIGURE", {
       ...this._buildSendConfig(),
       reason,
     });
@@ -1562,8 +1611,8 @@ Module.register('MMM-Webuntis', {
 
       if (this._initAttemptCount >= maxAttempts) {
         this._log(
-          'warn',
-          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_READY; reopening init gate for next trigger`
+          "warn",
+          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_READY; reopening init gate for next trigger`,
         );
         this._initRequested = false;
         this._initAttemptCount = 0;
@@ -1571,7 +1620,10 @@ Module.register('MMM-Webuntis', {
       }
 
       const nextAttempt = this._initAttemptCount + 1;
-      this._log('warn', `[INIT] No MODULE_READY within ${timeoutMs}ms, retrying CONFIGURE (attempt ${nextAttempt}/${maxAttempts})`);
+      this._log(
+        "warn",
+        `[INIT] No MODULE_READY within ${timeoutMs}ms, retrying CONFIGURE (attempt ${nextAttempt}/${maxAttempts})`,
+      );
       this._sendInit(`retry-timeout-${nextAttempt}`);
     }, timeoutMs);
   },
@@ -1582,7 +1634,7 @@ Module.register('MMM-Webuntis', {
    *
    * @param {string} reason - Why init is requested
    */
-  _requestInitIfNeeded(reason = 'manual') {
+  _requestInitIfNeeded(reason = "manual") {
     if (this._isDemoModeEnabled()) return;
     if (this._initialized || this._initRequested) return;
     this._initRequested = true;
@@ -1597,14 +1649,14 @@ Module.register('MMM-Webuntis', {
    *
    * @param {string} reason - Reason for fetch ('manual', 'periodic', 'resume')
    */
-  _sendFetchData(reason = 'manual') {
+  _sendFetchData(reason = "manual") {
     if (this._isDemoModeEnabled()) {
       this._emitDemoPayload(reason);
       return;
     }
 
     if (!this._initialized) {
-      if (String(reason).startsWith('resume')) {
+      if (String(reason).startsWith("resume")) {
         this._pendingResumeRequest = true;
       }
       return;
@@ -1613,7 +1665,7 @@ Module.register('MMM-Webuntis', {
     // REFRESH carries only what the backend reads from it - routing, the reason, and the two
     // per-request overrides. The full config travels with CONFIGURE; a backend that has lost the
     // session answers with INIT_REQUIRED instead of re-initializing from this payload.
-    this.transport.sendRequest('REFRESH', {
+    this.transport.sendRequest("REFRESH", {
       id: this.identifier,
       sessionId: this._sessionId,
       reason,
@@ -1631,44 +1683,46 @@ Module.register('MMM-Webuntis', {
   },
 
   getDom() {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'MMM-Webuntis';
+    const wrapper = document.createElement("div");
+    wrapper.className = "MMM-Webuntis";
     const widgets = this._getDisplayWidgets();
     let renderedWidgetCount = 0;
     const withWarningIcon = (element, text) => {
-      const icon = document.createElement('span');
-      icon.className = 'wu-inline-icon wu-inline-icon--warning';
-      icon.setAttribute('aria-hidden', 'true');
+      const icon = document.createElement("span");
+      icon.className = "wu-inline-icon wu-inline-icon--warning";
+      icon.setAttribute("aria-hidden", "true");
       element.replaceChildren(icon, document.createTextNode(` ${text}`));
     };
     const appendEmptyState = () => {
       if (renderedWidgetCount > 0) return;
-      const infoDiv = document.createElement('div');
-      infoDiv.className = 'wu-widget__info dimmed';
-      withWarningIcon(infoDiv, this.translate('no_data'));
+      const infoDiv = document.createElement("div");
+      infoDiv.className = "wu-widget__info dimmed";
+      withWarningIcon(infoDiv, this.translate("no_data"));
       wrapper.appendChild(infoDiv);
     };
 
     const sortedStudentTitles = this._getSortedStudentTitles();
 
     const appendWidgetError = (widgetLabel, error) => {
-      this._log('error', `Failed to render ${widgetLabel.toLowerCase()} widget: ${error.message}`);
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'wu-widget__error widget-error dimmed';
-      withWarningIcon(errorDiv, this.translate('widget_render_error', { widget: widgetLabel }));
+      this._log("error", `Failed to render ${widgetLabel.toLowerCase()} widget: ${error.message}`);
+      const errorDiv = document.createElement("div");
+      errorDiv.className = "wu-widget__error widget-error dimmed";
+      withWarningIcon(errorDiv, this.translate("widget_render_error", { widget: widgetLabel }));
       wrapper.appendChild(errorDiv);
     };
 
     if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
       const warnContainer = document.createDocumentFragment();
       for (const w of Array.from(this.moduleWarningsSet)) {
-        const warnDiv = document.createElement('div');
+        const warnDiv = document.createElement("div");
         const isCritical = this._isCriticalModuleWarning(w);
-        warnDiv.className = isCritical ? 'mmm-webuntis-warning critical small bright' : 'mmm-webuntis-warning small bright';
+        warnDiv.className = isCritical
+          ? "mmm-webuntis-warning critical small bright"
+          : "mmm-webuntis-warning small bright";
         try {
           withWarningIcon(warnDiv, w);
         } catch {
-          withWarningIcon(warnDiv, 'Configuration warning');
+          withWarningIcon(warnDiv, "Configuration warning");
         }
         warnContainer.appendChild(warnDiv);
       }
@@ -1679,12 +1733,12 @@ Module.register('MMM-Webuntis', {
     if (runtimeWarnings.length > 0) {
       const runtimeContainer = document.createDocumentFragment();
       for (const warning of runtimeWarnings) {
-        const warnDiv = document.createElement('div');
-        warnDiv.className = 'mmm-webuntis-warning runtime small bright';
+        const warnDiv = document.createElement("div");
+        warnDiv.className = "mmm-webuntis-warning runtime small bright";
         try {
           withWarningIcon(warnDiv, warning);
         } catch {
-          withWarningIcon(warnDiv, 'Fetch warning');
+          withWarningIcon(warnDiv, "Fetch warning");
         }
         runtimeContainer.appendChild(warnDiv);
       }
@@ -1695,8 +1749,8 @@ Module.register('MMM-Webuntis', {
 
     for (const widget of widgets) {
       const renderWidget = widgetRenderers[widget];
-      if (typeof renderWidget !== 'function') {
-        this._log('warn', `Unknown widget type: ${widget}`);
+      if (typeof renderWidget !== "function") {
+        this._log("warn", `Unknown widget type: ${widget}`);
         continue;
       }
       renderedWidgetCount += renderWidget() || 0;
@@ -1708,17 +1762,17 @@ Module.register('MMM-Webuntis', {
   },
 
   notificationReceived(notification) {
-    if (notification === 'DOM_OBJECTS_CREATED') {
+    if (notification === "DOM_OBJECTS_CREATED") {
       if (this.config.__legacyUsed && this.config.__legacyUsed.length > 0) {
-        this._log('warn', `⚠️ DEPRECATED CONFIG DETECTED: ${this.config.__legacyUsed.join(', ')}`);
-        this._log('warn', 'Your configuration uses deprecated keys that will be removed in future versions.');
-        this._log('warn', 'Please update your config.js to use the new configuration format.');
-        this._log('warn', 'See the module documentation for migration details.');
+        this._log("warn", `⚠️ DEPRECATED CONFIG DETECTED: ${this.config.__legacyUsed.join(", ")}`);
+        this._log("warn", "Your configuration uses deprecated keys that will be removed in future versions.");
+        this._log("warn", "Please update your config.js to use the new configuration format.");
+        this._log("warn", "See the module documentation for migration details.");
       }
 
       // The lifecycle already triggered (or deferred) init in start(); this is
       // only a safety net and is a no-op once init is under way.
-      this._requestInitIfNeeded('dom-objects-created');
+      this._requestInitIfNeeded("dom-objects-created");
     }
   },
 
@@ -1730,19 +1784,19 @@ Module.register('MMM-Webuntis', {
     const eventData = payload?.data || {};
 
     switch (action) {
-      case 'MODULE_READY':
+      case "MODULE_READY":
         this._handleModuleInitialized(eventData);
         break;
 
-      case 'MODULE_INIT_FAILED':
+      case "MODULE_INIT_FAILED":
         this._handleInitError(eventData);
         break;
 
-      case 'INIT_REQUIRED':
+      case "INIT_REQUIRED":
         this._handleInitRequired(eventData);
         break;
 
-      case 'DATA_UPDATE':
+      case "DATA_UPDATE":
         this._handleGotData(eventData);
         break;
 
@@ -1769,7 +1823,10 @@ Module.register('MMM-Webuntis', {
    * @param {Object} payload - Event payload ({ reason })
    */
   _handleInitRequired(payload) {
-    this._log('warn', `[INIT_REQUIRED] Backend requested re-initialization (reason=${payload?.reason || 'unspecified'})`);
+    this._log(
+      "warn",
+      `[INIT_REQUIRED] Backend requested re-initialization (reason=${payload?.reason || "unspecified"})`,
+    );
     this._initialized = false;
     this._initRequested = false;
     this._initAttemptCount = 0;
@@ -1777,16 +1834,19 @@ Module.register('MMM-Webuntis', {
       clearTimeout(this._initWatchdogTimer);
       this._initWatchdogTimer = null;
     }
-    this._requestInitIfNeeded('backend-init-required');
+    this._requestInitIfNeeded("backend-init-required");
   },
 
   _handleModuleInitialized(payload) {
     if (this._initialized) {
-      this._log('debug', `[MODULE_READY] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`);
+      this._log(
+        "debug",
+        `[MODULE_READY] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`,
+      );
       return;
     }
 
-    this._log('info', `Module ready, sessionId=${payload?.sessionId}`);
+    this._log("info", `Module ready, sessionId=${payload?.sessionId}`);
     this._initialized = true;
     this._initRequested = false;
     this._initializedAt = Date.now();
@@ -1798,48 +1858,52 @@ Module.register('MMM-Webuntis', {
     this._initAttemptCount = 0;
 
     if (this._pendingResumeRequest) {
-      this._log('debug', '[MODULE_READY] Clearing pending resume request (backend handles initial fetch)');
+      this._log("debug", "[MODULE_READY] Clearing pending resume request (backend handles initial fetch)");
       this._pendingResumeRequest = false;
     }
 
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
+      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: "config", severity: "warning" });
       payload.warnings.forEach((w) => {
-        this._log('warn', `Init warning: ${w}`);
+        this._log("warn", `Init warning: ${w}`);
       });
     }
 
     this._setPluginRegistry(payload?.plugins || []);
     this._initializeActivePlugins(payload?.plugins || []).catch((error) => {
-      this._log('error', `[plugins] initialization failed: ${error?.message || String(error)}`);
+      this._log("error", `[plugins] initialization failed: ${error?.message || String(error)}`);
     });
 
-    this._log('debug', '[MODULE_READY] Backend will auto-fetch data, periodic timer is owned by the lifecycle');
+    this._log("debug", "[MODULE_READY] Backend will auto-fetch data, periodic timer is owned by the lifecycle");
   },
 
   _handleInitError(payload) {
-    this._log('error', `Module initialization failed (sessionId=${payload?.sessionId}):`, payload.message || 'Unknown error');
+    this._log(
+      "error",
+      `Module initialization failed (sessionId=${payload?.sessionId}):`,
+      payload.message || "Unknown error",
+    );
     if (Array.isArray(payload.errors)) {
       payload.errors.forEach((err) => {
-        this._log('error', `  - ${err}`);
+        this._log("error", `  - ${err}`);
       });
     }
     if (Array.isArray(payload.warnings)) {
       payload.warnings.forEach((warn) => {
-        this._log('warn', `  - ${warn}`);
+        this._log("warn", `  - ${warn}`);
       });
     }
 
     const errorWarnings = Array.isArray(payload.errors) ? payload.errors : [];
     const errorWarningMeta = errorWarnings.map((message) => ({
       message: String(message),
-      kind: 'config',
-      severity: 'critical',
+      kind: "config",
+      severity: "critical",
     }));
-    this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: 'config', severity: 'critical' });
+    this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: "config", severity: "critical" });
 
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: 'config', severity: 'warning' });
+      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: "config", severity: "warning" });
     }
 
     this._initialized = false;
@@ -1855,20 +1919,23 @@ Module.register('MMM-Webuntis', {
 
   _handleGotData(payload) {
     if (Number(payload?.contractVersion) !== 3) {
-      this._log('warn', `[DATA_UPDATE] Ignored unsupported contractVersion=${payload?.contractVersion}`);
+      this._log("warn", `[DATA_UPDATE] Ignored unsupported contractVersion=${payload?.contractVersion}`);
       return;
     }
 
     const title = payload?.context?.student?.title;
     if (!title) {
-      this._log('warn', '[DATA_UPDATE] Missing context.student.title in payload, handling as module-level warning payload');
-      this._processGotDataWarnings('__module__', payload);
+      this._log(
+        "warn",
+        "[DATA_UPDATE] Missing context.student.title in payload, handling as module-level warning payload",
+      );
+      this._processGotDataWarnings("__module__", payload);
 
       this.lifecycle.render();
       return;
     }
 
-    this._log('debug', `[DATA_UPDATE] Received for student=${title}, sessionId=${payload?.sessionId}`);
+    this._log("debug", `[DATA_UPDATE] Received for student=${title}, sessionId=${payload?.sessionId}`);
     this._lastDataReceivedAt = Date.now();
     this.lifecycle.markDataReceived(this._lastDataReceivedAt);
     this.configByStudent[title] = payload?.context?.config || {};
@@ -1880,25 +1947,29 @@ Module.register('MMM-Webuntis', {
     if (dataChanged || warningsChanged) {
       this.lifecycle.render();
     } else {
-      this._log('debug', `[DATA_UPDATE] Skipping DOM update for ${title}: no effective data/warning changes`);
+      this._log("debug", `[DATA_UPDATE] Skipping DOM update for ${title}: no effective data/warning changes`);
     }
   },
 
   _syncDebugDate(cfg) {
-    this._log('debug', `[DATA_UPDATE] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`);
+    this._log(
+      "debug",
+      `[DATA_UPDATE] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`,
+    );
     const debugDateContext = this.getCurrentDateContext(cfg || {});
     if (debugDateContext.isDebug) {
-      this._log('debug', `[DATA_UPDATE] Using debugDate="${debugDateContext.isoDate}" from backend`);
+      this._log("debug", `[DATA_UPDATE] Using debugDate="${debugDateContext.isoDate}" from backend`);
       this._currentTodayYmd = debugDateContext.ymd;
-      this._log('debug', `[DATA_UPDATE] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
+      this._log("debug", `[DATA_UPDATE] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
     } else {
-      this._log('debug', `[DATA_UPDATE] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
+      this._log("debug", `[DATA_UPDATE] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
   },
 
   _processPayloadData(title, payload) {
     let dataChanged = false;
-    const collections = payload?.state?.collections && typeof payload.state.collections === 'object' ? payload.state.collections : {};
+    const collections =
+      payload?.state?.collections && typeof payload.state.collections === "object" ? payload.state.collections : {};
     const lessonsState = collections.lessons || {};
     const nextCollectionState = {};
 
@@ -1914,7 +1985,7 @@ Module.register('MMM-Webuntis', {
         }));
       }
     } catch (e) {
-      this._log('warn', 'failed to build timeUnits from grid', e);
+      this._log("warn", "failed to build timeUnits from grid", e);
     }
 
     // timeUnits, dayNotices and holidays travel with the timetable and follow its state.
@@ -1937,8 +2008,8 @@ Module.register('MMM-Webuntis', {
     }
     nextCollectionState.lessons = this._resolveCollectionState(lessonsState, preserveLessons);
     this._log(
-      'debug',
-      `[DATA_UPDATE] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`
+      "debug",
+      `[DATA_UPDATE] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`,
     );
 
     const dayNotices = Array.isArray(payload?.data?.dayNotices) ? payload.data.dayNotices : [];
@@ -1961,10 +2032,10 @@ Module.register('MMM-Webuntis', {
     this.preprocessedByStudent[title] = { ...(this.preprocessedByStudent[title] || {}), rawGroupedByDate: groupedRaw };
 
     const dataMaps = [
-      { key: 'exams', source: payload?.data?.exams, target: this.examsByStudent },
-      { key: 'homework', source: payload?.data?.homework, target: this.homeworksByStudent },
-      { key: 'absences', source: payload?.data?.absences, target: this.absencesByStudent },
-      { key: 'messages', source: payload?.data?.messages, target: this.messagesOfDayByStudent },
+      { key: "exams", source: payload?.data?.exams, target: this.examsByStudent },
+      { key: "homework", source: payload?.data?.homework, target: this.homeworksByStudent },
+      { key: "absences", source: payload?.data?.absences, target: this.absencesByStudent },
+      { key: "messages", source: payload?.data?.messages, target: this.messagesOfDayByStudent },
     ];
 
     dataMaps.forEach(({ key, source, target }) => {
@@ -2016,8 +2087,10 @@ Module.register('MMM-Webuntis', {
       if (entry?.message) metaByMessage.set(String(entry.message), entry);
     });
 
-    const persistentWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind === 'config');
-    const debouncedWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind !== 'config');
+    const persistentWarnings = warningsAfterNormalization.filter(
+      (w) => metaByMessage.get(String(w))?.kind === "config",
+    );
+    const debouncedWarnings = warningsAfterNormalization.filter((w) => metaByMessage.get(String(w))?.kind !== "config");
 
     const hasAnyDebouncedWarningNow = debouncedWarnings.length > 0;
     const hasCriticalDebouncedWarningNow =
@@ -2029,17 +2102,22 @@ Module.register('MMM-Webuntis', {
     this._runtimeWarningStreakByStudent[title] = nextRuntimeWarningStreak;
 
     const shouldShowDebouncedNow = hasCriticalDebouncedWarningNow || nextRuntimeWarningStreak >= 2;
-    const visibleWarnings = shouldShowDebouncedNow ? [...persistentWarnings, ...debouncedWarnings] : [...persistentWarnings];
+    const visibleWarnings = shouldShowDebouncedNow
+      ? [...persistentWarnings, ...debouncedWarnings]
+      : [...persistentWarnings];
     if (hasAnyDebouncedWarningNow && !shouldShowDebouncedNow) {
-      this._log('debug', `[DATA_UPDATE] Warning debounce active for ${title}: delaying runtime warning display until next fetch`);
+      this._log(
+        "debug",
+        `[DATA_UPDATE] Warning debounce active for ${title}: delaying runtime warning display until next fetch`,
+      );
     }
 
     let warningsChanged = this._updateRuntimeWarnings(title, visibleWarnings);
 
     // Recovery cleanup: if we receive a clean student-scoped payload,
     // drop stale module-scoped runtime warnings from earlier title-less payloads.
-    if (title !== '__module__' && visibleWarnings.length === 0) {
-      warningsChanged = this._updateRuntimeWarnings('__module__', []) || warningsChanged;
+    if (title !== "__module__" && visibleWarnings.length === 0) {
+      warningsChanged = this._updateRuntimeWarnings("__module__", []) || warningsChanged;
       if (this._runtimeWarningStreakByStudent) {
         delete this._runtimeWarningStreakByStudent.__module__;
       }

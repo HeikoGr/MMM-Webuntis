@@ -148,7 +148,10 @@
                     ],
                     "description": "Recurring weekday: mon, tue, wed, thu, fri, sat, sun (or 1-7). Leave empty when using date."
                   },
-                  "date": { "type": "string", "description": "Single date YYYY-MM-DD. Leave empty when using weekday." },
+                  "date": {
+                    "type": "string",
+                    "description": "Single date YYYY-MM-DD. Leave empty when using weekday."
+                  },
                   "startTime": { "type": "string", "description": "Start time HH:MM." },
                   "endTime": { "type": "string", "description": "End time HH:MM." },
                   "subject": { "type": "string", "description": "Subject (long name)." },
@@ -239,7 +242,10 @@
                           ],
                           "description": "Recurring weekday: mon, tue, wed, thu, fri, sat, sun (or 1-7). Leave empty when using date."
                         },
-                        "date": { "type": "string", "description": "Single date YYYY-MM-DD. Leave empty when using weekday." },
+                        "date": {
+                          "type": "string",
+                          "description": "Single date YYYY-MM-DD. Leave empty when using weekday."
+                        },
                         "startTime": { "type": "string", "description": "Start time HH:MM." },
                         "endTime": { "type": "string", "description": "End time HH:MM." },
                         "subject": { "type": "string", "description": "Subject (long name)." },

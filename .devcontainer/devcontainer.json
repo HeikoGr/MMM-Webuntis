@@ -15,14 +15,17 @@
     "PLAYWRIGHT_CHROMIUM_ARGS": "--no-sandbox --disable-dev-shm-usage --disable-gpu"
   },
   "forwardPorts": [8080],
-  // The host's Claude Code login and SSH keys are mounted read-only so the container
-  // can inherit them. Runtime bind mounts: nothing lands in the image, and all that is
-  // committed here are two paths. Read-only on purpose - the container runs as root,
-  // so a writable mount would leave root-owned files in the host's home directory.
-  // .devcontainer/postStart.sh copies both into the container's own HOME.
+  // The host's Claude Code login, SSH keys and git config are mounted read-only so the
+  // container can inherit them. Runtime bind mounts: nothing lands in the image, and all
+  // that is committed here are three paths. Read-only on purpose - the container runs as
+  // root, so a writable mount would leave root-owned files in the host's home directory.
+  // .devcontainer/postStart.sh copies them into the container's own HOME. ~/.gitconfig is
+  // a single file: on a host without one, Docker creates an empty directory there and the
+  // script skips it.
   "mounts": [
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude,target=/tmp/host-claude,type=bind,readonly",
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/tmp/host-ssh,type=bind,readonly"
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/tmp/host-ssh,type=bind,readonly",
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/tmp/host-gitconfig,type=bind,readonly"
   ],
 
   "customizations": {

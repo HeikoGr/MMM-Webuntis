@@ -13,14 +13,21 @@
  * Usage: node scripts/check-commit-scope.js <commit-msg-file>
  */
 
-const fs = require('node:fs');
-const { execFileSync } = require('node:child_process');
+const fs = require("node:fs");
+const { execFileSync } = require("node:child_process");
 
 // Types that promise "nothing user-visible changed".
-const LOW_SIGNAL_TYPES = new Set(['chore', 'docs', 'style', 'ci', 'build', 'test']);
+const LOW_SIGNAL_TYPES = new Set(["chore", "docs", "style", "ci", "build", "test"]);
 
 // Paths whose content ends up running on a user's mirror.
-const RUNTIME_PATHS = [/^lib\//, /^plugins\//, /^translations\//, /^node_helper\.js$/, /^MMM-Webuntis\.js$/, /^MMM-Webuntis\.css$/];
+const RUNTIME_PATHS = [
+  /^lib\//,
+  /^plugins\//,
+  /^translations\//,
+  /^node_helper\.js$/,
+  /^MMM-Webuntis\.js$/,
+  /^MMM-Webuntis\.css$/,
+];
 
 // Carve-outs inside those trees that are not runtime behavior.
 const RUNTIME_EXCEPTIONS = [/^lib\/mmm-shared\//, /\/README\.md$/, /\.md$/];
@@ -32,8 +39,8 @@ function isRuntimePath(file) {
 
 function getStagedFiles() {
   try {
-    return execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], { encoding: 'utf8' })
-      .split('\n')
+    return execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], { encoding: "utf8" })
+      .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
   } catch {
@@ -53,19 +60,23 @@ function getStagedFiles() {
  */
 function countSubstantiveChanges(files) {
   try {
-    const diff = execFileSync('git', ['diff', '--cached', '--ignore-all-space', '--ignore-blank-lines', '--unified=0', '--', ...files], {
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    const diff = execFileSync(
+      "git",
+      ["diff", "--cached", "--ignore-all-space", "--ignore-blank-lines", "--unified=0", "--", ...files],
+      {
+        encoding: "utf8",
+        maxBuffer: 32 * 1024 * 1024,
+      },
+    );
 
     return diff
-      .split('\n')
+      .split("\n")
       .filter((line) => /^[+-]/.test(line) && !/^(\+\+\+|---)/.test(line))
       .filter((line) => {
         const content = line.slice(1).trim();
         if (!content) return false;
         // Comment-only churn is not behavior either.
-        return !(content.startsWith('//') || content.startsWith('*') || content.startsWith('/*'));
+        return !(content.startsWith("//") || content.startsWith("*") || content.startsWith("/*"));
       }).length;
   } catch {
     // If the diff cannot be read, do not block the commit.
@@ -74,12 +85,12 @@ function countSubstantiveChanges(files) {
 }
 
 function main() {
-  if (process.env.WEBUNTIS_ALLOW_SCOPE_MISMATCH === '1') return;
+  if (process.env.WEBUNTIS_ALLOW_SCOPE_MISMATCH === "1") return;
 
   const messageFile = process.argv[2];
   if (!messageFile || !fs.existsSync(messageFile)) return;
 
-  const subject = fs.readFileSync(messageFile, 'utf8').split('\n')[0].trim();
+  const subject = fs.readFileSync(messageFile, "utf8").split("\n")[0].trim();
   const match = subject.match(/^([a-z]+)(\([^)]*\))?(!)?:/);
   if (!match) return; // commitlint reports malformed subjects; not this guard's job.
 
@@ -99,7 +110,7 @@ function main() {
 ✖ Commit type "${type}" changes runtime source.
 
   ${substantiveChanges} non-formatting line(s) in:
-${shown.map((file) => `    - ${file}`).join('\n')}${more > 0 ? `\n    ... and ${more} more` : ''}
+${shown.map((file) => `    - ${file}`).join("\n")}${more > 0 ? `\n    ... and ${more} more` : ""}
 
   "${type}" tells the changelog that nothing user-visible changed, so this commit would be
   released silently. If the behavior really did change, use "feat" or "fix" instead.

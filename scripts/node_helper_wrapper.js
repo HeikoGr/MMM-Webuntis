@@ -5,22 +5,22 @@
  * directly without a MagicMirror instance.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const process = require('node:process');
+const fs = require("node:fs");
+const path = require("node:path");
+const process = require("node:process");
 
 const ANSI = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-  green: '\x1b[32m',
-  cyan: '\x1b[36m',
+  reset: "\x1b[0m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  yellow: "\x1b[33m",
+  green: "\x1b[32m",
+  cyan: "\x1b[36m",
 };
 
 const stripModuleTag = (str) => {
-  if (typeof str === 'string') {
-    return str.replace(/\[MMM-Webuntis\]\s*/g, '');
+  if (typeof str === "string") {
+    return str.replace(/\[MMM-Webuntis\]\s*/g, "");
   }
   return str;
 };
@@ -30,16 +30,16 @@ const stripModuleTag = (str) => {
  * Walks up the stack to find the first frame outside node_helper_wrapper.js
  */
 function getCallerInfo() {
-  const stack = new Error().stack.split('\n');
+  const stack = new Error().stack.split("\n");
   for (let i = 3; i < stack.length; i++) {
     const line = stack[i];
-    if (line.includes('node_helper_wrapper.js')) continue;
+    if (line.includes("node_helper_wrapper.js")) continue;
 
     const match = line.match(/\(([^)]+?):(\d+):(\d+)\)/);
     if (match) {
       const filePath = match[1];
       const lineNum = match[2];
-      const fileName = filePath.split('/').pop();
+      const fileName = filePath.split("/").pop();
       return `${fileName}:${lineNum}`;
     }
   }
@@ -49,22 +49,22 @@ function getCallerInfo() {
 const Log = {
   debug: (...args) => {
     const source = getCallerInfo();
-    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : "";
     console.log(` > ${ANSI.dim}${ANSI.cyan}[DEBUG]${ANSI.reset}${sourceStr}`, ...args.map(stripModuleTag));
   },
   info: (...args) => {
     const source = getCallerInfo();
-    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : "";
     console.log(` > ${ANSI.green}[INFO]${ANSI.reset}${sourceStr} `, ...args.map(stripModuleTag));
   },
   warn: (...args) => {
     const source = getCallerInfo();
-    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : "";
     console.log(` > ${ANSI.yellow}[WARN]${ANSI.reset}${sourceStr} `, ...args.map(stripModuleTag));
   },
   error: (...args) => {
     const source = getCallerInfo();
-    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : '';
+    const sourceStr = source ? ` ${ANSI.dim}[${source}]${ANSI.reset}` : "";
     console.error(` > ${ANSI.red}[ERROR]${ANSI.reset}${sourceStr}`, ...args.map(stripModuleTag));
   },
   wrapper_info: (...args) => console.log(`${ANSI.reset}[INFO] `, ...args),
@@ -80,28 +80,28 @@ const NodeHelper = {
   create: (moduleImpl) => ({
     ...moduleImpl,
     sendSocketNotification: (name, payload) => {
-      if (name === 'MMM-Webuntis_EVENT' && payload?.action === 'DATA_UPDATE' && payload?.data?.id) {
+      if (name === "MMM-Webuntis_EVENT" && payload?.action === "DATA_UPDATE" && payload?.data?.id) {
         capturedPayloads.set(payload.data.id, payload.data);
       }
-      Log.debug(`[sendSocketNotification] ${name} for ${payload?.data?.id || payload?.id || 'unknown'}`);
+      Log.debug(`[sendSocketNotification] ${name} for ${payload?.data?.id || payload?.id || "unknown"}`);
     },
   }),
 };
 
 function loadNodeHelper() {
-  const Module = require('node:module');
+  const Module = require("node:module");
   const originalRequire = Module.prototype.require;
 
   Module.prototype.require = function (moduleName, ...args) {
-    if (moduleName === 'node_helper') return NodeHelper;
-    if (moduleName === 'logger') return Log;
+    if (moduleName === "node_helper") return NodeHelper;
+    if (moduleName === "logger") return Log;
     return originalRequire.call(this, moduleName, ...args);
   };
 
-  const nodeHelper = require('../node_helper.js');
+  const nodeHelper = require("../node_helper.js");
 
   Module.prototype.require = originalRequire;
-  if (typeof nodeHelper.start === 'function') {
+  if (typeof nodeHelper.start === "function") {
     nodeHelper.start();
   }
   return nodeHelper;
@@ -111,7 +111,7 @@ const nodeHelper = loadNodeHelper();
 
 function loadConfig(configPath) {
   if (!configPath) {
-    const candidates = ['./config/config.js', '../config/config.js', '../../config/config.js'];
+    const candidates = ["./config/config.js", "../config/config.js", "../../config/config.js"];
     for (const candidate of candidates) {
       const abs = path.resolve(candidate);
       if (fs.existsSync(abs)) {
@@ -122,7 +122,7 @@ function loadConfig(configPath) {
   }
 
   if (!configPath) {
-    throw new Error('Config file not found. Use --config <path> or place config.js in standard location');
+    throw new Error("Config file not found. Use --config <path> or place config.js in standard location");
   }
 
   const abs = path.isAbsolute(configPath) ? configPath : path.resolve(configPath);
@@ -132,7 +132,7 @@ function loadConfig(configPath) {
 
   delete require.cache[require.resolve(abs)];
   const config = require(abs);
-  if (!config || typeof config !== 'object') {
+  if (!config || typeof config !== "object") {
     throw new Error(`Config did not export an object: ${abs}`);
   }
 
@@ -140,9 +140,9 @@ function loadConfig(configPath) {
 }
 
 function getAllWebuntisModules(config) {
-  const modules = config.modules?.filter((m) => m.module === 'MMM-Webuntis') || [];
+  const modules = config.modules?.filter((m) => m.module === "MMM-Webuntis") || [];
   if (modules.length === 0) {
-    throw new Error('MMM-Webuntis module configuration not found in config file');
+    throw new Error("MMM-Webuntis module configuration not found in config file");
   }
   return modules;
 }
@@ -151,18 +151,18 @@ async function cmdFetch(flags) {
   const configPath = flags.config || flags.c;
   const studentIndexFlag = flags.student || flags.s;
   const verbose = flags.verbose || flags.v;
-  const debugApi = flags['debug-api'] || flags.x;
+  const debugApi = flags["debug-api"] || flags.x;
   const allStudents = flags.all || flags.a_all;
 
-  if (verbose) setLogLevel('debug');
+  if (verbose) setLogLevel("debug");
 
   try {
     if (nodeHelper._client?.cacheManager) {
       nodeHelper._client.cacheManager.clearAll();
-      Log.wrapper_info('🔄 Cleared all caches for fresh data');
+      Log.wrapper_info("🔄 Cleared all caches for fresh data");
     }
 
-    Log.wrapper_info('Loading configuration...');
+    Log.wrapper_info("Loading configuration...");
     const { config, filePath } = loadConfig(configPath);
     Log.wrapper_info(`✓ Loaded config from ${filePath}`);
 
@@ -198,12 +198,12 @@ async function cmdFetch(flags) {
         await nodeHelper._handleInitModule(initPayload);
 
         if (!nodeHelper._sessions.configsByIdentifier.has(cliIdentifier)) {
-          throw new Error('Config initialization failed - no config stored after _handleInitModule');
+          throw new Error("Config initialization failed - no config stored after _handleInitModule");
         }
 
         const moduleConfig = nodeHelper._sessions.configsByIdentifier.get(cliIdentifier);
 
-        const widgetNamespaces = ['lessons', 'grid', 'exams', 'homework', 'absences', 'messagesofday'];
+        const widgetNamespaces = ["lessons", "grid", "exams", "homework", "absences", "messagesofday"];
         if (Array.isArray(moduleConfig.students)) {
           moduleConfig.students.forEach((stu) => {
             widgetNamespaces.forEach((widget) => {
@@ -215,7 +215,7 @@ async function cmdFetch(flags) {
         }
 
         let studentIndices = [];
-        if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== '') {
+        if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== "") {
           const idx = parseInt(studentIndexFlag, 10);
           studentIndices = [idx];
         } else if (allStudents) {
@@ -225,7 +225,7 @@ async function cmdFetch(flags) {
         }
 
         Log.wrapper_info(`  📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
-        Log.wrapper_info(`  Testing student(s): [${studentIndices.join(', ')}]`);
+        Log.wrapper_info(`  Testing student(s): [${studentIndices.join(", ")}]`);
 
         const fetchPayload = {
           ...moduleConfig,
@@ -302,7 +302,9 @@ async function cmdFetch(flags) {
       }
     }
 
-    Log.wrapper_info(`\n✓ Summary: ${successCount} successful, ${failureCount} failed, ${disabledCount} disabled (skipped)`);
+    Log.wrapper_info(
+      `\n✓ Summary: ${successCount} successful, ${failureCount} failed, ${disabledCount} disabled (skipped)`,
+    );
     if (failureCount > 0) {
       throw new Error(`${failureCount} module(s) or student(s) failed`);
     }
@@ -367,9 +369,9 @@ EXAMPLES:
 }
 
 // Short flags that consume the following argument as their value.
-const VALUE_SHORT_FLAGS = new Set(['c', 's', 'a']);
+const VALUE_SHORT_FLAGS = new Set(["c", "s", "a"]);
 // Long flags that consume the following argument as their value.
-const VALUE_LONG_FLAGS = new Set(['config', 'student', 'action']);
+const VALUE_LONG_FLAGS = new Set(["config", "student", "action"]);
 
 /**
  * Parse CLI arguments into flags plus an optional positional command.
@@ -392,9 +394,9 @@ function parseCliArgs(args, startIdx = 2) {
   for (let i = startIdx; i < args.length; i++) {
     const arg = args[i];
 
-    if (arg.startsWith('--')) {
+    if (arg.startsWith("--")) {
       const body = arg.slice(2);
-      const eqIdx = body.indexOf('=');
+      const eqIdx = body.indexOf("=");
 
       if (eqIdx !== -1) {
         flags[body.slice(0, eqIdx)] = body.slice(eqIdx + 1);
@@ -404,7 +406,7 @@ function parseCliArgs(args, startIdx = 2) {
       const nextArg = args[i + 1];
       // Only declared value-flags consume the next token, so `--verbose --action auth` cannot
       // swallow `--action` and boolean flags stay boolean.
-      if (VALUE_LONG_FLAGS.has(body) && nextArg !== undefined && !nextArg.startsWith('-')) {
+      if (VALUE_LONG_FLAGS.has(body) && nextArg !== undefined && !nextArg.startsWith("-")) {
         flags[body] = nextArg;
         i++;
       } else {
@@ -413,19 +415,19 @@ function parseCliArgs(args, startIdx = 2) {
       continue;
     }
 
-    if (arg.startsWith('-') && arg !== '-') {
+    if (arg.startsWith("-") && arg !== "-") {
       const shortFlags = arg.slice(1);
       for (let j = 0; j < shortFlags.length; j++) {
         const char = shortFlags[j];
 
-        if (char === 'h') {
-          command = 'help';
+        if (char === "h") {
+          command = "help";
           continue;
         }
 
         if (VALUE_SHORT_FLAGS.has(char)) {
           const nextArg = args[i + 1];
-          if (nextArg !== undefined && !nextArg.startsWith('-')) {
+          if (nextArg !== undefined && !nextArg.startsWith("-")) {
             flags[char] = nextArg;
             i++;
           } else {
@@ -450,12 +452,12 @@ async function main() {
   const { flags, command } = parseCliArgs(process.argv);
 
   try {
-    if (command === 'help' || command === '--help' || command === '-h' || flags.help) {
+    if (command === "help" || command === "--help" || command === "-h" || flags.help) {
       showHelp();
       process.exit(0);
     }
 
-    if (command && !command.startsWith('-')) {
+    if (command && !command.startsWith("-")) {
       if (!flags.config && !flags.c) {
         flags.config = command;
       }

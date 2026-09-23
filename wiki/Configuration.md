@@ -16,7 +16,7 @@ This page covers the options most users actually need. For a full example file, 
 | `useClassTimetable` | `false` | Use class timetable instead of personal timetable |
 | `excludeLessons` | `[]` | Hide lessons **plus the homework and exams of the same subject** by name, see [Hiding and Adding Lessons](#hiding-and-adding-lessons) |
 | `addLessons` | `[]` | Add own lessons, see [Hiding and Adding Lessons](#hiding-and-adding-lessons) |
-| `logLevel` | `none` | Backend logging level for troubleshooting |
+| `logLevel` | unset | Optional: `none`, `error`, `warn`, `info`, `debug`. All output (browser console and `pm2 logs`) goes through MagicMirror's `Log`, so the global `logLevel` in `config.js` decides; this option can only narrow it for this module. `info`/`debug` set here also print the running config to the browser console; `debug` also keeps past lessons and exams visible. |
 | `debugDate` | `null` | Freeze the calendar date for testing |
 | `demoDataFile` | `null` | Relative JSON fixture path for frontend demo mode (skips backend/API entirely) |
 | `initRetryTimeout` | `5000` | Timeout (ms) for the CONFIGURE → MODULE_READY watchdog before retrying |

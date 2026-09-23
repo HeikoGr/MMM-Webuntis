@@ -1,11 +1,11 @@
-const { validateConfigObject } = require('../../lib/pluginValidationUtils');
+const { validateConfigObject } = require("../../lib/pluginValidationUtils");
 
 const DEFAULT_CONFIG = Object.freeze({
   // No plugin-specific config options yet.
 });
 
 module.exports = {
-  id: 'messagesofday',
+  id: "messagesofday",
   hostApiVersion: 1,
 
   setup() {
@@ -15,7 +15,7 @@ module.exports = {
       },
 
       validateConfig(pluginConfig) {
-        return validateConfigObject('messagesofday', pluginConfig, 'messagesofday');
+        return validateConfigObject("messagesofday", pluginConfig, "messagesofday");
       },
     };
   },

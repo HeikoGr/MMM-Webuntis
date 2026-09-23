@@ -43,7 +43,7 @@ This page gives you the fastest route to a working setup.
 
 ## Good Defaults For A First Run
 
-- Keep `logLevel: 'none'` unless you are debugging.
+- Leave `logLevel` unset unless you are debugging; MagicMirror's global `logLevel` then applies.
 - Start with one student only.
 - Use `displayMode: 'lessons, exams'` or `displayMode: 'grid, lessons, exams'`.
 - Prefer QR login if your school uses SSO.
