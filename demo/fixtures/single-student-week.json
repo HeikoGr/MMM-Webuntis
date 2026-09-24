@@ -14,7 +14,7 @@
     "config": {
       "header": "Demo Timetable",
       "mode": "verbose",
-      "displayMode": "messagesofday, grid, exams, homework, absences",
+      "displayMode": "messagesofday, grid, lessons, exams, homework, absences",
       "debugDate": "2026-03-04",
       "lessons": {
         "nextDays": 2,
@@ -69,7 +69,84 @@
         "showReason": true,
         "maxItems": 10
       },
-      "messagesofday": {}
+      "messagesofday": {},
+      "plugins": {
+        "grid": {
+          "enabled": true,
+          "config": {
+            "nextDays": 2,
+            "pastDays": 0,
+            "weekView": false,
+            "dateFormat": "EEE dd.MM.",
+            "hideWeekends": false,
+            "showNowLine": true,
+            "mergeGap": 10,
+            "maxLessons": 8,
+            "naText": "N/A",
+            "fields": {
+              "primary": "subject",
+              "secondary": "teacher",
+              "additional": ["room"],
+              "format": {
+                "subject": "long",
+                "teacher": "long",
+                "room": "short"
+              }
+            }
+          }
+        },
+        "lessons": {
+          "enabled": true,
+          "config": {
+            "nextDays": 2,
+            "pastDays": 0,
+            "dateFormat": "EEE dd.MM.",
+            "hideWeekends": false,
+            "showStartTime": false,
+            "showRegular": true,
+            "useShortSubject": false,
+            "showTeacherMode": "full",
+            "showRoom": false,
+            "showSubstitution": true,
+            "naText": "N/A"
+          }
+        },
+        "exams": {
+          "enabled": true,
+          "config": {
+            "nextDays": 21,
+            "dateFormat": "EEE dd.MM.",
+            "showSubject": true,
+            "showTeacher": true
+          }
+        },
+        "homework": {
+          "enabled": true,
+          "config": {
+            "nextDays": 21,
+            "pastDays": 0,
+            "dateFormat": "EEE dd.MM.",
+            "showSubject": true,
+            "showText": true
+          }
+        },
+        "absences": {
+          "enabled": true,
+          "config": {
+            "pastDays": 7,
+            "nextDays": 14,
+            "dateFormat": "EEE dd.MM.",
+            "showDate": true,
+            "showExcused": true,
+            "showReason": true,
+            "maxItems": 10
+          }
+        },
+        "messagesofday": {
+          "enabled": true,
+          "config": {}
+        }
+      }
     },
     "timezone": "Europe/Berlin",
     "todayYmd": 20260304,
@@ -1168,7 +1245,16 @@
         "lessonId": 15
       }
     ],
-    "messages": [],
+    "messages": [
+      {
+        "subject": "Field trip",
+        "text": "The class goes on a field trip on Friday. Please bring sturdy shoes and a rain jacket."
+      },
+      {
+        "subject": "Library hours",
+        "text": "This week the school library is open on Tuesday only."
+      }
+    ],
     "holidays": {
       "ranges": [],
       "current": null
