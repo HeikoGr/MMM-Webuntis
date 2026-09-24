@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.13.0...v0.13.1) (2026-09-24)
+
+
+### 🔧 Tooling
+
+* assign release-please's PR to HeikoGr ([d9d1b89](https://github.com/HeikoGr/MMM-Webuntis/commit/d9d1b897658de055de4eb3021bf86ddd6a09295e))
+
 ## [0.13.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.12.0...v0.13.0) (2026-09-23)
 
 
