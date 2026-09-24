@@ -244,7 +244,8 @@ Module.register("MMM-Webuntis", {
 
   _getPluginTranslationLoadOrder() {
     const configuredLanguage = String(
-      globalThis.config?.language || this.config?.language || navigator?.language || "en",
+      // MagicMirror's config is a global `let` in the browser, not a globalThis property.
+      (typeof config !== "undefined" && config?.language) || this.config?.language || navigator?.language || "en",
     ).trim();
     const normalizedLanguage = configuredLanguage || "en";
     const baseLanguage = normalizedLanguage.split("-")[0];

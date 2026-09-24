@@ -170,9 +170,8 @@ function getModuleRootElement(ctx) {
       ...studentConfig,
       language:
         studentConfig?.language ||
-        (typeof globalThis.config !== "undefined" && globalThis.config?.language
-          ? globalThis.config.language
-          : undefined),
+        // MagicMirror's config is a global `let` in the browser, not a globalThis property.
+        (typeof config !== "undefined" && config?.language ? config.language : undefined),
       logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
     };
     const dateContext = getCurrentDateContext(effectiveConfig);
