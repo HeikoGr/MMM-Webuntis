@@ -29,3 +29,9 @@ Set in module config:
 ```
 
 When `demoDataFile` is set, frontend demo mode skips backend/API and renders this fixture directly.
+
+**Known limitation:** the plugins read their options from `context.config.plugins.<id>.config`
+inside the fixture, but `single-student-week.json` still carries them under the legacy keys
+(`context.config.grid`, `.lessons`, …), which only the backend normalizes. In demo mode the
+widgets therefore fall back to their defaults: the grid shows a single day, exams are missing and
+homework shows no text. The fixture also contains no messages of day.

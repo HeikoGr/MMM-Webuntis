@@ -145,10 +145,10 @@ this._log('warn', '[feature] Warning:', error);
 - `lib/mmm-adapter/lessonAdjustments.js` - Config-driven `excludeLessons` filter and `addLessons` (own lessons), applied to compacted lessons + validation warnings
 - `lib/webuntis/errorHandler.js` - Error mapping + warnings
 - `lib/webuntis/errorUtils.js` - Shared async/error helpers for internal API modules
-- `lib/dateTimeUtils.js` - Frontend date/time utilities (formatHHMMTime, toMinutesSinceMidnight, etc.)
-- `lib/cookieJar.js` - Session cookie management
+- `lib/webuntis/cookieJar.js` - Session cookie management
 - `lib/widgetConfigValidator.js` - Widget-specific config validation
-- `lib/mmm-adapter/mmmPayloadMapper.js` - Build DATA_UPDATE payload data + debug dumps (MMM adapter layer)
+
+Frontend date/time helpers (`formatHHMMTime`, `toMinutesSinceMidnight`, …) live in `lib/frontendShared.js`; there is no separate `dateTimeUtils.js`.
 
 Boundary rule:
 - Only `lib/webuntisClient.js` is a public WebUntis API entry point at the lib root.
