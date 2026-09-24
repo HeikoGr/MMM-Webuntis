@@ -51,7 +51,9 @@
         "echo": true,
         "reveal": "always",
         "panel": "dedicated",
-        "focus": true
+        "focus": true,
+        "clear": true,
+        "showReuseMessage": false
       },
       "isBackground": false,
       "options": {
@@ -107,7 +109,7 @@
       "label": "pm2: restart & clean",
       "type": "shell",
       "command": "./scripts/require-devcontainer.sh",
-      "args": ["bash", "-lc", "clear && pm2 restart all && pm2 flush"],
+      "args": ["bash", "-lc", "pm2 stop all && pm2 flush && pm2 start all"],
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -128,7 +130,6 @@
     },
     {
       "label": "pm2: restart & logs (clean)",
-      "dependsOrder": "sequence",
       "options": {
         "statusbar": {
           "label": "$(refresh) Restart & Logs (clean)",
@@ -136,6 +137,7 @@
           "detail": "Restart all PM2 processes and flush logs"
         }
       },
+      "dependsOrder": "sequence",
       "dependsOn": ["pm2: restart & clean", "pm2: logs (follow)"],
       "problemMatcher": []
     }
