@@ -26,8 +26,21 @@ jobs:
       # Version numbers therefore stop being a manual step attached to an unrelated commit,
       # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
       - name: Run release-please
+        id: release-please
         uses: googleapis/release-please-action@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # gh pr edit's own notification (not the plain "PR opened" one) shows up in the
+      # GitHub inbox, not just by mail - assigning is what release-please itself has no
+      # config option for.
+      - name: Assign the release PR
+        if: ${{ steps.release-please.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for number in $(echo '${{ steps.release-please.outputs.prs }}' | jq -r '.[].number'); do
+            gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
+          done
