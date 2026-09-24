@@ -2,6 +2,10 @@
 
 The exams plugin lists upcoming exams in chronological order.
 
+## Screenshot
+
+![Exams plugin (top)](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/exams-homework-absences.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:

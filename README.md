@@ -91,13 +91,23 @@ Technical background documentation remains in `docs/`:
 
 ## Screenshots
 
-**Week view (grid):**
+All screenshots use the anonymized demo fixture (`demoDataFile`).
 
-![Grid View](screenshot-all.png)
+**Week view (grid)** — substitutions, absences, double periods and overflow hints:
 
-**List view (lessons + exams):**
+![Grid View](img/grid.png)
 
-![List View](screenshot-list.png)
+**Lessons list** — teachers, lesson texts and substitution notes:
+
+![Lessons](img/lessons.png)
+
+**Exams, homework and absences:**
+
+![Exams, homework and absences](img/exams-homework-absences.png)
+
+**Messages of day:**
+
+![Messages of day](img/messagesofday.png)
 
 ## Support
 

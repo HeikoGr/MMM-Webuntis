@@ -2,6 +2,10 @@
 
 The messages of day plugin shows WebUntis message cards for each student.
 
+## Screenshot
+
+![Messages of day plugin](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/messagesofday.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:

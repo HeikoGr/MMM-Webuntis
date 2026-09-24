@@ -2,6 +2,10 @@
 
 The grid plugin renders the timetable as a calendar-like grid with times on the left and days as columns. It is the most flexible plugin if you want a compact schedule overview.
 
+## Screenshot
+
+![Grid plugin](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/grid.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:

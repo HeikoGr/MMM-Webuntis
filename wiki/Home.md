@@ -4,9 +4,11 @@ MMM-Webuntis brings WebUntis data into MagicMirror²: timetable, exams, homework
 
 ## Screenshots
 
-![Grid View](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/screenshot-all.png)
+![Grid View](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/grid.png)
 
-![List View](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/screenshot-list.png)
+![Lessons](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/lessons.png)
+
+![Exams, homework and absences](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/exams-homework-absences.png)
 
 Use this wiki if you want to:
 

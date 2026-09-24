@@ -2,6 +2,10 @@
 
 The homework plugin shows homework entries with due date, subject, and description text.
 
+## Screenshot
+
+![Homework plugin (middle)](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/exams-homework-absences.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:

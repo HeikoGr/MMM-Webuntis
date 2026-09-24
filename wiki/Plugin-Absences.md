@@ -2,6 +2,10 @@
 
 The absences plugin lists absences including date, time range, subject, excuse state, and reason text.
 
+## Screenshot
+
+![Absences plugin (bottom)](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/exams-homework-absences.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:

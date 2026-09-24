@@ -2,6 +2,10 @@
 
 The lessons plugin shows lesson changes as a list. It is best if you mainly care about substitutions, cancellations, moved lessons, and other irregular timetable entries.
 
+## Screenshot
+
+![Lessons plugin](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/lessons.png)
+
 ## Enable The Plugin
 
 Simple activation via `displayMode`:
