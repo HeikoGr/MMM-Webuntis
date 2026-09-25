@@ -2,11 +2,13 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: develop
     schedule:
       interval: daily
 
   - package-ecosystem: npm
     directory: /
+    target-branch: develop
     schedule:
       interval: daily
 
@@ -15,5 +17,6 @@ updates:
   # before the PR can be merged.
   - package-ecosystem: gitsubmodule
     directory: /
+    target-branch: develop
     schedule:
       interval: daily

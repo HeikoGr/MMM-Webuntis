@@ -1,0 +1,40 @@
+name: PR title
+
+on:
+  pull_request:
+    # edited: a renamed PR has to be checked again; synchronize: the required check has to
+    # report on the current head commit.
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: PR title
+    runs-on: ubuntu-latest
+
+    steps:
+      # A squash merge turns the PR title into the commit on develop, and that commit is what
+      # release-please reads - so the title is held to the same commitlint rules as every commit.
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.2'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate PR title
+        env:
+          # Passed via env, not inlined: the title is user input.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | npx --no-install commitlint --verbose

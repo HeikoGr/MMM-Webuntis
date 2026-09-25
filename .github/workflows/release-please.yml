@@ -46,3 +46,22 @@ jobs:
           for number in $(jq -r '.[].number' <<< "$PRS"); do
             gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
           done
+
+      # The release commit (version bump + CHANGELOG) exists only on master. A PR back into
+      # develop keeps the two branches from drifting apart. It is opened with GITHUB_TOKEN,
+      # so no CI runs on it: merge it as admin past the required checks, as a merge commit.
+      - name: Open back-merge PR into develop
+        if: ${{ steps.release-please.outputs.releases_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.release-please.outputs.tag_name }}
+        run: |
+          if [ -n "$(gh pr list --repo "$REPO" --base develop --head master --state open --json number --jq '.[].number')" ]; then
+            echo "Back-merge PR already open."
+            exit 0
+          fi
+          gh pr create --repo "$REPO" --base develop --head master \
+            --title "chore: merge master into develop after release${TAG:+ $TAG}" \
+            --body "Brings the release commit back to develop. Merge as a merge commit, not squashed." \
+            --assignee HeikoGr

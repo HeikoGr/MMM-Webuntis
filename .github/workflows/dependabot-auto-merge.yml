@@ -14,7 +14,9 @@ permissions:
 
 jobs:
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    # Only develop: version updates target it (dependabot.yml), and security-update PRs are
+    # switched off in the repo settings - alerts alone are enough.
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.base.ref == 'develop'
     runs-on: ubuntu-latest
 
     steps:
