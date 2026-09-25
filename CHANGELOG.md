@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.14.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.13.1...v0.14.0) (2026-09-25)
+
+
+### 🔌 Features
+
+* **demo:** follow the module config in demo mode ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+
+
+### 🐛 Fixes
+
+* **auth:** log why no fetch targets could be built ([21bdd90](https://github.com/HeikoGr/MMM-Webuntis/commit/21bdd9078dde3f7b088863c2666798dad4f3a109))
+* **demo:** handle empty fixture paths in loadFixturePayloads ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* **demo:** stop asking for students and credentials in demo mode ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* **grid:** show lessons that start in a break when maxLessons is set ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* **i18n:** keep translations that are spelled like their key ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* let the demo fixture render every widget ([cc15f49](https://github.com/HeikoGr/MMM-Webuntis/commit/cc15f49e5abe6c632684190a9e5d20bf466d694b))
+* read MagicMirror's language from its global config ([a334af5](https://github.com/HeikoGr/MMM-Webuntis/commit/a334af50043343130d8c5bb44a243db17c022cc8))
+* update screenshot links to use absolute URLs ([5d7f744](https://github.com/HeikoGr/MMM-Webuntis/commit/5d7f7443d3853572a76042650fa667735004bf0a))
+
+
+### ⚡ Performance
+
+* reuse responses between instances of the same account ([11e0ffe](https://github.com/HeikoGr/MMM-Webuntis/commit/11e0ffe954c626e2f010340bb7008c896f3c035a))
+
+
+### 🧱 Refactoring
+
+* **deps:** update mmm-shared to 0.3.0 ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* update mmm-shared to c310517 ([f3228ae](https://github.com/HeikoGr/MMM-Webuntis/commit/f3228ae6fbb3f1d07044146ef7b2fea902aaf2d7))
+
+
+### 📚 Documentation
+
+* add a feature overview with screenshots to the wiki ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+* add screenshots from the anonymized demo fixture ([98ad804](https://github.com/HeikoGr/MMM-Webuntis/commit/98ad8048020409f39ae691833223305fae85f67a))
+* fix file paths in the agent instructions, note the demo fixture limitation ([42affa5](https://github.com/HeikoGr/MMM-Webuntis/commit/42affa5bb23aad8eb078c25968fd84b5b1f74d9b))
+* refresh the screenshots with the English interface and the new demo week ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+
+
+### 🧪 Testing
+
+* **demo:** check that the demo fixtures tell a consistent story ([ff86484](https://github.com/HeikoGr/MMM-Webuntis/commit/ff86484487757585493b4ce167ee4b0bd88f8ff2))
+
+
+### 🔧 Tooling
+
+* pin node 22.22.2 like the other modules ([4c8dd91](https://github.com/HeikoGr/MMM-Webuntis/commit/4c8dd9118fe69f66360dcfa9348d6359a6767a59))
+
 ## [0.13.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.13.0...v0.13.1) (2026-09-24)
 
 
