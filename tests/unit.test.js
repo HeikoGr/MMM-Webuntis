@@ -1544,6 +1544,21 @@ test("validateConfig rejects addLessons entries whose from date is after until",
   assert.deepEqual(warnings, ['addLessons[0]: "from" must not be after "until" – entry ignored']);
 });
 
+test("demo mode does not ask for students or credentials", () => {
+  const warned = [];
+  const demo = loadFrontendModule();
+  demo._log = () => {};
+  demo._upsertModuleWarnings = (warnings) => warned.push(...warnings);
+
+  demo.config = { demoDataFile: "demo/fixtures/single-student-week.json" };
+  demo._validateAndWarnConfig({ students: [] });
+  assert.deepEqual(warned, []);
+
+  demo.config = {};
+  demo._validateAndWarnConfig({ students: [] });
+  assert.match(warned[0], /No students configured/);
+});
+
 test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without logging in", async () => {
   const demoHelper = loadNodeHelper();
   demoHelper._mmLog = () => {};

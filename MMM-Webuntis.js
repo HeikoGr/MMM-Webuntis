@@ -617,6 +617,17 @@ Module.register("MMM-Webuntis", {
   },
 
   /**
+   * Check whether demo mode is enabled. The backend serves the fixtures (lib/demoData.js); the
+   * frontend only needs to know so it does not ask for students or credentials.
+   *
+   * @returns {boolean} True when a demo fixture path is configured.
+   */
+  _isDemoModeEnabled() {
+    const raw = this.config?.demoDataFile;
+    return typeof raw === "string" && raw.trim() !== "";
+  },
+
+  /**
    * Parse displayMode config and return array of enabled widgets
    * Handles special cases:
    *   - 'grid' → ['grid']
@@ -858,7 +869,8 @@ Module.register("MMM-Webuntis", {
     }
 
     const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
-    if (!Array.isArray(config.students) || config.students.length === 0) {
+    // Demo mode renders fixtures and never logs in, so it needs neither students nor credentials.
+    if (!this._isDemoModeEnabled() && (!Array.isArray(config.students) || config.students.length === 0)) {
       if (!hasParentCreds) {
         warnings.push(
           "No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.",
