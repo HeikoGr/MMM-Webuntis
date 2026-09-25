@@ -64,12 +64,16 @@ generation. Keep the rules in `commitlint.config.js`, `scripts/check-commit-scop
 
 4. Create a PR
 
-- Make a branch and open a PR with testing steps. CI runs lint, tests, spell check, and commitlint.
+- Make a branch and open a PR against `develop` with testing steps. CI runs lint, tests, spell check, and
+  commitlint. The PR is squash-merged, so its title becomes the commit and has to be a Conventional Commit
+  as well.
 
 5. Releases
 
-Releases are automated. Merging to `master` keeps a `chore(main): release x.y.z` PR up to date;
-merging that PR bumps the version, writes the changelog entry, tags, and creates a GitHub release.
+Releases are automated and prepared on `develop`. Every merge to `develop` keeps a
+`chore(develop): release x.y.z` PR up to date; merging it bumps the version and writes the changelog
+entry on `develop`. A single PR from `develop` to `master` (merge commit, not squashed) then ships the
+release: that merge tags it and creates the GitHub release.
 
 6. Style
 
