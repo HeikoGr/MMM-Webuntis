@@ -207,6 +207,11 @@ These are the internal status signals between frontend and backend.
 instance, browser session or `carouselId`: every consumer of the same account shares one
 WebUntis session and one login. Parallel fetches with the same key are serialized
 (`_pendingFetchByCredKey`), parallel logins are deduplicated inside `AuthService` (`_pendingAuth`).
+A session that follows another one of the same account reuses its responses
+(`lib/webuntis/responseCache.js`, keyed by account, server, endpoint, school year and
+parameters): for 80 % of its own `updateInterval`, at most 4 minutes. Several instances with one
+account (e.g. one per carousel slide) therefore cost about one set of requests per interval
+instead of one per instance. Failed responses are never reused.
 On shutdown `stop()` logs every cached session out (`AuthService.logoutAll()`).
 
 Possible paths:

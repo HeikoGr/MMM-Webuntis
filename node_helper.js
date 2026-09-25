@@ -26,6 +26,7 @@ const {
   validateNormalizedConfig,
 } = require("./lib/moduleConfig");
 const { createAuthSession, getCredentialKey } = require("./lib/authSession");
+const { createResponseCache } = require("./lib/webuntis/responseCache");
 const { ensureStudentsFromAppData } = require("./lib/studentDiscovery");
 const { extractHolidaysFromAppData } = require("./lib/webuntis/dataOrchestration");
 const { buildStudentErrorPayload } = require("./lib/mmm-adapter/mmmPayloadMapper");
@@ -81,6 +82,8 @@ module.exports = NodeHelper.create({
       mmLog: log,
       formatErr: formatError,
       apiStatus: this._apiStatus,
+      // Instances with the same account reuse each other's responses instead of fetching again.
+      responseCache: createResponseCache(),
     });
     this._pendingFetchByCredKey = new Map(); // credKey -> in-flight processGroup() promise
     this._initInFlightBySession = new Map(); // sessionKey -> in-flight _handleInitModule() promise
@@ -106,6 +109,7 @@ module.exports = NodeHelper.create({
     }
     this._sessions?.clear();
     this._apiStatus?.clear();
+    this._client?.responseCache?.clear();
     this._pendingFetchByCredKey?.clear();
     this._initInFlightBySession?.clear();
     this._runtimeReady = false;

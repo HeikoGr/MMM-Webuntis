@@ -971,6 +971,58 @@ test("getTimetable rejects a 200 body without days[] and retries once after an a
   );
 });
 
+test("instances with the same account reuse a fresh response instead of fetching again", async () => {
+  const api = require("../lib/webuntis/webuntisApiService");
+  const { createResponseCache, maxAgeFor } = require("../lib/webuntis/responseCache");
+  const range = { rangeStart: new Date("2026-09-18"), rangeEnd: new Date("2026-09-19") };
+  const auth = { token: "t", cookieString: "JSESSIONID=x", tenantId: 1, schoolYearId: 1 };
+  let clock = 0;
+  const store = createResponseCache({ now: () => clock });
+  const contextFor = (scope, maxAgeMs = 60_000) => ({
+    getAuth: async () => auth,
+    responseCache: { store, scope, maxAgeMs },
+  });
+
+  let calls = 0;
+  let fail = false;
+  await withStubbedFetch(
+    () => {
+      calls += 1;
+      if (fail) return jsonResponse({ errorCode: "SERVER" }, 500);
+      return jsonResponse({ days: [{ date: "2026-09-18", status: "REGULAR", gridEntries: [] }] });
+    },
+    async () => {
+      const fetchAs = (scope, personId = 1, maxAgeMs) =>
+        api.getTimetable({ authContext: contextFor(scope, maxAgeMs), server: "srv", personId, ...range });
+
+      await fetchAs("parent:a@srv/school");
+      const reused = await fetchAs("parent:a@srv/school");
+      assert.equal(calls, 1, "the second instance of the account is served from the cache");
+      assert.equal(reused.status, 200);
+
+      await fetchAs("parent:a@srv/school", 2);
+      assert.equal(calls, 2, "another student is another request");
+      await fetchAs("parent:b@srv/school");
+      assert.equal(calls, 3, "another account never shares an entry");
+
+      clock += 30_000;
+      await fetchAs("parent:a@srv/school", 1, 20_000);
+      assert.equal(calls, 4, "a caller with a shorter maximum age fetches again");
+
+      clock += 60_000;
+      fail = true;
+      await assert.rejects(fetchAs("parent:a@srv/school"));
+      await assert.rejects(fetchAs("parent:a@srv/school"));
+      assert.ok(calls > 5, "a failed response is not cached");
+    },
+  );
+
+  assert.equal(maxAgeFor({ updateInterval: 5 * 60 * 1000 }), 4 * 60 * 1000);
+  assert.equal(maxAgeFor({ updateInterval: 60 * 1000 }), 48 * 1000, "80% of a short interval");
+  assert.equal(maxAgeFor({ updateInterval: 60 * 60 * 1000 }), 4 * 60 * 1000, "capped");
+  assert.equal(maxAgeFor({}), 0);
+});
+
 test("AuthService.logoutAll logs every cached session out and clears the cache", async () => {
   const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
