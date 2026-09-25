@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.14.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.1...v0.14.2) (2026-09-25)
+
+
+### 🐛 Fixes
+
+* keep encoded markup in messages of the day inert, log each instance at its own level ([#107](https://github.com/HeikoGr/MMM-Webuntis/issues/107)) ([809097e](https://github.com/HeikoGr/MMM-Webuntis/commit/809097e1908e75ab7759a85c9df9c057cf5e7280))
+
+
+### 🔧 Tooling
+
+* open the release PR to the default branch automatically, use RELEASE_TOKEN ([#108](https://github.com/HeikoGr/MMM-Webuntis/issues/108)) ([4ac350f](https://github.com/HeikoGr/MMM-Webuntis/commit/4ac350f05a30f7f422f279dcaed2feea5bc990c8))
+* prepare releases on develop, ship them with one merge to the default branch ([#105](https://github.com/HeikoGr/MMM-Webuntis/issues/105)) ([9b5227f](https://github.com/HeikoGr/MMM-Webuntis/commit/9b5227f5cd693bbd020f2293277ee2f559ae4988))
+
 ## [0.14.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.0...v0.14.1) (2026-09-25)
 
 

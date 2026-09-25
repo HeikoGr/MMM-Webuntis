@@ -3,6 +3,7 @@ name: Release Please
 on:
   push:
     branches:
+      - develop
       - master
   workflow_dispatch:
 
@@ -14,14 +15,22 @@ concurrency:
   group: release-please
   cancel-in-progress: false
 
+# The release is prepared on develop and shipped by a single develop -> master merge.
+# Both jobs point release-please at develop: that is where the release PR lives and whose
+# history the changelog is built from.
+# RELEASE_TOKEN (fine-grained PAT: contents + pull requests, read/write) is used where set. Unlike
+# GITHUB_TOKEN, what it creates starts other workflows, so the release PRs get their checks. Without
+# it everything still runs on GITHUB_TOKEN, and those PRs need the admin bypass to merge.
 jobs:
-  release-please:
+  release-pr:
+    if: github.ref_name == 'develop'
     runs-on: ubuntu-latest
 
     steps:
-      # Keeps an open "chore(main): release x.y.z" PR in sync with every conventional commit
-      # landing on master. Merging that PR bumps package.json + package-lock.json, writes the
-      # CHANGELOG entry, creates the git tag, and publishes a GitHub release.
+      # Keeps an open "chore(develop): release x.y.z" PR in sync with every conventional commit
+      # landing on develop. Merging that PR bumps package.json + package-lock.json and writes the
+      # CHANGELOG entry - on develop, without a tag or GitHub release yet. Until that release has
+      # been shipped to master, release-please opens no new release PR.
       #
       # Version numbers therefore stop being a manual step attached to an unrelated commit,
       # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
@@ -29,9 +38,11 @@ jobs:
         id: release-please
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: develop
+          skip-github-release: true
 
       # gh pr edit's own notification (not the plain "PR opened" one) shows up in the
       # GitHub inbox, not just by mail - assigning is what release-please itself has no
@@ -39,7 +50,7 @@ jobs:
       - name: Assign the release PR
         if: ${{ steps.release-please.outputs.prs_created == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           # Passed via env, not inlined: the PR body is changelog text and may contain quotes.
           PRS: ${{ steps.release-please.outputs.prs }}
         run: |
@@ -47,21 +58,47 @@ jobs:
             gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
           done
 
-      # The release commit (version bump + CHANGELOG) exists only on master. A PR back into
-      # develop keeps the two branches from drifting apart. It is opened with GITHUB_TOKEN,
-      # so no CI runs on it: merge it as admin past the required checks, as a merge commit.
-      - name: Open back-merge PR into develop
-        if: ${{ steps.release-please.outputs.releases_created == 'true' }}
+      # A merged release PR keeps the label "autorelease: pending" until the push to the default
+      # branch tags it (github-release below). While there is one, develop holds a release that has
+      # not shipped yet: open the develop -> default branch PR for it, with the release PR's title
+      # and changelog. Runs on every push to develop and on a manual start, and does nothing when
+      # that PR is already open.
+      - name: Open the release PR to the default branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          TAG: ${{ steps.release-please.outputs.tag_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [ -n "$(gh pr list --repo "$REPO" --base develop --head master --state open --json number --jq '.[].number')" ]; then
-            echo "Back-merge PR already open."
+          release=$(gh pr list --repo "$REPO" --base develop --state merged --label "autorelease: pending" \
+            --json number,title,body --jq 'sort_by(.number) | last // empty')
+          if [ -z "$release" ]; then
+            echo "No unshipped release on develop."
             exit 0
           fi
-          gh pr create --repo "$REPO" --base develop --head master \
-            --title "chore: merge master into develop after release${TAG:+ $TAG}" \
-            --body "Brings the release commit back to develop. Merge as a merge commit, not squashed." \
-            --assignee HeikoGr
+          open=$(gh pr list --repo "$REPO" --base "$DEFAULT_BRANCH" --head develop --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            echo "develop -> $DEFAULT_BRANCH is already open as #$open."
+            exit 0
+          fi
+          title=$(jq -r .title <<< "$release" | sed "s/(develop)/($DEFAULT_BRANCH)/")
+          jq -r .body <<< "$release" > "$RUNNER_TEMP/release-body.md"
+          gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head develop \
+            --title "$title" --body-file "$RUNNER_TEMP/release-body.md" --assignee HeikoGr
+
+  github-release:
+    if: github.ref_name == 'master'
+    runs-on: ubuntu-latest
+
+    steps:
+      # develop reached master: tag the merged release PR and publish the GitHub release. The tag
+      # lands on the release PR's commit on develop, which master now contains - so installs from
+      # master and the tag agree.
+      - name: Run release-please
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: develop
+          skip-github-pull-request: true

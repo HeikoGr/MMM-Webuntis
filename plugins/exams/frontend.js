@@ -103,6 +103,91 @@
     return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
   }
 
+  /** An exam still ahead (or running) at the given day and time; debug mode keeps past ones. */
+  function isUpcoming(exam, nowYmd, nowHm) {
+    const examYmd = Number(exam?.examDate) || 0;
+    const examHm = Number(exam?.startTime) || 0;
+    return !(examYmd < nowYmd || (examYmd === nowYmd && examHm < nowHm));
+  }
+
+  /** Name cell of one exam: optional subject, name, optional teacher, description. */
+  function buildNameCell(exam, showSubject, showTeacher) {
+    const name = `<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;
+    let cell = showSubject ? `<span class="wu-exam__subject">${escapeHtml(exam?.subject)}</span>: &nbsp;${name}` : name;
+
+    const teacher = showTeacher ? getFirstFieldName(exam?.teachers, "short") : "";
+    if (teacher) {
+      cell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
+    }
+    if (exam?.text) {
+      cell += `<br/><span class="wu-exam__description">${escapeHtml(exam.text)}</span>`;
+    }
+    return cell;
+  }
+
+  /** Container with the verbose-mode header, for a student with something to show. */
+  function createStudentContainer(pluginContext, studentSlice, studentConfig, examConfig) {
+    const studentTitle = String(studentSlice?.student?.title || "").trim();
+    const verboseMode = isVerboseMode(studentConfig);
+    const container = createContainer();
+    if (verboseMode && studentTitle) {
+      addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
+    }
+    return { container, studentLabelText: verboseMode ? "" : escapeHtml(studentTitle) };
+  }
+
+  /**
+   * One student's exams, or null when there is nothing to show: the widget is off for the student
+   * (nextDays <= 0), no exam is ahead, or the list is empty without the collection being unavailable.
+   */
+  function renderStudent(pluginContext, studentSlice, includePastExams) {
+    const exams = Array.isArray(studentSlice?.data?.exams) ? studentSlice.data.exams : [];
+    const studentConfig = resolveStudentConfig(studentSlice);
+    const examConfig = resolveExamConfig(studentConfig);
+    if (normalizeDays(examConfig?.nextDays, 0) <= 0) return null;
+
+    if (exams.length === 0) {
+      if (studentSlice?.state?.collections?.exams?.status !== "unavailable") return null;
+      const { container, studentLabelText } = createStudentContainer(
+        pluginContext,
+        studentSlice,
+        studentConfig,
+        examConfig,
+      );
+      addRow(
+        container,
+        "examRowEmpty unavailable-notice",
+        studentLabelText,
+        escapeHtml(translate(pluginContext, "unavailable", "data unavailable")),
+      );
+      return container;
+    }
+
+    const dateContext = getCurrentDateContext(studentConfig);
+    const nowYmd = Number(dateContext?.ymd) || 0;
+    const nowHm = currentTimeAsHHMM(dateContext?.date);
+    const visibleExams = exams
+      .slice()
+      .sort(compareByDateAndStartTime)
+      .filter((exam) => includePastExams || isUpcoming(exam, nowYmd, nowHm));
+    if (visibleExams.length === 0) return null;
+
+    const { container, studentLabelText } = createStudentContainer(
+      pluginContext,
+      studentSlice,
+      studentConfig,
+      examConfig,
+    );
+    const showSubject = Boolean(examConfig?.showSubject);
+    const showTeacher = Boolean(examConfig?.showTeacher);
+    for (const exam of visibleExams) {
+      const formattedDate = formatDisplayDateValue(Number(exam?.examDate) || 0, examConfig?.dateFormat);
+      const dateTimeCell = formattedDate ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>` : "";
+      addRow(container, "examRow", studentLabelText, dateTimeCell, buildNameCell(exam, showSubject, showTeacher));
+    }
+    return container;
+  }
+
   host.registerFrontendPlugin({
     id: "exams",
     hostApiVersion: 1,
@@ -112,100 +197,19 @@
         render(renderContext) {
           const wrapper = createElement("section", "wu-plugin wu-plugin-exams");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
+          // Debug mode keeps past exams visible.
           const logLevel = String(renderContext?.runtime?.logLevel || root.MMMWebuntisLogLevel || "")
             .trim()
             .toLowerCase();
           const includePastExams = logLevel === "debug";
-          let renderedContainers = 0;
 
-          for (const studentSlice of students) {
-            const exams = Array.isArray(studentSlice?.data?.exams) ? studentSlice.data.exams : [];
-            const studentConfig = resolveStudentConfig(studentSlice);
-            const examConfig = resolveExamConfig(studentConfig);
-            if (normalizeDays(examConfig?.nextDays, 0) <= 0) {
-              continue;
-            }
-
-            if (exams.length === 0) {
-              if (studentSlice?.state?.collections?.exams?.status === "unavailable") {
-                const studentTitle = String(studentSlice?.student?.title || "").trim();
-                const verboseMode = isVerboseMode(studentConfig);
-                const container = createContainer();
-                if (verboseMode && studentTitle) {
-                  addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
-                }
-                addRow(
-                  container,
-                  "examRowEmpty unavailable-notice",
-                  verboseMode ? "" : escapeHtml(studentTitle),
-                  escapeHtml(translate(pluginContext, "unavailable", "data unavailable")),
-                );
-                wrapper.appendChild(container);
-                renderedContainers += 1;
-              }
-              continue;
-            }
-
-            const dateContext = getCurrentDateContext(studentConfig);
-            const nowYmd = Number(dateContext?.ymd) || 0;
-            const nowHm = currentTimeAsHHMM(dateContext?.date);
-            const showSubject = Boolean(examConfig?.showSubject);
-            const showTeacher = Boolean(examConfig?.showTeacher);
-
-            const visibleExams = exams
-              .slice()
-              .sort(compareByDateAndStartTime)
-              .filter((exam) => {
-                if (includePastExams) return true;
-                const examYmd = Number(exam?.examDate) || 0;
-                const examHm = Number(exam?.startTime) || 0;
-                return !(examYmd < nowYmd || (examYmd === nowYmd && examHm < nowHm));
-              });
-
-            if (visibleExams.length === 0) {
-              continue;
-            }
-
-            const studentTitle = String(studentSlice?.student?.title || "").trim();
-            const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
-            const container = createContainer();
-
-            if (verboseMode && studentTitle) {
-              addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
-            }
-
-            for (const exam of visibleExams) {
-              const examYmd = Number(exam?.examDate) || 0;
-              const formattedDate = formatDisplayDateValue(examYmd, examConfig?.dateFormat);
-              const dateTimeCell = formattedDate
-                ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>`
-                : "";
-
-              let nameCell = `<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;
-              if (showSubject) {
-                nameCell = `<span class="wu-exam__subject">${escapeHtml(exam?.subject)}</span>: &nbsp;<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;
-              }
-
-              if (showTeacher) {
-                const teacher = getFirstFieldName(exam?.teachers, "short");
-                if (teacher) {
-                  nameCell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
-                }
-              }
-
-              if (exam?.text) {
-                nameCell += `<br/><span class="wu-exam__description">${escapeHtml(exam.text)}</span>`;
-              }
-
-              addRow(container, "examRow", studentLabelText, dateTimeCell, nameCell);
-            }
-
+          const containers = students
+            .map((studentSlice) => renderStudent(pluginContext, studentSlice, includePastExams))
+            .filter(Boolean);
+          for (const container of containers) {
             wrapper.appendChild(container);
-            renderedContainers += 1;
           }
-
-          return renderedContainers > 0 ? wrapper : null;
+          return containers.length > 0 ? wrapper : null;
         },
       };
     },

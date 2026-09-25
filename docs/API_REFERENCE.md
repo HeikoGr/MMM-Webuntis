@@ -365,7 +365,7 @@ Rule:
 
 ### HTML Sanitization
 
-HTML-bearing fields are sanitized before transport by the shared `sanitizeRichText()` helper, which uses `sanitize-html`. No HTML attributes are retained.
+HTML-bearing fields are sanitized before transport with `sanitize-html` (`lib/webuntis/dataOrchestration.js`). No HTML attributes are retained.
 
 Whitelist:
 - `<b>`
@@ -376,37 +376,36 @@ Whitelist:
 - `<s>`, `<strike>`, `<del>`
 - `<sub>`, `<sup>`, `<small>`
 
-`<br>` and block elements (`<p>`, `<div>`, `<li>`, `<h1>` through `<h6>`) are converted to line breaks. All other tags, attributes, and unsafe tag content are removed. Entities (`&amp;`, `&auml;`, `&#228;`) are decoded **after** all tags are gone, so a decoded `<` can never be read as the start of a tag.
+`<br>` and block elements (`<p>`, `<div>`, `<li>`, `<h1>` through `<h6>`) are converted to line breaks. All other tags, attributes, and unsafe tag content are removed.
 
-#### Two sanitizers, and which field gets which
+#### Three helpers, and which field gets which
 
-There are two helpers in `lib/webuntis/dataOrchestration.js`, and both take a second boolean that does *not* mean the same thing:
+| Helper | Second parameter | Result | Used by |
+|--------|------------------|--------|---------|
+| `sanitizeRichText(text, keepMarkdownMarkers)` | keep literal `_` and `*` | **safe HTML**: whitelist kept, entities still encoded (`&amp;`, `&lt;`) | `messagesofday.text` only |
+| `richTextToPlainText(text, keepMarkdownMarkers)` | keep literal `_` and `*` | **plain text**: `sanitizeRichText`, then every tag removed, then entities decoded | all other mapped text fields |
+| `stripAllHtml(text, preserveLineBreaks)` | keep `<br>` as newlines | plain text, everything removed | `webuntisApiService.getExams()`, injected as `stripHtml` from `lib/webuntis/webuntisClient.js` |
 
-| Helper | Second parameter | Keeps markup? | Used by |
-|--------|------------------|---------------|---------|
-| `sanitizeRichText(text, keepMarkdownMarkers)` | keep literal `_` and `*` | yes, the whitelist above | `lib/mmm-adapter/mmmPayloadMapper.js`, on the fields below |
-| `stripAllHtml(text, preserveLineBreaks)` | keep `<br>` as newlines | no, everything is removed | `webuntisApiService.getExams()` only, injected as `stripHtml` from `lib/webuntis/webuntisClient.js` |
-
-Neither parameter switches HTML removal on or off. `sanitizeRichText` always keeps the whitelist, `stripAllHtml` always removes everything.
+Entities are decoded only once no tag is left. Decoding the output of the sanitizer (as
+`sanitizeRichText` did from `f7ebcda` to 0.14.1) turns text such as `&lt;img onerror=…&gt;` back
+into live markup.
 
 Field-by-field result in the `DATA_UPDATE` payload:
 
 | Collection | Field | Pipeline | Reaches the frontend as |
 |------------|-------|----------|-------------------------|
 | lessons | substitutionText, lessonText | **none** | raw API text; the `lessons` and `grid` plugins run it through `escapeHtml()` at render time |
-| exams | name, subject | `stripAllHtml(…, false)` then `sanitizeRichText` | plain text, whitespace collapsed |
-| exams | text | `stripAllHtml(…, true)` then `sanitizeRichText` | plain text, line breaks kept |
-| homework | text | `sanitizeRichText(…, true)` | rich text, Markdown markers kept |
-| homework | remark | `sanitizeRichText(…, false)` | rich text |
-| absences | reason | `sanitizeRichText(…, false)` | rich text |
-| messagesofday | subject, text | `sanitizeRichText(…, true)` | rich text, Markdown markers kept |
+| exams | name, subject | `stripAllHtml(…, false)` then `richTextToPlainText` | plain text, whitespace collapsed |
+| exams | text | `stripAllHtml(…, true)` then `richTextToPlainText` | plain text, line breaks kept |
+| homework | text | `richTextToPlainText(…, true)` | plain text, Markdown markers kept |
+| homework | remark | `richTextToPlainText(…, false)` | plain text |
+| absences | reason | `richTextToPlainText(…, false)` | plain text |
+| messagesofday | subject | `richTextToPlainText(…, true)` | plain text, Markdown markers kept |
+| messagesofday | text | `sanitizeRichText(…, true)` | safe HTML, Markdown markers kept |
 
-Two rows deserve attention, both current behavior rather than a deliberate contract:
-
-- **exams**: the API layer already strips everything, so the later rich-text pass has no markup left to preserve. Exam fields are plain text even though the mapper treats them as rich text.
 - **lessons**: `substitutionText` and `lessonText` are never sanitized on the backend. They are safe because both plugins escape them when rendering, but as a consequence entities arrive escaped rather than decoded - a lesson text containing `&amp;` displays as `&amp;`, while the same characters in a homework text display as `&`.
 
-**Trust boundary:** whatever leaves `sanitizeRichText()` is declared safe HTML and must not be escaped again in a plugin frontend. Escaping it a second time is what made users see literal `&amp;` and `<b>` (fixed in `f7ebcda`).
+**Trust boundary:** plain-text fields must be escaped in the plugin frontend (they are: `escapeHtml()`). The one safe-HTML field, `messagesofday.text`, is inserted as HTML and must not be escaped again, or users see literal `&amp;` and `<b>`.
 
 ### Range Calculation
 

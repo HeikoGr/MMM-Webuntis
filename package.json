@@ -4,7 +4,7 @@
     "type": "git",
     "url": "git+https://github.com/HeikoGr/MMM-Webuntis"
   },
-  "version": "0.14.1",
+  "version": "0.14.2",
   "description": "MagicMirror module to access Webuntis school timetables.",
   "main": "MMM-Webuntis.js",
   "exports": {
@@ -71,6 +71,6 @@
     "commit-msg": "npx --no-install commitlint --edit $1 && node scripts/check-commit-scope.js $1"
   },
   "allowScripts": {
-    "simple-git-hooks@2.13.1": true
+    "simple-git-hooks@2.14.0": true
   }
 }

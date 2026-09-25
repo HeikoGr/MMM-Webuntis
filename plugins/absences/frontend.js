@@ -116,6 +116,129 @@
     return infoDiv;
   }
 
+  /** A YYYYMMDD integer as UTC midnight in ms. */
+  function ymdToUtcMs(ymd) {
+    return Date.UTC(Math.floor(ymd / 10000), Math.floor((ymd % 10000) / 100) - 1, ymd % 100);
+  }
+
+  /**
+   * Whether an absence lies inside the configured window around today. An unset pastDays or
+   * nextDays leaves that side open.
+   */
+  function isWithinDayWindow(absence, nowYmd, pastDays, nextDays) {
+    const absenceYmd = Number(absence?.date) || 0;
+    if (absenceYmd === 0) return false;
+    const daysAgo = Math.floor((ymdToUtcMs(nowYmd) - ymdToUtcMs(absenceYmd)) / (1000 * 60 * 60 * 24));
+    if (pastDays !== null && pastDays !== undefined && daysAgo > pastDays) return false;
+    if (nextDays !== null && nextDays !== undefined && daysAgo < -nextDays) return false;
+    return true;
+  }
+
+  /** "excused"/"unexcused" label and class, or none when showExcused is off or it is unknown. */
+  function describeExcuse(pluginContext, absence, showExcused) {
+    if (!showExcused) return { label: "", className: "" };
+    if (absence?.excused === true) {
+      return { label: translate(pluginContext, "excused", "excused"), className: "absence-excused" };
+    }
+    if (absence?.excused === false) {
+      return { label: translate(pluginContext, "unexcused", "unexcused"), className: "absence-unexcused" };
+    }
+    return { label: "", className: "" };
+  }
+
+  function absencesLabel(pluginContext) {
+    return `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, "absences", "Absences"))}</span>`;
+  }
+
+  /** Data cell of one absence: time range, subject with excuse note, reason. */
+  function buildAbsenceDataHtml(pluginContext, absence, options) {
+    const start = formatDisplayTimeValue(absence?.startTime);
+    const end = formatDisplayTimeValue(absence?.endTime);
+    const timeRange = start && end ? `${start}-${end}` : start || end || "";
+    const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], "long");
+    const reason = String(absence?.reason || "").trim();
+    const excuse = describeExcuse(pluginContext, absence, options.showExcused);
+
+    const parts = [];
+    if (timeRange) parts.push(`<b class="wu-absence__time">${escapeHtml(timeRange)}</b>`);
+    if (subject) {
+      const note = excuse.label
+        ? ` <span class="${excuse.className} wu-absence__status">(${escapeHtml(excuse.label)})</span>`
+        : "";
+      parts.push(`<span class="wu-absence__subject">${escapeHtml(subject)}</span>${note}`);
+    } else if (excuse.label) {
+      parts.push(`<span class="${excuse.className} wu-absence__status">${escapeHtml(excuse.label)}</span>`);
+    }
+    if (options.showReason && reason) {
+      parts.push(`<br><span class="wu-absence__reason">${escapeHtml(reason).replace(/\n/g, "<br>")}</span>`);
+    }
+    return parts.length > 0 ? parts.join(" ") : absencesLabel(pluginContext);
+  }
+
+  /** "no absences" or "data unavailable" in place of the list. */
+  function addEmptyRow(pluginContext, container, studentSlice, studentLabelText) {
+    const unavailable = studentSlice?.state?.collections?.absences?.status === "unavailable";
+    addRow(
+      container,
+      unavailable ? "absenceRowEmpty unavailable-notice" : "absenceRowEmpty",
+      studentLabelText,
+      escapeHtml(
+        translate(
+          pluginContext,
+          unavailable ? "unavailable" : "no_absences",
+          unavailable ? "data unavailable" : "no absences",
+        ),
+      ),
+    );
+  }
+
+  /** One student's absences: filtered to the day window, sorted, cut to maxItems. */
+  function renderStudent(pluginContext, studentSlice) {
+    const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
+    const studentConfig = resolveStudentConfig(studentSlice);
+    const absencesConfig = resolveAbsencesConfig(studentConfig);
+    const studentTitle = String(studentSlice?.student?.title || "").trim();
+    const verboseMode = isVerboseMode(studentConfig);
+    const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
+    const container = createContainer();
+
+    if (verboseMode && studentTitle) {
+      addHeader(container, buildHeaderTitle(pluginContext, studentTitle, absencesConfig));
+    }
+
+    if (absences.length === 0) {
+      addEmptyRow(pluginContext, container, studentSlice, studentLabelText);
+      return container;
+    }
+
+    const nowYmd = Number(getCurrentDateContext(studentConfig)?.ymd) || 0;
+    const maxItems = Number(absencesConfig?.maxItems);
+    const limit = Number.isFinite(maxItems) && maxItems > 0 ? Math.ceil(maxItems) : Number.POSITIVE_INFINITY;
+    const options = {
+      showExcused: Boolean(absencesConfig?.showExcused),
+      showReason: Boolean(absencesConfig?.showReason),
+    };
+    const visible = absences
+      .filter((absence) => isWithinDayWindow(absence, nowYmd, absencesConfig?.pastDays, absencesConfig?.nextDays))
+      .sort(compareByDateAndStartTime)
+      .slice(0, limit);
+
+    for (const absence of visible) {
+      const dateStr = absence?.date ? formatDisplayDateValue(absence.date, absencesConfig?.dateFormat) : "";
+      const meta =
+        absencesConfig?.showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : "";
+      addRow(
+        container,
+        "absenceRow",
+        studentLabelText,
+        meta || absencesLabel(pluginContext),
+        buildAbsenceDataHtml(pluginContext, absence, options),
+      );
+    }
+
+    return container;
+  }
+
   host.registerFrontendPlugin({
     id: "absences",
     hostApiVersion: 1,
@@ -128,141 +251,10 @@
           if (students.some((studentSlice) => studentSlice?.state?.absencesUnavailable === true)) {
             wrapper.appendChild(createWarningInfo(pluginContext));
           }
-
-          let renderedContainers = 0;
-
           for (const studentSlice of students) {
-            const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
-            const studentConfig = resolveStudentConfig(studentSlice);
-            const absencesConfig = resolveAbsencesConfig(studentConfig);
-            const studentTitle = String(studentSlice?.student?.title || "").trim();
-            const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
-            const container = createContainer();
-
-            if (verboseMode && studentTitle) {
-              addHeader(container, buildHeaderTitle(pluginContext, studentTitle, absencesConfig));
-            }
-
-            if (!Array.isArray(absences) || absences.length === 0) {
-              const unavailable = studentSlice?.state?.collections?.absences?.status === "unavailable";
-              addRow(
-                container,
-                unavailable ? "absenceRowEmpty unavailable-notice" : "absenceRowEmpty",
-                studentLabelText,
-                escapeHtml(
-                  translate(
-                    pluginContext,
-                    unavailable ? "unavailable" : "no_absences",
-                    unavailable ? "data unavailable" : "no absences",
-                  ),
-                ),
-              );
-              wrapper.appendChild(container);
-              renderedContainers += 1;
-              continue;
-            }
-
-            const maxItems = Number(absencesConfig?.maxItems);
-            const showDate = Boolean(absencesConfig?.showDate);
-            const showExcused = Boolean(absencesConfig?.showExcused);
-            const showReason = Boolean(absencesConfig?.showReason);
-            const nowContext = getCurrentDateContext(studentConfig);
-            const nowYmd = Number(nowContext?.ymd) || 0;
-            const pastDays = absencesConfig?.pastDays;
-            const nextDays = absencesConfig?.nextDays;
-            const dateFormat = absencesConfig?.dateFormat;
-
-            const sorted = absences
-              .slice()
-              .filter((absence) => {
-                const absenceYmd = Number(absence?.date) || 0;
-                if (absenceYmd === 0) return false;
-
-                const absYear = Math.floor(absenceYmd / 10000);
-                const absMonth = Math.floor((absenceYmd % 10000) / 100);
-                const absDay = absenceYmd % 100;
-                const nowYear = Math.floor(nowYmd / 10000);
-                const nowMonth = Math.floor((nowYmd % 10000) / 100);
-                const nowDay = nowYmd % 100;
-                const absUtcMs = Date.UTC(absYear, absMonth - 1, absDay);
-                const nowUtcMs = Date.UTC(nowYear, nowMonth - 1, nowDay);
-                const daysDiff = Math.floor((nowUtcMs - absUtcMs) / (1000 * 60 * 60 * 24));
-
-                if (pastDays !== null && pastDays !== undefined && daysDiff > pastDays) {
-                  return false;
-                }
-                if (nextDays !== null && nextDays !== undefined && daysDiff < -nextDays) {
-                  return false;
-                }
-                return true;
-              })
-              .sort(compareByDateAndStartTime);
-
-            let visibleCount = 0;
-            for (const absence of sorted) {
-              if (Number.isFinite(maxItems) && maxItems > 0 && visibleCount >= maxItems) break;
-
-              const dateStr = absence?.date ? formatDisplayDateValue(absence.date, dateFormat) : "";
-              const start = formatDisplayTimeValue(absence?.startTime);
-              const end = formatDisplayTimeValue(absence?.endTime);
-              const timeRange = start && end ? `${start}-${end}` : start || end || "";
-              const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], "long");
-              const reason = String(absence?.reason || "").trim();
-              const isExcused = absence?.excused === true;
-              const isUnexcused = absence?.excused === false;
-              const meta = showDate && dateStr ? `<span class="wu-absence__date">${escapeHtml(dateStr)}</span>` : "";
-
-              let statusLabel = "";
-              let statusClass = "";
-              if (showExcused) {
-                if (isExcused) {
-                  statusLabel = translate(pluginContext, "excused", "excused");
-                  statusClass = "absence-excused";
-                } else if (isUnexcused) {
-                  statusLabel = translate(pluginContext, "unexcused", "unexcused");
-                  statusClass = "absence-unexcused";
-                }
-              }
-
-              const dataParts = [];
-              if (timeRange) dataParts.push(`<b class="wu-absence__time">${escapeHtml(timeRange)}</b>`);
-              if (subject) {
-                const note = statusLabel
-                  ? ` <span class="${statusClass} wu-absence__status">(${escapeHtml(statusLabel)})</span>`
-                  : "";
-                dataParts.push(`<span class="wu-absence__subject">${escapeHtml(subject)}</span>${note}`);
-              } else if (statusLabel) {
-                dataParts.push(`<span class="${statusClass} wu-absence__status">${escapeHtml(statusLabel)}</span>`);
-              }
-              if (showReason && reason) {
-                dataParts.push(
-                  `<br><span class="wu-absence__reason">${escapeHtml(reason).replace(/\n/g, "<br>")}</span>`,
-                );
-              }
-
-              const data =
-                dataParts.length > 0
-                  ? dataParts.join(" ")
-                  : `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, "absences", "Absences"))}</span>`;
-
-              addRow(
-                container,
-                "absenceRow",
-                studentLabelText,
-                meta ||
-                  `<span class="wu-absence__label">${escapeHtml(translate(pluginContext, "absences", "Absences"))}</span>`,
-                data,
-              );
-
-              visibleCount += 1;
-            }
-
-            wrapper.appendChild(container);
-            renderedContainers += 1;
+            wrapper.appendChild(renderStudent(pluginContext, studentSlice));
           }
-
-          return renderedContainers > 0 ? wrapper : null;
+          return students.length > 0 ? wrapper : null;
         },
       };
     },
