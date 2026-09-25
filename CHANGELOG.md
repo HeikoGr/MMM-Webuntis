@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.14.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.0...v0.14.1) (2026-09-25)
+
+
+### 🐛 Fixes
+
+* resolve **SECRET_...** placeholders in the module config ([#102](https://github.com/HeikoGr/MMM-Webuntis/issues/102)) ([218f4f2](https://github.com/HeikoGr/MMM-Webuntis/commit/218f4f281f30af1544d9d804407b651b5499404d))
+* resolve **SECRET_...** placeholders in the module config ([#102](https://github.com/HeikoGr/MMM-Webuntis/issues/102)) ([356f01e](https://github.com/HeikoGr/MMM-Webuntis/commit/356f01e8dfac2675f906ae23c75917a43f05f9d2))
+
+
+### 🔧 Tooling
+
+* develop branch model and PR title check ([69f0cfd](https://github.com/HeikoGr/MMM-Webuntis/commit/69f0cfd775e1349cc3d22e632128c7bd6f8c9469))
+* pass release PRs to the assign step via env ([45eb599](https://github.com/HeikoGr/MMM-Webuntis/commit/45eb599486f18ce39e399d8c4fe12d80fd658e72))
+
 ## [0.14.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.13.1...v0.14.0) (2026-09-25)
 
 
