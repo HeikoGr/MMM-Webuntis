@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const Module = require("node:module");
 const runtimeUtils = require("../lib/runtime-utils");
-const { sanitizeRichText } = require("../lib/webuntis/dataOrchestration");
+const { richTextToPlainText, sanitizeRichText } = require("../lib/webuntis/dataOrchestration");
 const singleStudentWeekFixture = require("../demo/fixtures/single-student-week.json");
 
 /**
@@ -102,9 +102,20 @@ test("sanitizeRichText keeps Markdown markers only when requested", () => {
   assert.equal(sanitizeRichText("A *marked* _text_", true), "A *marked* _text_");
 });
 
-test("sanitizeRichText decodes HTML entities instead of leaving them literal (issue #88)", () => {
-  assert.equal(sanitizeRichText("Aufgabe 3&amp;4 schriftlich"), "Aufgabe 3&4 schriftlich");
-  assert.equal(sanitizeRichText("&auml;&ouml;&uuml;&szlig; &#228;"), "äöüß ä");
+test("richTextToPlainText decodes HTML entities instead of leaving them literal (issue #88)", () => {
+  assert.equal(richTextToPlainText("Aufgabe 3&amp;4 schriftlich"), "Aufgabe 3&4 schriftlich");
+  assert.equal(richTextToPlainText("&auml;&ouml;&uuml;&szlig; &#228;"), "äöüß ä");
+  assert.equal(richTextToPlainText("<b>Wichtig</b><br>morgen"), "Wichtig\nmorgen");
+});
+
+test("sanitizeRichText never turns encoded markup into live HTML", () => {
+  // WebUntis stores literally typed markup entity-encoded; decoding it after the sanitizer ran
+  // made the messages-of-day widget execute it.
+  assert.equal(
+    sanitizeRichText("&lt;img src=x onerror=alert(1)&gt; &amp; <b>fett</b>"),
+    "&lt;img src=x onerror=alert(1)&gt; &amp; <b>fett</b>",
+  );
+  assert.equal(richTextToPlainText("&lt;img src=x onerror=alert(1)&gt;"), "<img src=x onerror=alert(1)>");
 });
 
 test("single-student-week fixture matches the canonical V3 payload shape", () => {
@@ -1584,6 +1595,7 @@ test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without lo
     emitted.map((event) => event.action),
     ["MODULE_READY", "DATA_UPDATE"],
   );
+  assert.equal("_authService" in emitted[0].data.config, false, "MODULE_READY must not carry the auth service");
   const avery = emitted[1].data;
   assert.equal(avery.context.student.title, "Avery Finch");
   assert.equal(avery.sessionId, "demo-session");
@@ -1591,6 +1603,85 @@ test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without lo
   assert.equal(avery.context.config.debugDate, "2026-09-30");
   assert.equal(avery.context.config.plugins.grid.config.weekView, true);
   assert.ok(avery.data.lessons.length > 0);
+});
+
+test("sessions of one account fetch one after another, even when several wait at once", async () => {
+  const serialHelper = loadNodeHelper();
+  serialHelper._mmLog = () => {};
+  serialHelper._ensureRuntime();
+  const student = { title: "Kid", username: "parent", password: "pw", school: "s", server: "x.webuntis.com" };
+  serialHelper._sessions.getOrCreateSessionConfig = () => ({ students: [student] });
+
+  let active = 0;
+  let maxActive = 0;
+  let runs = 0;
+  serialHelper._processGroup = async () => {
+    active += 1;
+    runs += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    active -= 1;
+  };
+
+  await Promise.all(["a:1", "b:1", "c:1"].map((sessionKey) => serialHelper._executeFetchForSession(sessionKey)));
+
+  assert.equal(runs, 3);
+  assert.equal(maxActive, 1, "two waiting sessions must not start together once the first finished");
+  assert.equal(serialHelper._pendingFetchByCredKey.size, 0);
+});
+
+test("each instance logs at its own logLevel, not the one of the last CONFIGURE", async () => {
+  const lines = [];
+  const originalLoad = Module._load;
+  const helperPath = require.resolve("../node_helper");
+  delete require.cache[helperPath];
+  Module._load = function patchedLoad(request, parent, isMain) {
+    if (request === "node_helper") return { create: (definition) => definition };
+    if (request === "logger") {
+      const capture = (level) => (message) => lines.push({ level, message });
+      return { debug: capture("debug"), info: capture("info"), warn: capture("warn"), error: capture("error") };
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  let logHelper;
+  try {
+    logHelper = require("../node_helper");
+  } finally {
+    Module._load = originalLoad;
+  }
+  logHelper.sendSocketNotification = () => {};
+
+  const configure = (id, logLevel) =>
+    logHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+      action: "CONFIGURE",
+      identifier: id,
+      data: {
+        id,
+        sessionId: `${id}-session`,
+        logLevel,
+        demoDataFile: "demo/fixtures/single-student-week.json",
+        displayMode: "grid",
+        students: [],
+      },
+    });
+  const refresh = (id) =>
+    logHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+      action: "REFRESH",
+      identifier: id,
+      data: { id, sessionId: `${id}-session`, reason: "test" },
+    });
+
+  await configure("verbose", "debug");
+  await configure("quiet", "error");
+  lines.length = 0;
+
+  await refresh("verbose");
+  await refresh("quiet");
+
+  const debugFor = (id) => lines.filter((line) => line.level === "debug" && line.message.includes(`id=${id}`));
+  assert.ok(debugFor("verbose").length > 0, "the debug instance keeps its debug lines");
+  assert.equal(debugFor("quiet").length, 0, "the error instance logs no debug lines");
+  assert.equal(logHelper._sharedLogLevel(), "debug", "shared services follow the widest instance level");
 });
 
 test("demo payloads take the configured student's options, one fixture per student", () => {

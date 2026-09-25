@@ -76,6 +76,82 @@
     return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
   }
 
+  /**
+   * Due date, then subject, then the homework id: WebUntis does not guarantee a stable order for
+   * entries tied on the first two, and the id keeps it identical across refreshes (issue #89).
+   */
+  function compareHomework(left, right) {
+    return (
+      (Number(left?.dueDate) || 0) - (Number(right?.dueDate) || 0) ||
+      getFieldDisplayName(left?.subject || null, "short").localeCompare(
+        getFieldDisplayName(right?.subject || null, "short"),
+      ) ||
+      (Number(left?.id) || 0) - (Number(right?.id) || 0)
+    );
+  }
+
+  function homeworkLabel(pluginContext) {
+    return `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
+  }
+
+  /** Right-hand cell: subject and text as configured, the widget label when both are off or empty. */
+  function buildContentCell(pluginContext, homework, homeworkConfig) {
+    const subjectLabel = homeworkConfig?.showSubject ? getFieldDisplayName(homework?.subject || null, "long") : "";
+    const text = homeworkConfig?.showText ? String(homework?.text || "").trim() : "";
+    const parts = [];
+    if (subjectLabel) parts.push(`<b class="wu-homework__subject">${escapeHtml(subjectLabel)}</b>`);
+    if (text) parts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, "<br>")}</span>`);
+    return parts.length > 0 ? parts.join(": ") : homeworkLabel(pluginContext);
+  }
+
+  /** "no homework" or "data unavailable" in place of the list. */
+  function addEmptyRow(pluginContext, container, studentSlice, studentLabelText) {
+    const unavailable = studentSlice?.state?.collections?.homework?.status === "unavailable";
+    addRow(
+      container,
+      unavailable ? "homeworkRowEmpty unavailable-notice" : "homeworkRowEmpty",
+      studentLabelText,
+      escapeHtml(
+        translate(
+          pluginContext,
+          unavailable ? "unavailable" : "no_homework",
+          unavailable ? "data unavailable" : "no homework",
+        ),
+      ),
+    );
+  }
+
+  function renderStudent(pluginContext, studentSlice) {
+    const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
+    const studentConfig = resolveStudentConfig(studentSlice);
+    const homeworkConfig = resolveHomeworkConfig(studentConfig);
+    const studentTitle = String(studentSlice?.student?.title || "").trim();
+    const verboseMode = isVerboseMode(studentConfig);
+    const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
+    const container = createContainer();
+
+    if (verboseMode && studentTitle) {
+      addHeader(container, buildHeaderTitle(pluginContext, studentTitle, homeworkConfig));
+    }
+    if (homeworks.length === 0) {
+      addEmptyRow(pluginContext, container, studentSlice, studentLabelText);
+      return container;
+    }
+
+    for (const homework of homeworks.slice().sort(compareHomework)) {
+      const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, homeworkConfig?.dateFormat) : "";
+      const dateCell = due ? `<span class="wu-homework__date">${escapeHtml(due)}</span>` : homeworkLabel(pluginContext);
+      addRow(
+        container,
+        "homeworkRow",
+        studentLabelText,
+        dateCell,
+        buildContentCell(pluginContext, homework, homeworkConfig),
+      );
+    }
+    return container;
+  }
+
   host.registerFrontendPlugin({
     id: "homework",
     hostApiVersion: 1,
@@ -85,82 +161,10 @@
         render(renderContext) {
           const wrapper = createElement("section", "wu-plugin wu-plugin-homework");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
-          let renderedContainers = 0;
-
           for (const studentSlice of students) {
-            const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
-            const studentConfig = resolveStudentConfig(studentSlice);
-            const homeworkConfig = resolveHomeworkConfig(studentConfig);
-            const studentTitle = String(studentSlice?.student?.title || "").trim();
-            const verboseMode = isVerboseMode(studentConfig);
-            const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
-            const container = createContainer();
-
-            if (verboseMode && studentTitle) {
-              addHeader(container, buildHeaderTitle(pluginContext, studentTitle, homeworkConfig));
-            }
-
-            if (!Array.isArray(homeworks) || homeworks.length === 0) {
-              const unavailable = studentSlice?.state?.collections?.homework?.status === "unavailable";
-              addRow(
-                container,
-                unavailable ? "homeworkRowEmpty unavailable-notice" : "homeworkRowEmpty",
-                studentLabelText,
-                escapeHtml(
-                  translate(
-                    pluginContext,
-                    unavailable ? "unavailable" : "no_homework",
-                    unavailable ? "data unavailable" : "no homework",
-                  ),
-                ),
-              );
-              wrapper.appendChild(container);
-              renderedContainers += 1;
-              continue;
-            }
-
-            const showSubject = Boolean(homeworkConfig?.showSubject);
-            const showText = Boolean(homeworkConfig?.showText);
-            const dateFormat = homeworkConfig?.dateFormat;
-
-            const sorted = homeworks.slice().sort((left, right) => {
-              const leftSubject = left?.subject || null;
-              const rightSubject = right?.subject || null;
-              return (
-                (Number(left?.dueDate) || 0) - (Number(right?.dueDate) || 0) ||
-                getFieldDisplayName(leftSubject, "short").localeCompare(getFieldDisplayName(rightSubject, "short")) ||
-                // WebUntis doesn't guarantee a stable order for entries tied on the criteria above,
-                // so fall back to the immutable homework id - keeps the order identical across
-                // refreshes instead of flipping (see issue #89).
-                (Number(left?.id) || 0) - (Number(right?.id) || 0)
-              );
-            });
-
-            for (const homework of sorted) {
-              const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, dateFormat) : "";
-              const subject = homework?.subject || null;
-              const subjectLabel = showSubject ? getFieldDisplayName(subject, "long") : "";
-              const text = showText ? String(homework?.text || "").trim() : "";
-              const left = due
-                ? `<span class="wu-homework__date">${escapeHtml(due)}</span>`
-                : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
-              const rightParts = [];
-              if (subjectLabel) rightParts.push(`<b class="wu-homework__subject">${escapeHtml(subjectLabel)}</b>`);
-              if (text)
-                rightParts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, "<br>")}</span>`);
-              const right =
-                rightParts.length > 0
-                  ? rightParts.join(": ")
-                  : `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
-
-              addRow(container, "homeworkRow", studentLabelText, left, right);
-            }
-
-            wrapper.appendChild(container);
-            renderedContainers += 1;
+            wrapper.appendChild(renderStudent(pluginContext, studentSlice));
           }
-
-          return renderedContainers > 0 ? wrapper : null;
+          return students.length > 0 ? wrapper : null;
         },
       };
     },

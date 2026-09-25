@@ -199,7 +199,6 @@ function getModuleRootElement(ctx) {
         },
       },
       _currentTodayYmd: dateContext.ymd,
-      _paused: false,
       _hasWidget(name) {
         return (
           String(name || "")
@@ -405,12 +404,14 @@ function getModuleRootElement(ctx) {
   /**
    * Start the now-line updater (runs every minute)
    * Updates now-line position and refreshes past lesson masks
-   * Automatically triggers data fetch on date change (if not in debug mode)
+   * and notes a day rollover. It fetches nothing itself; new data comes with the lifecycle's next
+   * periodic fetch.
+   * Started and stopped by the lifecycle's onVisible/onHidden, so it never runs while hidden.
    *
    * @param {Object} ctx - Main module context
    */
   function startNowLineUpdater(ctx) {
-    if (!ctx || ctx._paused) return;
+    if (!ctx) return;
     if (!ctx._hasWidget("grid")) return;
     const state = getNowLineState(ctx);
     if (state.timer || state.initialTimeout) return;
@@ -749,6 +750,90 @@ function getModuleRootElement(ctx) {
    * @param {Object} ctx - Main module context (provides translate)
    * @returns {HTMLElement} Time axis div element
    */
+  /**
+   * Markup of one period label. How much fits depends on the period's height: "tight" shows only
+   * the start time, "compact" the period and one time, "full" the period and start-end.
+   * @returns {{html: string, title: string}} Label markup and its tooltip ("" for none)
+   */
+  function timeUnitLabel(unit, labelMode, ctx) {
+    const unitName = String(unit?.name ?? "").trim();
+    const startText = formatAxisTime(unit?.startTime);
+    const endText = formatAxisTime(unit?.endTime);
+    const range = startText && endText ? `${startText}-${endText}` : startText || endText;
+
+    if (!unitName) {
+      const fallbackTime = startText || endText || "";
+      return { html: `<span class='grid-timeunit-time'>${fallbackTime}</span>`, title: fallbackTime };
+    }
+
+    const periodText = escapeHtml(formatTimeUnitPeriodText(unitName, ctx));
+    const period = `<span class='grid-timeunit-period'>${periodText}</span>`;
+    let html;
+    if (labelMode === "tight") {
+      html = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
+    } else {
+      const time = labelMode === "compact" ? startText || endText : range;
+      html = time ? `${period}<span class='grid-timeunit-time'>${time}</span>` : period;
+    }
+    return { html, title: range || "" };
+  }
+
+  function createHourLine(top) {
+    const line = document.createElement("div");
+    line.className = "grid-hourline";
+    line.style.top = `${top}px`;
+    return line;
+  }
+
+  /** Period labels and period lines from the school's timegrid. */
+  function appendTimeUnitAxis(timeInner, timeUnits, { allStart, allEnd, totalHeight, totalMinutes }, ctx) {
+    const toPx = (minutes) => Math.round(((minutes - allStart) / totalMinutes) * totalHeight);
+    for (let ui = 0; ui < timeUnits.length; ui++) {
+      const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
+      if (startMin === null) continue;
+
+      const lab = document.createElement("div");
+      lab.style.position = "absolute";
+      lab.style.top = `${toPx(startMin)}px`;
+      lab.style.left = "4px";
+      lab.style.zIndex = 2;
+      lab.className = "grid-timeunit-label";
+
+      const unitHeightPx =
+        Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
+          ? Math.round(((lineMin - startMin) / totalMinutes) * totalHeight)
+          : null;
+      const labelMode = resolveAxisLabelMode(unitHeightPx);
+      lab.classList.add(`is-${labelMode}`);
+
+      const { html, title } = timeUnitLabel(timeUnits[ui], labelMode, ctx);
+      lab.innerHTML = html;
+      if (title) lab.title = title;
+      timeInner.appendChild(lab);
+
+      if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
+        timeInner.appendChild(createHourLine(toPx(lineMin)));
+      }
+    }
+  }
+
+  /** Without a timegrid: a label and a line at every full hour. */
+  function appendHourlyAxis(timeInner, { allStart, allEnd, totalHeight, totalMinutes }) {
+    for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
+      const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
+      const lab = document.createElement("div");
+      lab.style.position = "absolute";
+      lab.style.top = `${top}px`;
+      lab.style.zIndex = 2;
+      lab.style.left = "4px";
+      lab.style.fontSize = "0.85em";
+      lab.style.color = "#666";
+      lab.innerText = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      timeInner.appendChild(lab);
+      timeInner.appendChild(createHourLine(top));
+    }
+  }
+
   function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
     const timeAxis = document.createElement("div");
     timeAxis.className = "grid-timecell";
@@ -757,90 +842,15 @@ function getModuleRootElement(ctx) {
     timeInner.style.height = `${totalHeight}px`;
     timeInner.style.width = "100%";
 
+    const scale = { allStart, allEnd, totalHeight, totalMinutes };
     if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-      for (let ui = 0; ui < timeUnits.length; ui++) {
-        const u = timeUnits[ui];
-        const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
-        if (startMin === null) continue;
-
-        const top = Math.round(((startMin - allStart) / totalMinutes) * totalHeight);
-        const lab = document.createElement("div");
-        lab.style.position = "absolute";
-        lab.style.top = `${top}px`;
-        lab.style.left = "4px";
-        lab.style.zIndex = 2;
-        lab.className = "grid-timeunit-label";
-
-        const unitHeightPx =
-          Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
-            ? Math.round(((lineMin - startMin) / totalMinutes) * totalHeight)
-            : null;
-        const labelMode = resolveAxisLabelMode(unitHeightPx);
-        lab.classList.add(`is-${labelMode}`);
-
-        const unitName = String(u?.name ?? "").trim();
-        const startText = formatAxisTime(u?.startTime);
-        const endText = formatAxisTime(u?.endTime);
-
-        if (unitName) {
-          const periodText = escapeHtml(formatTimeUnitPeriodText(unitName, ctx));
-          if (labelMode === "tight") {
-            lab.innerHTML = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
-          } else if (labelMode === "compact") {
-            const compactTime = startText || endText;
-            lab.innerHTML = compactTime
-              ? `<span class='grid-timeunit-period'>${periodText}</span><span class='grid-timeunit-time'>${compactTime}</span>`
-              : `<span class='grid-timeunit-period'>${periodText}</span>`;
-          } else {
-            const fullTime = startText && endText ? `${startText}-${endText}` : startText || endText;
-            lab.innerHTML = fullTime
-              ? `<span class='grid-timeunit-period'>${periodText}</span><span class='grid-timeunit-time'>${fullTime}</span>`
-              : `<span class='grid-timeunit-period'>${periodText}</span>`;
-          }
-
-          if (startText || endText) {
-            lab.title = startText && endText ? `${startText}-${endText}` : startText || endText;
-          }
-        } else {
-          const fallbackTime = startText || endText || "";
-          lab.innerHTML = `<span class='grid-timeunit-time'>${fallbackTime}</span>`;
-          if (fallbackTime) lab.title = fallbackTime;
-        }
-        timeInner.appendChild(lab);
-
-        if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
-          const lineTop = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
-          const tline = document.createElement("div");
-          tline.className = "grid-hourline";
-          tline.style.top = `${lineTop}px`;
-          timeInner.appendChild(tline);
-        }
-      }
+      appendTimeUnitAxis(timeInner, timeUnits, scale, ctx);
     } else {
-      for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
-        const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-        const lab = document.createElement("div");
-        lab.style.position = "absolute";
-        lab.style.top = `${top}px`;
-        lab.style.zIndex = 2;
-        lab.style.left = "4px";
-        lab.style.fontSize = "0.85em";
-        lab.style.color = "#666";
-        const hh = String(Math.floor(m / 60)).padStart(2, "0");
-        const mm = String(m % 60).padStart(2, "0");
-        lab.innerText = `${hh}:${mm}`;
-        timeInner.appendChild(lab);
-
-        const tline = document.createElement("div");
-        tline.className = "grid-hourline";
-        tline.style.top = `${top}px`;
-        timeInner.appendChild(tline);
-      }
+      appendHourlyAxis(timeInner, scale);
     }
 
     timeAxis.appendChild(timeInner);
     timeAxis.style.gridColumn = "1";
-
     return timeAxis;
   }
 
@@ -1374,123 +1384,122 @@ function getModuleRootElement(ctx) {
   }
 
   /**
-   * Generate HTML content for lesson cell
-   * Uses flexible field configuration (grid.fields.primary, grid.fields.secondary, grid.fields.additional).
-   *
-   * Special handling for BREAK_SUPERVISION activity type
+   * A changed field: the new value, else the removed old one (struck through), else N/A.
+   */
+  function changedFieldHtml(newName, oldName, naText, escapeHtml) {
+    if (newName) return `<span class='lesson-changed-new'>${escapeHtml(newName)}</span>`;
+    if (oldName) return `<span class='lesson-changed-removed'>${escapeHtml(oldName)}</span>`;
+    return `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+  }
+
+  /** Break supervision cell: "BS"/"PA" plus the supervised area. */
+  function breakSupervisionHtml(lesson, escapeHtml, ctx) {
+    const label = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
+    const shortLabel = label === "Pausenaufsicht" ? "PA" : "BS";
+    const area = lesson.room || lesson.roomLong || "";
+    const displayText = area ? `${shortLabel} (${area})` : shortLabel;
+    return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
+  }
+
+  /** Room line: the changed room, or the configured additional fields, each in brackets. */
+  function additionalLineHtml(lesson, displayParts, changedFields, naText, escapeHtml) {
+    if (changedFields.has("room")) {
+      const room = changedFieldHtml(
+        lesson.rooms?.[0]?.name || "",
+        getFirstFieldName(lesson.previousRooms),
+        naText,
+        escapeHtml,
+      );
+      return ` <span class='lesson-additional'>(${room})</span>`;
+    }
+    const parts = (displayParts.additional || [])
+      .filter(Boolean)
+      .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
+      .join(" ");
+    return parts ? ` ${parts}` : "";
+  }
+
+  /** Substitution text and lesson text; the lesson text only when it does not repeat a shown field. */
+  function lessonNotesHtml(lesson, displayParts, escapeHtml) {
+    const lessonText = normalizeComparableText(lesson.text);
+    const repeatsField =
+      lessonText === normalizeComparableText(displayParts.primary) ||
+      lessonText === normalizeComparableText(displayParts.secondary) ||
+      (Array.isArray(displayParts.additional) &&
+        displayParts.additional.some((item) => lessonText === normalizeComparableText(item)));
+
+    const subst = lesson.substitutionText
+      ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, "<br>")}</span>`
+      : "";
+    const txt =
+      lessonText !== "" && !repeatsField
+        ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, "<br>")}</span>`
+        : "";
+    return `${subst}${txt}`;
+  }
+
+  /**
+   * HTML for a lesson cell: primary line (subject), secondary line (teacher plus additional
+   * fields), substitution and lesson text. Changes are marked inline rather than in extra rows so
+   * compact cells do not overflow; a moved lesson or a change without details gets a badge.
+   * Fields follow grid.fields (primary, secondary, additional); break supervision has its own cell.
    *
    * @param {Object} lesson - Lesson object with display fields
    * @param {Function} escapeHtml - HTML escape function
    * @param {Object} ctx - Main module context (provides config)
+   * @param {Object} [lessonConfig] - Effective widget config
    * @returns {string} HTML content for lesson cell
    */
   function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
     if (lessonIsBreakSupervision(lesson)) {
-      const breakSupervisionLabel = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
-      const shortLabel = breakSupervisionLabel === "Pausenaufsicht" ? "PA" : "BS";
-      const supervisedArea = lesson.room || lesson.roomLong || "";
-      const displayText = supervisedArea ? `${shortLabel} (${supervisedArea})` : shortLabel;
-      return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
+      return breakSupervisionHtml(lesson, escapeHtml, ctx);
     }
 
-    // Build change-diff indicators for CHANGED lessons.
-    // These are injected INLINE into the existing primary/secondary/additional lines
-    // (not appended as a new row) to avoid overflow in compact grid cells.
     const changedFields = getChangedFieldSet(lesson);
     const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
-
-    const hasMovedBadge = lessonIsMoved(lesson);
-    const movedBadge = hasMovedBadge ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : "";
+    const movedBadge = lessonIsMoved(lesson) ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : "";
     const changedBadge = hasUnknownChangedDetails
       ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>`
       : "";
     const iconsHtml =
       movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : "";
     const lessonContentClass = movedBadge || changedBadge ? "lesson-content has-icons" : "lesson-content";
-
     const naText = String(lessonConfig?.grid?.naText ?? "N/A");
 
     try {
       const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
 
-      let primaryHtml;
-      if (changedFields.has("subject")) {
-        const newSubject = lesson.subjects?.[0]?.name || "";
-        const oldSubject = getFirstFieldName(lesson.previousSubjects);
-        if (newSubject) {
-          primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newSubject)}</span>`;
-        } else if (oldSubject) {
-          primaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldSubject)}</span>`;
-        } else {
-          primaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
-        }
-      } else {
-        primaryHtml = displayParts.primary ? escapeHtml(displayParts.primary) : "";
-      }
-
-      let secondaryHtml;
-      if (changedFields.has("teacher")) {
-        const newTeacher = lesson.teachers?.[0]?.name || "";
-        const oldTeacher = getFirstFieldName(lesson.previousTeachers);
-        if (newTeacher) {
-          secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(newTeacher)}</span>`;
-        } else if (oldTeacher) {
-          secondaryHtml = `<span class='lesson-changed-removed'>${escapeHtml(oldTeacher)}</span>`;
-        } else {
-          secondaryHtml = `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
-        }
-      } else {
-        secondaryHtml = displayParts.secondary ? escapeHtml(displayParts.secondary) : "";
-      }
-
-      let additionalHtml = "";
-      if (changedFields.has("room")) {
-        const newRoom = lesson.rooms?.[0]?.name || "";
-        const oldRoom = getFirstFieldName(lesson.previousRooms);
-        if (newRoom) {
-          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(newRoom)}</span>)</span>`;
-        } else if (oldRoom) {
-          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-removed'>${escapeHtml(oldRoom)}</span>)</span>`;
-        } else {
-          additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
-        }
-      } else if (displayParts.additional && displayParts.additional.length > 0) {
-        const additionalParts = displayParts.additional
-          .filter(Boolean)
-          .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
-          .join(" ");
-        if (additionalParts) {
-          additionalHtml = ` ${additionalParts}`;
-        }
-      }
-
+      const primaryHtml = changedFields.has("subject")
+        ? changedFieldHtml(
+            lesson.subjects?.[0]?.name || "",
+            getFirstFieldName(lesson.previousSubjects),
+            naText,
+            escapeHtml,
+          )
+        : displayParts.primary
+          ? escapeHtml(displayParts.primary)
+          : "";
+      const secondaryHtml = changedFields.has("teacher")
+        ? changedFieldHtml(
+            lesson.teachers?.[0]?.name || "",
+            getFirstFieldName(lesson.previousTeachers),
+            naText,
+            escapeHtml,
+          )
+        : displayParts.secondary
+          ? escapeHtml(displayParts.secondary)
+          : "";
+      let additionalHtml = additionalLineHtml(lesson, displayParts, changedFields, naText, escapeHtml);
       if (hasUnknownChangedDetails && !additionalHtml) {
         additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
       }
-
-      const normalizedLessonText = normalizeComparableText(lesson.text);
-      const shouldShowLessonText =
-        normalizedLessonText !== "" &&
-        normalizedLessonText !== normalizeComparableText(displayParts.primary) &&
-        normalizedLessonText !== normalizeComparableText(displayParts.secondary) &&
-        !(
-          Array.isArray(displayParts.additional) &&
-          displayParts.additional.some((item) => normalizedLessonText === normalizeComparableText(item))
-        );
-
-      const subst = lesson.substitutionText
-        ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, "<br>")}</span>`
-        : "";
-      const txt = shouldShowLessonText
-        ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, "<br>")}</span>`
-        : "";
 
       const secondaryLine =
         secondaryHtml || additionalHtml
           ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>`
           : "";
 
-      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${subst}${txt}</div>`;
+      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${lessonNotesHtml(lesson, displayParts, escapeHtml)}</div>`;
     } catch (err) {
       log(
         "error",
@@ -1726,6 +1735,169 @@ function getModuleRootElement(ctx) {
    * @param {number} nowYmd - Current date as YYYYMMDD integer
    * @param {number} nowMin - Current time in minutes since midnight
    */
+  /** Lessons of one ticker slot by subject and student group (or class). */
+  function groupTickerLessons(lessons) {
+    const groups = new Map();
+    for (const lesson of lessons) {
+      const subject = getSubject(lesson, "short") || null;
+      const group = getStudentGroup(lesson, "short") || getClass(lesson, "short") || null;
+      const key = `${subject || "unknown"}_${group || "noGroup"}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(lesson);
+    }
+    for (const groupLessons of groups.values()) {
+      groupLessons.sort(byStartThenEnd);
+    }
+    return groups;
+  }
+
+  function byStartThenEnd(a, b) {
+    return a.startMin - b.startMin || a.endMin - b.endMin;
+  }
+
+  /**
+   * Split view: every cancelled lesson next to the replacements overlapping it. Cancelled lessons
+   * with the same set of replacements share one pair.
+   */
+  function pairCancelledWithReplacements(tickerData) {
+    if (!tickerData?.hasSplitView || tickerData.cancelledLessons.length === 0) return [];
+    const pairs = new Map();
+    for (const cancelled of tickerData.cancelledLessons) {
+      const replacements = tickerData.replacements.filter(
+        (r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin,
+      );
+      if (replacements.length === 0) continue;
+      const key = replacements
+        .map((r) => `${r.id ?? r.lessonId ?? "noId"}_${r.startMin}_${r.endMin}_${r.status || ""}`)
+        .sort()
+        .join("|");
+      if (!pairs.has(key)) pairs.set(key, { cancelledLessons: [], replacements });
+      pairs.get(key).cancelledLessons.push(cancelled);
+    }
+    const result = [...pairs.values()];
+    for (const pair of result) pair.cancelledLessons.sort(byStartThenEnd);
+    return result;
+  }
+
+  /** Drop lessons that a split-view pair already shows; groups left empty disappear. */
+  function removePairedLessons(groups, pairs) {
+    const paired = new Set(pairs.flatMap((pair) => [...pair.cancelledLessons, ...pair.replacements]));
+    for (const [key, groupLessons] of groups.entries()) {
+      const remaining = groupLessons.filter((lesson) => !paired.has(lesson));
+      if (remaining.length === 0) groups.delete(key);
+      else groups.set(key, remaining);
+    }
+  }
+
+  function createTickerItem(className, lessons, widthPercent) {
+    const item = document.createElement("div");
+    item.className = className;
+    if (lessons.some((lesson) => lessonHasExam(lesson))) item.classList.add("has-exam");
+    item.style.width = `${widthPercent}%`;
+    item.style.position = "relative";
+    item.style.height = "100%";
+    return item;
+  }
+
+  /**
+   * One lesson inside a ticker item, placed by percent of the item's time span.
+   * @param {Array<[string, string]>} sideStyles - Horizontal placement, in the order it is applied
+   */
+  function createTickerLesson(lesson, placement, sideStyles, splitClass, env) {
+    const div = document.createElement("div");
+    div.className = splitClass ? `lesson-content ${splitClass}` : "lesson-content";
+    div.style.position = "absolute";
+    div.style.top = `${placement.top}%`;
+    div.style.height = `${placement.height}%`;
+    for (const [property, value] of sideStyles) div.style[property] = value;
+
+    applyLessonClasses(div, lesson, {
+      hasExam: lessonHasExam(lesson),
+      nowYmd: env.nowYmd,
+      nowMin: env.nowMin,
+      ...(splitClass ? { additionalClasses: [splitClass] } : {}),
+    });
+    div.innerHTML = makeLessonInnerHTML(lesson, env.escapeHtml, env.ctx, env.lessonConfig);
+    if (checkHomeworkMatch(lesson)) addHomeworkIcon(div);
+    return div;
+  }
+
+  /** Ticker item for one subject group: its lessons stacked over the group's time span. */
+  function createGroupTickerItem(groupLessons, widthPercent, env) {
+    const item = createTickerItem("ticker-item", groupLessons, widthPercent);
+    const start = Math.min(...groupLessons.map((l) => l.startMin));
+    const total = Math.max(...groupLessons.map((l) => l.endMin)) - start;
+    for (const lesson of groupLessons) {
+      const placement =
+        total === 0
+          ? { top: 0, height: 100 }
+          : {
+              top: ((lesson.startMin - start) / total) * 100,
+              height: ((lesson.endMin - lesson.startMin) / total) * 100,
+            };
+      item.appendChild(
+        createTickerLesson(
+          lesson,
+          placement,
+          [
+            ["left", "0"],
+            ["right", "0"],
+          ],
+          null,
+          env,
+        ),
+      );
+    }
+    return item;
+  }
+
+  /** Ticker item for a split-view pair: replacements on the left, cancelled lessons on the right. */
+  function createSplitTickerItem(pair, widthPercent, env) {
+    const all = [...pair.cancelledLessons, ...pair.replacements];
+    const item = createTickerItem(
+      "ticker-item ticker-item-split",
+      [...pair.replacements, ...pair.cancelledLessons],
+      widthPercent,
+    );
+
+    const splitContainer = document.createElement("div");
+    splitContainer.className = "lesson-both-inner";
+    splitContainer.style.position = "absolute";
+    splitContainer.style.top = "0";
+    splitContainer.style.left = "0";
+    splitContainer.style.right = "0";
+    splitContainer.style.height = "100%";
+
+    const start = Math.min(...all.map((l) => l.startMin));
+    const total = Math.max(1, Math.max(...all.map((l) => l.endMin)) - start);
+    const placementOf = (lesson) => ({
+      top: ((lesson.startMin - start) / total) * 100,
+      height: ((lesson.endMin - lesson.startMin) / total) * 100,
+    });
+
+    for (const replacement of pair.replacements) {
+      const side = [
+        ["left", "0"],
+        ["width", "50%"],
+      ];
+      splitContainer.appendChild(createTickerLesson(replacement, placementOf(replacement), side, "split-left", env));
+    }
+    for (const cancelled of pair.cancelledLessons) {
+      const side = [
+        ["right", "0"],
+        ["width", "50%"],
+      ];
+      splitContainer.appendChild(createTickerLesson(cancelled, placementOf(cancelled), side, "split-right", env));
+    }
+
+    item.appendChild(splitContainer);
+    return item;
+  }
+
+  /**
+   * Overlapping lessons of one slot as a horizontally scrolling ticker: one item per subject
+   * group and per split-view pair, the whole track twice for a seamless loop.
+   */
   function createTickerAnimation(
     lessons,
     topPx,
@@ -1739,69 +1911,11 @@ function getModuleRootElement(ctx) {
     tickerData,
     lessonConfig,
   ) {
-    const subjectGroups = new Map();
-    for (let index = 0; index < lessons.length; index++) {
-      const lesson = lessons[index];
-      const subject = getSubject(lesson, "short") || null;
-      const studentGroup = getStudentGroup(lesson, "short") || null;
-      const className = getClass(lesson, "short") || null;
-
-      const groupKey = `${subject || "unknown"}_${studentGroup || className || "noGroup"}`;
-
-      if (!subjectGroups.has(groupKey)) {
-        subjectGroups.set(groupKey, []);
-      }
-      subjectGroups.get(groupKey).push(lesson);
-    }
-
-    for (const [, groupLessons] of subjectGroups.entries()) {
-      groupLessons.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-    }
-
-    const splitViewPairs = [];
+    const env = { ctx, escapeHtml, nowYmd, nowMin, lessonConfig };
+    const groups = groupTickerLessons(lessons);
+    const pairs = pairCancelledWithReplacements(tickerData);
     if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
-      const pairMap = new Map();
-      for (const cancelled of tickerData.cancelledLessons) {
-        const matchingReplacements = tickerData.replacements.filter(
-          (r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin,
-        );
-
-        if (matchingReplacements.length > 0) {
-          const replacementKey = matchingReplacements
-            .map((r) => `${r.id ?? r.lessonId ?? "noId"}_${r.startMin}_${r.endMin}_${r.status || ""}`)
-            .sort()
-            .join("|");
-
-          if (!pairMap.has(replacementKey)) {
-            pairMap.set(replacementKey, {
-              cancelledLessons: [],
-              replacements: matchingReplacements,
-            });
-          }
-
-          pairMap.get(replacementKey).cancelledLessons.push(cancelled);
-        }
-      }
-
-      for (const [, pair] of pairMap.entries()) {
-        pair.cancelledLessons.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-        splitViewPairs.push(pair);
-      }
-
-      const pairedLessons = new Set();
-      for (const pair of splitViewPairs) {
-        for (const cancelled of pair.cancelledLessons) pairedLessons.add(cancelled);
-        for (const replacement of pair.replacements) pairedLessons.add(replacement);
-      }
-
-      for (const [key, groupLessons] of subjectGroups.entries()) {
-        const filtered = groupLessons.filter((l) => !pairedLessons.has(l));
-        if (filtered.length === 0) {
-          subjectGroups.delete(key);
-        } else {
-          subjectGroups.set(key, filtered);
-        }
-      }
+      removePairedLessons(groups, pairs);
     }
 
     const tickerWrapper = document.createElement("div");
@@ -1815,171 +1929,26 @@ function getModuleRootElement(ctx) {
     tickerWrapper.setAttribute("data-date", lessons[0].dateStr);
     tickerWrapper.setAttribute("data-end-min", String(Math.max(...lessons.map((l) => l.endMin))));
 
+    const itemCount = groups.size + pairs.length;
+    const itemWidthPercent = 100 / (itemCount * 2);
     const tickerTrack = document.createElement("div");
     tickerTrack.className = "ticker-track";
-
-    const itemCount = subjectGroups.size + splitViewPairs.length;
-    const itemWidthPercent = 100;
-
-    const trackWidth = itemCount * 2 * itemWidthPercent;
-    tickerTrack.style.width = `${trackWidth}%`;
+    tickerTrack.style.width = `${itemCount * 2 * 100}%`;
 
     for (let copy = 0; copy < 2; copy++) {
-      for (const [, subjectLessons] of subjectGroups.entries()) {
-        const tickerItem = document.createElement("div");
-        tickerItem.className = "ticker-item";
-        const groupHasExam = subjectLessons.some((lesson) => lessonHasExam(lesson));
-        if (groupHasExam) tickerItem.classList.add("has-exam");
-
-        tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
-        tickerItem.style.position = "relative";
-        tickerItem.style.height = "100%";
-
-        const groupStartMin = Math.min(...subjectLessons.map((l) => l.startMin));
-        const groupEndMin = Math.max(...subjectLessons.map((l) => l.endMin));
-        const totalGroupMinutes = groupEndMin - groupStartMin;
-
-        for (const lesson of subjectLessons) {
-          const lessonDiv = document.createElement("div");
-          lessonDiv.className = "lesson-content";
-
-          const lessonStartOffset = lesson.startMin - groupStartMin;
-          const lessonDuration = lesson.endMin - lesson.startMin;
-
-          let topPercent;
-          let heightPercent;
-
-          if (totalGroupMinutes === 0) {
-            topPercent = 0;
-            heightPercent = 100;
-          } else {
-            topPercent = (lessonStartOffset / totalGroupMinutes) * 100;
-            heightPercent = (lessonDuration / totalGroupMinutes) * 100;
-          }
-
-          lessonDiv.style.position = "absolute";
-          lessonDiv.style.top = `${topPercent}%`;
-          lessonDiv.style.height = `${heightPercent}%`;
-          lessonDiv.style.left = "0";
-          lessonDiv.style.right = "0";
-
-          applyLessonClasses(lessonDiv, lesson, {
-            hasExam: lessonHasExam(lesson),
-            nowYmd,
-            nowMin,
-          });
-
-          lessonDiv.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
-
-          if (checkHomeworkMatch(lesson)) {
-            addHomeworkIcon(lessonDiv);
-          }
-
-          tickerItem.appendChild(lessonDiv);
-        }
-
-        tickerTrack.appendChild(tickerItem);
+      for (const groupLessons of groups.values()) {
+        tickerTrack.appendChild(createGroupTickerItem(groupLessons, itemWidthPercent, env));
       }
-
-      for (const pair of splitViewPairs) {
-        const tickerItem = document.createElement("div");
-        tickerItem.className = "ticker-item ticker-item-split";
-        const pairHasExam = [...pair.replacements, ...pair.cancelledLessons].some((lesson) => lessonHasExam(lesson));
-        if (pairHasExam) tickerItem.classList.add("has-exam");
-
-        tickerItem.style.width = `${itemWidthPercent / (itemCount * 2)}%`;
-        tickerItem.style.position = "relative";
-        tickerItem.style.height = "100%";
-
-        const splitContainer = document.createElement("div");
-        splitContainer.className = "lesson-both-inner";
-        splitContainer.style.position = "absolute";
-        splitContainer.style.top = "0";
-        splitContainer.style.left = "0";
-        splitContainer.style.right = "0";
-        splitContainer.style.height = "100%";
-
-        const pairStartMin = Math.min(
-          ...pair.cancelledLessons.map((c) => c.startMin),
-          ...pair.replacements.map((r) => r.startMin),
-        );
-        const pairEndMin = Math.max(
-          ...pair.cancelledLessons.map((c) => c.endMin),
-          ...pair.replacements.map((r) => r.endMin),
-        );
-        const pairTotalMinutes = Math.max(1, pairEndMin - pairStartMin);
-
-        const toPairPercent = (lesson) => {
-          const lessonStartOffset = lesson.startMin - pairStartMin;
-          const lessonDuration = lesson.endMin - lesson.startMin;
-          return {
-            top: (lessonStartOffset / pairTotalMinutes) * 100,
-            height: (lessonDuration / pairTotalMinutes) * 100,
-          };
-        };
-
-        for (const replacement of pair.replacements) {
-          const replacementDiv = document.createElement("div");
-          replacementDiv.className = "lesson-content split-left";
-          const replacementPos = toPairPercent(replacement);
-          replacementDiv.style.position = "absolute";
-          replacementDiv.style.top = `${replacementPos.top}%`;
-          replacementDiv.style.height = `${replacementPos.height}%`;
-          replacementDiv.style.left = "0";
-          replacementDiv.style.width = "50%";
-
-          applyLessonClasses(replacementDiv, replacement, {
-            hasExam: lessonHasExam(replacement),
-            nowYmd,
-            nowMin,
-            additionalClasses: ["split-left"],
-          });
-
-          replacementDiv.innerHTML = makeLessonInnerHTML(replacement, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(replacement)) {
-            addHomeworkIcon(replacementDiv);
-          }
-
-          splitContainer.appendChild(replacementDiv);
-        }
-
-        for (const cancelled of pair.cancelledLessons) {
-          const cancelledDiv = document.createElement("div");
-          cancelledDiv.className = "lesson-content split-right";
-          const cancelledPos = toPairPercent(cancelled);
-          cancelledDiv.style.position = "absolute";
-          cancelledDiv.style.top = `${cancelledPos.top}%`;
-          cancelledDiv.style.height = `${cancelledPos.height}%`;
-          cancelledDiv.style.right = "0";
-          cancelledDiv.style.width = "50%";
-
-          applyLessonClasses(cancelledDiv, cancelled, {
-            hasExam: lessonHasExam(cancelled),
-            nowYmd,
-            nowMin,
-            additionalClasses: ["split-right"],
-          });
-
-          cancelledDiv.innerHTML = makeLessonInnerHTML(cancelled, escapeHtml, ctx, lessonConfig);
-          if (checkHomeworkMatch(cancelled)) {
-            addHomeworkIcon(cancelledDiv);
-          }
-
-          splitContainer.appendChild(cancelledDiv);
-        }
-
-        tickerItem.appendChild(splitContainer);
-        tickerTrack.appendChild(tickerItem);
+      for (const pair of pairs) {
+        tickerTrack.appendChild(createSplitTickerItem(pair, itemWidthPercent, env));
       }
     }
-
     tickerWrapper.appendChild(tickerTrack);
 
     const prefersReducedMotion =
       typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!prefersReducedMotion) {
-      const duration = Math.max(10, itemCount * 3);
-      tickerTrack.style.animation = `ticker-scroll ${duration}s linear infinite`;
+      tickerTrack.style.animation = `ticker-scroll ${Math.max(10, itemCount * 3)}s linear infinite`;
     }
 
     container.appendChild(tickerWrapper);

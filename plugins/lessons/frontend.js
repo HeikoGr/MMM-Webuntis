@@ -326,290 +326,85 @@
   ) {
     const effectiveStudentTitle = String(studentTitle || studentConfig?.title || studentCellTitle || "");
     log("debug", `[LESSONS-DEBUG] renderLessonsForStudent called for ${effectiveStudentTitle}`);
-    let addedRows = 0;
 
     const widgetCtx = createWidgetContext("lessons", studentConfig, root.util || {}, ctx);
-
     const getLessonsConfig = (key, optionsOrFallback) => widgetCtx.getConfig(key, optionsOrFallback);
 
     const configuredNext = getLessonsConfig("nextDays");
-    const nextDays = Math.max(0, Number.parseInt(configuredNext, 10) || 0);
     log("debug", `[LESSONS-DEBUG] ${effectiveStudentTitle}: configuredNext=${configuredNext}`);
     if (configuredNext === undefined || configuredNext === null) {
       log("debug", `[LESSONS-DEBUG] ${effectiveStudentTitle}: skipped - nextDays missing`);
       log("debug", `[lessons] skipped: nextDays missing for "${effectiveStudentTitle}"`);
       return 0;
     }
+    const nextDays = Math.max(0, Number.parseInt(configuredNext, 10) || 0);
 
-    const timetableLength = Array.isArray(timetable) ? timetable.length : 0;
-    const holidaysLength = Array.isArray(holidays) ? holidays.length : 0;
-    const holidayMapLength = ctx.holidayMapByStudent?.[effectiveStudentTitle]
-      ? Object.keys(ctx.holidayMapByStudent[effectiveStudentTitle]).length
-      : 0;
-    log(
-      "debug",
-      `[LESSONS-DEBUG] ${effectiveStudentTitle}: timetable=${timetableLength}, holidays=${holidaysLength}, holidayMap=${holidayMapLength}`,
-    );
-    log(
-      ctx,
-      "debug",
-      `[lessons] render start | student: "${effectiveStudentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength}`,
-    );
+    logRenderStart(ctx, effectiveStudentTitle, timetable, holidays);
 
-    // Use module's computed today value when available (supports debugDate), else local now
+    // The module's today (it follows debugDate), else the local clock.
     const nowContext = ctx.getCurrentDateContext(studentConfig || ctx.config || {});
     const nowYmd =
       ctx._currentTodayYmd ||
       (typeof ctx._computeTodayYmdValue === "function" ? ctx._computeTodayYmdValue() : nowContext.ymd);
-    const nowLocal = nowContext.date;
-    const nowHm = currentTimeAsHHMM(nowLocal);
+    const nowHm = currentTimeAsHHMM(nowContext.date);
     log("debug", `[lessons] Now: ${nowYmd} ${nowHm}, holidays: ${Array.isArray(holidays) ? holidays.length : 0}`);
 
-    // Group lessons by date for efficient day-by-day rendering
-    const lessonsByDate = {};
-    const lessonsList = Array.isArray(timetable) ? timetable.slice() : [];
-    for (const entry of lessonsList) {
-      const dateYmd = Number(entry.date);
-      if (!lessonsByDate[dateYmd]) lessonsByDate[dateYmd] = [];
-      lessonsByDate[dateYmd].push(entry);
-    }
-    const dateCount = Object.keys(lessonsByDate).length;
-    log("debug", `[lessons] grouped ${lessonsList.length} entries into ${dateCount} unique dates`);
+    const lessonsByDate = groupLessonsByDate(timetable);
 
-    // Determine display window (aligns with grid behavior: past + today + future)
-    const daysToShow = nextDays;
+    // Display window, as in the grid: past days + today + future days.
     const pastDays = Math.max(0, parseInt(getLessonsConfig("pastDays") ?? 0, 10));
-    const totalDisplayDays = pastDays + 1 + daysToShow;
-    log("debug", `[lessons] window: ${totalDisplayDays} total days (${pastDays} past + today + ${daysToShow} future)`);
+    log(
+      "debug",
+      `[lessons] window: ${pastDays + 1 + nextDays} total days (${pastDays} past + today + ${nextDays} future)`,
+    );
 
-    // Add header after validation passes, reusing the already-created widgetCtx
+    // The header goes in once the config is known to be usable.
     const { studentLabelText } = initializeWidgetContextAndHeader(
       "lessons",
       ctx,
       container,
       studentCellTitle,
       studentConfig,
-      {
-        widgetCtx,
-      },
+      { widgetCtx },
     );
 
-    const lessonsDateFormat = getLessonsConfig("dateFormat");
-    const useShortSubject = Boolean(getLessonsConfig("useShortSubject"));
-    const teacherMode = getLessonsConfig("showTeacherMode");
-    const hideWeekends = Boolean(getLessonsConfig("hideWeekends"));
-    const showSubstitution = Boolean(getLessonsConfig("showSubstitution"));
-    const showRoom = Boolean(getLessonsConfig("showRoom"));
-    const showRegular = Boolean(getLessonsConfig("showRegular"));
-    const showStartTime = Boolean(getLessonsConfig("showStartTime"));
-    const naText = String(getLessonsConfig("naText", "N/A"));
+    const options = {
+      dateFormat: getLessonsConfig("dateFormat"),
+      useShortSubject: Boolean(getLessonsConfig("useShortSubject")),
+      teacherMode: getLessonsConfig("showTeacherMode"),
+      showSubstitution: Boolean(getLessonsConfig("showSubstitution")),
+      showRoom: Boolean(getLessonsConfig("showRoom")),
+      showRegular: Boolean(getLessonsConfig("showRegular")),
+      showStartTime: Boolean(getLessonsConfig("showStartTime")),
+      naText: String(getLessonsConfig("naText", "N/A")),
+      keepPast: (ctx.config.logLevel ?? "info") === "debug",
+      startTimesMap,
+    };
 
-    // Determine base date (supports debugDate via ctx._currentTodayYmd)
-    let baseDate;
-    if (ctx._currentTodayYmd) {
-      const s = String(ctx._currentTodayYmd);
-      const by = parseInt(s.substring(0, 4), 10);
-      const bm = parseInt(s.substring(4, 6), 10) - 1;
-      const bd = parseInt(s.substring(6, 8), 10);
-      baseDate = new Date(by, bm, bd);
-    } else {
-      baseDate = new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
-    }
-
-    const displayDates = buildDisplayDates(baseDate, {
+    const displayDates = buildDisplayDates(resolveBaseDate(ctx, nowContext.date), {
       pastDays,
-      daysToShow,
-      hideWeekends,
+      daysToShow: nextDays,
+      hideWeekends: Boolean(getLessonsConfig("hideWeekends")),
       lessonsByDate,
     });
 
-    // Iterate display days in order and render lessons or holiday notices
+    let addedRows = 0;
     for (const dayDate of displayDates) {
       const dateYmd = getDayYmd(dayDate);
+      const entries = (lessonsByDate[dateYmd] || []).slice().sort(compareLessonsOfDay);
 
-      const entries = (lessonsByDate[dateYmd] || []).slice().sort((a, b) => {
-        const aTime = Number(a.startTime) || 0;
-        const bTime = Number(b.startTime) || 0;
-        if (aTime !== bTime) return aTime - bTime;
-        const aCancelled = a.status === "CANCELLED";
-        const bCancelled = b.status === "CANCELLED";
-        if (aCancelled && !bCancelled) return -1;
-        if (!aCancelled && bCancelled) return 1;
-        return 0;
-      });
-
-      if (!entries || entries.length === 0) {
+      if (entries.length === 0) {
         const dayState = getEmptyDayState(ctx, effectiveStudentTitle, dayDate);
-        addedRows += renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState);
+        addedRows += renderEmptyDayRow(container, studentLabelText, dayDate, options.dateFormat, dayState);
         continue;
       }
 
       log("debug", `[lessons] ${dateYmd}: ${entries.length} entries`);
-
       for (const entry of entries) {
-        const entryYmdStr = String(entry.date);
-        const year = parseInt(entryYmdStr.substring(0, 4), 10);
-        const month = parseInt(entryYmdStr.substring(4, 6), 10);
-        const day = parseInt(entryYmdStr.substring(6, 8), 10);
-        const stNum = Number(entry.startTime) || 0;
-        const stHour = Math.floor(stNum / 100);
-        const stMin = stNum % 100;
-        const entryDate = new Date(year, month - 1, day);
-
-        const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && stNum < nowHm);
-        const isRegularLesson = !isIrregularStatus(entry) && entry.status !== "CANCELLED";
-        const changedFields = getChangedFieldSet(entry);
-        const subjectChanged = hasEffectiveFieldChange(entry, "subject");
-        const teacherChanged = hasEffectiveFieldChange(entry, "teacher");
-        const roomChanged = hasEffectiveFieldChange(entry, "room");
-        const visibleChangedInLessons =
-          entry.status === "CHANGED" ? hasVisibleLessonChange(entry, teacherMode, showRoom) : false;
-        const subjects = getLessonField(entry, "subject");
-        const teachers = getLessonField(entry, "teacher");
-        const rooms = getLessonField(entry, "room");
-        const subjectEntry = getPrimaryFieldEntry(subjects);
-        const teacherEntry = getPrimaryFieldEntry(teachers);
-        const roomEntry = getPrimaryFieldEntry(rooms);
-
-        const isChangedButNotVisible = entry.status === "CHANGED" && !showRegular && !visibleChangedInLessons;
-        if ((!showRegular && isRegularLesson) || (isPast && (ctx.config.logLevel ?? "info") !== "debug")) {
-          log(
-            "debug",
-            `[lessons] filter: ${getFieldDisplayName(subjectEntry, "short") || "N/A"} ${stNum} (past=${isPast}, status=${entry.status || "none"})`,
-          );
-          continue;
-        }
-
-        if (isChangedButNotVisible) {
-          log("debug", `[lessons] filter: hidden non-visible CHANGED lesson at ${stNum}`);
-          continue;
-        }
-
+        if (isFilteredOut(entry, options, nowYmd, nowHm)) continue;
         addedRows++;
-        const dateLabel = formatDisplayDate(entryDate, lessonsDateFormat);
-        let timeStr = `<span class="wu-lesson__date">${escapeHtml(dateLabel)}</span>&nbsp;`;
-        const hh = String(stHour).padStart(2, "0");
-        const mm = String(stMin).padStart(2, "0");
-        const formattedStart = `${hh}:${mm}`;
-        const startNumeric = normalizeHHMMValue(entry.startTime);
-        const endNumeric = normalizeHHMMValue(entry.endTime);
-        const startKey = startNumeric !== null ? String(startNumeric) : "";
-        const startLabel =
-          startNumeric !== null ? (startTimesMap?.[startNumeric] ?? startTimesMap?.[startKey]) : undefined;
-
-        let endPeriodLabel = startLabel;
-        if (startLabel && startNumeric !== null && endNumeric !== null) {
-          const sortedStarts = Object.keys(startTimesMap)
-            .map(Number)
-            .filter(Number.isFinite)
-            .filter((t) => t > startNumeric && t < endNumeric)
-            .sort((a, b) => b - a);
-
-          if (sortedStarts.length > 0) {
-            const lastStart = sortedStarts[0];
-            endPeriodLabel = startTimesMap[lastStart];
-          }
-        }
-
-        if (showStartTime) {
-          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
-        } else if (startLabel !== undefined) {
-          if (endPeriodLabel !== undefined && endPeriodLabel !== startLabel) {
-            timeStr += `<span class="wu-lesson__period">${startLabel}.-${endPeriodLabel}.</span>`;
-          } else {
-            timeStr += `<span class="wu-lesson__period">${startLabel}.</span>`;
-          }
-        } else {
-          timeStr += `<span class="wu-lesson__time">${formattedStart}</span>`;
-        }
-
-        const fallbackLong = getLessonDisplayFallback(entry, "long");
-        const fallbackShort = getLessonDisplayFallback(entry, "short");
-        const hasSubject = Boolean(subjectEntry);
-        const subjLong = getFieldDisplayName(subjectEntry, "long") || fallbackLong || "N/A";
-        const subjShort = getFieldDisplayName(subjectEntry, "short") || fallbackShort || fallbackLong || "N/A";
-        const subjectLabel = useShortSubject ? subjShort : subjLong;
-        log("debug", `[lessons] Adding lesson: ${subjLong} at ${stNum}`);
-        let subjectStr = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
-        if (subjectChanged && !hasSubject) {
-          subjectStr = `<span class='lesson-changed-new'>${escapeHtml(subjectLabel || naText)}</span>`;
-        } else if (subjectChanged) {
-          subjectStr = `<span class='lesson-changed-new'>${subjectStr}</span>`;
-        }
-
-        if (teacherMode === "initial") {
-          const teacherInitial = getFieldDisplayName(teacherEntry, "short");
-          if (teacherInitial !== "") {
-            const teacherText = `(${escapeHtml(teacherInitial)})`;
-            if (teacherChanged) {
-              subjectStr += `&nbsp;<span class="lesson-changed-new">${teacherText}</span>`;
-            } else {
-              subjectStr += `&nbsp;<span class="teacher-name">${teacherText}</span>`;
-            }
-          } else if (teacherChanged) {
-            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
-          }
-        } else if (teacherMode === "full") {
-          const teacherFull = getFieldDisplayName(teacherEntry, "long");
-          if (teacherFull !== "") {
-            const teacherText = `(${escapeHtml(teacherFull)})`;
-            if (teacherChanged) {
-              subjectStr += `&nbsp;<span class="lesson-changed-new">${teacherText}</span>`;
-            } else {
-              subjectStr += `&nbsp;<span class="teacher-name">${teacherText}</span>`;
-            }
-          } else if (teacherChanged) {
-            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
-          }
-        }
-
-        if (showRoom) {
-          const roomName = getFieldDisplayName(roomEntry, "short");
-          if (roomName !== "") {
-            const roomText = `(${escapeHtml(roomName)})`;
-            if (roomChanged) {
-              subjectStr += `&nbsp;<span class="lesson-changed-new">${roomText}</span>`;
-            } else {
-              subjectStr += `&nbsp;<span class="lesson-room-name">${roomText}</span>`;
-            }
-          } else if (roomChanged) {
-            subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
-          }
-        }
-
-        if (entry.status === "CHANGED" && changedFields.size === 0 && fallbackLong === "") {
-          subjectStr += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
-        }
-
-        const substitutionText = getSubstitutionText(entry);
-        if (showSubstitution && substitutionText !== "") {
-          subjectStr += `<br/><span class='lesson-substitution-text'>${escapeHtml(substitutionText)}</span>`;
-        }
-
-        const lessonText = getLessonText(entry);
-        const normalizedLessonText = normalizeComparableText(lessonText);
-        const shouldShowLessonText =
-          normalizedLessonText !== "" &&
-          normalizedLessonText !== normalizeComparableText(subjectLabel) &&
-          normalizedLessonText !== normalizeComparableText(subjLong) &&
-          normalizedLessonText !== normalizeComparableText(subjShort);
-
-        if (shouldShowLessonText) {
-          if (subjectStr.trim() !== "") subjectStr += "<br/>";
-          subjectStr += `<span class='lesson-info-text'>${escapeHtml(lessonText)}</span>`;
-        }
-
-        let addClass = "";
-        if (
-          Array.isArray(entry.displayIcons) &&
-          entry.displayIcons.some((icon) => String(icon || "").toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM)
-        ) {
-          addClass = "exam";
-        } else if (entry.status === "CANCELLED") {
-          addClass = "cancelled";
-        }
-
-        addRow(container, "lessonRow", studentLabelText, timeStr, subjectStr, addClass);
+        const subject = buildSubjectCell(entry, options);
+        addRow(container, "lessonRow", studentLabelText, buildTimeCell(entry, options), subject, lessonRowClass(entry));
       }
     }
 
@@ -621,6 +416,209 @@
 
     log("debug", `[lessons] render complete | rows: ${addedRows}`);
     return addedRows;
+  }
+
+  function logRenderStart(ctx, studentTitle, timetable, holidays) {
+    const timetableLength = Array.isArray(timetable) ? timetable.length : 0;
+    const holidaysLength = Array.isArray(holidays) ? holidays.length : 0;
+    const holidayMapLength = ctx.holidayMapByStudent?.[studentTitle]
+      ? Object.keys(ctx.holidayMapByStudent[studentTitle]).length
+      : 0;
+    log(
+      "debug",
+      `[LESSONS-DEBUG] ${studentTitle}: timetable=${timetableLength}, holidays=${holidaysLength}, holidayMap=${holidayMapLength}`,
+    );
+    log(
+      ctx,
+      "debug",
+      `[lessons] render start | student: "${studentTitle}" | entries: ${timetableLength} | holidays: ${holidaysLength} | holidayMap: ${holidayMapLength}`,
+    );
+  }
+
+  /** Timetable entries by YYYYMMDD. */
+  function groupLessonsByDate(timetable) {
+    const lessonsByDate = {};
+    const lessonsList = Array.isArray(timetable) ? timetable.slice() : [];
+    for (const entry of lessonsList) {
+      const dateYmd = Number(entry.date);
+      if (!lessonsByDate[dateYmd]) lessonsByDate[dateYmd] = [];
+      lessonsByDate[dateYmd].push(entry);
+    }
+    log(
+      "debug",
+      `[lessons] grouped ${lessonsList.length} entries into ${Object.keys(lessonsByDate).length} unique dates`,
+    );
+    return lessonsByDate;
+  }
+
+  /** First displayed day: the module's today (debugDate aware), else the local date. */
+  function resolveBaseDate(ctx, nowLocal) {
+    if (ctx._currentTodayYmd) {
+      const ymd = String(ctx._currentTodayYmd);
+      return new Date(
+        parseInt(ymd.substring(0, 4), 10),
+        parseInt(ymd.substring(4, 6), 10) - 1,
+        parseInt(ymd.substring(6, 8), 10),
+      );
+    }
+    return new Date(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
+  }
+
+  /** By start time; a cancelled lesson before its replacement in the same slot. */
+  function compareLessonsOfDay(a, b) {
+    const aTime = Number(a.startTime) || 0;
+    const bTime = Number(b.startTime) || 0;
+    if (aTime !== bTime) return aTime - bTime;
+    const aCancelled = a.status === "CANCELLED";
+    const bCancelled = b.status === "CANCELLED";
+    if (aCancelled && !bCancelled) return -1;
+    if (!aCancelled && bCancelled) return 1;
+    return 0;
+  }
+
+  /**
+   * Lessons the list leaves out: regular ones without showRegular, past ones (except in debug
+   * mode), and CHANGED ones whose change is not visible with the configured fields.
+   */
+  function isFilteredOut(entry, options, nowYmd, nowHm) {
+    const startHm = Number(entry.startTime) || 0;
+    const isPast = Number(entry.date) < nowYmd || (Number(entry.date) === nowYmd && startHm < nowHm);
+    const isRegularLesson = !isIrregularStatus(entry) && entry.status !== "CANCELLED";
+
+    if ((!options.showRegular && isRegularLesson) || (isPast && !options.keepPast)) {
+      const subjectEntry = getPrimaryFieldEntry(getLessonField(entry, "subject"));
+      log(
+        "debug",
+        `[lessons] filter: ${getFieldDisplayName(subjectEntry, "short") || "N/A"} ${startHm} (past=${isPast}, status=${entry.status || "none"})`,
+      );
+      return true;
+    }
+
+    const changeVisible =
+      entry.status === "CHANGED" ? hasVisibleLessonChange(entry, options.teacherMode, options.showRoom) : false;
+    if (entry.status === "CHANGED" && !options.showRegular && !changeVisible) {
+      log("debug", `[lessons] filter: hidden non-visible CHANGED lesson at ${startHm}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Period label(s) of a lesson from the timegrid: "3." or "3.-4." for a lesson spanning several
+   * periods; undefined when its start is not a period start.
+   */
+  function periodLabel(entry, startTimesMap) {
+    const startNumeric = normalizeHHMMValue(entry.startTime);
+    const endNumeric = normalizeHHMMValue(entry.endTime);
+    const startLabel =
+      startNumeric !== null ? (startTimesMap?.[startNumeric] ?? startTimesMap?.[String(startNumeric)]) : undefined;
+    if (startLabel === undefined) return undefined;
+
+    let endLabel = startLabel;
+    if (startLabel && startNumeric !== null && endNumeric !== null) {
+      // The last period that starts inside the lesson.
+      const lastStart = Object.keys(startTimesMap)
+        .map(Number)
+        .filter(Number.isFinite)
+        .filter((t) => t > startNumeric && t < endNumeric)
+        .sort((a, b) => b - a)[0];
+      if (lastStart !== undefined) endLabel = startTimesMap[lastStart];
+    }
+    return endLabel !== undefined && endLabel !== startLabel ? `${startLabel}.-${endLabel}.` : `${startLabel}.`;
+  }
+
+  /** Date plus start time, or plus the period number(s) when the timegrid knows them. */
+  function buildTimeCell(entry, options) {
+    const ymd = String(entry.date);
+    const entryDate = new Date(
+      parseInt(ymd.substring(0, 4), 10),
+      parseInt(ymd.substring(4, 6), 10) - 1,
+      parseInt(ymd.substring(6, 8), 10),
+    );
+    const startHm = Number(entry.startTime) || 0;
+    const formattedStart = `${String(Math.floor(startHm / 100)).padStart(2, "0")}:${String(startHm % 100).padStart(2, "0")}`;
+    const dateCell = `<span class="wu-lesson__date">${escapeHtml(formatDisplayDate(entryDate, options.dateFormat))}</span>&nbsp;`;
+
+    const period = options.showStartTime ? undefined : periodLabel(entry, options.startTimesMap);
+    return period === undefined
+      ? `${dateCell}<span class="wu-lesson__time">${formattedStart}</span>`
+      : `${dateCell}<span class="wu-lesson__period">${period}</span>`;
+  }
+
+  /**
+   * " (value)" after the subject, highlighted when the field changed; "(N/A)" for a changed field
+   * that has no value any more; nothing for an unchanged empty one.
+   */
+  function attachedField(value, changed, cssClass, naText) {
+    if (value !== "") {
+      const text = `(${escapeHtml(value)})`;
+      return changed
+        ? `&nbsp;<span class="lesson-changed-new">${text}</span>`
+        : `&nbsp;<span class="${cssClass}">${text}</span>`;
+    }
+    return changed ? `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>` : "";
+  }
+
+  /** Subject with optional teacher and room, substitution text and lesson text. */
+  function buildSubjectCell(entry, options) {
+    const { naText } = options;
+    const subjectEntry = getPrimaryFieldEntry(getLessonField(entry, "subject"));
+    const teacherEntry = getPrimaryFieldEntry(getLessonField(entry, "teacher"));
+    const roomEntry = getPrimaryFieldEntry(getLessonField(entry, "room"));
+    const subjectChanged = hasEffectiveFieldChange(entry, "subject");
+
+    const fallbackLong = getLessonDisplayFallback(entry, "long");
+    const fallbackShort = getLessonDisplayFallback(entry, "short");
+    const subjLong = getFieldDisplayName(subjectEntry, "long") || fallbackLong || "N/A";
+    const subjShort = getFieldDisplayName(subjectEntry, "short") || fallbackShort || fallbackLong || "N/A";
+    const subjectLabel = options.useShortSubject ? subjShort : subjLong;
+    log("debug", `[lessons] Adding lesson: ${subjLong} at ${Number(entry.startTime) || 0}`);
+
+    let cell = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
+    if (subjectChanged && !subjectEntry) {
+      cell = `<span class='lesson-changed-new'>${escapeHtml(subjectLabel || naText)}</span>`;
+    } else if (subjectChanged) {
+      cell = `<span class='lesson-changed-new'>${cell}</span>`;
+    }
+
+    if (options.teacherMode === "initial" || options.teacherMode === "full") {
+      const teacher = getFieldDisplayName(teacherEntry, options.teacherMode === "initial" ? "short" : "long");
+      cell += attachedField(teacher, hasEffectiveFieldChange(entry, "teacher"), "teacher-name", naText);
+    }
+    if (options.showRoom) {
+      const room = getFieldDisplayName(roomEntry, "short");
+      cell += attachedField(room, hasEffectiveFieldChange(entry, "room"), "lesson-room-name", naText);
+    }
+    // CHANGED without any field we could show: at least mark it.
+    if (entry.status === "CHANGED" && getChangedFieldSet(entry).size === 0 && fallbackLong === "") {
+      cell += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+    }
+
+    const substitutionText = getSubstitutionText(entry);
+    if (options.showSubstitution && substitutionText !== "") {
+      cell += `<br/><span class='lesson-substitution-text'>${escapeHtml(substitutionText)}</span>`;
+    }
+
+    // The lesson text, unless it only repeats the subject.
+    const lessonText = getLessonText(entry);
+    const normalizedLessonText = normalizeComparableText(lessonText);
+    const repeatsSubject = [subjectLabel, subjLong, subjShort].some(
+      (label) => normalizedLessonText === normalizeComparableText(label),
+    );
+    if (normalizedLessonText !== "" && !repeatsSubject) {
+      if (cell.trim() !== "") cell += "<br/>";
+      cell += `<span class='lesson-info-text'>${escapeHtml(lessonText)}</span>`;
+    }
+    return cell;
+  }
+
+  /** "exam" for an exam lesson, "cancelled" for a cancelled one. */
+  function lessonRowClass(entry) {
+    const isExam =
+      Array.isArray(entry.displayIcons) &&
+      entry.displayIcons.some((icon) => String(icon || "").toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM);
+    if (isExam) return "exam";
+    return entry.status === "CANCELLED" ? "cancelled" : "";
   }
 
   host.registerFrontendPlugin({

@@ -106,6 +106,9 @@ webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
 // Backend: use the logger function passed as parameter
 logger('debug', null, `[feature] Message ${variable}`);  // null = no student context
 logger('warn', 'StudentName', `Warning for student`);    // include student name for context
+// In node_helper.js, code that knows its instance logs through this._loggerFor(identifier)
+// (that instance's logLevel) and passes it on (e.g. fetchStudentData({ ..., mmLog })).
+// this._mmLog is for the shared services and follows the widest instance logLevel.
 
 // Frontend: use the instance logger. Everything goes through MagicMirror's Log (global
 // logLevel); the instance's own logLevel can only narrow it

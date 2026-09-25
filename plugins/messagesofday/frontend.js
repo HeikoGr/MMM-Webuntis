@@ -52,7 +52,9 @@
               const subjectHtml = subject
                 ? `<span class="message-subject wu-message__subject">${escapeHtml(subject)}</span>`
                 : "";
-              const contentText = text || escapeHtml(translate("no_text", "No text"));
+              // text is safe HTML from sanitizeRichText() (formatting tags kept, entities still
+              // encoded) - inserted as is, never escaped a second time.
+              const contentText = text ? text.replace(/\n/g, "<br>") : escapeHtml(translate("no_text", "No text"));
               const fullContent = subjectHtml
                 ? `${subjectHtml}<span class="message-text wu-message__text">${contentText}</span>`
                 : `<span class="message-text wu-message__text">${contentText}</span>`;
