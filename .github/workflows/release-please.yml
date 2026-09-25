@@ -3,6 +3,7 @@ name: Release Please
 on:
   push:
     branches:
+      - develop
       - master
   workflow_dispatch:
 
@@ -14,14 +15,19 @@ concurrency:
   group: release-please
   cancel-in-progress: false
 
+# The release is prepared on develop and shipped by a single develop -> master merge.
+# Both jobs point release-please at develop: that is where the release PR lives and whose
+# history the changelog is built from.
 jobs:
-  release-please:
+  release-pr:
+    if: github.ref_name == 'develop'
     runs-on: ubuntu-latest
 
     steps:
-      # Keeps an open "chore(main): release x.y.z" PR in sync with every conventional commit
-      # landing on master. Merging that PR bumps package.json + package-lock.json, writes the
-      # CHANGELOG entry, creates the git tag, and publishes a GitHub release.
+      # Keeps an open "chore(develop): release x.y.z" PR in sync with every conventional commit
+      # landing on develop. Merging that PR bumps package.json + package-lock.json and writes the
+      # CHANGELOG entry - on develop, without a tag or GitHub release yet. Until that release has
+      # been shipped to master, release-please opens no new release PR.
       #
       # Version numbers therefore stop being a manual step attached to an unrelated commit,
       # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
@@ -32,6 +38,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: develop
+          skip-github-release: true
 
       # gh pr edit's own notification (not the plain "PR opened" one) shows up in the
       # GitHub inbox, not just by mail - assigning is what release-please itself has no
@@ -47,21 +55,19 @@ jobs:
             gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
           done
 
-      # The release commit (version bump + CHANGELOG) exists only on master. A PR back into
-      # develop keeps the two branches from drifting apart. It is opened with GITHUB_TOKEN,
-      # so no CI runs on it: merge it as admin past the required checks, as a merge commit.
-      - name: Open back-merge PR into develop
-        if: ${{ steps.release-please.outputs.releases_created == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.release-please.outputs.tag_name }}
-        run: |
-          if [ -n "$(gh pr list --repo "$REPO" --base develop --head master --state open --json number --jq '.[].number')" ]; then
-            echo "Back-merge PR already open."
-            exit 0
-          fi
-          gh pr create --repo "$REPO" --base develop --head master \
-            --title "chore: merge master into develop after release${TAG:+ $TAG}" \
-            --body "Brings the release commit back to develop. Merge as a merge commit, not squashed." \
-            --assignee HeikoGr
+  github-release:
+    if: github.ref_name == 'master'
+    runs-on: ubuntu-latest
+
+    steps:
+      # develop reached master: tag the merged release PR and publish the GitHub release. The tag
+      # lands on the release PR's commit on develop, which master now contains - so installs from
+      # master and the tag agree.
+      - name: Run release-please
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: develop
+          skip-github-pull-request: true
