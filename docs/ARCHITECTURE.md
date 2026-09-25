@@ -176,23 +176,28 @@ Current compatibility note:
 - The backend normalizes `displayMode` and top-level legacy plugin namespaces into canonical `plugins.<id>.enabled` and `plugins.<id>.config`.
 - The frontend render path is plugin-only.
 
-### Demo Mode (Frontend-Only Path)
+### Demo Mode
 
-When `demoDataFile` is set, the frontend bypasses the backend entirely:
+When `demoDataFile` is set, the backend serves fixtures instead of WebUntis data. Everything else runs
+the live path - `CONFIGURE`, `MODULE_READY` with the plugin registry, periodic `REFRESH`, `DATA_UPDATE`
+- so the widgets follow the module config exactly like live data. `lib/demoData.js` holds the demo
+logic; the backend touches it at three points:
 
-1. `MMM-Webuntis.js` skips `CONFIGURE` and never opens a WebUntis session.
-2. `_loadDemoPluginRegistry()` fetches each `plugins/<id>/manifest.json` over HTTP and builds the
-   plugin registry that the backend would normally supply.
-3. `_loadDemoPayloads()` reads the fixture and emits it through the same `DATA_UPDATE` handling as
-   a live payload.
+1. `CONFIGURE` validates without requiring students or credentials (`lib/configValidator.js`), checks
+   that the fixtures can be read, and merges the module defaults into the configured students instead
+   of running the WebUntis student discovery (which would log in).
+2. `REFRESH` (`_handleFetchData`) emits the fixtures via `_emitDemoData()` instead of fetching. Each
+   payload gets the config of the student at the same position in `context.config`; without configured
+   students every fixture gets a student built from the module config. `demoDataFile` may list several
+   fixtures, comma-separated, one student each. Fixtures are read on every refresh.
+3. Fixture paths must stay inside the module folder.
 
-The fixture must therefore satisfy the same contract as a real payload
-([API_V3_MANIFEST.md](API_V3_MANIFEST.md)); `tests/unit.test.js` asserts that shape for
-`demo/fixtures/single-student-week.json`. Fixture rules live in
+The frontend knows about demo mode only to skip its "no students configured" warning.
+
+The fixtures must satisfy the same contract as a real payload, minus `context.config`
+([API_V3_MANIFEST.md](API_V3_MANIFEST.md)); `tests/unit.test.js` asserts that shape and
+`tests/demo-fixture.test.js` checks that the fixtures tell a consistent story. Fixture rules live in
 [demo/fixtures/README.md](../demo/fixtures/README.md).
-
-Because the demo registry is built in the frontend, the plugin ID list is hardcoded in
-`MMM-Webuntis.js` (`_demoPluginIds`) and must be kept in sync when plugins are added or removed.
 
 ## Key Architectural Rules
 

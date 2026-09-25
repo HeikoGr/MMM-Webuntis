@@ -28,6 +28,7 @@ const {
 const { createAuthSession, getCredentialKey } = require("./lib/authSession");
 const { createResponseCache } = require("./lib/webuntis/responseCache");
 const { ensureStudentsFromAppData } = require("./lib/studentDiscovery");
+const { isDemoMode, buildDemoPayloads, loadFixturePayloads, prepareDemoStudents } = require("./lib/demoData");
 const { extractHolidaysFromAppData } = require("./lib/webuntis/dataOrchestration");
 const { buildStudentErrorPayload } = require("./lib/mmm-adapter/mmmPayloadMapper");
 const {
@@ -271,6 +272,14 @@ module.exports = NodeHelper.create({
       }
 
       const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
+      if (isDemoMode(normalizedConfig)) {
+        try {
+          loadFixturePayloads(normalizedConfig.demoDataFile, __dirname);
+        } catch (error) {
+          validation.valid = false;
+          validation.errors.push(`demoDataFile: ${formatError(error)}`);
+        }
+      }
       if (!validation.valid) {
         this._mmLog("error", null, `[CONFIGURE] Config validation failed for ${identifier}`);
         this._emitInitError(
@@ -290,11 +299,15 @@ module.exports = NodeHelper.create({
       normalizedConfig._authService = this._authService;
       this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
 
-      await ensureStudentsFromAppData(normalizedConfig, {
-        authService: this._authService,
-        logger: this._mmLog.bind(this),
-        formatError: formatError,
-      });
+      if (isDemoMode(normalizedConfig)) {
+        prepareDemoStudents(normalizedConfig);
+      } else {
+        await ensureStudentsFromAppData(normalizedConfig, {
+          authService: this._authService,
+          logger: this._mmLog.bind(this),
+          formatError: formatError,
+        });
+      }
 
       // Same shape as a REFRESH from the frontend - the handler reads nothing else from it, and
       // the session config it needs was just registered above.
@@ -335,6 +348,29 @@ module.exports = NodeHelper.create({
       },
       { identifier, sessionId },
     );
+  },
+
+  // ---------------------------------------------------------------------------------------------
+  // Demo mode
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Demo mode replaces the WebUntis fetch: emit the fixtures as regular DATA_UPDATEs, each with
+   * the per-student config a live payload carries (see lib/demoData.js).
+   */
+  _emitDemoData(config, route) {
+    // The fixtures were checked at CONFIGURE; failing now means one was changed or removed since.
+    let payloads;
+    try {
+      payloads = buildDemoPayloads(config, __dirname);
+    } catch (error) {
+      this._mmLog("error", null, `[DEMO] Cannot read the demo fixtures: ${formatError(error)}`);
+      return;
+    }
+    payloads.forEach((payload) => {
+      this._emitGotData({ ...payload, id: route.identifier }, route);
+    });
+    this._mmLog("debug", null, `[DEMO] Emitted ${payloads.length} demo payload(s) for ${route.identifier}`);
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -414,6 +450,11 @@ module.exports = NodeHelper.create({
       this._sessions.setSessionConfig(sessionKey, config);
       if (payload.debugDate)
         this._mmLog("debug", null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
+    }
+
+    if (isDemoMode(config)) {
+      this._emitDemoData(config, { identifier, sessionId });
+      return;
     }
 
     await this._executeFetchForSession(sessionKey);

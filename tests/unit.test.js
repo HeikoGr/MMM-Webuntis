@@ -1543,3 +1543,77 @@ test("validateConfig rejects addLessons entries whose from date is after until",
   });
   assert.deepEqual(warnings, ['addLessons[0]: "from" must not be after "until" – entry ignored']);
 });
+
+test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without logging in", async () => {
+  const demoHelper = loadNodeHelper();
+  demoHelper._mmLog = () => {};
+  const emitted = [];
+  demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
+
+  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+    action: "CONFIGURE",
+    identifier: "demo-module",
+    data: {
+      id: "demo-module",
+      sessionId: "demo-session",
+      demoDataFile: "demo/fixtures/single-student-week.json",
+      debugDate: "2026-09-30",
+      mode: "compact",
+      displayMode: "grid",
+      grid: { weekView: true },
+      students: [],
+    },
+  });
+
+  assert.deepEqual(
+    emitted.map((event) => event.action),
+    ["MODULE_READY", "DATA_UPDATE"],
+  );
+  const avery = emitted[1].data;
+  assert.equal(avery.context.student.title, "Avery Finch");
+  assert.equal(avery.sessionId, "demo-session");
+  assert.equal(avery.context.config.mode, "compact", "module config reaches the widgets");
+  assert.equal(avery.context.config.debugDate, "2026-09-30");
+  assert.equal(avery.context.config.plugins.grid.config.weekView, true);
+  assert.ok(avery.data.lessons.length > 0);
+});
+
+test("demo payloads take the configured student's options, one fixture per student", () => {
+  const { buildDemoPayloads } = require("../lib/demoData");
+  const moduleRoot = require("node:path").join(__dirname, "..");
+  const config = {
+    demoDataFile: "demo/fixtures/single-student-week.json, demo/fixtures/single-student-week.json",
+    debugDate: "2026-09-30",
+    students: [{ title: "Avery", mode: "verbose" }],
+  };
+
+  const [first, second] = buildDemoPayloads(config, moduleRoot);
+  assert.equal(first.context.config.mode, "verbose");
+  assert.equal(first.context.student.title, "Avery Finch", "the data keeps the fixture's student");
+  assert.equal(second.context.config.title, "Avery", "more fixtures than students reuse the first student");
+});
+
+test("demoDataFile cannot point outside the module folder", () => {
+  const { resolveFixturePaths } = require("../lib/demoData");
+  const moduleRoot = require("node:path").join(__dirname, "..");
+
+  assert.throws(() => resolveFixturePaths("../../config/config.js", moduleRoot), /inside the module folder/);
+  assert.equal(resolveFixturePaths("/demo/fixtures/single-student-week.json", moduleRoot).length, 1);
+});
+
+test("a missing demo fixture fails CONFIGURE with a config error", async () => {
+  const demoHelper = loadNodeHelper();
+  demoHelper._mmLog = () => {};
+  const emitted = [];
+  demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
+
+  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+    action: "CONFIGURE",
+    identifier: "demo-module",
+    data: { id: "demo-module", sessionId: "s", demoDataFile: "demo/fixtures/missing.json", students: [] },
+  });
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].action, "MODULE_INIT_FAILED");
+  assert.match(emitted[0].data.errors.join(" "), /demoDataFile/);
+});
