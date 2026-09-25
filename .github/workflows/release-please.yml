@@ -18,6 +18,9 @@ concurrency:
 # The release is prepared on develop and shipped by a single develop -> master merge.
 # Both jobs point release-please at develop: that is where the release PR lives and whose
 # history the changelog is built from.
+# RELEASE_TOKEN (fine-grained PAT: contents + pull requests, read/write) is used where set. Unlike
+# GITHUB_TOKEN, what it creates starts other workflows, so the release PRs get their checks. Without
+# it everything still runs on GITHUB_TOKEN, and those PRs need the admin bypass to merge.
 jobs:
   release-pr:
     if: github.ref_name == 'develop'
@@ -35,7 +38,7 @@ jobs:
         id: release-please
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: develop
@@ -47,13 +50,41 @@ jobs:
       - name: Assign the release PR
         if: ${{ steps.release-please.outputs.prs_created == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           # Passed via env, not inlined: the PR body is changelog text and may contain quotes.
           PRS: ${{ steps.release-please.outputs.prs }}
         run: |
           for number in $(jq -r '.[].number' <<< "$PRS"); do
             gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
           done
+
+      # A merged release PR keeps the label "autorelease: pending" until the push to the default
+      # branch tags it (github-release below). While there is one, develop holds a release that has
+      # not shipped yet: open the develop -> default branch PR for it, with the release PR's title
+      # and changelog. Runs on every push to develop and on a manual start, and does nothing when
+      # that PR is already open.
+      - name: Open the release PR to the default branch
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          release=$(gh pr list --repo "$REPO" --base develop --state merged --label "autorelease: pending" \
+            --json number,title,body --jq 'sort_by(.number) | last // empty')
+          if [ -z "$release" ]; then
+            echo "No unshipped release on develop."
+            exit 0
+          fi
+          open=$(gh pr list --repo "$REPO" --base "$DEFAULT_BRANCH" --head develop --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            echo "develop -> $DEFAULT_BRANCH is already open as #$open."
+            exit 0
+          fi
+          title=$(jq -r .title <<< "$release" | sed "s/(develop)/($DEFAULT_BRANCH)/")
+          jq -r .body <<< "$release" > "$RUNNER_TEMP/release-body.md"
+          gh pr create --repo "$REPO" --base "$DEFAULT_BRANCH" --head develop \
+            --title "$title" --body-file "$RUNNER_TEMP/release-body.md" --assignee HeikoGr
 
   github-release:
     if: github.ref_name == 'master'
@@ -66,7 +97,7 @@ jobs:
       - name: Run release-please
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: develop
