@@ -40,7 +40,9 @@ jobs:
         if: ${{ steps.release-please.outputs.prs_created == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed via env, not inlined: the PR body is changelog text and may contain quotes.
+          PRS: ${{ steps.release-please.outputs.prs }}
         run: |
-          for number in $(echo '${{ steps.release-please.outputs.prs }}' | jq -r '.[].number'); do
+          for number in $(jq -r '.[].number' <<< "$PRS"); do
             gh pr edit "$number" --add-assignee HeikoGr --repo ${{ github.repository }}
           done
