@@ -10,7 +10,7 @@
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
-    return translated && translated !== key ? translated : fallback;
+    return translated || fallback;
   }
 
   function normalizeDays(value, fallback = 0) {

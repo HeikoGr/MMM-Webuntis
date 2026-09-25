@@ -68,6 +68,7 @@ A minimal QR-code setup looks like this:
 User-facing setup and configuration documentation now lives in the project wiki:
 
 - [Wiki Home](https://github.com/HeikoGr/MMM-Webuntis/wiki)
+- [Features](https://github.com/HeikoGr/MMM-Webuntis/wiki/Features)
 - [Installation](https://github.com/HeikoGr/MMM-Webuntis/wiki/Installation)
 - [Update](https://github.com/HeikoGr/MMM-Webuntis/wiki/Update)
 - [Quick Start](https://github.com/HeikoGr/MMM-Webuntis/wiki/Quick-Start)
@@ -87,17 +88,20 @@ Technical background documentation remains in `docs/`:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/CSS_CUSTOMIZATION.md](docs/CSS_CUSTOMIZATION.md)
 - [docs/CLI.md](docs/CLI.md)
+- [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md)
 - [config/config.template.js](config/config.template.js)
 
 ## Screenshots
 
-All screenshots use the anonymized demo fixture (`demoDataFile`).
+All screenshots use the anonymized demo fixture (`demoDataFile`) and are regenerated with
+`node scripts/take-screenshots.mjs` — see [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md).
+A complete list of what the module can do is in the [feature overview](https://github.com/HeikoGr/MMM-Webuntis/wiki/Features).
 
-**Week view (grid)** — substitutions, absences, double periods and overflow hints:
+**Week view (grid)** — substitutions, room changes, cancelled and moved lessons, absences, exam and homework markers:
 
 ![Grid View](img/grid.png)
 
-**Lessons list** — teachers, lesson texts and substitution notes:
+**Lessons list** — teachers, rooms, lesson texts and substitution notes:
 
 ![Lessons](img/lessons.png)
 

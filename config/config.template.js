@@ -37,7 +37,7 @@ const config = {
         // === DEBUG OPTIONS ===
         // logLevel: "info", // optional: 'none', 'error', 'warn', 'info', 'debug'; unset = global logLevel
         debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
-        demoDataFile: null, // optional: local fixture JSON path (e.g. 'demo/fixtures/single-student-week.json') to run frontend-only demo mode
+        demoDataFile: null, // optional: show demo data instead of WebUntis (e.g. 'demo/fixtures/single-student-week.json'; comma-separated for several students)
         initRetryTimeout: 5000, // retry timeout for missing MODULE_READY during startup (milliseconds)
         initRetryMaxAttempts: 4, // max startup CONFIGURE attempts before waiting for next trigger
         dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder

@@ -41,7 +41,7 @@
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== "function") return fallback;
     const translated = pluginContext.translate(key, fallback, replacements);
-    return translated && translated !== key ? translated : fallback;
+    return translated || fallback;
   }
 
   function buildHolidayMapFromRanges(holidays) {
@@ -209,8 +209,8 @@
       _computeTodayYmdValue() {
         return this._currentTodayYmd || this.getCurrentDateContext().ymd;
       },
-      translate(key, replacements) {
-        return translate(pluginContext, key, key, replacements);
+      translate(key, replacements, fallback = key) {
+        return translate(pluginContext, key, fallback, replacements);
       },
     };
   }

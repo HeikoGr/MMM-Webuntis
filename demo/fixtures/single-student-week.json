@@ -1,7 +1,7 @@
 {
   "contractVersion": 3,
   "meta": {
-    "generatedAt": "2026-03-02T07:30:00.000Z",
+    "generatedAt": "2026-09-28T05:30:00.000Z",
     "moduleVersion": "demo-fixture",
     "moduleId": "demo-fixture",
     "sessionId": "demo-fixture"
@@ -11,148 +11,11 @@
       "id": 1001,
       "title": "Avery Finch"
     },
-    "config": {
-      "header": "Demo Timetable",
-      "mode": "verbose",
-      "displayMode": "messagesofday, grid, lessons, exams, homework, absences",
-      "debugDate": "2026-03-04",
-      "lessons": {
-        "nextDays": 2,
-        "pastDays": 0,
-        "dateFormat": "EEE dd.MM.",
-        "showStartTime": false,
-        "showRegular": true,
-        "useShortSubject": false,
-        "showTeacherMode": "full",
-        "showSubstitution": true,
-        "naText": "N/A"
-      },
-      "grid": {
-        "weekView": false,
-        "nextDays": 2,
-        "pastDays": 0,
-        "dateFormat": "EEE dd.MM.",
-        "showNowLine": true,
-        "mergeGap": 10,
-        "maxLessons": 8,
-        "naText": "N/A",
-        "fields": {
-          "primary": "subject",
-          "secondary": "teacher",
-          "additional": ["room"],
-          "format": {
-            "subject": "long",
-            "teacher": "long",
-            "room": "short"
-          }
-        }
-      },
-      "exams": {
-        "nextDays": 21,
-        "dateFormat": "EEE dd.MM.",
-        "showSubject": true,
-        "showTeacher": true
-      },
-      "homework": {
-        "nextDays": 21,
-        "pastDays": 0,
-        "dateFormat": "EEE dd.MM.",
-        "showSubject": true,
-        "showText": true
-      },
-      "absences": {
-        "pastDays": 7,
-        "nextDays": 14,
-        "dateFormat": "EEE dd.MM.",
-        "showDate": true,
-        "showExcused": true,
-        "showReason": true,
-        "maxItems": 10
-      },
-      "messagesofday": {},
-      "plugins": {
-        "grid": {
-          "enabled": true,
-          "config": {
-            "nextDays": 2,
-            "pastDays": 0,
-            "weekView": false,
-            "dateFormat": "EEE dd.MM.",
-            "hideWeekends": false,
-            "showNowLine": true,
-            "mergeGap": 10,
-            "maxLessons": 8,
-            "naText": "N/A",
-            "fields": {
-              "primary": "subject",
-              "secondary": "teacher",
-              "additional": ["room"],
-              "format": {
-                "subject": "long",
-                "teacher": "long",
-                "room": "short"
-              }
-            }
-          }
-        },
-        "lessons": {
-          "enabled": true,
-          "config": {
-            "nextDays": 2,
-            "pastDays": 0,
-            "dateFormat": "EEE dd.MM.",
-            "hideWeekends": false,
-            "showStartTime": false,
-            "showRegular": true,
-            "useShortSubject": false,
-            "showTeacherMode": "full",
-            "showRoom": false,
-            "showSubstitution": true,
-            "naText": "N/A"
-          }
-        },
-        "exams": {
-          "enabled": true,
-          "config": {
-            "nextDays": 21,
-            "dateFormat": "EEE dd.MM.",
-            "showSubject": true,
-            "showTeacher": true
-          }
-        },
-        "homework": {
-          "enabled": true,
-          "config": {
-            "nextDays": 21,
-            "pastDays": 0,
-            "dateFormat": "EEE dd.MM.",
-            "showSubject": true,
-            "showText": true
-          }
-        },
-        "absences": {
-          "enabled": true,
-          "config": {
-            "pastDays": 7,
-            "nextDays": 14,
-            "dateFormat": "EEE dd.MM.",
-            "showDate": true,
-            "showExcused": true,
-            "showReason": true,
-            "maxItems": 10
-          }
-        },
-        "messagesofday": {
-          "enabled": true,
-          "config": {}
-        }
-      }
-    },
     "timezone": "Europe/Berlin",
-    "todayYmd": 20260304,
+    "todayYmd": 20260930,
     "range": {
-      "startYmd": 20260302,
-      "endYmd": 20260306
+      "startYmd": 20260928,
+      "endYmd": 20261002
     }
   },
   "data": {
@@ -191,7 +54,7 @@
     "lessons": [
       {
         "id": 1,
-        "date": 20260302,
+        "date": 20260928,
         "startTime": 800,
         "endTime": 845,
         "status": "REGULAR",
@@ -226,7 +89,7 @@
       },
       {
         "id": 2,
-        "date": 20260302,
+        "date": 20260928,
         "startTime": 850,
         "endTime": 935,
         "status": "REGULAR",
@@ -261,7 +124,7 @@
       },
       {
         "id": 3,
-        "date": 20260302,
+        "date": 20260928,
         "startTime": 945,
         "endTime": 1120,
         "status": "REGULAR",
@@ -296,7 +159,7 @@
       },
       {
         "id": 4,
-        "date": 20260302,
+        "date": 20260928,
         "startTime": 1130,
         "endTime": 1215,
         "status": "REGULAR",
@@ -331,7 +194,7 @@
       },
       {
         "id": 5,
-        "date": 20260302,
+        "date": 20260928,
         "startTime": 1220,
         "endTime": 1305,
         "status": "REGULAR",
@@ -366,7 +229,7 @@
       },
       {
         "id": 6,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 800,
         "endTime": 845,
         "status": "REGULAR",
@@ -401,7 +264,7 @@
       },
       {
         "id": 7,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 850,
         "endTime": 935,
         "status": "REGULAR",
@@ -436,7 +299,7 @@
       },
       {
         "id": 8,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 945,
         "endTime": 1030,
         "status": "REGULAR",
@@ -471,7 +334,7 @@
       },
       {
         "id": 9,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 1035,
         "endTime": 1120,
         "status": "REGULAR",
@@ -506,12 +369,12 @@
       },
       {
         "id": 10,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 1125,
         "endTime": 1210,
         "status": "CHANGED",
         "info": [],
-        "changedFields": [],
+        "changedFields": ["room"],
         "subjects": [
           {
             "name": "En",
@@ -541,7 +404,7 @@
       },
       {
         "id": 11,
-        "date": 20260303,
+        "date": 20260929,
         "startTime": 1220,
         "endTime": 1305,
         "status": "REGULAR",
@@ -576,7 +439,7 @@
       },
       {
         "id": 12,
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 800,
         "endTime": 845,
         "status": "REGULAR",
@@ -611,7 +474,7 @@
       },
       {
         "id": 13,
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 850,
         "endTime": 935,
         "status": "REGULAR",
@@ -646,7 +509,7 @@
       },
       {
         "id": 14,
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 945,
         "endTime": 1120,
         "status": "CHANGED",
@@ -686,7 +549,7 @@
       },
       {
         "id": 15,
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 1130,
         "endTime": 1215,
         "status": "CHANGED",
@@ -721,7 +584,7 @@
       },
       {
         "id": 16,
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 1220,
         "endTime": 1305,
         "status": "REGULAR",
@@ -752,11 +615,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "Debugging kata: one bug, two clues, infinite confidence.",
-        "displayIcons": []
+        "displayIcons": ["HOMEWORK"]
       },
       {
         "id": 17,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 800,
         "endTime": 845,
         "status": "REGULAR",
@@ -787,11 +650,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "Mini debate: should dragons do homework?",
-        "displayIcons": []
+        "displayIcons": ["HOMEWORK"]
       },
       {
         "id": 18,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 850,
         "endTime": 935,
         "status": "REGULAR",
@@ -826,7 +689,7 @@
       },
       {
         "id": 19,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 945,
         "endTime": 1030,
         "status": "REGULAR",
@@ -857,11 +720,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "Gravity challenge: predictions before the drop.",
-        "displayIcons": []
+        "displayIcons": ["HOMEWORK"]
       },
       {
         "id": 20,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 1035,
         "endTime": 1120,
         "status": "REGULAR",
@@ -896,7 +759,7 @@
       },
       {
         "id": 21,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 1130,
         "endTime": 1215,
         "status": "CANCELLED",
@@ -925,13 +788,13 @@
         "previousSubjects": [],
         "previousTeachers": [],
         "previousRooms": [],
-        "substitutionText": "Cancelled because PE was moved into this slot to avoid a gap.",
-        "lessonText": "Geography moved out of period 5.",
-        "displayIcons": ["MOVED"]
+        "substitutionText": "Cancelled: Ms. Globe is out on a volcano field study.",
+        "lessonText": "Plate tectonics postponed to next Tuesday.",
+        "displayIcons": []
       },
       {
         "id": 210,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 1130,
         "endTime": 1215,
         "status": "ADDITIONAL",
@@ -966,7 +829,7 @@
       },
       {
         "id": 22,
-        "date": 20260305,
+        "date": 20261001,
         "startTime": 1220,
         "endTime": 1305,
         "status": "CANCELLED",
@@ -1001,7 +864,7 @@
       },
       {
         "id": 23,
-        "date": 20260306,
+        "date": 20261002,
         "startTime": 800,
         "endTime": 845,
         "status": "REGULAR",
@@ -1032,11 +895,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "Weekly challenge puzzle: no calculators, only courage.",
-        "displayIcons": []
+        "displayIcons": ["HOMEWORK"]
       },
       {
         "id": 24,
-        "date": 20260306,
+        "date": 20261002,
         "startTime": 850,
         "endTime": 935,
         "status": "REGULAR",
@@ -1071,7 +934,7 @@
       },
       {
         "id": 25,
-        "date": 20260306,
+        "date": 20261002,
         "startTime": 945,
         "endTime": 1120,
         "status": "REGULAR",
@@ -1102,11 +965,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "Double period studio: poster design for the school science fair.",
-        "displayIcons": []
+        "displayIcons": ["HOMEWORK"]
       },
       {
         "id": 26,
-        "date": 20260306,
+        "date": 20261002,
         "startTime": 1130,
         "endTime": 1215,
         "status": "REGULAR",
@@ -1137,11 +1000,11 @@
         "previousRooms": [],
         "substitutionText": "",
         "lessonText": "History checkpoint test: trade routes, timelines, and tactical memory.",
-        "displayIcons": ["EXAM"]
+        "displayIcons": ["EXAM", "HOMEWORK"]
       },
       {
         "id": 27,
-        "date": 20260306,
+        "date": 20261002,
         "startTime": 1220,
         "endTime": 1305,
         "status": "REGULAR",
@@ -1177,7 +1040,7 @@
     ],
     "exams": [
       {
-        "examDate": 20260304,
+        "examDate": 20260930,
         "startTime": 850,
         "name": "Biology Quiz",
         "subject": "Biology",
@@ -1186,7 +1049,7 @@
         "endTime": null
       },
       {
-        "examDate": 20260306,
+        "examDate": 20261002,
         "startTime": 1130,
         "name": "History Checkpoint Test",
         "subject": "History",
@@ -1197,7 +1060,7 @@
     ],
     "homework": [
       {
-        "dueDate": 20260304,
+        "dueDate": 20260930,
         "text": "Rename one variable.",
         "subject": {
           "name": "CS",
@@ -1212,7 +1075,7 @@
         "remark": ""
       },
       {
-        "dueDate": 20260305,
+        "dueDate": 20261006,
         "text": "Bring 3 plate facts.",
         "subject": {
           "name": "Ge",
@@ -1225,11 +1088,86 @@
         "elementIds": [],
         "completed": false,
         "remark": ""
+      },
+      {
+        "dueDate": 20261001,
+        "text": "Prepare two arguments for the dragon debate.",
+        "subject": {
+          "name": "En",
+          "longname": "English"
+        },
+        "id": 102,
+        "lid": 10,
+        "lessonId": 10,
+        "studentId": 1001,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261001,
+        "text": "Write down your drop-time prediction.",
+        "subject": {
+          "name": "Sc",
+          "longname": "Science"
+        },
+        "id": 103,
+        "lid": 3,
+        "lessonId": 3,
+        "studentId": 1001,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261002,
+        "text": "Split three pizzas into fair fractions (worksheet 4).",
+        "subject": {
+          "name": "Ma",
+          "longname": "Mathematics"
+        },
+        "id": 104,
+        "lid": 12,
+        "lessonId": 12,
+        "studentId": 1001,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261002,
+        "text": "Revise the medieval trade routes for the checkpoint test.",
+        "subject": {
+          "name": "Hi",
+          "longname": "History"
+        },
+        "id": 105,
+        "lid": 14,
+        "lessonId": 14,
+        "studentId": 1001,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261002,
+        "text": "Bring two poster sketches for the science fair.",
+        "subject": {
+          "name": "Ar",
+          "longname": "Art"
+        },
+        "id": 106,
+        "lid": 8,
+        "lessonId": 8,
+        "studentId": 1001,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
       }
     ],
     "absences": [
       {
-        "date": 20260304,
+        "date": 20260930,
         "startTime": 1040,
         "endTime": 1225,
         "reason": "Dental appointment",
@@ -1248,7 +1186,7 @@
     "messages": [
       {
         "subject": "Field trip",
-        "text": "The class goes on a field trip on Friday. Please bring sturdy shoes and a rain jacket."
+        "text": "The class goes on a field trip next Wednesday. Please bring sturdy shoes and a rain jacket."
       },
       {
         "subject": "Library hours",
@@ -1256,7 +1194,15 @@
       }
     ],
     "holidays": {
-      "ranges": [],
+      "ranges": [
+        {
+          "id": 1,
+          "name": "Autumn",
+          "longName": "Autumn break",
+          "startDate": 20261012,
+          "endDate": 20261023
+        }
+      ],
       "current": null
     },
     "dayNotices": []
@@ -1281,27 +1227,27 @@
       "lessons": {
         "status": "ok",
         "httpStatus": 200,
-        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
       },
       "exams": {
         "status": "ok",
         "httpStatus": 200,
-        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
       },
       "homework": {
         "status": "ok",
         "httpStatus": 200,
-        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
       },
       "absences": {
         "status": "ok",
         "httpStatus": 200,
-        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
       },
       "messages": {
         "status": "ok",
         "httpStatus": 200,
-        "lastSuccessAt": "2026-03-02T07:30:00.000Z"
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
       }
     },
     "warnings": [],

@@ -1,0 +1,885 @@
+{
+  "contractVersion": 3,
+  "meta": {
+    "generatedAt": "2026-09-28T05:30:00.000Z",
+    "moduleVersion": "demo-fixture",
+    "moduleId": "demo-fixture",
+    "sessionId": "demo-fixture"
+  },
+  "context": {
+    "student": {
+      "id": 1002,
+      "title": "Robin Finch"
+    },
+    "timezone": "Europe/Berlin",
+    "todayYmd": 20260930,
+    "range": {
+      "startYmd": 20260928,
+      "endYmd": 20261002
+    }
+  },
+  "data": {
+    "timeUnits": [
+      {
+        "name": "1",
+        "startTime": 800,
+        "endTime": 845
+      },
+      {
+        "name": "2",
+        "startTime": 850,
+        "endTime": 935
+      },
+      {
+        "name": "3",
+        "startTime": 945,
+        "endTime": 1030
+      },
+      {
+        "name": "4",
+        "startTime": 1035,
+        "endTime": 1120
+      }
+    ],
+    "lessons": [
+      {
+        "id": 3001,
+        "date": 20260928,
+        "startTime": 800,
+        "endTime": 845,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "En",
+            "longname": "English"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "PQuill",
+            "longname": "Ms. Penny Quill"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Phonics bingo with suspiciously long words.",
+        "displayIcons": []
+      },
+      {
+        "id": 3002,
+        "date": 20260928,
+        "startTime": 850,
+        "endTime": 935,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ma",
+            "longname": "Mathematics"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "RRuler",
+            "longname": "Mr. Rex Ruler"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Times tables relay: sevens are the boss level.",
+        "displayIcons": []
+      },
+      {
+        "id": 3003,
+        "date": 20260928,
+        "startTime": 945,
+        "endTime": 1030,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Bi",
+            "longname": "Biology"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "FGreen",
+            "longname": "Dr. Flora Green"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "LAB-2",
+            "longname": "Biology Lab 2"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Seed diary, day one of the great bean race.",
+        "displayIcons": []
+      },
+      {
+        "id": 3004,
+        "date": 20260928,
+        "startTime": 1035,
+        "endTime": 1120,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "PE",
+            "longname": "Physical Education"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "MSprint",
+            "longname": "Coach Max Sprint"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "GYM",
+            "longname": "Main Gym"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Ball games and the noble art of fair play.",
+        "displayIcons": []
+      },
+      {
+        "id": 3005,
+        "date": 20260929,
+        "startTime": 800,
+        "endTime": 845,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Mu",
+            "longname": "Music"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "LChord",
+            "longname": "Mr. Leo Chord"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "MUS",
+            "longname": "Music Room"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Recorder basics: three notes, zero squeaks.",
+        "displayIcons": []
+      },
+      {
+        "id": 3006,
+        "date": 20260929,
+        "startTime": 850,
+        "endTime": 935,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ma",
+            "longname": "Mathematics"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "RRuler",
+            "longname": "Mr. Rex Ruler"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Fractions: halves, quarters and one fair cake.",
+        "displayIcons": []
+      },
+      {
+        "id": 3007,
+        "date": 20260929,
+        "startTime": 945,
+        "endTime": 1030,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ge",
+            "longname": "Geography"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "TGlobe",
+            "longname": "Ms. Terra Globe"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Continents song and a very big map.",
+        "displayIcons": []
+      },
+      {
+        "id": 3008,
+        "date": 20260929,
+        "startTime": 1035,
+        "endTime": 1120,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ar",
+            "longname": "Art"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "IPalet",
+            "longname": "Ms. Iris Palette"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "ART-1",
+            "longname": "Art Studio 1"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Clay animals, gentle thumbs.",
+        "displayIcons": []
+      },
+      {
+        "id": 3009,
+        "date": 20260930,
+        "startTime": 800,
+        "endTime": 845,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "En",
+            "longname": "English"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "PQuill",
+            "longname": "Ms. Penny Quill"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Story circle: finish the sentence, keep the plot.",
+        "displayIcons": []
+      },
+      {
+        "id": 3010,
+        "date": 20260930,
+        "startTime": 850,
+        "endTime": 935,
+        "status": "CHANGED",
+        "info": [],
+        "changedFields": ["teacher"],
+        "subjects": [
+          {
+            "name": "Ma",
+            "longname": "Mathematics"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "RProxy",
+            "longname": "Ms. Rita Proxy"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [
+          {
+            "name": "RRuler",
+            "longname": "Mr. Rex Ruler"
+          }
+        ],
+        "previousRooms": [],
+        "substitutionText": "Substitution: Mr. Ruler is at a teacher training.",
+        "lessonText": "Fraction worksheet, part two.",
+        "displayIcons": []
+      },
+      {
+        "id": 3011,
+        "date": 20260930,
+        "startTime": 945,
+        "endTime": 1030,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Bi",
+            "longname": "Biology"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "FGreen",
+            "longname": "Dr. Flora Green"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "LAB-2",
+            "longname": "Biology Lab 2"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Bean race check: measure, note, water.",
+        "displayIcons": ["HOMEWORK"]
+      },
+      {
+        "id": 3012,
+        "date": 20260930,
+        "startTime": 1035,
+        "endTime": 1120,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Mu",
+            "longname": "Music"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "LChord",
+            "longname": "Mr. Leo Chord"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "MUS",
+            "longname": "Music Room"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Rhythm game: clap back the pattern.",
+        "displayIcons": []
+      },
+      {
+        "id": 3013,
+        "date": 20261001,
+        "startTime": 800,
+        "endTime": 845,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ma",
+            "longname": "Mathematics"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "RRuler",
+            "longname": "Mr. Rex Ruler"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Test warm-up: times tables speed round.",
+        "displayIcons": ["HOMEWORK"]
+      },
+      {
+        "id": 3014,
+        "date": 20261001,
+        "startTime": 850,
+        "endTime": 935,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Bi",
+            "longname": "Biology"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "FGreen",
+            "longname": "Dr. Flora Green"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "LAB-2",
+            "longname": "Biology Lab 2"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Bean race: halfway report.",
+        "displayIcons": []
+      },
+      {
+        "id": 3015,
+        "date": 20261001,
+        "startTime": 945,
+        "endTime": 1030,
+        "status": "CANCELLED",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Mu",
+            "longname": "Music"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "LChord",
+            "longname": "Mr. Leo Chord"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "MUS",
+            "longname": "Music Room"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "Cancelled: Mr. Chord is tuning the pianos for the school concert.",
+        "lessonText": "Choir practice postponed.",
+        "displayIcons": []
+      },
+      {
+        "id": 3016,
+        "date": 20261001,
+        "startTime": 1035,
+        "endTime": 1120,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "En",
+            "longname": "English"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "PQuill",
+            "longname": "Ms. Penny Quill"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Reading time: pick a book, any book.",
+        "displayIcons": []
+      },
+      {
+        "id": 3017,
+        "date": 20261002,
+        "startTime": 800,
+        "endTime": 845,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ar",
+            "longname": "Art"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "IPalet",
+            "longname": "Ms. Iris Palette"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "ART-1",
+            "longname": "Art Studio 1"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Clay animals, second coat of glaze.",
+        "displayIcons": ["HOMEWORK"]
+      },
+      {
+        "id": 3018,
+        "date": 20261002,
+        "startTime": 850,
+        "endTime": 935,
+        "status": "CHANGED",
+        "info": [],
+        "changedFields": ["room"],
+        "subjects": [
+          {
+            "name": "En",
+            "longname": "English"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "PQuill",
+            "longname": "Ms. Penny Quill"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-110",
+            "longname": "Room 110"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "substitutionText": "Room change: R-104 is being painted.",
+        "lessonText": "Poems about autumn leaves.",
+        "displayIcons": []
+      },
+      {
+        "id": 3019,
+        "date": 20261002,
+        "startTime": 945,
+        "endTime": 1030,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "Ma",
+            "longname": "Mathematics"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "RRuler",
+            "longname": "Mr. Rex Ruler"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "R-104",
+            "longname": "Room 104"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Math test: times tables and fractions.",
+        "displayIcons": ["EXAM"]
+      },
+      {
+        "id": 3020,
+        "date": 20261002,
+        "startTime": 1035,
+        "endTime": 1120,
+        "status": "REGULAR",
+        "info": [],
+        "changedFields": [],
+        "subjects": [
+          {
+            "name": "PE",
+            "longname": "Physical Education"
+          }
+        ],
+        "teachers": [
+          {
+            "name": "MSprint",
+            "longname": "Coach Max Sprint"
+          }
+        ],
+        "rooms": [
+          {
+            "name": "GYM",
+            "longname": "Main Gym"
+          }
+        ],
+        "classes": [],
+        "studentGroups": [],
+        "previousSubjects": [],
+        "previousTeachers": [],
+        "previousRooms": [],
+        "substitutionText": "",
+        "lessonText": "Obstacle course, last one before the break.",
+        "displayIcons": []
+      }
+    ],
+    "exams": [
+      {
+        "examDate": 20261002,
+        "startTime": 945,
+        "name": "Math Test",
+        "subject": "Mathematics",
+        "teachers": ["Mr. Rex Ruler"],
+        "text": "Times tables and fractions.",
+        "endTime": null
+      }
+    ],
+    "homework": [
+      {
+        "dueDate": 20260930,
+        "text": "Water your bean and write down its height.",
+        "subject": {
+          "name": "Bi",
+          "longname": "Biology"
+        },
+        "id": 300,
+        "lid": 3003,
+        "lessonId": 3003,
+        "studentId": 1002,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261001,
+        "text": "Practise the seven times table.",
+        "subject": {
+          "name": "Ma",
+          "longname": "Mathematics"
+        },
+        "id": 301,
+        "lid": 3006,
+        "lessonId": 3006,
+        "studentId": 1002,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      },
+      {
+        "dueDate": 20261002,
+        "text": "Bring an old shirt for glazing.",
+        "subject": {
+          "name": "Ar",
+          "longname": "Art"
+        },
+        "id": 302,
+        "lid": 3008,
+        "lessonId": 3008,
+        "studentId": 1002,
+        "elementIds": [],
+        "completed": false,
+        "remark": ""
+      }
+    ],
+    "absences": [],
+    "messages": [
+      {
+        "subject": "Field trip",
+        "text": "The class goes on a field trip next Wednesday. Please bring sturdy shoes and a rain jacket."
+      },
+      {
+        "subject": "Library hours",
+        "text": "This week the school library is open on Tuesday only."
+      }
+    ],
+    "holidays": {
+      "ranges": [
+        {
+          "id": 1,
+          "name": "Autumn",
+          "longName": "Autumn break",
+          "startDate": 20261012,
+          "endDate": 20261023
+        }
+      ],
+      "current": null
+    },
+    "dayNotices": []
+  },
+  "state": {
+    "fetch": {
+      "timegrid": true,
+      "timetable": true,
+      "exams": true,
+      "homework": true,
+      "absences": true,
+      "messages": true
+    },
+    "api": {
+      "timetable": 200,
+      "exams": 200,
+      "homework": 200,
+      "absences": 200,
+      "messages": 200
+    },
+    "collections": {
+      "lessons": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
+      },
+      "exams": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
+      },
+      "homework": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
+      },
+      "absences": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
+      },
+      "messages": {
+        "status": "ok",
+        "httpStatus": 200,
+        "lastSuccessAt": "2026-09-28T05:30:00.000Z"
+      }
+    },
+    "warnings": [],
+    "warningMeta": []
+  }
+}

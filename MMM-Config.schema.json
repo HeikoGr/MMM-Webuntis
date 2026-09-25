@@ -91,7 +91,7 @@
             },
             "demoDataFile": {
               "type": "string",
-              "description": "FOR DEV ONLY: Optional local JSON fixture file for demo mode."
+              "description": "Optional demo fixture (e.g. demo/fixtures/single-student-week.json, comma-separated for several students) shown instead of WebUntis data."
             },
             "initRetryTimeout": {
               "type": "integer",
@@ -800,7 +800,7 @@
         {
           "key": "MMM-Webuntis.config.demoDataFile",
           "title": "demoDataFile",
-          "description": "Optional local JSON fixture file for demo mode."
+          "description": "Optional demo fixture (comma-separated for several students) shown instead of WebUntis data."
         },
         {
           "key": "MMM-Webuntis.config.initRetryTimeout",

@@ -18,7 +18,7 @@ This page covers the options most users actually need. For a full example file, 
 | `addLessons` | `[]` | Add own lessons, see [Hiding and Adding Lessons](#hiding-and-adding-lessons) |
 | `logLevel` | unset | Optional: `none`, `error`, `warn`, `info`, `debug`. All output (browser console and `pm2 logs`) goes through MagicMirror's `Log`, so the global `logLevel` in `config.js` decides; this option can only narrow it for this module. `info`/`debug` set here also print the running config to the browser console; `debug` also keeps past lessons and exams visible. |
 | `debugDate` | `null` | Freeze the calendar date for testing |
-| `demoDataFile` | `null` | Relative JSON fixture path for frontend demo mode (skips backend/API entirely) |
+| `demoDataFile` | `null` | Show demo data instead of WebUntis data, e.g. `'demo/fixtures/single-student-week.json'` (comma-separated for several students). No login; all other options apply as usual |
 | `initRetryTimeout` | `5000` | Timeout (ms) for the CONFIGURE → MODULE_READY watchdog before retrying |
 | `initRetryMaxAttempts` | `4` | Max CONFIGURE attempts before the init retry gate reopens |
 | `dumpBackendPayloads` | `false` | Dump raw payloads from the backend into `./debug_dumps/` |

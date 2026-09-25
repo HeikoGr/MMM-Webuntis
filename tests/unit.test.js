@@ -423,6 +423,35 @@ test("shared date map builders replace the former per-plugin copies", () => {
   assert.deepEqual(Object.keys(noticeMap), ["20260302"]);
 });
 
+test("empty-day notices keep translations that equal their key and fall back to English", () => {
+  const shared = loadFrontendShared();
+  const english = { weekend: "weekend", "no-lessons": "no lessons" };
+  const ctx = { translate: (key, _replacements, fallback = key) => english[key] ?? fallback };
+
+  // 2026-10-03 is a Saturday, 2026-10-05 a Monday without lessons.
+  assert.equal(shared.util.getEmptyDayState(ctx, "Avery", 20261003).label, "weekend");
+  assert.equal(shared.util.getEmptyDayState(ctx, "Avery", 20261005).label, "no lessons");
+  assert.equal(
+    shared.util.getEmptyDayState({ translate: (_key, _replacements, fallback) => fallback }, "Avery", 20261003).label,
+    "weekend",
+  );
+});
+
+test("findPeriodIndex assigns lessons outside a period to the next one", () => {
+  const { findPeriodIndex } = loadFrontendShared().util;
+  // 08:00-08:45, 08:50-09:35, 09:45-10:30 (the last one without an explicit end)
+  const periods = [{ startMin: 480, endMin: 525 }, { startMin: 530, endMin: 575 }, { startMin: 585 }];
+
+  assert.equal(findPeriodIndex(480, periods), 0, "start of a period");
+  assert.equal(findPeriodIndex(540, periods), 1, "inside a period");
+  // Regression: a lesson starting in a break matched no period and was hidden by grid.maxLessons.
+  assert.equal(findPeriodIndex(527, periods), 1, "in the break before period 2");
+  assert.equal(findPeriodIndex(450, periods), 0, "before the first period");
+  assert.equal(findPeriodIndex(600, periods), 2, "inside the open-ended last period");
+  assert.equal(findPeriodIndex(700, periods), 2, "after the last period");
+  assert.equal(findPeriodIndex(500, []), -1, "no periods");
+});
+
 test("frontendShared namespace members are callable", () => {
   const shared = loadFrontendShared();
 
@@ -1513,4 +1542,93 @@ test("validateConfig rejects addLessons entries whose from date is after until",
     ],
   });
   assert.deepEqual(warnings, ['addLessons[0]: "from" must not be after "until" – entry ignored']);
+});
+
+test("demo mode does not ask for students or credentials", () => {
+  const warned = [];
+  const demo = loadFrontendModule();
+  demo._log = () => {};
+  demo._upsertModuleWarnings = (warnings) => warned.push(...warnings);
+
+  demo.config = { demoDataFile: "demo/fixtures/single-student-week.json" };
+  demo._validateAndWarnConfig({ students: [] });
+  assert.deepEqual(warned, []);
+
+  demo.config = {};
+  demo._validateAndWarnConfig({ students: [] });
+  assert.match(warned[0], /No students configured/);
+});
+
+test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without logging in", async () => {
+  const demoHelper = loadNodeHelper();
+  demoHelper._mmLog = () => {};
+  const emitted = [];
+  demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
+
+  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+    action: "CONFIGURE",
+    identifier: "demo-module",
+    data: {
+      id: "demo-module",
+      sessionId: "demo-session",
+      demoDataFile: "demo/fixtures/single-student-week.json",
+      debugDate: "2026-09-30",
+      mode: "compact",
+      displayMode: "grid",
+      grid: { weekView: true },
+      students: [],
+    },
+  });
+
+  assert.deepEqual(
+    emitted.map((event) => event.action),
+    ["MODULE_READY", "DATA_UPDATE"],
+  );
+  const avery = emitted[1].data;
+  assert.equal(avery.context.student.title, "Avery Finch");
+  assert.equal(avery.sessionId, "demo-session");
+  assert.equal(avery.context.config.mode, "compact", "module config reaches the widgets");
+  assert.equal(avery.context.config.debugDate, "2026-09-30");
+  assert.equal(avery.context.config.plugins.grid.config.weekView, true);
+  assert.ok(avery.data.lessons.length > 0);
+});
+
+test("demo payloads take the configured student's options, one fixture per student", () => {
+  const { buildDemoPayloads } = require("../lib/demoData");
+  const moduleRoot = require("node:path").join(__dirname, "..");
+  const config = {
+    demoDataFile: "demo/fixtures/single-student-week.json, demo/fixtures/single-student-week.json",
+    debugDate: "2026-09-30",
+    students: [{ title: "Avery", mode: "verbose" }],
+  };
+
+  const [first, second] = buildDemoPayloads(config, moduleRoot);
+  assert.equal(first.context.config.mode, "verbose");
+  assert.equal(first.context.student.title, "Avery Finch", "the data keeps the fixture's student");
+  assert.equal(second.context.config.title, "Avery", "more fixtures than students reuse the first student");
+});
+
+test("demoDataFile cannot point outside the module folder", () => {
+  const { resolveFixturePaths } = require("../lib/demoData");
+  const moduleRoot = require("node:path").join(__dirname, "..");
+
+  assert.throws(() => resolveFixturePaths("../../config/config.js", moduleRoot), /inside the module folder/);
+  assert.equal(resolveFixturePaths("/demo/fixtures/single-student-week.json", moduleRoot).length, 1);
+});
+
+test("a missing demo fixture fails CONFIGURE with a config error", async () => {
+  const demoHelper = loadNodeHelper();
+  demoHelper._mmLog = () => {};
+  const emitted = [];
+  demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
+
+  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+    action: "CONFIGURE",
+    identifier: "demo-module",
+    data: { id: "demo-module", sessionId: "s", demoDataFile: "demo/fixtures/missing.json", students: [] },
+  });
+
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].action, "MODULE_INIT_FAILED");
+  assert.match(emitted[0].data.errors.join(" "), /demoDataFile/);
 });

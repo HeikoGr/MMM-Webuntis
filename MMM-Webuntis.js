@@ -1,8 +1,6 @@
 Module.register("MMM-Webuntis", {
   _cacheVersion: "2.0.2",
 
-  _demoPluginIds: ["grid", "lessons", "exams", "homework", "absences", "messagesofday"],
-
   defaults: {
     // === GLOBAL OPTIONS ===
     header: "MMM-Webuntis", // displayed as module title in MagicMirror
@@ -16,7 +14,7 @@ Module.register("MMM-Webuntis", {
     // global logLevel decides; this can only narrow it. Unset (null) = the global level alone.
     logLevel: null,
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
-    demoDataFile: null, // optional relative JSON fixture path for frontend demo mode (skips backend/API)
+    demoDataFile: null, // optional fixture path(s), comma-separated: render demo data instead of fetching from WebUntis
     initRetryTimeout: 5000, // timeout for CONFIGURE -> MODULE_READY watchdog (milliseconds)
     initRetryMaxAttempts: 4, // max CONFIGURE attempts before reopening init gate
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
@@ -238,8 +236,30 @@ Module.register("MMM-Webuntis", {
       return this._applyTranslationReplacements(pluginValue, replacements);
     }
 
-    const translated = replacements ? this.translate(key, replacements) : this.translate(key);
-    return translated && translated !== key ? translated : fallback || key;
+    if (!this._hasModuleTranslation(key)) return fallback || key;
+    return replacements ? this.translate(key, replacements) : this.translate(key);
+  },
+
+  /**
+   * Whether MagicMirror knows a translation for `key` (module or core, any loaded language).
+   * translate() returns the key itself for a missing entry, so a translation that equals its key
+   * ("homework": "homework") can only be told apart by looking it up.
+   *
+   * @param {string} key - Translation key
+   * @returns {boolean} True when a translation exists
+   */
+  _hasModuleTranslation(key) {
+    const translator = typeof Translator !== "undefined" ? Translator : null;
+    if (!translator) {
+      const translated = this.translate(key);
+      return Boolean(translated) && translated !== key;
+    }
+    return [
+      translator.translations?.[this.name],
+      translator.coreTranslations,
+      translator.translationsFallback?.[this.name],
+      translator.coreTranslationsFallback,
+    ].some((table) => table && Object.hasOwn(table, key));
   },
 
   _getPluginTranslationLoadOrder() {
@@ -597,172 +617,14 @@ Module.register("MMM-Webuntis", {
   },
 
   /**
-   * Check whether frontend demo mode is enabled.
+   * Check whether demo mode is enabled. The backend serves the fixtures (lib/demoData.js); the
+   * frontend only needs to know so it does not ask for students or credentials.
    *
    * @returns {boolean} True when a demo fixture path is configured.
    */
   _isDemoModeEnabled() {
     const raw = this.config?.demoDataFile;
     return typeof raw === "string" && raw.trim() !== "";
-  },
-
-  /**
-   * Resolve the configured demo fixture path to a module-local URL.
-   *
-   * @returns {string|null} Fixture URL or null when demo mode is disabled.
-   */
-  _getDemoDataUrl() {
-    const raw = String(this.config?.demoDataFile || "")
-      .trim()
-      .replace(/^\/+/, "");
-    if (!raw) return null;
-    return this.file(raw);
-  },
-
-  /**
-   * Normalize demo fixture content to the payload array shape used by the runtime.
-   *
-   * @param {Object|Object[]} rawData - Parsed demo fixture JSON.
-   * @returns {Object[]} Normalized payload entries.
-   */
-  _normalizeDemoPayloads(rawData) {
-    if (!rawData) return [];
-    if (Array.isArray(rawData)) return rawData;
-    if (Array.isArray(rawData?.payloads)) return rawData.payloads;
-    return [rawData];
-  },
-
-  async _loadDemoPluginRegistry() {
-    const displayTokens = this._getLegacyDisplayTokens(this.config || {});
-    const explicitPlugins =
-      this.config?.plugins && typeof this.config.plugins === "object" && !Array.isArray(this.config.plugins)
-        ? this.config.plugins
-        : {};
-
-    const entries = await Promise.all(
-      this._demoPluginIds.map(async (pluginId) => {
-        const response = await fetch(this.file(`plugins/${pluginId}/manifest.json`), { cache: "no-store" });
-        if (!response.ok) {
-          throw new Error(`Failed to load demo plugin manifest for "${pluginId}" (${response.status}).`);
-        }
-
-        const manifest = await response.json();
-        const aliases = Array.isArray(manifest?.activation?.displayAliases)
-          ? manifest.activation.displayAliases
-          : [manifest.id];
-        const explicitConfig = explicitPlugins[manifest.id];
-        const active = explicitConfig?.enabled === true || aliases.some((alias) => displayTokens.includes(alias));
-
-        return {
-          id: manifest.id,
-          title: manifest.title,
-          order: manifest.order || 1000,
-          configNamespace: manifest.configNamespace || manifest.id,
-          aliases,
-          capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities : [],
-          active,
-          entry: {
-            frontend: `plugins/${pluginId}/${manifest.entry.frontend}`,
-            styles: Array.isArray(manifest.entry.styles)
-              ? manifest.entry.styles.map((style) => `plugins/${pluginId}/${style}`)
-              : [],
-          },
-        };
-      }),
-    );
-
-    this._setPluginRegistry(entries);
-    return entries;
-  },
-
-  /**
-   * Load and cache demo payloads from the configured fixture.
-   *
-   * @returns {Promise<Object[]>} Demo payload entries.
-   */
-  async _loadDemoPayloads() {
-    const demoUrl = this._getDemoDataUrl();
-    if (!demoUrl) return [];
-
-    const cacheKey = String(this.config?.demoDataFile || "").trim();
-    if (
-      this._demoPayloadCacheKey === cacheKey &&
-      Array.isArray(this._demoPayloadCache) &&
-      this._demoPayloadCache.length > 0
-    ) {
-      return this._demoPayloadCache;
-    }
-
-    const response = await fetch(demoUrl, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Failed to load demo fixture (${response.status}) from ${demoUrl}`);
-    }
-
-    const json = await response.json();
-    const payloads = this._normalizeDemoPayloads(json);
-    if (!Array.isArray(payloads) || payloads.length === 0) {
-      throw new Error(`Demo fixture ${demoUrl} contains no payloads`);
-    }
-
-    this._demoPayloadCacheKey = cacheKey;
-    this._demoPayloadCache = payloads;
-    return payloads;
-  },
-
-  /**
-   * Emit one or more demo payloads through the normal DATA_UPDATE handler path.
-   *
-   * @param {string} [reason='manual'] - Trigger reason for logging/debugging context.
-   * @returns {Promise<void>}
-   */
-  async _emitDemoPayload(reason = "manual") {
-    try {
-      const payloads = await this._loadDemoPayloads();
-      const statusDefaults = {
-        timetable: 200,
-        exams: 200,
-        homework: 200,
-        absences: 200,
-        messagesOfDay: 200,
-      };
-      const fetchDefaults = {
-        fetchTimetable: true,
-        fetchTimegrid: true,
-        fetchExams: true,
-        fetchHomeworks: true,
-        fetchAbsences: true,
-        fetchMessagesOfDay: true,
-      };
-
-      payloads.forEach((entry, index) => {
-        const fallbackTitle =
-          this.config?.students?.[index]?.title || this.config?.students?.[0]?.title || `Demo Student ${index + 1}`;
-        const payload = {
-          ...(entry || {}),
-          title: String(entry?.title || fallbackTitle),
-          config: entry?.config || this.config,
-          warnings: Array.isArray(entry?.warnings) ? entry.warnings : [],
-          apiStatus: { ...statusDefaults, ...(entry?.apiStatus || {}) },
-          fetchFlags: { ...fetchDefaults, ...(entry?.fetchFlags || {}) },
-          sessionId: this._sessionId,
-          id: this.identifier,
-        };
-        this.socketNotificationReceived(this.notifications.EVENT, {
-          identifier: this.identifier,
-          instanceId: this.identifier,
-          action: "DATA_UPDATE",
-          data: payload,
-        });
-      });
-
-      this._log("debug", `[DEMO] Rendered ${payloads.length} demo payload(s) (${reason})`);
-    } catch (error) {
-      const msg = `Demo mode failed: ${error?.message || String(error)}`;
-      this._log("error", msg);
-      this.moduleWarningsSet = this.moduleWarningsSet || new Set();
-      this.moduleWarningsSet.add(msg);
-      this.lifecycle.render();
-    }
   },
 
   /**
@@ -1007,7 +869,8 @@ Module.register("MMM-Webuntis", {
     }
 
     const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
-    if (!Array.isArray(config.students) || config.students.length === 0) {
+    // Demo mode renders fixtures and never logs in, so it needs neither students nor credentials.
+    if (!this._isDemoModeEnabled() && (!Array.isArray(config.students) || config.students.length === 0)) {
       if (!hasParentCreds) {
         warnings.push(
           "No students configured and no parent credentials provided. Either configure students[] or provide username, password, and school for auto-discovery.",
@@ -1483,21 +1346,6 @@ Module.register("MMM-Webuntis", {
 
     this._createLifecycle();
 
-    if (this._isDemoModeEnabled()) {
-      this._initialized = true;
-      this._initializedAt = Date.now();
-      this._log("info", `[DEMO] Enabled with fixture "${this.config.demoDataFile}"`);
-      this._loadDemoPluginRegistry()
-        .then((pluginEntries) => this._initializeActivePlugins(pluginEntries))
-        .then(() => this._emitDemoPayload("start"))
-        .catch((error) => {
-          const msg = `Demo mode failed: ${error?.message || String(error)}`;
-          this._log("error", msg);
-          this.moduleWarningsSet.add(msg);
-          this.lifecycle.render();
-        });
-    }
-
     this.lifecycle.start();
     // Deliberately unredacted: this only reaches the browser DevTools console, and only when the
     // module's own logLevel is explicitly 'info' or 'debug' - never by the global level alone,
@@ -1548,7 +1396,7 @@ Module.register("MMM-Webuntis", {
       onFetch: ({ reason }) => this._sendFetchData(reason),
       deferredInit: {
         run: (reason) => this._requestInitIfNeeded(reason),
-        isPending: () => !this._isDemoModeEnabled() && !this._initialized && !this._initRequested,
+        isPending: () => !this._initialized && !this._initRequested,
         intervalMs: Number(this.config?.initRetryTimeout) || 5000,
         maxAttempts: 12,
       },
@@ -1636,7 +1484,6 @@ Module.register("MMM-Webuntis", {
    * @param {string} reason - Why init is requested
    */
   _requestInitIfNeeded(reason = "manual") {
-    if (this._isDemoModeEnabled()) return;
     if (this._initialized || this._initRequested) return;
     this._initRequested = true;
     this._initAttemptCount = 0;
@@ -1651,11 +1498,6 @@ Module.register("MMM-Webuntis", {
    * @param {string} reason - Reason for fetch ('manual', 'periodic', 'resume')
    */
   _sendFetchData(reason = "manual") {
-    if (this._isDemoModeEnabled()) {
-      this._emitDemoPayload(reason);
-      return;
-    }
-
     if (!this._initialized) {
       if (String(reason).startsWith("resume")) {
         this._pendingResumeRequest = true;

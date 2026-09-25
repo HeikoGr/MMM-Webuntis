@@ -1,6 +1,7 @@
 # MMM-Webuntis Wiki
 
 - [Home](Home)
+- [Features](Features)
 - [Installation](Installation)
 - [Update](Update)
 - [Quick Start](Quick-Start)

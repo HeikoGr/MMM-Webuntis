@@ -331,9 +331,9 @@ Capability names outside the canonical list are dropped, so a hook cannot invent
 
 ## Runtime Boundaries
 
-The plugin system is current production architecture, but one boundary still matters:
-- demo mode builds its plugin registry in the frontend from a hardcoded ID list
-  (`MMM-Webuntis.js` → `_demoPluginIds`) instead of receiving it from the backend host
+The plugin system is current production architecture. Demo mode uses it unchanged: the registry comes
+from the backend host like in live operation, only the data is read from fixtures
+(see [ARCHITECTURE.md](ARCHITECTURE.md#demo-mode)).
 
 Plugin config validation is fully owned by the plugins: each backend implements `validateConfig()`
 on top of the shared helpers in `lib/pluginValidationUtils.js`. `lib/widgetConfigValidator.js` only
