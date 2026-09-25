@@ -15,7 +15,7 @@
       const translate = (key, fallback) => {
         if (typeof pluginContext?.translate !== "function") return fallback;
         const translated = pluginContext.translate(key, fallback);
-        return translated && translated !== key ? translated : fallback;
+        return translated || fallback;
       };
 
       const buildHeaderTitle = (studentTitle = "") => {

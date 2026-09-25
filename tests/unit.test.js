@@ -423,6 +423,20 @@ test("shared date map builders replace the former per-plugin copies", () => {
   assert.deepEqual(Object.keys(noticeMap), ["20260302"]);
 });
 
+test("empty-day notices keep translations that equal their key and fall back to English", () => {
+  const shared = loadFrontendShared();
+  const english = { weekend: "weekend", "no-lessons": "no lessons" };
+  const ctx = { translate: (key, _replacements, fallback = key) => english[key] ?? fallback };
+
+  // 2026-10-03 is a Saturday, 2026-10-05 a Monday without lessons.
+  assert.equal(shared.util.getEmptyDayState(ctx, "Avery", 20261003).label, "weekend");
+  assert.equal(shared.util.getEmptyDayState(ctx, "Avery", 20261005).label, "no lessons");
+  assert.equal(
+    shared.util.getEmptyDayState({ translate: (_key, _replacements, fallback) => fallback }, "Avery", 20261003).label,
+    "weekend",
+  );
+});
+
 test("frontendShared namespace members are callable", () => {
   const shared = loadFrontendShared();
 

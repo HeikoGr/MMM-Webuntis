@@ -238,8 +238,30 @@ Module.register("MMM-Webuntis", {
       return this._applyTranslationReplacements(pluginValue, replacements);
     }
 
-    const translated = replacements ? this.translate(key, replacements) : this.translate(key);
-    return translated && translated !== key ? translated : fallback || key;
+    if (!this._hasModuleTranslation(key)) return fallback || key;
+    return replacements ? this.translate(key, replacements) : this.translate(key);
+  },
+
+  /**
+   * Whether MagicMirror knows a translation for `key` (module or core, any loaded language).
+   * translate() returns the key itself for a missing entry, so a translation that equals its key
+   * ("homework": "homework") can only be told apart by looking it up.
+   *
+   * @param {string} key - Translation key
+   * @returns {boolean} True when a translation exists
+   */
+  _hasModuleTranslation(key) {
+    const translator = typeof Translator !== "undefined" ? Translator : null;
+    if (!translator) {
+      const translated = this.translate(key);
+      return Boolean(translated) && translated !== key;
+    }
+    return [
+      translator.translations?.[this.name],
+      translator.coreTranslations,
+      translator.translationsFallback?.[this.name],
+      translator.coreTranslationsFallback,
+    ].some((table) => table && Object.hasOwn(table, key));
   },
 
   _getPluginTranslationLoadOrder() {
