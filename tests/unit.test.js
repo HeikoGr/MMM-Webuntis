@@ -437,6 +437,21 @@ test("empty-day notices keep translations that equal their key and fall back to 
   );
 });
 
+test("findPeriodIndex assigns lessons outside a period to the next one", () => {
+  const { findPeriodIndex } = loadFrontendShared().util;
+  // 08:00-08:45, 08:50-09:35, 09:45-10:30 (the last one without an explicit end)
+  const periods = [{ startMin: 480, endMin: 525 }, { startMin: 530, endMin: 575 }, { startMin: 585 }];
+
+  assert.equal(findPeriodIndex(480, periods), 0, "start of a period");
+  assert.equal(findPeriodIndex(540, periods), 1, "inside a period");
+  // Regression: a lesson starting in a break matched no period and was hidden by grid.maxLessons.
+  assert.equal(findPeriodIndex(527, periods), 1, "in the break before period 2");
+  assert.equal(findPeriodIndex(450, periods), 0, "before the first period");
+  assert.equal(findPeriodIndex(600, periods), 2, "inside the open-ended last period");
+  assert.equal(findPeriodIndex(700, periods), 2, "after the last period");
+  assert.equal(findPeriodIndex(500, []), -1, "no periods");
+});
+
 test("frontendShared namespace members are callable", () => {
   const shared = loadFrontendShared();
 

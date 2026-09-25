@@ -51,6 +51,7 @@ function getModuleRootElement(ctx) {
     formatDisplayDate,
     formatDisplayTime,
     toMinutesSinceMidnight,
+    findPeriodIndex,
     createWidgetContext,
     getTeachers,
     getSubject,
@@ -997,35 +998,8 @@ function getModuleRootElement(ctx) {
       }
 
       if (maxGridLessons >= 1) {
-        let matchedIndex = -1;
-        for (let ui = 0; ui < timeUnits.length; ui++) {
-          const u = timeUnits[ui];
-          const uStart = u.startMin;
-          let uEnd = u.endMin;
-
-          if (uEnd === undefined || uEnd === null) {
-            if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
-              uEnd = timeUnits[ui + 1].startMin;
-            } else {
-              uEnd = uStart + 60;
-            }
-          }
-
-          if (s >= uStart && s < uEnd) {
-            matchedIndex = ui;
-            break;
-          }
-        }
-
-        if (
-          matchedIndex === -1 &&
-          timeUnits.length > 0 &&
-          s >= (timeUnits[timeUnits.length - 1].startMin ?? Number.NEGATIVE_INFINITY)
-        ) {
-          matchedIndex = timeUnits.length - 1;
-        }
-
-        return matchedIndex !== -1 && matchedIndex < maxGridLessons;
+        const periodIndex = findPeriodIndex(s, timeUnits);
+        return periodIndex !== -1 && periodIndex < maxGridLessons;
       }
 
       if (s >= allEnd) {
