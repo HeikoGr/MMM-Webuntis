@@ -71,6 +71,8 @@ module.exports = NodeHelper.create({
     if (this._runtimeReady) return;
     this._runtimeReady = true;
 
+    // Each instance's own logLevel (from its CONFIGURE), keyed by identifier.
+    this._logLevels = new Map();
     const log = this._mmLog.bind(this);
     this.notifications = shared.buildNotifications("MMM-Webuntis");
     this._authService = new AuthService({ logger: (level, message) => log(level, null, `[lib] ${message}`) });
@@ -229,10 +231,14 @@ module.exports = NodeHelper.create({
    */
   async _handleInitModule(payload) {
     this._ensureRuntime();
-    const { sessionKey } = buildRouteMeta(payload);
+    const { identifier, sessionKey } = buildRouteMeta(payload);
     const inFlight = this._initInFlightBySession.get(sessionKey);
     if (inFlight) {
-      this._mmLog("debug", null, `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`);
+      this._loggerFor(identifier)(
+        "debug",
+        null,
+        `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`,
+      );
       return inFlight;
     }
 
@@ -251,20 +257,21 @@ module.exports = NodeHelper.create({
         pluginHost: this._pluginHost,
         logger: this._mmLog.bind(this),
       });
-      // The backend is shared by all instances: the most recent CONFIGURE sets its own logLevel.
-      this._logLevel = normalizedConfig.logLevel;
       const route = buildRouteMeta({ id: normalizedConfig.id, sessionId: payload.sessionId });
       identifier = route.identifier;
       const { sessionId, sessionKey } = route;
+      // Each instance logs at its own logLevel; the shared services follow the widest one.
+      this._logLevels.set(identifier, normalizedConfig.logLevel);
+      const log = this._loggerFor(identifier);
 
-      this._mmLog(
+      log(
         "debug",
         null,
         `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || "unspecified"})`,
       );
       this._sessions.storeInitConfig(sessionKey, normalizedConfig);
       if (normalizedConfig.debugDate) {
-        this._mmLog(
+        log(
           "debug",
           null,
           `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`,
@@ -281,7 +288,7 @@ module.exports = NodeHelper.create({
         }
       }
       if (!validation.valid) {
-        this._mmLog("error", null, `[CONFIGURE] Config validation failed for ${identifier}`);
+        log("error", null, `[CONFIGURE] Config validation failed for ${identifier}`);
         this._emitInitError(
           {
             errors: validation.errors,
@@ -296,7 +303,6 @@ module.exports = NodeHelper.create({
       }
 
       this._sessions.configsByIdentifier.set(identifier, normalizedConfig);
-      normalizedConfig._authService = this._authService;
       this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
 
       if (isDemoMode(normalizedConfig)) {
@@ -304,7 +310,7 @@ module.exports = NodeHelper.create({
       } else {
         await ensureStudentsFromAppData(normalizedConfig, {
           authService: this._authService,
-          logger: this._mmLog.bind(this),
+          logger: log,
           formatError: formatError,
         });
       }
@@ -318,7 +324,7 @@ module.exports = NodeHelper.create({
         backgroundRefresh: normalizedConfig.backgroundRefresh,
       });
     } catch (error) {
-      this._mmLog("error", null, `[CONFIGURE] Initialization failed: ${formatError(error)}`);
+      this._loggerFor(identifier)("error", null, `[CONFIGURE] Initialization failed: ${formatError(error)}`);
       this._emitInitError(
         {
           errors: [error.message || "Unknown initialization error"],
@@ -364,13 +370,17 @@ module.exports = NodeHelper.create({
     try {
       payloads = buildDemoPayloads(config, __dirname);
     } catch (error) {
-      this._mmLog("error", null, `[DEMO] Cannot read the demo fixtures: ${formatError(error)}`);
+      this._loggerFor(route.identifier)("error", null, `[DEMO] Cannot read the demo fixtures: ${formatError(error)}`);
       return;
     }
     payloads.forEach((payload) => {
       this._emitGotData({ ...payload, id: route.identifier }, route);
     });
-    this._mmLog("debug", null, `[DEMO] Emitted ${payloads.length} demo payload(s) for ${route.identifier}`);
+    this._loggerFor(route.identifier)(
+      "debug",
+      null,
+      `[DEMO] Emitted ${payloads.length} demo payload(s) for ${route.identifier}`,
+    );
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -389,7 +399,7 @@ module.exports = NodeHelper.create({
     // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
     this._sessions.touch(sessionKey);
     this._sessions.setPaused(sessionKey, state === "paused");
-    this._mmLog(
+    this._loggerFor(identifier)(
       "debug",
       null,
       `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${payload.reason || "unspecified"})`,
@@ -405,15 +415,16 @@ module.exports = NodeHelper.create({
     this._ensureRuntime();
     const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
     const fetchReason = payload?.reason || "unspecified";
+    const log = this._loggerFor(identifier);
 
-    this._mmLog("debug", null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
+    log("debug", null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
     this._sessions.touch(sessionKey);
 
     // A hidden session may still ask for data: the shared frontend lifecycle keeps
     // refreshing in the background so the view is warm when it becomes visible.
     // Only a frontend that explicitly opted out of background refresh is gated here.
     if (this._sessions.isPaused(sessionKey) && payload?.backgroundRefresh === false) {
-      this._mmLog(
+      log(
         "debug",
         null,
         `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`,
@@ -423,7 +434,7 @@ module.exports = NodeHelper.create({
 
     const inFlightInit = this._initInFlightBySession.get(sessionKey);
     if (inFlightInit && fetchReason !== "post-init-auto-fetch") {
-      this._mmLog("debug", null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
+      log("debug", null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
       await inFlightInit.catch(() => {});
     }
 
@@ -432,11 +443,7 @@ module.exports = NodeHelper.create({
       // The helper has no config for this session - it was restarted while the frontend kept
       // running. REFRESH no longer carries the full config, so ask the frontend to redo the
       // CONFIGURE handshake instead of re-initializing from this payload.
-      this._mmLog(
-        "warn",
-        null,
-        `[REFRESH] ${identifier} not initialized for session ${sessionId}; requesting CONFIGURE`,
-      );
+      log("warn", null, `[REFRESH] ${identifier} not initialized for session ${sessionId}; requesting CONFIGURE`);
       this._emitInitRequired(
         { id: identifier, sessionId, reason: "session-config-missing" },
         { identifier, sessionId },
@@ -449,7 +456,7 @@ module.exports = NodeHelper.create({
       config = { ...config, debugDate: payload.debugDate };
       this._sessions.setSessionConfig(sessionKey, config);
       if (payload.debugDate)
-        this._mmLog("debug", null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
+        log("debug", null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
     }
 
     if (isDemoMode(config)) {
@@ -466,12 +473,12 @@ module.exports = NodeHelper.create({
    * they share one WebUntis session and would only race each other.
    */
   async _executeFetchForSession(sessionKey) {
+    const log = this._loggerFor(parseSessionKey(sessionKey).identifier);
     const config = this._sessions.getOrCreateSessionConfig(sessionKey);
     if (!config) {
-      this._mmLog("warn", null, `Session ${sessionKey} not found, skipping fetch`);
+      log("warn", null, `Session ${sessionKey} not found, skipping fetch`);
       return;
     }
-    config._authService = this._authService;
 
     try {
       const groups = new Map();
@@ -482,22 +489,24 @@ module.exports = NodeHelper.create({
       });
 
       for (const [credKey, students] of groups.entries()) {
-        const pendingFetch = this._pendingFetchByCredKey.get(credKey);
-        if (pendingFetch) {
-          this._mmLog("debug", null, `Session ${sessionKey}: waiting for running fetch of credKey=${credKey}`);
-          await pendingFetch.catch(() => {});
+        // Queue behind whatever runs for this account. Chaining (instead of awaiting the running
+        // fetch once) keeps two waiting sessions from starting at the same time.
+        const previous = this._pendingFetchByCredKey.get(credKey);
+        if (previous) {
+          log("debug", null, `Session ${sessionKey}: waiting for running fetch of credKey=${credKey}`);
         }
-
-        const inFlightFetch = this._processGroup(credKey, students, sessionKey, config);
-        this._pendingFetchByCredKey.set(credKey, inFlightFetch);
+        const run = (previous || Promise.resolve())
+          .catch(() => {})
+          .then(() => this._processGroup(credKey, students, sessionKey, config));
+        this._pendingFetchByCredKey.set(credKey, run);
         try {
-          await inFlightFetch;
+          await run;
         } finally {
-          if (this._pendingFetchByCredKey.get(credKey) === inFlightFetch) this._pendingFetchByCredKey.delete(credKey);
+          if (this._pendingFetchByCredKey.get(credKey) === run) this._pendingFetchByCredKey.delete(credKey);
         }
       }
     } catch (error) {
-      this._mmLog("error", null, `Error loading Untis data for session ${sessionKey}: ${formatError(error)}`);
+      log("error", null, `Error loading Untis data for session ${sessionKey}: ${formatError(error)}`);
     }
   },
 
@@ -569,11 +578,12 @@ module.exports = NodeHelper.create({
     const msg = networkFailure
       ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
       : `Authentication failed for ${credKey}: ${errorMsg}`;
-    this._mmLog("error", null, msg);
+    const log = this._loggerFor(identifier);
+    log("error", null, msg);
 
     // Only the failing credentials are forced to re-login; other accounts keep their sessions.
     if (this._authService?.invalidateCache(credKey)) {
-      this._mmLog("warn", null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
+      log("warn", null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
     }
 
     warningsState.addGroupWarning(
@@ -611,8 +621,9 @@ module.exports = NodeHelper.create({
       validateStudentCredentials(student),
       collectPluginValidationIssues(student, this._pluginHost).warnings,
     );
+    const log = this._loggerFor(identifier);
     studentWarnings.forEach((warning) => {
-      this._mmLog("warn", student, warning);
+      log("warn", student, warning);
       warningsState.addGroupWarning(warning, { kind: "config", severity: "warning" });
     });
 
@@ -627,10 +638,11 @@ module.exports = NodeHelper.create({
       plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService }),
       sessionKey,
       currentFetchWarnings: new Set(),
+      mmLog: log,
     });
 
     if (!payload) {
-      this._mmLog("warn", student, `fetchStudentData returned empty payload for ${student.title}`);
+      log("warn", student, `fetchStudentData returned empty payload for ${student.title}`);
       return null;
     }
     return {
@@ -640,7 +652,8 @@ module.exports = NodeHelper.create({
   },
 
   _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
-    this._mmLog("error", student, `Error fetching data for ${student.title}: ${formatError(err)}`);
+    const log = this._loggerFor(identifier);
+    log("error", student, `Error fetching data for ${student.title}: ${formatError(err)}`);
 
     const warningMsg = convertRestErrorToWarning(err, {
       studentTitle: student.title,
@@ -649,7 +662,7 @@ module.exports = NodeHelper.create({
     });
     if (warningMsg) {
       warningsState.addGroupWarning(warningMsg, classifyWarningMetaFromError(err));
-      this._mmLog("warn", student, warningMsg);
+      log("warn", student, warningMsg);
     }
 
     return this._buildErrorPayload({
@@ -695,11 +708,40 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Forward to MagicMirror's Log with an optional [student] tag. MagicMirror's global logLevel
-   * decides; the module's own logLevel (most recent CONFIGURE) can only narrow it.
+   * Log for the shared services (auth, API status, HTTP client, plugin host) and for paths without
+   * an instance. They serve every instance, so the widest instance logLevel applies: one instance
+   * at "debug" keeps their debug lines, and a single instance behaves exactly as before.
    */
   _mmLog(level, student, message) {
-    const own = LOG_LEVEL_WEIGHTS[String(this._logLevel || "").toLowerCase()];
+    this._writeLog(level, student, message, this._sharedLogLevel());
+  },
+
+  /**
+   * Logger of one instance: (level, student, message), narrowed by that instance's own logLevel.
+   * @param {string} identifier - Module instance
+   * @returns {Function} Logger
+   */
+  _loggerFor(identifier) {
+    return (level, student, message) => this._writeLog(level, student, message, this._logLevels?.get(identifier));
+  },
+
+  /** @returns {string|undefined} The least restrictive configured logLevel, undefined = no narrowing */
+  _sharedLogLevel() {
+    let widest;
+    for (const level of this._logLevels?.values() || []) {
+      const weight = LOG_LEVEL_WEIGHTS[String(level || "").toLowerCase()];
+      if (weight === undefined) return undefined;
+      if (widest === undefined || weight > LOG_LEVEL_WEIGHTS[widest]) widest = String(level).toLowerCase();
+    }
+    return widest;
+  },
+
+  /**
+   * Forward to MagicMirror's Log with an optional [student] tag. MagicMirror's global logLevel
+   * decides; the given own logLevel can only narrow it.
+   */
+  _writeLog(level, student, message, ownLevel) {
+    const own = LOG_LEVEL_WEIGHTS[String(ownLevel || "").toLowerCase()];
     if (own !== undefined && (LOG_LEVEL_WEIGHTS[level] ?? LOG_LEVEL_WEIGHTS.info) > own) return;
     const studentTag = student?.title ? `[${String(student.title).trim()}] ` : "";
     const formatted = `${studentTag}${message}`;
