@@ -10,6 +10,8 @@ MMM-Webuntis brings WebUntis data into MagicMirror²: timetable, exams, homework
 
 ![Exams, homework and absences](https://raw.githubusercontent.com/HeikoGr/MMM-Webuntis/master/img/exams-homework-absences.png)
 
+See [Features](Features) for everything the module can show, with more screenshots.
+
 Use this wiki if you want to:
 
 - install the module cleanly
@@ -20,6 +22,7 @@ Use this wiki if you want to:
 
 ## Start Here
 
+- [Features](Features)
 - [Installation](Installation)
 - [Update](Update)
 - [Quick Start](Quick-Start)
