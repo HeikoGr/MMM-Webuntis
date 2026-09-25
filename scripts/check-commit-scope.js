@@ -29,8 +29,9 @@ const RUNTIME_PATHS = [
   /^MMM-Webuntis\.css$/,
 ];
 
-// Carve-outs inside those trees that are not runtime behavior.
-const RUNTIME_EXCEPTIONS = [/^lib\/mmm-shared\//, /\/README\.md$/, /\.md$/];
+// Carve-outs inside those trees that are not runtime behavior. The submodule shows up in the
+// staged list as the bare `lib/mmm-shared`, without a trailing slash.
+const RUNTIME_EXCEPTIONS = [/^lib\/mmm-shared(\/|$)/, /\/README\.md$/, /\.md$/];
 
 function isRuntimePath(file) {
   if (RUNTIME_EXCEPTIONS.some((pattern) => pattern.test(file))) return false;
