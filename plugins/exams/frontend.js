@@ -5,7 +5,7 @@
     return;
   }
 
-  const { addHeader, addRow, createContainer, createElement, escapeHtml } = sharedDom;
+  const { addHeader, addRow, createContainer, createElement, el, headerTitleNodes } = sharedDom;
 
   function formatFallbackDate(ymd) {
     const numeric = Number(ymd) || 0;
@@ -94,13 +94,13 @@
   }
 
   function buildHeaderTitle(pluginContext, studentName, examConfig) {
-    const title = escapeHtml(translate(pluginContext, "exams", "Exams"));
+    const title = translate(pluginContext, "exams", "Exams");
     const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(examConfig?.nextDays, 0);
     const filterLabel = `+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
-    return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
+    return headerTitleNodes(title, meta);
   }
 
   /** An exam still ahead (or running) at the given day and time; debug mode keeps past ones. */
@@ -112,15 +112,15 @@
 
   /** Name cell of one exam: optional subject, name, optional teacher, description. */
   function buildNameCell(exam, showSubject, showTeacher) {
-    const name = `<span class="wu-exam__name">${escapeHtml(exam?.name)}</span>`;
-    let cell = showSubject ? `<span class="wu-exam__subject">${escapeHtml(exam?.subject)}</span>: &nbsp;${name}` : name;
+    const name = el("span", "wu-exam__name", exam?.name);
+    const cell = showSubject ? [el("span", "wu-exam__subject", exam?.subject), ": \u00a0", name] : [name];
 
     const teacher = showTeacher ? getFirstFieldName(exam?.teachers, "short") : "";
     if (teacher) {
-      cell += `&nbsp;<span class="teacher-name wu-exam__teacher">(${escapeHtml(teacher)})</span>`;
+      cell.push("\u00a0", el("span", "teacher-name wu-exam__teacher", `(${teacher})`));
     }
     if (exam?.text) {
-      cell += `<br/><span class="wu-exam__description">${escapeHtml(exam.text)}</span>`;
+      cell.push(document.createElement("br"), el("span", "wu-exam__description", exam.text));
     }
     return cell;
   }
@@ -133,7 +133,7 @@
     if (verboseMode && studentTitle) {
       addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
     }
-    return { container, studentLabelText: verboseMode ? "" : escapeHtml(studentTitle) };
+    return { container, studentLabelText: verboseMode ? "" : studentTitle };
   }
 
   /**
@@ -158,7 +158,7 @@
         container,
         "examRowEmpty unavailable-notice",
         studentLabelText,
-        escapeHtml(translate(pluginContext, "unavailable", "data unavailable")),
+        translate(pluginContext, "unavailable", "data unavailable"),
       );
       return container;
     }
@@ -182,7 +182,7 @@
     const showTeacher = Boolean(examConfig?.showTeacher);
     for (const exam of visibleExams) {
       const formattedDate = formatDisplayDateValue(Number(exam?.examDate) || 0, examConfig?.dateFormat);
-      const dateTimeCell = formattedDate ? `<span class="wu-exam__date">${escapeHtml(formattedDate)}</span>` : "";
+      const dateTimeCell = formattedDate ? el("span", "wu-exam__date", formattedDate) : "";
       addRow(container, "examRow", studentLabelText, dateTimeCell, buildNameCell(exam, showSubject, showTeacher));
     }
     return container;
