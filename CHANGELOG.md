@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.2...v0.14.3) (2026-09-26)
+
+
+### 🔧 Tooling
+
+* skip the commit message check on the release PR ([#110](https://github.com/HeikoGr/MMM-Webuntis/issues/110)) ([275b0e0](https://github.com/HeikoGr/MMM-Webuntis/commit/275b0e053ed121df20f1c48056e43717131830ad))
+
 ## [0.14.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.1...v0.14.2) (2026-09-25)
 
 
