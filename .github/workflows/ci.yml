@@ -58,8 +58,12 @@ jobs:
   commit-messages:
     name: Commit messages
     runs-on: ubuntu-latest
-    # Only pull requests have a well-defined range of new commits to validate.
-    if: github.event_name == 'pull_request'
+    # Only pull requests have a well-defined range of new commits to validate. The release PR
+    # (develop -> default branch) is skipped: its commits are the squash commits GitHub composed on
+    # develop, each titled by a PR title that "PR title" already checked, with a body GitHub assembles
+    # from the PR's commits - which can break footer rules no author wrote. A skipped required
+    # check counts as passed.
+    if: github.event_name == 'pull_request' && github.head_ref != 'develop'
 
     steps:
       - name: Check out repository
