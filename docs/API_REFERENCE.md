@@ -394,7 +394,7 @@ Field-by-field result in the `DATA_UPDATE` payload:
 
 | Collection | Field | Pipeline | Reaches the frontend as |
 |------------|-------|----------|-------------------------|
-| lessons | substitutionText, lessonText | **none** | raw API text; the `lessons` and `grid` plugins run it through `escapeHtml()` at render time |
+| lessons | substitutionText, lessonText | **none** | raw API text; the `lessons` and `grid` plugins set it as text nodes (no HTML) |
 | exams | name, subject | `stripAllHtml(…, false)` then `richTextToPlainText` | plain text, whitespace collapsed |
 | exams | text | `stripAllHtml(…, true)` then `richTextToPlainText` | plain text, line breaks kept |
 | homework | text | `richTextToPlainText(…, true)` | plain text, Markdown markers kept |
@@ -405,7 +405,7 @@ Field-by-field result in the `DATA_UPDATE` payload:
 
 - **lessons**: `substitutionText` and `lessonText` are never sanitized on the backend. They are safe because both plugins escape them when rendering, but as a consequence entities arrive escaped rather than decoded - a lesson text containing `&amp;` displays as `&amp;`, while the same characters in a homework text display as `&`.
 
-**Trust boundary:** plain-text fields must be escaped in the plugin frontend (they are: `escapeHtml()`). The one safe-HTML field, `messagesofday.text`, is inserted as HTML and must not be escaped again, or users see literal `&amp;` and `<b>`.
+**Trust boundary:** the frontend sets plain-text fields as text nodes (`dom.el()`), so they need no escaping and can never become markup. The one safe-HTML field, `messagesofday.text`, goes through `dom.richTextNodes()`: parsed inert, rebuilt from the same tag whitelist without attributes - a second line of defence should the backend sanitizer ever let something through. It must not be set as text, or users see literal `&amp;` and `<b>`.
 
 ### Range Calculation
 

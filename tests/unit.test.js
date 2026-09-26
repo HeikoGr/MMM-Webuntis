@@ -397,9 +397,20 @@ test("frontendShared exposes the namespaces backing pluginContext", () => {
   // Regression: pluginContext.dom/time/formatting used to be handed to plugins as empty objects
   // while docs/PLUGINS.md documented them as provided.
   const expected = {
-    dom: ["addFullRow", "addHeader", "addRow", "createContainer", "createElement", "escapeHtml"],
+    dom: [
+      "addFullRow",
+      "addHeader",
+      "addRow",
+      "createContainer",
+      "createElement",
+      "el",
+      "headerTitleNodes",
+      "iconSpan",
+      "multilineNodes",
+      "richTextNodes",
+    ],
     time: ["DEFAULT_TIMEZONE", "currentTimeAsHHMM", "getCurrentDateContext", "toMinutesSinceMidnight"],
-    formatting: ["escapeHtml", "formatDisplayDate", "formatDisplayTime", "formatYmd"],
+    formatting: ["formatDisplayDate", "formatDisplayTime", "formatYmd"],
   };
 
   for (const [namespace, keys] of Object.entries(expected)) {
@@ -466,7 +477,6 @@ test("findPeriodIndex assigns lessons outside a period to the next one", () => {
 test("frontendShared namespace members are callable", () => {
   const shared = loadFrontendShared();
 
-  assert.equal(shared.formatting.escapeHtml("<b>&</b>"), "&lt;b&gt;&amp;&lt;/b&gt;");
   assert.equal(shared.formatting.formatYmd(20260302), "02.03.2026");
   assert.equal(shared.time.currentTimeAsHHMM(new Date(2026, 0, 1, 13, 50)), 1350);
   assert.equal(shared.time.toMinutesSinceMidnight("13:50"), 830);

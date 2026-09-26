@@ -93,8 +93,14 @@ webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
     → mmm-adapter/mmmPayloadMapper.js#compactArray() – compacts lessons
       → socket DATA_UPDATE payload            – field present in data.lessons[]
         → plugins/grid/frontend.js#extractDayLessons() – spread: auto-forwarded ✅
-            → makeLessonInnerHTML()                – field available on `lesson`
+            → buildLessonContent()                 – field available on `lesson`
 ```
+
+The whole frontend builds its markup as DOM nodes (`dom.el()` and friends in `lib/frontendShared.js`;
+grid: `buildLessonContent()`, `timeUnitLabel()`), so fetched data only ever becomes text. There is no
+`innerHTML` and no `escapeHtml` any more; `tests/frontend-dom.test.js` keeps it that way. The only
+parsed markup is `messagesofday.text` via `dom.richTextNodes()` (inert `DOMParser`, tag whitelist, no
+attributes). See `docs/PLUGINS.md` → "Building markup".
 
 ### Configuration
 - 25 legacy config key mappings in `configValidator.js#applyLegacyMappings()` - don't break them

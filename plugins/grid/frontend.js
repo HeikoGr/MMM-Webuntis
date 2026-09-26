@@ -45,7 +45,9 @@ function getModuleRootElement(ctx) {
   const root = globalRoot.MMMWebuntisFrontendShared || {};
   const {
     log,
-    escapeHtml,
+    el,
+    iconSpan,
+    multilineNodes,
     addHeader,
     getWidgetConfigResolved,
     formatDisplayDate,
@@ -497,54 +499,10 @@ function getModuleRootElement(ctx) {
     const gridDateFormat = getGridConfig("dateFormat");
     const hideWeekends = Boolean(getGridConfig("hideWeekends"));
     const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig("maxLessons") ?? 0)));
-    const rawPxPerMinute = getGridConfig("pxPerMinute");
-    const pxPerMinute =
-      rawPxPerMinute !== undefined &&
-      rawPxPerMinute !== null &&
-      Number.isFinite(Number(rawPxPerMinute)) &&
-      Number(rawPxPerMinute) > 0
-        ? Number(rawPxPerMinute)
-        : 0.8;
-
-    let daysToShow, pastDays, startOffset, totalDisplayDays;
-
-    if (weekView) {
-      let baseDate;
-      if (ctx._currentTodayYmd && typeof ctx._currentTodayYmd === "number") {
-        const s = String(ctx._currentTodayYmd);
-        const by = parseInt(s.substring(0, 4), 10);
-        const bm = parseInt(s.substring(4, 6), 10) - 1;
-        const bd = parseInt(s.substring(6, 8), 10);
-        baseDate = new Date(by, bm, bd);
-      } else {
-        baseDate = getCurrentDayDate(ctx);
-      }
-
-      const dayOfWeek = baseDate.getDay();
-      const nowContext = getModuleDateContext(ctx);
-      const currentHour = nowContext.date.getHours();
-      const currentMinute = nowContext.date.getMinutes();
-
-      let weekOffset = 0;
-      if (dayOfWeek === 5) {
-        if (ctx._usesLiveClock(nowContext) && (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45))) {
-          weekOffset = 1;
-        }
-      } else if (dayOfWeek === 6 || dayOfWeek === 0) {
-        weekOffset = 1;
-      }
-
-      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      startOffset = daysToMonday + weekOffset * 7;
-      totalDisplayDays = 5;
-      daysToShow = totalDisplayDays - 1;
-      pastDays = 0;
-    } else {
-      daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 0;
-      pastDays = Math.max(0, parseInt(configuredPast, 10));
-      startOffset = -pastDays;
-      totalDisplayDays = pastDays + 1 + daysToShow;
-    }
+    const pxPerMinute = resolvePxPerMinute(getGridConfig("pxPerMinute"));
+    const { daysToShow, pastDays, startOffset, totalDisplayDays } = weekView
+      ? weekViewRange(ctx)
+      : rollingRange(configuredNext, configuredPast);
 
     return {
       daysToShow,
@@ -557,6 +515,47 @@ function getModuleRootElement(ctx) {
       hideWeekends,
       weekView,
     };
+  }
+
+  /** Configured pixels per minute when positive, else the default 0.8. */
+  function resolvePxPerMinute(raw) {
+    const value = Number(raw);
+    return raw !== undefined && raw !== null && Number.isFinite(value) && value > 0 ? value : 0.8;
+  }
+
+  /**
+   * Week view: Monday to Friday of the current week - or of the next one from Friday 15:45 (live
+   * clock only) and at the weekend.
+   */
+  function weekViewRange(ctx) {
+    const baseDate =
+      typeof ctx._currentTodayYmd === "number" ? getBaseDateFromYmd(ctx._currentTodayYmd, ctx) : getCurrentDayDate(ctx);
+    const dayOfWeek = baseDate.getDay();
+    const nowContext = getModuleDateContext(ctx);
+    const currentHour = nowContext.date.getHours();
+    const currentMinute = nowContext.date.getMinutes();
+
+    const afterFridaySchool =
+      dayOfWeek === 5 &&
+      ctx._usesLiveClock(nowContext) &&
+      (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45));
+    const weekOffset = afterFridaySchool || dayOfWeek === 6 || dayOfWeek === 0 ? 1 : 0;
+
+    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const totalDisplayDays = 5;
+    return {
+      daysToShow: totalDisplayDays - 1,
+      pastDays: 0,
+      startOffset: daysToMonday + weekOffset * 7,
+      totalDisplayDays,
+    };
+  }
+
+  /** Rolling view: pastDays before today, today, nextDays after. */
+  function rollingRange(configuredNext, configuredPast) {
+    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 0;
+    const pastDays = Math.max(0, parseInt(configuredPast, 10));
+    return { daysToShow, pastDays, startOffset: -pastDays, totalDisplayDays: pastDays + 1 + daysToShow };
   }
 
   /**
@@ -739,21 +738,9 @@ function getModuleRootElement(ctx) {
   }
 
   /**
-   * Create time axis (left column with hour labels and grid lines)
-   * Renders either time units (periods) or hourly grid lines
-   *
-   * @param {Array} timeUnits - Array of time unit objects (name, startTime, startMin, endMin)
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes
-   * @param {number} totalHeight - Total height in pixels
-   * @param {number} totalMinutes - Total minutes span (allEnd - allStart)
-   * @param {Object} ctx - Main module context (provides translate)
-   * @returns {HTMLElement} Time axis div element
-   */
-  /**
-   * Markup of one period label. How much fits depends on the period's height: "tight" shows only
-   * the start time, "compact" the period and one time, "full" the period and start-end.
-   * @returns {{html: string, title: string}} Label markup and its tooltip ("" for none)
+   * Content of one period label. How much fits depends on the period's height: "tight" shows only
+   * the start time, "compact" the period and one time, "roomy" the period and start-end.
+   * @returns {{nodes: Node[], title: string}} Label content and its tooltip ("" for none)
    */
   function timeUnitLabel(unit, labelMode, ctx) {
     const unitName = String(unit?.name ?? "").trim();
@@ -763,19 +750,17 @@ function getModuleRootElement(ctx) {
 
     if (!unitName) {
       const fallbackTime = startText || endText || "";
-      return { html: `<span class='grid-timeunit-time'>${fallbackTime}</span>`, title: fallbackTime };
+      return { nodes: [el("span", "grid-timeunit-time", fallbackTime)], title: fallbackTime };
     }
 
-    const periodText = escapeHtml(formatTimeUnitPeriodText(unitName, ctx));
-    const period = `<span class='grid-timeunit-period'>${periodText}</span>`;
-    let html;
+    const periodText = formatTimeUnitPeriodText(unitName, ctx);
     if (labelMode === "tight") {
-      html = `<span class='grid-timeunit-time'>${startText || periodText}</span>`;
-    } else {
-      const time = labelMode === "compact" ? startText || endText : range;
-      html = time ? `${period}<span class='grid-timeunit-time'>${time}</span>` : period;
+      return { nodes: [el("span", "grid-timeunit-time", startText || periodText)], title: range || "" };
     }
-    return { html, title: range || "" };
+    const time = labelMode === "compact" ? startText || endText : range;
+    const nodes = [el("span", "grid-timeunit-period", periodText)];
+    if (time) nodes.push(el("span", "grid-timeunit-time", time));
+    return { nodes, title: range || "" };
   }
 
   function createHourLine(top) {
@@ -806,8 +791,8 @@ function getModuleRootElement(ctx) {
       const labelMode = resolveAxisLabelMode(unitHeightPx);
       lab.classList.add(`is-${labelMode}`);
 
-      const { html, title } = timeUnitLabel(timeUnits[ui], labelMode, ctx);
-      lab.innerHTML = html;
+      const { nodes, title } = timeUnitLabel(timeUnits[ui], labelMode, ctx);
+      lab.append(...nodes);
       if (title) lab.title = title;
       timeInner.appendChild(lab);
 
@@ -834,6 +819,18 @@ function getModuleRootElement(ctx) {
     }
   }
 
+  /**
+   * Create time axis (left column with hour labels and grid lines)
+   * Renders either time units (periods) or hourly grid lines
+   *
+   * @param {Array} timeUnits - Array of time unit objects (name, startTime, startMin, endMin)
+   * @param {number} allStart - Start time in minutes
+   * @param {number} allEnd - End time in minutes
+   * @param {number} totalHeight - Total height in pixels
+   * @param {number} totalMinutes - Total minutes span (allEnd - allStart)
+   * @param {Object} ctx - Main module context (provides translate)
+   * @returns {HTMLElement} Time axis div element
+   */
   function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
     const timeAxis = document.createElement("div");
     timeAxis.className = "grid-timecell";
@@ -904,7 +901,7 @@ function getModuleRootElement(ctx) {
       // Explicit keys below override where the grid needs computed/normalized values.
       // Without the spread, any new field added to
       // lib/mmm-adapter/mmmPayloadMapper.js/schemas.lesson would silently vanish
-      // here and never reach makeLessonInnerHTML().
+      // here and never reach buildLessonContent().
       return {
         ...el,
         dateStr: String(el.date),
@@ -1280,7 +1277,7 @@ function getModuleRootElement(ctx) {
 
     const label = document.createElement("div");
     label.style.fontWeight = "bold";
-    label.innerHTML = text;
+    label.appendChild(el("b", null, text));
 
     notice.appendChild(icon);
     notice.appendChild(label);
@@ -1383,44 +1380,45 @@ function getModuleRootElement(ctx) {
     return cell;
   }
 
+  /** Text as a text node shows it: null and undefined become "" (as escapeHtml() did). */
+  function toText(value) {
+    return value === null || value === undefined ? "" : String(value);
+  }
+
   /**
    * A changed field: the new value, else the removed old one (struck through), else N/A.
    */
-  function changedFieldHtml(newName, oldName, naText, escapeHtml) {
-    if (newName) return `<span class='lesson-changed-new'>${escapeHtml(newName)}</span>`;
-    if (oldName) return `<span class='lesson-changed-removed'>${escapeHtml(oldName)}</span>`;
-    return `<span class='lesson-changed-new'>${escapeHtml(naText)}</span>`;
+  function changedFieldNode(newName, oldName, naText) {
+    if (newName) return el("span", "lesson-changed-new", toText(newName));
+    if (oldName) return el("span", "lesson-changed-removed", toText(oldName));
+    return el("span", "lesson-changed-new", naText);
   }
 
   /** Break supervision cell: "BS"/"PA" plus the supervised area. */
-  function breakSupervisionHtml(lesson, escapeHtml, ctx) {
+  function breakSupervisionContent(lesson, ctx) {
     const label = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
     const shortLabel = label === "Pausenaufsicht" ? "PA" : "BS";
     const area = lesson.room || lesson.roomLong || "";
     const displayText = area ? `${shortLabel} (${area})` : shortLabel;
-    return `<div class='lesson-content break-supervision'><span class='lesson-primary'><span class='wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon' aria-hidden='true'></span>${escapeHtml(displayText)}</span></div>`;
+    const icon = iconSpan("wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon");
+    return el("div", "lesson-content break-supervision", el("span", "lesson-primary", icon, displayText));
   }
 
   /** Room line: the changed room, or the configured additional fields, each in brackets. */
-  function additionalLineHtml(lesson, displayParts, changedFields, naText, escapeHtml) {
+  function additionalLineNodes(lesson, displayParts, changedFields, naText) {
     if (changedFields.has("room")) {
-      const room = changedFieldHtml(
-        lesson.rooms?.[0]?.name || "",
-        getFirstFieldName(lesson.previousRooms),
-        naText,
-        escapeHtml,
-      );
-      return ` <span class='lesson-additional'>(${room})</span>`;
+      const room = changedFieldNode(lesson.rooms?.[0]?.name || "", getFirstFieldName(lesson.previousRooms), naText);
+      return [" ", el("span", "lesson-additional", "(", room, ")")];
     }
-    const parts = (displayParts.additional || [])
-      .filter(Boolean)
-      .map((item) => `<span class='lesson-additional'>(${escapeHtml(item)})</span>`)
-      .join(" ");
-    return parts ? ` ${parts}` : "";
+    const nodes = [];
+    for (const item of (displayParts.additional || []).filter(Boolean)) {
+      nodes.push(" ", el("span", "lesson-additional", `(${toText(item)})`));
+    }
+    return nodes;
   }
 
   /** Substitution text and lesson text; the lesson text only when it does not repeat a shown field. */
-  function lessonNotesHtml(lesson, displayParts, escapeHtml) {
+  function lessonNoteNodes(lesson, displayParts) {
     const lessonText = normalizeComparableText(lesson.text);
     const repeatsField =
       lessonText === normalizeComparableText(displayParts.primary) ||
@@ -1428,87 +1426,78 @@ function getModuleRootElement(ctx) {
       (Array.isArray(displayParts.additional) &&
         displayParts.additional.some((item) => lessonText === normalizeComparableText(item)));
 
-    const subst = lesson.substitutionText
-      ? `<span class='lesson-substitution-text'>${escapeHtml(lesson.substitutionText).replace(/\n/g, "<br>")}</span>`
-      : "";
-    const txt =
-      lessonText !== "" && !repeatsField
-        ? `<span class='lesson-info-text'>${escapeHtml(lesson.text).replace(/\n/g, "<br>")}</span>`
-        : "";
-    return `${subst}${txt}`;
+    const nodes = [];
+    if (lesson.substitutionText) {
+      nodes.push(el("span", "lesson-substitution-text", ...multilineNodes(lesson.substitutionText)));
+    }
+    if (lessonText !== "" && !repeatsField) {
+      nodes.push(el("span", "lesson-info-text", ...multilineNodes(lesson.text)));
+    }
+    return nodes;
   }
 
   /**
-   * HTML for a lesson cell: primary line (subject), secondary line (teacher plus additional
+   * Primary line, secondary line (teacher plus additional fields) and notes of a lesson cell.
+   * A changed field shows its new value, or the removed one struck through.
+   */
+  function lessonLineNodes(lesson, changedFields, naText, config, ctx) {
+    const displayParts = buildFlexibleLessonDisplay(lesson, config, { ctx });
+    const primary = changedFields.has("subject")
+      ? changedFieldNode(lesson.subjects?.[0]?.name || "", getFirstFieldName(lesson.previousSubjects), naText)
+      : toText(displayParts.primary || "");
+    const secondary = changedFields.has("teacher")
+      ? changedFieldNode(lesson.teachers?.[0]?.name || "", getFirstFieldName(lesson.previousTeachers), naText)
+      : toText(displayParts.secondary || "");
+
+    let additional = additionalLineNodes(lesson, displayParts, changedFields, naText);
+    const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
+    if (hasUnknownChangedDetails && additional.length === 0) {
+      additional = [" ", el("span", "lesson-additional", "(", el("span", "lesson-changed-new", naText), ")")];
+    }
+
+    const lines = [el("span", "lesson-primary", primary)];
+    if (secondary !== "" || additional.length > 0) {
+      lines.push(el("span", "lesson-secondary", secondary, ...additional));
+    }
+    return [...lines, ...lessonNoteNodes(lesson, displayParts)];
+  }
+
+  /**
+   * Content of a lesson cell: primary line (subject), secondary line (teacher plus additional
    * fields), substitution and lesson text. Changes are marked inline rather than in extra rows so
    * compact cells do not overflow; a moved lesson or a change without details gets a badge.
    * Fields follow grid.fields (primary, secondary, additional); break supervision has its own cell.
+   * Built as DOM nodes: lesson data is only ever text, never markup.
    *
    * @param {Object} lesson - Lesson object with display fields
-   * @param {Function} escapeHtml - HTML escape function
    * @param {Object} ctx - Main module context (provides config)
    * @param {Object} [lessonConfig] - Effective widget config
-   * @returns {string} HTML content for lesson cell
+   * @returns {HTMLElement} The .lesson-content element
    */
-  function makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig) {
+  function buildLessonContent(lesson, ctx, lessonConfig) {
     if (lessonIsBreakSupervision(lesson)) {
-      return breakSupervisionHtml(lesson, escapeHtml, ctx);
+      return breakSupervisionContent(lesson, ctx);
     }
 
     const changedFields = getChangedFieldSet(lesson);
-    const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
-    const movedBadge = lessonIsMoved(lesson) ? `<span class='lesson-moved-badge' aria-hidden='true'></span>` : "";
-    const changedBadge = hasUnknownChangedDetails
-      ? `<span class='lesson-changed-generic-badge' aria-hidden='true'></span>`
-      : "";
-    const iconsHtml =
-      movedBadge || changedBadge ? `<span class='lesson-icons'>${movedBadge}${changedBadge}</span>` : "";
-    const lessonContentClass = movedBadge || changedBadge ? "lesson-content has-icons" : "lesson-content";
+    const badges = [
+      lessonIsMoved(lesson) && iconSpan("lesson-moved-badge"),
+      lesson.status === "CHANGED" && changedFields.size === 0 && iconSpan("lesson-changed-generic-badge"),
+    ].filter(Boolean);
+    const content = el("div", badges.length > 0 ? "lesson-content has-icons" : "lesson-content");
+    if (badges.length > 0) content.append(el("span", "lesson-icons", ...badges));
     const naText = String(lessonConfig?.grid?.naText ?? "N/A");
 
     try {
-      const displayParts = buildFlexibleLessonDisplay(lesson, lessonConfig || ctx?.config, { ctx });
-
-      const primaryHtml = changedFields.has("subject")
-        ? changedFieldHtml(
-            lesson.subjects?.[0]?.name || "",
-            getFirstFieldName(lesson.previousSubjects),
-            naText,
-            escapeHtml,
-          )
-        : displayParts.primary
-          ? escapeHtml(displayParts.primary)
-          : "";
-      const secondaryHtml = changedFields.has("teacher")
-        ? changedFieldHtml(
-            lesson.teachers?.[0]?.name || "",
-            getFirstFieldName(lesson.previousTeachers),
-            naText,
-            escapeHtml,
-          )
-        : displayParts.secondary
-          ? escapeHtml(displayParts.secondary)
-          : "";
-      let additionalHtml = additionalLineHtml(lesson, displayParts, changedFields, naText, escapeHtml);
-      if (hasUnknownChangedDetails && !additionalHtml) {
-        additionalHtml = ` <span class='lesson-additional'>(<span class='lesson-changed-new'>${escapeHtml(naText)}</span>)</span>`;
-      }
-
-      const secondaryLine =
-        secondaryHtml || additionalHtml
-          ? `<span class='lesson-secondary'>${secondaryHtml}${additionalHtml}</span>`
-          : "";
-
-      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'>${primaryHtml}</span>${secondaryLine}${lessonNotesHtml(lesson, displayParts, escapeHtml)}</div>`;
+      content.append(...lessonLineNodes(lesson, changedFields, naText, lessonConfig || ctx?.config, ctx));
     } catch (err) {
       log(
         "error",
-        `[grid] makeLessonInnerHTML failed for lesson ${lesson?.id ?? lesson?.lessonId ?? "unknown"}: ${err?.message || err}`,
+        `[grid] buildLessonContent failed for lesson ${lesson?.id ?? lesson?.lessonId ?? "unknown"}: ${err?.message || err}`,
       );
-      return `<div class='${lessonContentClass}'>${iconsHtml}<span class='lesson-primary'><span class='lesson-changed-new'>${escapeHtml(
-        naText,
-      )}</span></span></div>`;
+      content.append(el("span", "lesson-primary", el("span", "lesson-changed-new", naText)));
     }
+    return content;
   }
 
   /**
@@ -1531,7 +1520,7 @@ function getModuleRootElement(ctx) {
     const icon = document.createElement("span");
     icon.className = "homework-icon";
     icon.setAttribute("aria-hidden", "true");
-    if (cell?.innerHTML) {
+    if (cell?.hasChildNodes()) {
       const iconContainer = cell.querySelector(".lesson-content") || cell;
       let icons = iconContainer.querySelector(".lesson-icons");
       if (!icons) {
@@ -1588,7 +1577,6 @@ function getModuleRootElement(ctx) {
    * @param {number} timeConstraints.totalHeight - Total height of grid in pixels
    * @param {Object} rendering - Rendering context and configuration
    * @param {Object} rendering.ctx - Module context
-   * @param {Function} rendering.escapeHtml - HTML escape function
    * @param {Object} rendering.lessonConfig - Lesson-specific configuration
    * @param {Object} [options={}] - Optional rendering parameters
    * @param {boolean} [options.isPast] - Whether the lesson is in the past
@@ -1599,7 +1587,7 @@ function getModuleRootElement(ctx) {
    */
   function appendLessonCell(container, lesson, timeConstraints, rendering, options = {}) {
     const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
-    const { ctx, escapeHtml, lessonConfig } = rendering;
+    const { ctx, lessonConfig } = rendering;
     const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
     const placement = getVisibleTimeBlockPlacement(
       lesson.startMin,
@@ -1624,7 +1612,7 @@ function getModuleRootElement(ctx) {
       isPast: resolvedIsPast,
       additionalClasses,
     });
-    cell.innerHTML = makeLessonInnerHTML(lesson, escapeHtml, ctx, lessonConfig);
+    cell.appendChild(buildLessonContent(lesson, ctx, lessonConfig));
     cell.tabIndex = 0;
     cell.setAttribute("role", "button");
     cell.setAttribute("aria-label", `${getSubject(lesson, "long") || "Lesson"} details`);
@@ -1654,87 +1642,70 @@ function getModuleRootElement(ctx) {
    * @returns {Map} Map of group key → lesson array
    */
   function groupLessonsByTimeSlot(lessonsToRender) {
-    const byDate = new Map();
-    for (const lesson of lessonsToRender) {
-      if (!byDate.has(lesson.dateStr)) {
-        byDate.set(lesson.dateStr, []);
-      }
-      byDate.get(lesson.dateStr).push(lesson);
-    }
-
     const groups = new Map();
     let groupId = 0;
 
-    for (const [dateStr, lessons] of byDate.entries()) {
-      const regularLessons = [];
-      const breakSupervisions = [];
-
-      for (const lesson of lessons) {
-        if (lessonIsBreakSupervision(lesson)) {
-          breakSupervisions.push(lesson);
-        } else {
-          regularLessons.push(lesson);
-        }
+    for (const [dateStr, lessons] of groupByDate(lessonsToRender)) {
+      const regularLessons = lessons.filter((lesson) => !lessonIsBreakSupervision(lesson));
+      for (const overlappingGroup of collectOverlapGroups(regularLessons)) {
+        groups.set(`${dateStr}_group_${groupId++}`, overlappingGroup);
       }
-
-      const sorted = regularLessons.slice().sort((a, b) => a.startMin - b.startMin);
-
-      const assigned = new Set();
-
-      for (let i = 0; i < sorted.length; i++) {
-        if (assigned.has(i)) continue;
-
-        const lesson = sorted[i];
-        const overlappingGroup = [lesson];
-        assigned.add(i);
-
-        let foundNew = true;
-        while (foundNew) {
-          foundNew = false;
-          for (let j = i + 1; j < sorted.length; j++) {
-            if (assigned.has(j)) continue;
-
-            const candidate = sorted[j];
-            const hasOverlap = overlappingGroup.some(
-              (groupLesson) => candidate.startMin < groupLesson.endMin && candidate.endMin > groupLesson.startMin,
-            );
-
-            if (hasOverlap) {
-              overlappingGroup.push(candidate);
-              assigned.add(j);
-              foundNew = true;
-            }
-          }
-        }
-
-        const key = `${dateStr}_group_${groupId++}`;
-        groups.set(key, overlappingGroup);
-      }
-
-      for (const supervision of breakSupervisions) {
-        const key = `${dateStr}_supervision_${groupId++}`;
-        groups.set(key, [supervision]);
+      for (const supervision of lessons.filter(lessonIsBreakSupervision)) {
+        groups.set(`${dateStr}_supervision_${groupId++}`, [supervision]);
       }
     }
 
     return groups;
   }
 
+  /** Lessons by dateStr, in order of first appearance. */
+  function groupByDate(lessons) {
+    const byDate = new Map();
+    for (const lesson of lessons) {
+      if (!byDate.has(lesson.dateStr)) byDate.set(lesson.dateStr, []);
+      byDate.get(lesson.dateStr).push(lesson);
+    }
+    return byDate;
+  }
+
+  function lessonsOverlap(a, b) {
+    return a.startMin < b.endMin && a.endMin > b.startMin;
+  }
+
   /**
-   * Create ticker animation for overlapping lessons
-   * Groups lessons by subject and creates seamless scrolling ticker
-   * Each subject group is displayed stacked (lessons within group positioned relatively)
-   *
-   * @param {Array} lessons - Array of overlapping lesson objects
-   * @param {number} topPx - Top position in pixels
-   * @param {number} heightPx - Height in pixels
-   * @param {HTMLElement} container - Day column container
-   * @param {Object} ctx - Main module context
-   * @param {Function} escapeHtml - HTML escape function
-   * @param {boolean} isPast - True if lesson group is in the past (used for ticker wrapper)
-   * @param {number} nowYmd - Current date as YYYYMMDD integer
-   * @param {number} nowMin - Current time in minutes since midnight
+   * Overlap groups of one day's lessons, sorted by start: each group is a lesson plus every later
+   * lesson that overlaps any member, repeated until nothing joins any more. Deliberately not a
+   * single sweep: lessons without a valid time span (missing start, end before start) must keep
+   * their grouping.
    */
+  function collectOverlapGroups(lessons) {
+    const sorted = lessons.slice().sort((a, b) => a.startMin - b.startMin);
+    const assigned = new Set();
+    const groups = [];
+    for (let i = 0; i < sorted.length; i++) {
+      if (assigned.has(i)) continue;
+      assigned.add(i);
+      groups.push(growOverlapGroup(sorted, i, assigned));
+    }
+    return groups;
+  }
+
+  /** Grows the group of sorted[start] by every later unassigned lesson overlapping a member. */
+  function growOverlapGroup(sorted, start, assigned) {
+    const group = [sorted[start]];
+    let foundNew = true;
+    while (foundNew) {
+      foundNew = false;
+      for (let j = start + 1; j < sorted.length; j++) {
+        if (assigned.has(j) || !group.some((member) => lessonsOverlap(sorted[j], member))) continue;
+        group.push(sorted[j]);
+        assigned.add(j);
+        foundNew = true;
+      }
+    }
+    return group;
+  }
+
   /** Lessons of one ticker slot by subject and student group (or class). */
   function groupTickerLessons(lessons) {
     const groups = new Map();
@@ -1817,7 +1788,7 @@ function getModuleRootElement(ctx) {
       nowMin: env.nowMin,
       ...(splitClass ? { additionalClasses: [splitClass] } : {}),
     });
-    div.innerHTML = makeLessonInnerHTML(lesson, env.escapeHtml, env.ctx, env.lessonConfig);
+    div.appendChild(buildLessonContent(lesson, env.ctx, env.lessonConfig));
     if (checkHomeworkMatch(lesson)) addHomeworkIcon(div);
     return div;
   }
@@ -1896,22 +1867,21 @@ function getModuleRootElement(ctx) {
 
   /**
    * Overlapping lessons of one slot as a horizontally scrolling ticker: one item per subject
-   * group and per split-view pair, the whole track twice for a seamless loop.
+   * group and per split-view pair, the whole track twice for a seamless loop. Lessons of one
+   * subject group are stacked by their time within the item.
+   *
+   * @param {Array} lessons - Overlapping lesson objects
+   * @param {number} topPx - Top position in pixels
+   * @param {number} heightPx - Height in pixels
+   * @param {HTMLElement} container - Day column container
+   * @param {Object} ctx - Main module context
+   * @param {number} nowYmd - Current date as YYYYMMDD integer
+   * @param {number} nowMin - Current time in minutes since midnight
+   * @param {Object} tickerData - Cancelled lessons, their replacements and whether to split
+   * @param {Object} lessonConfig - Effective widget config
    */
-  function createTickerAnimation(
-    lessons,
-    topPx,
-    heightPx,
-    container,
-    ctx,
-    escapeHtml,
-    _isPast,
-    nowYmd,
-    nowMin,
-    tickerData,
-    lessonConfig,
-  ) {
-    const env = { ctx, escapeHtml, nowYmd, nowMin, lessonConfig };
+  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, nowYmd, nowMin, tickerData, lessonConfig) {
+    const env = { ctx, nowYmd, nowMin, lessonConfig };
     const groups = groupTickerLessons(lessons);
     const pairs = pairCancelledWithReplacements(tickerData);
     if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
@@ -2188,23 +2158,13 @@ function getModuleRootElement(ctx) {
     if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
       const resolvedState = emptyDayState || { noticeType: "no-lessons", label: ctx.translate("no-lessons") };
       const noticeType = resolvedState?.noticeType || "no-lessons";
-      const noticeText = `<b>${escapeHtml(resolvedState?.label || ctx.translate("no-lessons"))}</b>`;
+      const noticeText = toText(resolvedState?.label || ctx.translate("no-lessons"));
       const iconSize = resolvedState?.type === "holiday" || resolvedState?.type === "unavailable" ? "2em" : "1.5em";
       addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
       return;
     }
 
-    renderLessonCells(
-      lessonsToRender,
-      { bothInner },
-      allStart,
-      allEnd,
-      totalMinutes,
-      totalHeight,
-      ctx,
-      escapeHtml,
-      studentConfig,
-    );
+    renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, ctx, studentConfig);
   }
 
   /**
@@ -2331,7 +2291,6 @@ function getModuleRootElement(ctx) {
    * @param {number} totalMinutes - Total visible duration in minutes.
    * @param {number} totalHeight - Total column height in pixels.
    * @param {Object} ctx - Module context.
-   * @param {Function} escapeHtml - HTML escaping helper.
    * @param {Object} lessonConfig - Grid rendering configuration.
    */
   function renderLessonCells(
@@ -2342,7 +2301,6 @@ function getModuleRootElement(ctx) {
     totalMinutes,
     totalHeight,
     ctx,
-    escapeHtml,
     lessonConfig,
   ) {
     const { bothInner } = containers;
@@ -2360,17 +2318,13 @@ function getModuleRootElement(ctx) {
         bothInner,
         lesson,
         { allStart, allEnd, totalMinutes, totalHeight },
-        { ctx, escapeHtml, lessonConfig },
+        { ctx, lessonConfig },
         { nowYmd, nowMin },
       );
     };
 
     const renderTickerGroup = (lessons, group) => {
       const { cancelledLessons, addedLessons, substLessons, eventLessons, tickerCandidates, isSplitView } = group;
-      const tYmd = Number(tickerCandidates[0].dateStr) || 0;
-      const tEMin = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-      const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
-
       const tickerData = {
         cancelledLessons,
         replacements: [...addedLessons, ...substLessons, ...eventLessons],
@@ -2398,8 +2352,6 @@ function getModuleRootElement(ctx) {
           placement.heightPx,
           bothInner,
           ctx,
-          escapeHtml,
-          isPast,
           nowYmd,
           nowMin,
           tickerData,
@@ -2431,7 +2383,7 @@ function getModuleRootElement(ctx) {
           bothInner,
           repl,
           { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, escapeHtml, lessonConfig },
+          { ctx, lessonConfig },
           { isPast, additionalClasses: ["split-left"] },
         );
       }
@@ -2441,7 +2393,7 @@ function getModuleRootElement(ctx) {
           bothInner,
           cancelled,
           { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, escapeHtml, lessonConfig },
+          { ctx, lessonConfig },
           { isPast, additionalClasses: ["split-right"] },
         );
       }
@@ -2463,7 +2415,7 @@ function getModuleRootElement(ctx) {
           bothInner,
           spanning,
           { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, escapeHtml, lessonConfig },
+          { ctx, lessonConfig },
           { isPast, additionalClasses: ["split-left"] },
         );
       }
@@ -2473,7 +2425,7 @@ function getModuleRootElement(ctx) {
           bothInner,
           sub,
           { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, escapeHtml, lessonConfig },
+          { ctx, lessonConfig },
           { isPast, additionalClasses: ["split-right"] },
         );
       }
@@ -2727,7 +2679,7 @@ function getModuleRootElement(ctx) {
         const isPast = getElementPastState(ticker);
 
         // Update only top-level lesson cells within ticker.
-        // Nested `.lesson-content` nodes from makeLessonInnerHTML() must not receive
+        // Nested `.lesson-content` nodes from buildLessonContent() must not receive
         // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
         const lessonDivs = Array.from(ticker.querySelectorAll(".lesson-content")).filter(
           (div) => div.style.position === "absolute",
@@ -2803,6 +2755,48 @@ function getModuleRootElement(ctx) {
     stopNowLineUpdater,
   };
 
+  const listOrEmpty = (value) => (Array.isArray(value) ? value : []);
+
+  /** The payload parts the grid draws from, each an array (empty when missing). */
+  function readGridData(studentSlice) {
+    const data = studentSlice?.data;
+    return {
+      lessons: listOrEmpty(data?.lessons),
+      timeUnits: listOrEmpty(data?.timeUnits),
+      absences: listOrEmpty(data?.absences),
+      holidays: listOrEmpty(data?.holidays?.ranges),
+      dayNotices: listOrEmpty(data?.dayNotices),
+    };
+  }
+
+  /** One student's grid, or null when there is nothing at all to draw. */
+  function renderStudentGrid(pluginContext, renderContext, studentSlice) {
+    const studentConfig = resolveStudentConfig(studentSlice);
+    const gridConfig = resolveGridConfig(studentConfig);
+    const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
+    const { lessons, timeUnits, absences, holidays, dayNotices } = readGridData(studentSlice);
+
+    if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
+      return null;
+    }
+
+    const pluginRuntimeContext = createGridPluginRuntimeContext(
+      pluginContext,
+      renderContext,
+      studentSlice,
+      effectiveStudentConfig,
+    );
+    const studentTitle = String(studentSlice?.student?.title || "").trim();
+    return renderGridForStudent(
+      pluginRuntimeContext,
+      studentTitle,
+      effectiveStudentConfig,
+      lessons,
+      timeUnits,
+      absences,
+    );
+  }
+
   host.registerFrontendPlugin({
     id: "grid",
     hostApiVersion: 1,
@@ -2812,48 +2806,11 @@ function getModuleRootElement(ctx) {
         render(renderContext) {
           const section = document.createElement("section");
           section.className = "wu-plugin wu-plugin-grid";
-          const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
-          let renderedContainers = 0;
-
-          for (const studentSlice of students) {
-            const studentConfig = resolveStudentConfig(studentSlice);
-            const gridConfig = resolveGridConfig(studentConfig);
-            const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
-            const lessons = Array.isArray(studentSlice?.data?.lessons) ? studentSlice.data.lessons : [];
-            const timeUnits = Array.isArray(studentSlice?.data?.timeUnits) ? studentSlice.data.timeUnits : [];
-            const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
-            const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges)
-              ? studentSlice.data.holidays.ranges
-              : [];
-            const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
-
-            if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
-              continue;
-            }
-
-            const pluginRuntimeContext = createGridPluginRuntimeContext(
-              pluginContext,
-              renderContext,
-              studentSlice,
-              effectiveStudentConfig,
-            );
-            const studentTitle = String(studentSlice?.student?.title || "").trim();
-            const gridElement = renderGridForStudent(
-              pluginRuntimeContext,
-              studentTitle,
-              effectiveStudentConfig,
-              lessons,
-              timeUnits,
-              absences,
-            );
-
-            if (gridElement) {
-              section.appendChild(gridElement);
-              renderedContainers += 1;
-            }
+          for (const studentSlice of listOrEmpty(renderContext?.students)) {
+            const gridElement = renderStudentGrid(pluginContext, renderContext, studentSlice);
+            if (gridElement) section.appendChild(gridElement);
           }
-
-          return renderedContainers > 0 ? section : null;
+          return section.childElementCount > 0 ? section : null;
         },
       };
     },
