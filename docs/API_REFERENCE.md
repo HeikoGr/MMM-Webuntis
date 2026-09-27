@@ -39,7 +39,7 @@ Flow:
 4. Reuse the resulting session to request a REST bearer token.
 
 Notes:
-- TOTP uses `otplib`.
+- TOTP is generated with `node:crypto` (`lib/webuntis/totp.js`, RFC 6238: SHA1, 6 digits, 30 s).
 - The generated bearer token is used together with tenant and school-year headers.
 
 ### Username / Password Authentication
