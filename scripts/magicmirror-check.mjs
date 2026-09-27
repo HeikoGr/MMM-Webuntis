@@ -7,11 +7,9 @@ import process from "node:process";
 
 const DEFAULT_SHARED_CHECK_SCRIPT =
   process.env.MAGICMIRROR_SHARED_CHECK_SCRIPT || "/opt/mm-tools/magicmirror-check.mjs";
-const REQUIREMENT_FLAG = "--devcontainer-only";
 
 function main() {
-  const wrapperArgs = process.argv.slice(2);
-  const userArgs = wrapperArgs.filter((arg) => arg !== REQUIREMENT_FLAG);
+  const userArgs = process.argv.slice(2);
   const sharedScript = path.resolve(DEFAULT_SHARED_CHECK_SCRIPT);
 
   if (!existsSync(sharedScript)) {
