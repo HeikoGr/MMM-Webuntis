@@ -4,7 +4,7 @@
  *
  * Why this exists: `0.7.14` shipped as "chore: update biome schema version to 2.5.0" but also
  * contained a real behavior fix (`lessons.nextDays: 0` was treated as "not configured" and the
- * widget was silently skipped). commitlint accepted it - the *format* was fine. Because the type
+ * widget was silently skipped). the format check accepted it - the *format* was fine. Because the type
  * was `chore`, the change never reached the changelog and had to be reconstructed from diffs
  * months later.
  *
@@ -93,7 +93,7 @@ function main() {
 
   const subject = fs.readFileSync(messageFile, "utf8").split("\n")[0].trim();
   const match = subject.match(/^([a-z]+)(\([^)]*\))?(!)?:/);
-  if (!match) return; // commitlint reports malformed subjects; not this guard's job.
+  if (!match) return; // check-commit-msg.js reports malformed subjects; not this guard's job.
 
   const [, type, , breaking] = match;
   if (breaking || !LOW_SIGNAL_TYPES.has(type)) return;

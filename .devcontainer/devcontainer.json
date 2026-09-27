@@ -37,7 +37,7 @@
         "chat.mcp.autoStart": true,
         "editor.formatOnSave": true,
         "files.trimTrailingWhitespace": true,
-        // Guided commit form matching commitlint.config.js. The scope list is optional;
+        // Guided commit form matching scripts/check-commit-msg.js. The scope list is optional;
         // leaving it empty is fine for repo-wide changes.
         "conventionalCommits.showEditor": true,
         "conventionalCommits.promptScopes": true,

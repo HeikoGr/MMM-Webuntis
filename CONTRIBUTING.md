@@ -26,7 +26,7 @@ Run at least `node --run lint` and `node --run test` before opening a PR.
 3. Commit
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) and are checked
-twice: by `commitlint` in a `commit-msg` hook, and again in CI for every commit in a PR.
+twice: by `scripts/check-commit-msg.js` in a `commit-msg` hook, and again in CI for every commit in a PR.
 
 ```
 <type>(<optional scope>): <subject>
@@ -59,13 +59,13 @@ If you let Copilot draft the message with the ✨ button in the Source Control v
 `.github/commit-instructions.md`, which `.vscode/settings.json` wires up via
 `github.copilot.chat.commitMessageGeneration.instructions`. Note that Copilot does *not* read
 `.github/copilot-instructions.md` for commit messages — that file only applies to chat and code
-generation. Keep the rules in `commitlint.config.js`, `scripts/check-commit-scope.js`, and
+generation. Keep the rules in `scripts/check-commit-msg.js`, `scripts/check-commit-scope.js`, and
 `.github/commit-instructions.md` in sync when you change them.
 
 4. Create a PR
 
 - Make a branch and open a PR against `develop` with testing steps. CI runs lint, tests, spell check, and
-  commitlint. The PR is squash-merged, so its title becomes the commit and has to be a Conventional Commit
+  the commit message check. The PR is squash-merged, so its title becomes the commit and has to be a Conventional Commit
   as well.
 
 5. Releases

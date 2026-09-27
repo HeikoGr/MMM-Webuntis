@@ -1,8 +1,8 @@
 # Commit message instructions
 
 Write the commit message as a Conventional Commit. The repository enforces these rules with
-commitlint and `scripts/check-commit-scope.js`, so a message that ignores them is rejected by the
-`commit-msg` hook.
+`scripts/check-commit-msg.js` and `scripts/check-commit-scope.js`, so a message that ignores them is
+rejected by the `commit-msg` hook.
 
 ## Format
 

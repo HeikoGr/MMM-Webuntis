@@ -45,8 +45,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
-    "@commitlint/cli": "^21.2.3",
-    "@commitlint/config-conventional": "^21.2.3",
     "lint-staged": "^17.5.1",
     "simple-git-hooks": "^2.14.0"
   },
@@ -57,7 +55,7 @@
   },
   "simple-git-hooks": {
     "pre-commit": "npx --no-install lint-staged",
-    "commit-msg": "npx --no-install commitlint --edit $1 && node scripts/check-commit-scope.js $1"
+    "commit-msg": "node scripts/check-commit-msg.js $1 && node scripts/check-commit-scope.js $1"
   },
   "allowScripts": {
     "simple-git-hooks@2.14.0": true
