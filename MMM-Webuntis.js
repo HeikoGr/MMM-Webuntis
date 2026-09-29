@@ -241,39 +241,70 @@ Module.register("MMM-Webuntis", {
       return;
     }
 
-    const mergedTranslations = {};
+    // All languages at once, merged afterwards in load order (en, base language, locale).
     const languages = this._getPluginTranslationLoadOrder();
-    for (const language of languages) {
-      const relativePath = `${pluginRoot}/translations/${language}.json`;
-      const url = this.file(relativePath);
+    const files = await Promise.all(
+      languages.map((language) => this._fetchPluginTranslationFile(pluginId, pluginRoot, language)),
+    );
+    const mergedTranslations = {};
+    files.forEach((json) => {
+      if (json) Object.assign(mergedTranslations, json);
+    });
 
+    this._pluginTranslationsById.set(pluginId, mergedTranslations);
+  },
+
+  /**
+   * One translation file of a plugin, or null when there is none or it is unusable.
+   *
+   * Every instance in the window asks for the same files, so the request is shared through one
+   * promise per plugin and language (`MMMWebuntisPluginTranslations`). A failed request is dropped
+   * from the cache so a later instance can retry it; a missing file (404) is remembered.
+   *
+   * @param {string} pluginId - Plugin id
+   * @param {string} pluginRoot - Plugin folder relative to the module
+   * @param {string} language - Language code
+   * @returns {Promise<Object|null>} The parsed translations
+   */
+  _fetchPluginTranslationFile(pluginId, pluginRoot, language) {
+    if (!globalThis.MMMWebuntisPluginTranslations) globalThis.MMMWebuntisPluginTranslations = new Map();
+    const cache = globalThis.MMMWebuntisPluginTranslations;
+    const cacheKey = `${pluginId}|${language}`;
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+    const relativePath = `${pluginRoot}/translations/${language}.json`;
+    // The module version in the query keeps the browser cache from serving texts of an older release.
+    const url = `${this.file(relativePath)}?v=${encodeURIComponent(this._cacheVersion)}`;
+    const request = (async () => {
       try {
-        const response = await fetch(url, { cache: "no-store" });
-        if (response.status === 404) continue;
+        const response = await fetch(url);
+        if (response.status === 404) return null;
         if (!response.ok) {
           this._log(
             "warn",
             `[plugins] ${pluginId}: failed to load translations from ${relativePath} (${response.status})`,
           );
-          continue;
+          cache.delete(cacheKey);
+          return null;
         }
 
         const json = await response.json();
         if (!json || typeof json !== "object" || Array.isArray(json)) {
           this._log("warn", `[plugins] ${pluginId}: ignoring non-object translations in ${relativePath}`);
-          continue;
+          return null;
         }
-
-        Object.assign(mergedTranslations, json);
+        return json;
       } catch (error) {
         this._log(
           "warn",
           `[plugins] ${pluginId}: failed to load translations from ${relativePath}: ${error?.message || error}`,
         );
+        cache.delete(cacheKey);
+        return null;
       }
-    }
-
-    this._pluginTranslationsById.set(pluginId, mergedTranslations);
+    })();
+    cache.set(cacheKey, request);
+    return request;
   },
 
   /**
@@ -422,10 +453,8 @@ Module.register("MMM-Webuntis", {
       state.promise = Promise.resolve()
         .then(() => {
           this._loadPluginStyles(pluginEntry);
-          return this._loadPluginTranslations(pluginEntry);
-        })
-        .then(() => {
-          return this._loadPluginScript(pluginEntry);
+          // Texts and script load side by side; the widget renders once both are there (state.loaded).
+          return Promise.all([this._loadPluginTranslations(pluginEntry), this._loadPluginScript(pluginEntry)]);
         })
         .then(() => {
           state.loaded = true;
