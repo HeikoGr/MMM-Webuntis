@@ -34,16 +34,16 @@ flowchart TD
     FE[Frontend MMM-Webuntis.js]
     NH[node_helper.js]
     INIT[REQUEST: CONFIGURE]
-    FETCH[REQUEST: REFRESH]
     STATE[SESSION_STATE]
-    MODOK[EVENT: MODULE_READY]
-    GOT[EVENT: DATA_UPDATE]
-    INITERR[EVENT: MODULE_INIT_FAILED]
+    MODOK[EVENT: CONFIGURED]
+    GOT[EVENT: DATA]
+    INITERR[EVENT: CONFIG_INVALID]
     INITREQ[EVENT: INIT_REQUIRED]
+    HUB[mmm-shared instance hub\nlifecycle per instance]
 
-    CFG[Config validation and legacy mapping]
+    CFG[prepareConfig: validation and legacy mapping]
     DISCOVER[Optional student auto-discovery via app/data]
-    EXEC[_executeFetchForSession]
+    EXEC[fetchInstance]
     GROUP[Group students by credential key]
     AUTHSESSION[_createAuthSession]
 
@@ -71,17 +71,14 @@ flowchart TD
     API[(WebUntis REST API)]
     RPC[(WebUntis JSON-RPC API)]
 
-    FE --> INIT --> NH --> CFG
-    CFG --> DISCOVER
-    DISCOVER --> MODOK
-    MODOK --> NH
-    NH --> EXEC
-
-    FE --> FETCH --> NH --> EXEC
-    NH -- session unknown --> INITREQ --> FE
+    FE --> INIT --> NH --> HUB --> CFG
+    CFG -- invalid --> INITERR --> FE
+    CFG -- valid --> MODOK --> FE
+    HUB -- on schedule --> EXEC
+    NH -- new connection --> INITREQ --> FE
     FE --> STATE --> NH
 
-    EXEC --> GROUP --> AUTHSESSION --> FACADE
+    EXEC --> DISCOVER --> GROUP --> AUTHSESSION --> FACADE
     FACADE --> CLIENT
     CLIENT --> BUNDLE --> TARGETS --> ORCH
 
@@ -124,8 +121,9 @@ sequenceDiagram
     participant FC as fetchClient
     participant WU as WebUntis
 
-    FE->>NH: REQUEST action CONFIGURE or REFRESH
-    NH->>WF: fetchStudentData(...)
+    FE->>NH: REQUEST action CONFIGURE (once)
+    Note over NH: the hub calls fetchInstance() on schedule
+    NH->>WF: fetchStudentData(...) per student
     WF->>WC: fetchBundle(...)
     WC->>OR: orchestrateFetch(...)
 
@@ -171,7 +169,7 @@ sequenceDiagram
 
     OR-->>WC: timetable + parallel endpoint results
     WC-->>NH: normalized payload
-    NH-->>FE: EVENT action DATA_UPDATE
+    NH-->>FE: EVENT action DATA (one payload per student)
 ```
 
 ## 3. Socket-Level Status Signals
@@ -180,24 +178,26 @@ These are the internal status signals between frontend and backend.
 
 | Signal | Direction | Meaning |
 |--------|-----------|---------|
-| `CONFIGURE` | frontend -> backend | Validate config, set up auth service, optionally auto-discover students, then trigger initial fetch |
-| `MODULE_READY` | backend -> frontend | Initialization finished successfully; includes normalized config, warnings, and students |
-| `MODULE_INIT_FAILED` | backend -> frontend | Initialization failed; includes `errors`, `warnings`, and `severity` |
-| `REFRESH` | frontend -> backend | Start a refresh for an already initialized session. Carries only `id`, `sessionId`, `reason`, `debugDate` and `backgroundRefresh` - the config travels with `CONFIGURE` |
-| `INIT_REQUIRED` | backend -> frontend | A `REFRESH` arrived for a session the backend does not know (helper restarted). The frontend reopens its init gate and re-sends `CONFIGURE` |
-| `DATA_UPDATE` | backend -> frontend | Final payload after auth, fetch, normalization, and payload building |
-| `SESSION_STATE` | frontend -> backend | Mark session as `active` or `paused`; paused sessions ignore fetches |
+| `CONFIGURE` | frontend -> backend | Sent once (and again on `INIT_REQUIRED`): the full config. The backend validates it, starts the instance and its fetch schedule |
+| `SESSION_STATE` | frontend -> backend | Mark the display as `active` or `paused`; with `backgroundRefresh: false` the backend stops fetching while every display is paused |
+| `CONFIGURED` | backend -> frontend | Config accepted; carries config `warnings`/`warningMeta` and the plugin `plugins` registry. Sent before the first fetch |
+| `DATA` | backend -> frontend | Result of one fetch cycle: `students` (one payload per student), `allFailed`, module-level `warnings`. Replayed to a display that connects later |
+| `FETCH_FAILED` | backend -> frontend | The fetch threw as a whole; the frontend keeps its data and shows the message. The retry follows the backoff |
+| `CONFIG_INVALID` | backend -> frontend | Validation failed; `error.details.errors` lists every error, `error.details.warnings` the warnings |
+| `CONFIG_REJECTED` | backend -> frontend | Only to the display concerned: its credentials or students differ from the running instance (`data.mismatchKeys`) |
+| `INIT_REQUIRED` | backend -> frontend | A new socket connected or the instance is unknown (helper restarted). `identifier` is `*` for every instance; the frontend re-sends `CONFIGURE` and `SESSION_STATE` |
 
 ## 4. Request Phases
 
 ### Phase 1: Initialization
 
 1. Frontend sends `CONFIGURE`.
-2. `node_helper.js` applies legacy mappings and validates config.
-3. The process-wide `AuthService` is attached (one instance for all module instances and browser sessions).
-4. If parent credentials are present, `app/data` may be used to auto-discover students.
-5. Backend emits `MODULE_READY`.
-6. Backend immediately runs `_handleFetchData()` for the first fetch.
+2. `prepareConfig()` applies legacy mappings and validates the config (`CONFIG_INVALID` otherwise).
+3. The process-wide `AuthService` is shared by all module instances.
+4. The hub sends `CONFIGURED` and starts the lifecycle, which runs the first `fetchInstance()` right away.
+5. `fetchInstance()` first runs the student discovery when parent credentials are present without
+   configured students (`app/data`, may log in). A failed discovery becomes a module-level warning in
+   `DATA` and is retried by the next fetch (2 min, then doubling).
 
 ### Phase 2: Auth Session Creation
 
@@ -205,7 +205,7 @@ These are the internal status signals between frontend and backend.
 (`_getCredentialKey()`) is the credential fingerprint only — `parent:<user>@<server>/<school>`,
 `user:<user>@<server>/<school>` or `qrcode:<url>` — and is deliberately not scoped by module
 instance, browser session or `carouselId`: every consumer of the same account shares one
-WebUntis session and one login. Parallel fetches with the same key are serialized
+WebUntis session and one login. Fetches of different instances with the same key are serialized
 (`_pendingFetchByCredKey`), parallel logins are deduplicated inside `AuthService` (`_pendingAuth`).
 A session that follows another one of the same account reuses its responses
 (`lib/webuntis/responseCache.js`, keyed by account, server, endpoint, school year and
@@ -529,7 +529,7 @@ The server request model is intentionally layered:
 3. `dataFetchOrchestrator.js` enforces timetable-first auth validation and one controlled rerun after auth refresh.
 4. `webuntisApiService.js` performs one auth-based endpoint retry.
 5. `restClient.js` performs transport retries for rate limits, server failures, and network issues.
-6. `authService.js` caches one session per credential fingerprint for 14 minutes with a 5-minute safety buffer; the session is shared by every module instance using that account, and any endpoint that sees the login page (`302`, `LOGIN_ERROR`, HTML) forces a re-login.
+6. `authService.js` caches one session per credential fingerprint until the token's `exp` (14 minutes without one) with a 60-second safety buffer; the session is shared by every module instance using that account, and any endpoint that sees the login page (`302`, `LOGIN_ERROR`, HTML) forces a re-login.
 
 This combination gives the module three distinct stability layers:
 - proactive auth avoidance through token buffering

@@ -38,8 +38,6 @@ const config = {
         // logLevel: "info", // optional: 'none', 'error', 'warn', 'info', 'debug'; unset = global logLevel
         debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
         demoDataFile: null, // optional: show demo data instead of WebUntis (e.g. 'demo/fixtures/single-student-week.json'; comma-separated for several students)
-        initRetryTimeout: 5000, // retry timeout for missing MODULE_READY during startup (milliseconds)
-        initRetryMaxAttempts: 4, // max startup CONFIGURE attempts before waiting for next trigger
         dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
         dumpRawApiResponses: false, // when true, save raw REST API responses to ./debug_dumps/raw_api_*.json
         timezone: "Europe/Berlin", // timezone for date calculations (important for schools outside UTC)

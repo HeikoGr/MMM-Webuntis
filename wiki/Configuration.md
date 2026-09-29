@@ -19,8 +19,6 @@ This page covers the options most users actually need. For a full example file, 
 | `logLevel` | unset | Optional: `none`, `error`, `warn`, `info`, `debug`. All output (browser console and `pm2 logs`) goes through MagicMirror's `Log`, so the global `logLevel` in `config.js` decides; this option can only narrow it for this instance (several instances keep their own levels; the shared login and HTTP layer follows the most detailed one). `info`/`debug` set here also print the running config to the browser console; `debug` also keeps past lessons and exams visible. |
 | `debugDate` | `null` | Freeze the calendar date for testing |
 | `demoDataFile` | `null` | Show demo data instead of WebUntis data, e.g. `'demo/fixtures/single-student-week.json'` (comma-separated for several students). No login; all other options apply as usual |
-| `initRetryTimeout` | `5000` | Timeout (ms) for the CONFIGURE → MODULE_READY watchdog before retrying |
-| `initRetryMaxAttempts` | `4` | Max CONFIGURE attempts before the init retry gate reopens |
 | `dumpBackendPayloads` | `false` | Dump raw payloads from the backend into `./debug_dumps/` |
 | `dumpRawApiResponses` | `false` | Save raw WebUntis REST responses into `./debug_dumps/raw_api_*.json` |
 
@@ -137,7 +135,7 @@ Added lessons are regular lessons: the `lessons` widget only lists them with `sh
 
 ## Debug Options
 
-Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, `demoDataFile`, `initRetryTimeout`, and `initRetryMaxAttempts` in the option table above.
+Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, and `demoDataFile` in the option table above.
 
 **`debugDate` and past school years:** pick a date inside the *current* school year. WebUntis serves homework only for the school year your session was opened in, so a `debugDate` in an earlier school year shows no homework, while the timetable and exams still appear. Normal operation is unaffected. Details: [API_REFERENCE.md](../docs/API_REFERENCE.md#known-limitation-debugdate).
 

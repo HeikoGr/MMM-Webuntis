@@ -93,16 +93,6 @@
               "type": "string",
               "description": "Optional demo fixture (e.g. demo/fixtures/single-student-week.json, comma-separated for several students) shown instead of WebUntis data."
             },
-            "initRetryTimeout": {
-              "type": "integer",
-              "minimum": 1000,
-              "description": "Wait time in milliseconds before retrying initialization."
-            },
-            "initRetryMaxAttempts": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "Maximum number of automatic initialization retries."
-            },
             "dumpBackendPayloads": {
               "type": "boolean",
               "description": "FOR DEV ONLY: Save normalized backend payloads to debug_dumps for analysis."
@@ -803,16 +793,6 @@
           "description": "Optional demo fixture (comma-separated for several students) shown instead of WebUntis data."
         },
         {
-          "key": "MMM-Webuntis.config.initRetryTimeout",
-          "title": "initRetryTimeout",
-          "description": "Wait time in milliseconds before retrying initialization."
-        },
-        {
-          "key": "MMM-Webuntis.config.initRetryMaxAttempts",
-          "title": "initRetryMaxAttempts",
-          "description": "Maximum number of automatic initialization retries."
-        },
-        {
           "key": "MMM-Webuntis.config.dumpBackendPayloads",
           "title": "dumpBackendPayloads",
           "description": "Save normalized backend payloads to debug_dumps for analysis."
@@ -1254,8 +1234,6 @@
       "logLevel": "none",
       "debugDate": "",
       "demoDataFile": "",
-      "initRetryTimeout": 5000,
-      "initRetryMaxAttempts": 4,
       "dumpBackendPayloads": false,
       "dumpRawApiResponses": false,
       "displayMode": "lessons, exams",

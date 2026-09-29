@@ -8,7 +8,7 @@ Scope of this document:
 - normalization rules applied before data reaches the frontend
 
 Out of scope:
-- internal `DATA_UPDATE` payload shape
+- internal student payload shape (the `students` entries of `DATA`)
 - frontend/backend transport contract
 - detailed retry, timeout, and skip behavior
 
@@ -98,7 +98,7 @@ the session cookie of that same response, so both must be kept together.
 
 REST bearer tokens:
 - server lifetime: about 15 minutes
-- module cache lifetime: 14 minutes with a 5-minute safety buffer
+- module cache lifetime: until the JWT's `exp` (14 minutes when the token has none), minus a 60-second safety buffer
 
 Required REST headers:
 - `Authorization: Bearer <token>`
@@ -390,7 +390,7 @@ Entities are decoded only once no tag is left. Decoding the output of the saniti
 `sanitizeRichText` did from `f7ebcda` to 0.14.1) turns text such as `&lt;img onerror=…&gt;` back
 into live markup.
 
-Field-by-field result in the `DATA_UPDATE` payload:
+Field-by-field result in the student payload:
 
 | Collection | Field | Pipeline | Reaches the frontend as |
 |------------|-------|----------|-------------------------|

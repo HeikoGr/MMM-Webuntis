@@ -59,8 +59,9 @@ Files:
 - `MMM-Webuntis.css`
 
 Responsibilities:
-- send `CONFIGURE` (full config) and `REFRESH` (routing, reason, `debugDate`, `backgroundRefresh`)
-- receive `MODULE_READY`, `MODULE_INIT_FAILED`, `INIT_REQUIRED`, and `DATA_UPDATE`
+- send `CONFIGURE` (full config, once) and `SESSION_STATE` (`active` / `paused`) - nothing else; the backend owns the fetch schedule
+- receive `CONFIGURED`, `DATA`, `FETCH_FAILED`, `CONFIG_INVALID`, `CONFIG_REJECTED`, and `INIT_REQUIRED`
+- render once per `DATA` (one payload per student inside it) and check for a day change once a minute while visible
 - load frontend plugin assets and register plugin instances
 - render active plugins through the frontend plugin host
 - format already-normalized data for display
@@ -70,10 +71,9 @@ The frontend should not know WebUntis endpoint details.
 ### MagicMirror Adapter Layer
 
 Files:
-- `node_helper.js` - socket protocol, session lifecycle, per-credential fetch loop (nothing else)
+- `node_helper.js` - wires the mmm-shared instance hub (socket protocol, one lifecycle per instance) and adds `prepareConfig()`, `fetchInstance()` with the per-credential fetch loop, and demo mode (nothing else)
 - `lib/moduleConfig.js` - legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
-- `lib/sessionRegistry.js` - session configs, paused flags, TTL-based eviction
-- `lib/apiStatusTracker.js` - per-session endpoint status, 24h permanent-error skip, transient circuit breaker
+- `lib/apiStatusTracker.js` - per-instance endpoint status, 24h permanent-error skip, transient circuit breaker
 - `lib/authSession.js` - credential fingerprint, auth session creation, parent auth
 - `lib/studentDiscovery.js` - parent-account student auto-discovery
 - `lib/warningUtils.js` - warning classification, group collectors, payload merge
@@ -141,7 +141,7 @@ This layer separates transport data from frontend-facing runtime data.
 `lib/mmm-shared` is a git submodule (`https://github.com/HeikoGr/mmm-shared.git`) that provides
 notification-name and socket-envelope helpers used by both runtime halves:
 
-- `node_helper.js` requires it at load time for `buildNotifications()` and `createEnvelope()`
+- `node_helper.js` requires it at load time for `buildNotifications()` and `createInstanceHub()` (`lib/mmm-shared/backend-session.js`)
 - `MMM-Webuntis.js` ships `lib/mmm-shared/mmm-shared.js` as the first entry of `getScripts()`
 
 Consequences for contributors:
@@ -154,21 +154,31 @@ Consequences for contributors:
 
 ## Main Control Flow
 
-1. `MMM-Webuntis.js` sends `CONFIGURE`.
-2. `node_helper.js` normalizes and validates the config, registers the session and immediately
-   emits `MODULE_READY` (duplicate `CONFIGURE`s for a running init are ignored).
-3. `lib/studentDiscovery.js` auto-discovers students for parent accounts (may log in).
-4. `node_helper.js` triggers the first fetch automatically.
+The frontend sends its config once; the backend (the mmm-shared instance hub in `node_helper.js`)
+keeps one lifecycle per module identifier and owns the fetch schedule. Several displays of one
+instance share one fetch cycle.
+
+1. `MMM-Webuntis.js` reports `SESSION_STATE` and sends `CONFIGURE` (full config, `id` = identifier).
+2. The hub calls `prepareConfig()`: legacy mapping, validation, demo fixture check. An invalid
+   config is answered with `CONFIG_INVALID` (all errors in `error.details.errors`), and a display
+   whose credentials or students differ from the running instance with `CONFIG_REJECTED`.
+3. For a valid config the hub answers `CONFIGURED` (config warnings and the plugin registry) before
+   the first fetch and starts the lifecycle (`updateInterval`, quiet hours, backoff, pause state).
+4. On schedule the hub calls `fetchInstance()`. `lib/studentDiscovery.js` auto-discovers students for
+   parent accounts first (may log in; retried by every fetch until it worked), then the students are
+   grouped by credential key and each group is fetched.
 5. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
-6. `lib/webuntisClient.js` maps the normalized bundle into the `DATA_UPDATE` payload, including
+6. `lib/webuntisClient.js` maps the normalized bundle into one student payload, including
    `state.collections` (per-collection `ok` / `unavailable` / `disabled`).
-7. `node_helper.js` emits `DATA_UPDATE`.
+7. `fetchInstance()` returns `{ students, allFailed, warnings }`; the hub pushes it as `DATA`
+   (or `FETCH_FAILED` when the fetch threw). `allFailed` counts as a failed fetch and grows the retry
+   backoff (2 min, doubling up to 30 min).
 8. Frontend keeps previous data for `unavailable` collections and renders "data unavailable" when
    it has nothing to keep; plugin renderers consume the normalized result.
 
-Subsequent refreshes repeat steps 5-8. Because `REFRESH` no longer carries the config, a helper
-that restarted under a running frontend answers the next `REFRESH` with `INIT_REQUIRED`; the
-frontend then reopens its init gate and the flow restarts at step 1.
+A new socket connection is greeted with `INIT_REQUIRED` (for `*`, every instance), so a frontend
+that outlives a helper restart re-sends `CONFIGURE` and `SESSION_STATE` within seconds. An instance
+lives until its last display has been gone for 10 minutes, so a reload keeps the retry backoff.
 
 Current compatibility note:
 
@@ -179,14 +189,14 @@ Current compatibility note:
 ### Demo Mode
 
 When `demoDataFile` is set, the backend serves fixtures instead of WebUntis data. Everything else runs
-the live path - `CONFIGURE`, `MODULE_READY` with the plugin registry, periodic `REFRESH`, `DATA_UPDATE`
+the live path - `CONFIGURE`, `CONFIGURED` with the plugin registry, the scheduled fetch, `DATA`
 - so the widgets follow the module config exactly like live data. `lib/demoData.js` holds the demo
 logic; the backend touches it at three points:
 
-1. `CONFIGURE` validates without requiring students or credentials (`lib/configValidator.js`), checks
-   that the fixtures can be read, and merges the module defaults into the configured students instead
-   of running the WebUntis student discovery (which would log in).
-2. `REFRESH` (`_handleFetchData`) emits the fixtures via `_emitDemoData()` instead of fetching. Each
+1. `prepareConfig()` validates without requiring students or credentials (`lib/configValidator.js`) and
+   checks that the fixtures can be read. `fetchInstance()` merges the module defaults into the
+   configured students instead of running the WebUntis student discovery (which would log in).
+2. `fetchInstance()` returns the fixtures as its student payloads instead of fetching. Each
    payload gets the config of the student at the same position in `context.config`; without configured
    students every fixture gets a student built from the module config. `demoDataFile` may list several
    fixtures, comma-separated, one student each. Fixtures are read on every refresh.

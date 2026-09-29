@@ -10,6 +10,13 @@ Check these first:
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.
 5. Make sure the selected date range actually contains timetable data.
 
+## A Reload Does Not Reset The Retry Backoff
+
+The backend owns the fetch schedule. After a failed fetch (wrong password, server unreachable) it
+retries after 2 minutes, then 4, 8 … up to 30 minutes, and an instance stays alive for 10 minutes
+after its last display went away. Reloading the browser therefore does not force an immediate new
+login attempt; restart MagicMirror (or wait for the next retry) after fixing the credentials.
+
 ## Which Log Level To Pick
 
 All output goes through MagicMirror's `Log`: the global `logLevel` in `config.js` is the upper

@@ -15,8 +15,6 @@ Module.register("MMM-Webuntis", {
     logLevel: null,
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional fixture path(s), comma-separated: render demo data instead of fetching from WebUntis
-    initRetryTimeout: 5000, // timeout for CONFIGURE -> MODULE_READY watchdog (milliseconds)
-    initRetryMaxAttempts: 4, // max CONFIGURE attempts before reopening init gate
     dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
     dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
 
@@ -120,52 +118,6 @@ Module.register("MMM-Webuntis", {
     return true;
   },
 
-  /**
-   * Generate a random session identifier.
-   * Uses a cryptographically secure random number generator when available.
-   *
-   * @param {number} length - Length of the identifier to generate.
-   * @returns {string} Random session identifier consisting of [0-9a-z].
-   * @private
-   */
-  _generateSessionId(length = 9) {
-    if (globalThis.MMModuleRuntimeUtils?.generateScopedId) {
-      const scopedId = globalThis.MMModuleRuntimeUtils.generateScopedId("wu", length);
-      return scopedId.startsWith("wu_") ? scopedId.slice(3) : scopedId;
-    }
-
-    const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
-
-    const cryptoObj =
-      (typeof window !== "undefined" && window.crypto) ||
-      (typeof self !== "undefined" && self.crypto) ||
-      (typeof crypto !== "undefined" && crypto);
-
-    let result = "";
-
-    if (cryptoObj && typeof cryptoObj.getRandomValues === "function") {
-      const array = new Uint8Array(length);
-      cryptoObj.getRandomValues(array);
-      for (let i = 0; i < length; i += 1) {
-        const idx = array[i] % alphabet.length;
-        result += alphabet.charAt(idx);
-      }
-      return result;
-    }
-
-    for (let i = 0; i < length; i += 1) {
-      const idx = Math.floor(Math.random() * alphabet.length);
-      result += alphabet.charAt(idx);
-    }
-    return result;
-  },
-
-  /**
-   * Return array of CSS files to load for this module
-   * Called by MagicMirror during module initialization
-   *
-   * @returns {string[]} Array of CSS file paths
-   */
   getStyles() {
     return [this.file("MMM-Webuntis.css")];
   },
@@ -461,6 +413,7 @@ Module.register("MMM-Webuntis", {
 
   _initializeActivePlugins(pluginEntries = []) {
     const entries = Array.isArray(pluginEntries) ? pluginEntries.filter((entry) => entry?.active === true) : [];
+    const needsRender = entries.some((entry) => !this._ensurePluginAssetState(entry.id).loaded);
     const loadTasks = entries.map((pluginEntry) => {
       const state = this._ensurePluginAssetState(pluginEntry.id);
       if (state.loaded) return Promise.resolve();
@@ -493,7 +446,7 @@ Module.register("MMM-Webuntis", {
 
     return Promise.all(loadTasks)
       .then(() => {
-        this.lifecycle.render();
+        if (needsRender) this.lifecycle.render();
       })
       .catch((error) => {
         this._log("error", "[plugins] failed to initialize plugin widgets", error);
@@ -777,7 +730,7 @@ Module.register("MMM-Webuntis", {
    * Build configuration object to send to backend
    * Backend performs normalization/default handling for nested widget configs
    *
-   * @returns {Object} Config object with session metadata for backend processing
+   * @returns {Object} Config object for the backend; `id` is the module identifier
    */
   _buildSendConfig() {
     const rawStudents = Array.isArray(this.config.students) ? this.config.students : [];
@@ -792,7 +745,6 @@ Module.register("MMM-Webuntis", {
       ...this.config,
       students: rawStudents,
       id: this.identifier,
-      sessionId: this._sessionId,
     };
 
     if (explicitPlugins) {
@@ -854,18 +806,6 @@ Module.register("MMM-Webuntis", {
     }
     if (Number.isFinite(config.grid?.mergeGap) && config.grid.mergeGap < 0) {
       warnings.push(`grid.mergeGap cannot be negative. Value: ${config.grid.mergeGap}`);
-    }
-    if (
-      config.initRetryTimeout !== undefined &&
-      (!Number.isFinite(Number(config.initRetryTimeout)) || Number(config.initRetryTimeout) < 1000)
-    ) {
-      warnings.push(`initRetryTimeout should be >= 1000ms. Value: ${config.initRetryTimeout}`);
-    }
-    if (
-      config.initRetryMaxAttempts !== undefined &&
-      (!Number.isFinite(Number(config.initRetryMaxAttempts)) || Number(config.initRetryMaxAttempts) < 1)
-    ) {
-      warnings.push(`initRetryMaxAttempts should be >= 1. Value: ${config.initRetryMaxAttempts}`);
     }
 
     const hasParentCreds = Boolean((config.username && config.password && config.school) || config.qrcode);
@@ -1001,10 +941,14 @@ Module.register("MMM-Webuntis", {
       });
     }
 
+    let added = false;
     (Array.isArray(warnings) ? warnings : []).forEach((warning) => {
       const message = String(warning || "").trim();
       if (!message) return;
-      this.moduleWarningsSet.add(message);
+      if (!this.moduleWarningsSet.has(message)) {
+        this.moduleWarningsSet.add(message);
+        added = true;
+      }
 
       const nextMeta = metaByMessage.get(message) || { message, ...fallbackMeta };
       const prevMeta = this.moduleWarningMetaByMessage.get(message);
@@ -1012,6 +956,7 @@ Module.register("MMM-Webuntis", {
         this.moduleWarningMetaByMessage.set(message, { message, ...nextMeta });
       }
     });
+    return added;
   },
 
   _isCriticalModuleWarning(message) {
@@ -1262,10 +1207,8 @@ Module.register("MMM-Webuntis", {
    * Performs:
    *   1. Store log level in global config for widget access
    *   2. Initialize data storage structures (timetableByStudent, examsByStudent, etc.)
-   *   3. Generate unique session ID for browser window isolation
-   *   4. Parse and set debugDate if configured (frozen date for testing)
-   *   5. Request CONFIGURE once DOM is ready (DOM_OBJECTS_CREATED),
-   *      with resume() and startup fallback as safety nets
+   *   3. Parse and set debugDate if configured (frozen date for testing)
+   *   4. Send CONFIGURE once; the backend owns the fetch schedule and pushes the data
    *
    * Multi-instance support: Each instance should have a unique identifier in config.js
    */
@@ -1279,8 +1222,6 @@ Module.register("MMM-Webuntis", {
     });
     this.notifications = this.transport.notifications;
 
-    this._sessionId = this._generateSessionId(9);
-
     // Multi-instance support via explicit identifiers.
     // For multiple MMM-Webuntis instances, you MUST add unique 'identifier' fields in config.js:
     // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
@@ -1293,10 +1234,7 @@ Module.register("MMM-Webuntis", {
         '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js',
       );
     }
-    this._log(
-      "info",
-      `[start] identifier="${this.identifier}", sessionId="${this._sessionId}" (memory-only, unique per window)`,
-    );
+    this._log("info", `[start] identifier="${this.identifier}"`);
 
     try {
       if (!this.config.language && typeof config !== "undefined" && config?.language) {
@@ -1337,16 +1275,13 @@ Module.register("MMM-Webuntis", {
     this._pluginAssetStateById = new Map();
     this._frontendPluginInstancesById = new Map();
 
-    this._initialized = false;
-    this._initRequested = false;
-    this._initWatchdogTimer = null;
-    this._initAttemptCount = 0;
-
     this._lastDataReceivedAt = null;
 
     this._createLifecycle();
 
     this.lifecycle.start();
+    // After the lifecycle, so the backend knows a hidden display is paused before it starts.
+    this._sendConfigure();
     // Deliberately unredacted: this only reaches the browser DevTools console, and only when the
     // module's own logLevel is explicitly 'info' or 'debug' - never by the global level alone,
     // which is on INFO in a default MagicMirror. Its whole purpose is to let a user see -
@@ -1364,42 +1299,36 @@ Module.register("MMM-Webuntis", {
   /**
    * Build the shared lifecycle.
    *
-   * It owns everything that used to live in this file as hand-written timer and
-   * visibility bookkeeping: the freshness guard on resume(), the guard inside
-   * the interval callback, the deferred init for a module that starts hidden,
-   * the day rollover across a suspend, jitter and quiet hours.
+   * The backend owns the fetch schedule, so this one has no interval and no fetch callback. It
+   * gates rendering while hidden, reports active/paused (SESSION_STATE), and ticks once a minute
+   * while visible to catch a day change: with updateInterval 0 nothing else notices it.
    *
    * @private
    */
   _createLifecycle() {
+    const rolloverIfNeeded = () => {
+      if (this._handleClockDrivenDayRollover()) this.lifecycle.render();
+    };
     this.lifecycle = this.shared.createLifecycle({
       module: this,
       log: this._log.bind(this),
-      getUpdateInterval: () => this.config?.updateInterval,
-      minUpdateInterval: 30 * 1000,
+      updateInterval: 0,
       backgroundRefresh: this.config?.backgroundRefresh !== false,
-      quietHours: this.config?.quietHours,
       getDayKey: () => {
         const context = this.getCurrentDateContext();
         return this._usesLiveClock(context) ? String(context?.ymd ?? "") : null;
       },
       onDayChange: ({ previous, current }) => {
         this._log("debug", `[lifecycle] Day change detected: ${previous} -> ${current}`);
-        this._handleClockDrivenDayRollover();
+        rolloverIfNeeded();
       },
+      onVisibleTick: rolloverIfNeeded,
+      visibleTickInterval: 60 * 1000,
       onVisible: () => this._startNowLineUpdater(),
       onHidden: () => {
         this._stopNowLineUpdater();
       },
-      onSessionState: ({ state, reason }) =>
-        this.transport.sendRequest("SESSION_STATE", { sessionId: this._sessionId, state, reason }),
-      onFetch: ({ reason }) => this._sendFetchData(reason),
-      deferredInit: {
-        run: (reason) => this._requestInitIfNeeded(reason),
-        isPending: () => !this._initialized && !this._initRequested,
-        intervalMs: Number(this.config?.initRetryTimeout) || 5000,
-        maxAttempts: 12,
-      },
+      onSessionState: ({ state, reason }) => this.transport.sendRequest("SESSION_STATE", { state, reason }),
     });
   },
 
@@ -1424,97 +1353,12 @@ Module.register("MMM-Webuntis", {
   },
 
   /**
-   * Send CONFIGURE request to backend
-   * Triggers one-time module initialization (config validation, student discovery)
-   * Backend responds with MODULE_READY when ready
-   *
-   * @param {string} reason - Reason for initialization trigger
+   * Send the config to the backend: once at start, again only when the backend asks for it
+   * (INIT_REQUIRED, e.g. after a server restart). The backend starts the fetch schedule.
    */
-  _sendInit(reason = "manual") {
-    this._initAttemptCount += 1;
-    this._log("debug", `[CONFIGURE] Sending to backend (reason=${reason})`);
-    this.transport.sendRequest("CONFIGURE", {
-      ...this._buildSendConfig(),
-      reason,
-    });
-    this._armInitWatchdog();
-  },
-
-  /**
-   * Arm a watchdog for the init handshake and retry when MODULE_READY is missing.
-   */
-  _armInitWatchdog() {
-    const configuredTimeout = Number(this.config?.initRetryTimeout);
-    const timeoutMs = Number.isFinite(configuredTimeout) ? Math.max(1000, Math.floor(configuredTimeout)) : 5000;
-    const configuredMaxAttempts = Number(this.config?.initRetryMaxAttempts);
-    const maxAttempts = Number.isFinite(configuredMaxAttempts) ? Math.max(1, Math.floor(configuredMaxAttempts)) : 4;
-
-    if (this._initWatchdogTimer) {
-      clearTimeout(this._initWatchdogTimer);
-      this._initWatchdogTimer = null;
-    }
-
-    this._initWatchdogTimer = setTimeout(() => {
-      this._initWatchdogTimer = null;
-      if (this._initialized || !this._initRequested) return;
-
-      if (this._initAttemptCount >= maxAttempts) {
-        this._log(
-          "warn",
-          `[INIT] Watchdog reached max retries (${maxAttempts}) without MODULE_READY; reopening init gate for next trigger`,
-        );
-        this._initRequested = false;
-        this._initAttemptCount = 0;
-        return;
-      }
-
-      const nextAttempt = this._initAttemptCount + 1;
-      this._log(
-        "warn",
-        `[INIT] No MODULE_READY within ${timeoutMs}ms, retrying CONFIGURE (attempt ${nextAttempt}/${maxAttempts})`,
-      );
-      this._sendInit(`retry-timeout-${nextAttempt}`);
-    }, timeoutMs);
-  },
-
-  /**
-   * Request backend initialization exactly once when needed.
-   * Safe to call from multiple lifecycle hooks.
-   *
-   * @param {string} reason - Why init is requested
-   */
-  _requestInitIfNeeded(reason = "manual") {
-    if (this._initialized || this._initRequested) return;
-    this._initRequested = true;
-    this._initAttemptCount = 0;
-    this._sendInit(reason);
-  },
-
-  /**
-   * Send REFRESH request to backend for data refresh
-   * Only sends if module is initialized (prevents fetch before init)
-   * Stores pending resume request if called during initialization
-   *
-   * @param {string} reason - Reason for fetch ('manual', 'periodic', 'resume')
-   */
-  _sendFetchData(reason = "manual") {
-    if (!this._initialized) {
-      if (String(reason).startsWith("resume")) {
-        this._pendingResumeRequest = true;
-      }
-      return;
-    }
-
-    // REFRESH carries only what the backend reads from it - routing, the reason, and the two
-    // per-request overrides. The full config travels with CONFIGURE; a backend that has lost the
-    // session answers with INIT_REQUIRED instead of re-initializing from this payload.
-    this.transport.sendRequest("REFRESH", {
-      id: this.identifier,
-      sessionId: this._sessionId,
-      reason,
-      debugDate: this.config?.debugDate ?? this.defaults.debugDate,
-      backgroundRefresh: this.config?.backgroundRefresh ?? this.defaults.backgroundRefresh,
-    });
+  _sendConfigure() {
+    this._log("debug", "[CONFIGURE] Sending config to backend");
+    this.transport.sendRequest("CONFIGURE", { config: this._buildSendConfig() });
   },
 
   suspend() {
@@ -1612,35 +1456,39 @@ Module.register("MMM-Webuntis", {
         this._log("warn", "Please update your config.js to use the new configuration format.");
         this._log("warn", "See the module documentation for migration details.");
       }
-
-      // The lifecycle already triggered (or deferred) init in start(); this is
-      // only a safety net and is a no-op once init is under way.
-      this._requestInitIfNeeded("dom-objects-created");
     }
   },
 
   socketNotificationReceived(notification, payload) {
     if (notification !== this.notifications.EVENT) return;
-    if (!this._isValidTargetInstance(payload)) return;
 
     const action = payload?.action;
-    const eventData = payload?.data || {};
+    // A fresh backend connection is greeted with INIT_REQUIRED for "*" (every instance).
+    if (action === "INIT_REQUIRED") {
+      if (payload?.identifier === this.identifier || payload?.identifier === "*") this._handleInitRequired();
+      return;
+    }
+    if (payload?.identifier !== this.identifier) return;
 
     switch (action) {
-      case "MODULE_READY":
-        this._handleModuleInitialized(eventData);
+      case "CONFIGURED":
+        this._handleConfigured(payload.data || {});
         break;
 
-      case "MODULE_INIT_FAILED":
-        this._handleInitError(eventData);
+      case "DATA":
+        this._handleData(payload.data || {});
         break;
 
-      case "INIT_REQUIRED":
-        this._handleInitRequired(eventData);
+      case "FETCH_FAILED":
+        this._handleFetchFailed(payload.error);
         break;
 
-      case "DATA_UPDATE":
-        this._handleGotData(eventData);
+      case "CONFIG_INVALID":
+        this._handleConfigInvalid(payload.error);
+        break;
+
+      case "CONFIG_REJECTED":
+        this._handleConfigRejected(payload.data);
         break;
 
       default:
@@ -1649,136 +1497,125 @@ Module.register("MMM-Webuntis", {
   },
 
   /**
-   * Ensure the payload matches the current module instance's sessionId or identifier
+   * The backend does not know this instance (server restart, new connection): send the config
+   * again, and the paused state with it, which a restarted backend has lost as well.
    */
-  _isValidTargetInstance(payload) {
-    const routed = payload?.data || payload || {};
-    if (routed?.sessionId && this._sessionId !== routed.sessionId) return false;
-    if (routed?.id && !routed?.sessionId && this.identifier !== routed.id) return false;
-    if (payload?.identifier && this.identifier !== payload.identifier) return false;
-    return true;
+  _handleInitRequired() {
+    this._log("debug", "[INIT_REQUIRED] Backend requested the config");
+    this._sendConfigure();
+    this.lifecycle.reportSessionState("init-required");
   },
 
   /**
-   * Backend lost this session's config (helper restart) and asked for a new CONFIGURE handshake.
-   * Reopen the init gate and re-send the full config; the watchdog takes over from there.
+   * The backend accepted the config: show its warnings and set up the plugins in use. Sent before
+   * the first fetch, so config warnings appear even while a slow first login is still running.
+   * Safe to repeat: the plugin setup is idempotent and renders only when it loaded something.
    *
-   * @param {Object} payload - Event payload ({ reason })
+   * @param {Object} payload - { warnings, warningMeta, plugins }
    */
-  _handleInitRequired(payload) {
-    this._log(
-      "warn",
-      `[INIT_REQUIRED] Backend requested re-initialization (reason=${payload?.reason || "unspecified"})`,
-    );
-    this._initialized = false;
-    this._initRequested = false;
-    this._initAttemptCount = 0;
-    if (this._initWatchdogTimer) {
-      clearTimeout(this._initWatchdogTimer);
-      this._initWatchdogTimer = null;
-    }
-    this._requestInitIfNeeded("backend-init-required");
-  },
-
-  _handleModuleInitialized(payload) {
-    if (this._initialized) {
-      this._log(
-        "debug",
-        `[MODULE_READY] sessionId=${payload?.sessionId} Already initialized, ignoring duplicate notification`,
-      );
-      return;
-    }
-
-    this._log("info", `Module ready, sessionId=${payload?.sessionId}`);
-    this._initialized = true;
-    this._initRequested = false;
-    this._initializedAt = Date.now();
-
-    if (this._initWatchdogTimer) {
-      clearTimeout(this._initWatchdogTimer);
-      this._initWatchdogTimer = null;
-    }
-    this._initAttemptCount = 0;
-
-    if (this._pendingResumeRequest) {
-      this._log("debug", "[MODULE_READY] Clearing pending resume request (backend handles initial fetch)");
-      this._pendingResumeRequest = false;
-    }
-
+  _handleConfigured(payload) {
+    let warningsAdded = false;
     if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: "config", severity: "warning" });
+      warningsAdded = this._upsertModuleWarnings(payload.warnings, payload.warningMeta, {
+        kind: "config",
+        severity: "warning",
+      });
       payload.warnings.forEach((w) => {
         this._log("warn", `Init warning: ${w}`);
       });
     }
+    if (warningsAdded) this.lifecycle.render();
 
-    this._setPluginRegistry(payload?.plugins || []);
-    this._initializeActivePlugins(payload?.plugins || []).catch((error) => {
+    this._setPluginRegistry(payload.plugins || []);
+    this._initializeActivePlugins(payload.plugins || []).catch((error) => {
       this._log("error", `[plugins] initialization failed: ${error?.message || String(error)}`);
     });
-
-    this._log("debug", "[MODULE_READY] Backend will auto-fetch data, periodic timer is owned by the lifecycle");
   },
 
-  _handleInitError(payload) {
-    this._log(
-      "error",
-      `Module initialization failed (sessionId=${payload?.sessionId}):`,
-      payload.message || "Unknown error",
-    );
-    if (Array.isArray(payload.errors)) {
-      payload.errors.forEach((err) => {
-        this._log("error", `  - ${err}`);
-      });
-    }
-    if (Array.isArray(payload.warnings)) {
-      payload.warnings.forEach((warn) => {
+  /**
+   * One fetch cycle finished: one payload per student and the module-level warnings, rendered once.
+   *
+   * @param {Object} data - { students, warnings }
+   */
+  _handleData(data) {
+    const students = Array.isArray(data.students) ? data.students : [];
+    let changed = false;
+    students.forEach((studentPayload) => {
+      changed = this._handleGotData(studentPayload) || changed;
+    });
+    // The backend sends the module-level warnings of every cycle, so an empty list clears them.
+    changed = this._updateRuntimeWarnings("__module__", data.warnings) || changed;
+    if (changed) this.lifecycle.render();
+  },
+
+  /** A fetch failed as a whole: keep the data on screen and say why. */
+  _handleFetchFailed(error) {
+    const message = error?.message || "Fetch failed";
+    this._log("warn", `[FETCH_FAILED] ${message}`);
+    this._updateRuntimeWarnings("__module__", [message]);
+    this.lifecycle.render();
+  },
+
+  _handleConfigInvalid(error) {
+    const details = error?.details || {};
+    const errors = Array.isArray(details.errors) ? details.errors : String(error?.message || "").split("\n");
+    this._log("error", "Config validation failed:", error?.message || "Unknown error");
+    errors.forEach((err) => {
+      this._log("error", `  - ${err}`);
+    });
+    if (Array.isArray(details.warnings)) {
+      details.warnings.forEach((warn) => {
         this._log("warn", `  - ${warn}`);
       });
     }
 
-    const errorWarnings = Array.isArray(payload.errors) ? payload.errors : [];
+    const errorWarnings = errors.filter((message) => String(message).trim() !== "");
     const errorWarningMeta = errorWarnings.map((message) => ({
       message: String(message),
       kind: "config",
       severity: "critical",
     }));
-    this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: "config", severity: "critical" });
+    let added = this._upsertModuleWarnings(errorWarnings, errorWarningMeta, { kind: "config", severity: "critical" });
 
-    if (Array.isArray(payload.warnings) && payload.warnings.length > 0) {
-      this._upsertModuleWarnings(payload.warnings, payload.warningMeta, { kind: "config", severity: "warning" });
+    if (Array.isArray(details.warnings) && details.warnings.length > 0) {
+      added =
+        this._upsertModuleWarnings(details.warnings, details.warningMeta, { kind: "config", severity: "warning" }) ||
+        added;
     }
-
-    this._initialized = false;
-    this._initRequested = false;
-    if (this._initWatchdogTimer) {
-      clearTimeout(this._initWatchdogTimer);
-      this._initWatchdogTimer = null;
-    }
-    this._initAttemptCount = 0;
-    this.lifecycle.markFetchFailed();
-    this.lifecycle.render();
+    if (added) this.lifecycle.render();
   },
 
+  /** Another display of this instance runs with different credentials or students. */
+  _handleConfigRejected(data) {
+    const keys = Array.isArray(data?.mismatchKeys) ? data.mismatchKeys.join(", ") : "";
+    const message = `Config differs from the running instance: ${keys}`;
+    this._log("error", `[CONFIG_REJECTED] ${message}`);
+    const added = this._upsertModuleWarnings([message], [{ message, kind: "config", severity: "critical" }], {
+      kind: "config",
+      severity: "critical",
+    });
+    if (added) this.lifecycle.render();
+  },
+
+  /**
+   * Apply the payload of one student.
+   *
+   * @param {Object} payload - Student payload (contract v3)
+   * @returns {boolean} True when data or warnings changed and the view needs a render
+   */
   _handleGotData(payload) {
     if (Number(payload?.contractVersion) !== 3) {
-      this._log("warn", `[DATA_UPDATE] Ignored unsupported contractVersion=${payload?.contractVersion}`);
-      return;
+      this._log("warn", `[DATA] Ignored unsupported contractVersion=${payload?.contractVersion}`);
+      return false;
     }
 
     const title = payload?.context?.student?.title;
     if (!title) {
-      this._log(
-        "warn",
-        "[DATA_UPDATE] Missing context.student.title in payload, handling as module-level warning payload",
-      );
-      this._processGotDataWarnings("__module__", payload);
-
-      this.lifecycle.render();
-      return;
+      this._log("warn", "[DATA] Missing context.student.title in payload, handling as module-level warning payload");
+      return this._processGotDataWarnings("__module__", payload);
     }
 
-    this._log("debug", `[DATA_UPDATE] Received for student=${title}, sessionId=${payload?.sessionId}`);
+    this._log("debug", `[DATA] Received for student=${title}`);
     this._lastDataReceivedAt = Date.now();
     this.lifecycle.markDataReceived(this._lastDataReceivedAt);
     this.configByStudent[title] = payload?.context?.config || {};
@@ -1787,25 +1624,24 @@ Module.register("MMM-Webuntis", {
     const dataChanged = this._processPayloadData(title, payload);
     const warningsChanged = this._processGotDataWarnings(title, payload);
 
-    if (dataChanged || warningsChanged) {
-      this.lifecycle.render();
-    } else {
-      this._log("debug", `[DATA_UPDATE] Skipping DOM update for ${title}: no effective data/warning changes`);
+    if (!dataChanged && !warningsChanged) {
+      this._log("debug", `[DATA] Skipping DOM update for ${title}: no effective data/warning changes`);
     }
+    return dataChanged || warningsChanged;
   },
 
   _syncDebugDate(cfg) {
     this._log(
       "debug",
-      `[DATA_UPDATE] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`,
+      `[DATA] Before filter: _currentTodayYmd=${this._currentTodayYmd}, cfg.debugDate=${cfg?.debugDate}`,
     );
     const debugDateContext = this.getCurrentDateContext(cfg || {});
     if (debugDateContext.isDebug) {
-      this._log("debug", `[DATA_UPDATE] Using debugDate="${debugDateContext.isoDate}" from backend`);
+      this._log("debug", `[DATA] Using debugDate="${debugDateContext.isoDate}" from backend`);
       this._currentTodayYmd = debugDateContext.ymd;
-      this._log("debug", `[DATA_UPDATE] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
+      this._log("debug", `[DATA] Updated _currentTodayYmd=${debugDateContext.ymd} (before timetable filtering)`);
     } else {
-      this._log("debug", `[DATA_UPDATE] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
+      this._log("debug", `[DATA] No debugDate in cfg, keeping _currentTodayYmd=${this._currentTodayYmd}`);
     }
   },
 
@@ -1852,7 +1688,7 @@ Module.register("MMM-Webuntis", {
     nextCollectionState.lessons = this._resolveCollectionState(lessonsState, preserveLessons);
     this._log(
       "debug",
-      `[DATA_UPDATE] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`,
+      `[DATA] Timetable updated: ${rawLessons.length} total -> ${this.timetableByStudent[title]?.length || 0} valid`,
     );
 
     const dayNotices = Array.isArray(payload?.data?.dayNotices) ? payload.data.dayNotices : [];
@@ -1951,7 +1787,7 @@ Module.register("MMM-Webuntis", {
     if (hasAnyDebouncedWarningNow && !shouldShowDebouncedNow) {
       this._log(
         "debug",
-        `[DATA_UPDATE] Warning debounce active for ${title}: delaying runtime warning display until next fetch`,
+        `[DATA] Warning debounce active for ${title}: delaying runtime warning display until next fetch`,
       );
     }
 
