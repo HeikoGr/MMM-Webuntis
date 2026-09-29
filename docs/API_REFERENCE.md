@@ -8,7 +8,7 @@ Scope of this document:
 - normalization rules applied before data reaches the frontend
 
 Out of scope:
-- internal `DATA_UPDATE` payload shape
+- internal student payload shape (the `students` entries of `DATA`)
 - frontend/backend transport contract
 - detailed retry, timeout, and skip behavior
 
@@ -39,7 +39,7 @@ Flow:
 4. Reuse the resulting session to request a REST bearer token.
 
 Notes:
-- TOTP uses `otplib`.
+- TOTP is generated with `node:crypto` (`lib/webuntis/totp.js`, RFC 6238: SHA1, 6 digits, 30 s).
 - The generated bearer token is used together with tenant and school-year headers.
 
 ### Username / Password Authentication
@@ -98,7 +98,7 @@ the session cookie of that same response, so both must be kept together.
 
 REST bearer tokens:
 - server lifetime: about 15 minutes
-- module cache lifetime: 14 minutes with a 5-minute safety buffer
+- module cache lifetime: until the JWT's `exp` (14 minutes when the token has none), minus a 60-second safety buffer
 
 Required REST headers:
 - `Authorization: Bearer <token>`
@@ -390,11 +390,11 @@ Entities are decoded only once no tag is left. Decoding the output of the saniti
 `sanitizeRichText` did from `f7ebcda` to 0.14.1) turns text such as `&lt;img onerror=…&gt;` back
 into live markup.
 
-Field-by-field result in the `DATA_UPDATE` payload:
+Field-by-field result in the student payload:
 
 | Collection | Field | Pipeline | Reaches the frontend as |
 |------------|-------|----------|-------------------------|
-| lessons | substitutionText, lessonText | **none** | raw API text; the `lessons` and `grid` plugins run it through `escapeHtml()` at render time |
+| lessons | substitutionText, lessonText | **none** | raw API text; the `lessons` and `grid` plugins set it as text nodes (no HTML) |
 | exams | name, subject | `stripAllHtml(…, false)` then `richTextToPlainText` | plain text, whitespace collapsed |
 | exams | text | `stripAllHtml(…, true)` then `richTextToPlainText` | plain text, line breaks kept |
 | homework | text | `richTextToPlainText(…, true)` | plain text, Markdown markers kept |
@@ -405,7 +405,7 @@ Field-by-field result in the `DATA_UPDATE` payload:
 
 - **lessons**: `substitutionText` and `lessonText` are never sanitized on the backend. They are safe because both plugins escape them when rendering, but as a consequence entities arrive escaped rather than decoded - a lesson text containing `&amp;` displays as `&amp;`, while the same characters in a homework text display as `&`.
 
-**Trust boundary:** plain-text fields must be escaped in the plugin frontend (they are: `escapeHtml()`). The one safe-HTML field, `messagesofday.text`, is inserted as HTML and must not be escaped again, or users see literal `&amp;` and `<b>`.
+**Trust boundary:** the frontend sets plain-text fields as text nodes (`dom.el()`), so they need no escaping and can never become markup. The one safe-HTML field, `messagesofday.text`, goes through `dom.richTextNodes()`: parsed inert, rebuilt from the same tag whitelist without attributes - a second line of defence should the backend sanitizer ever let something through. It must not be set as text, or users see literal `&amp;` and `<b>`.
 
 ### Range Calculation
 

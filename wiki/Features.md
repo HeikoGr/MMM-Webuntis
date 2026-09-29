@@ -141,7 +141,7 @@ Options: [Messages Of Day Plugin](Plugin-MessagesOfDay)
 
 ## Operation
 
-- **Refresh:** every 5 minutes by default (`updateInterval`), also while the module is hidden, e.g. in
+- **Refresh:** every 4 minutes by default (`updateInterval`), also while the module is hidden, e.g. in
   a carousel (`backgroundRefresh`). `quietHours` pauses all requests, e.g. at night.
 - **Robust against outages:** if WebUntis fails, the last data stays on screen instead of an empty
   widget, and a widget without any data says "data unavailable". Configuration problems are reported in

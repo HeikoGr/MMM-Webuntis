@@ -3,7 +3,7 @@
   "meta": {
     "generatedAt": "2026-09-28T05:30:00.000Z",
     "moduleVersion": "demo-fixture",
-    "moduleId": "demo-fixture",
+    "identifier": "demo-fixture",
     "sessionId": "demo-fixture"
   },
   "context": {

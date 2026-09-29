@@ -1,6 +1,7 @@
 const NodeHelper = require("node_helper");
 const Log = require("logger");
 const shared = require("./lib/mmm-shared/mmm-shared");
+const { createInstanceHub } = require("./lib/mmm-shared/backend-session");
 
 const {
   AuthService,
@@ -9,14 +10,7 @@ const {
   convertRestErrorToWarning,
   buildFetchPlan,
 } = require("./lib/webuntisClient");
-const { ApiStatusTracker } = require("./lib/apiStatusTracker");
-const {
-  SessionRegistry,
-  buildRouteMeta,
-  parseSessionKey,
-  DEFAULT_IDENTIFIER,
-  DEFAULT_SESSION_ID,
-} = require("./lib/sessionRegistry");
+const { ApiStatusTracker, apiStatusKey } = require("./lib/apiStatusTracker");
 const {
   buildEffectiveStudentConfig,
   buildFetchFlags,
@@ -47,24 +41,48 @@ const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
 
 const LOG_LEVEL_WEIGHTS = Object.freeze({ none: -1, error: 0, warn: 1, info: 2, debug: 3 });
 
+// Students of one account fetched at the same time (see _processGroup).
+const STUDENT_FETCH_CONCURRENCY = 3;
+
+/**
+ * map() with an async callback and at most `limit` calls in flight; results keep the input order.
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 /**
  * MagicMirror adapter for MMM-Webuntis.
  *
- * Owns the socket protocol (CONFIGURE / REFRESH / SESSION_STATE in, MODULE_READY /
- * MODULE_INIT_FAILED / DATA_UPDATE out), frontend session bookkeeping and the per-credential
- * fetch loop. Everything else lives in lib/: config normalization (moduleConfig), student
- * discovery (studentDiscovery), auth (authSession + webuntis/authService), endpoint status and
- * circuit breaker (apiStatusTracker), WebUntis fetching (webuntisClient) and payload building
+ * The backend owns the fetch schedule: the frontend sends its config once (CONFIGURE) and reports
+ * active/paused (SESSION_STATE); the mmm-shared instance hub keeps one lifecycle per instance,
+ * calls fetchInstance() on schedule and pushes CONFIGURED, DATA, FETCH_FAILED, CONFIG_INVALID,
+ * CONFIG_REJECTED and INIT_REQUIRED events. Several displays of one instance share one fetch cycle.
+ *
+ * This file adds the WebUntis parts: config preparation, the per-credential fetch loop and the
+ * demo mode. Everything else lives in lib/: config normalization (moduleConfig), student discovery
+ * (studentDiscovery), auth (authSession + webuntis/authService), endpoint status and circuit
+ * breaker (apiStatusTracker), WebUntis fetching (webuntisClient) and payload building
  * (mmm-adapter/mmmPayloadMapper).
  */
 module.exports = NodeHelper.create({
   start() {
     this._ensureRuntime();
+    this._hub.attach(this.io);
     this._mmLog("debug", null, "Node helper started");
   },
 
   /**
-   * Lazily create runtime state so the CLI wrapper and unit tests can drive handlers without
+   * Lazily create runtime state so the CLI wrapper and unit tests can drive the helper without
    * going through start().
    */
   _ensureRuntime() {
@@ -77,10 +95,6 @@ module.exports = NodeHelper.create({
     this.notifications = shared.buildNotifications("MMM-Webuntis");
     this._authService = new AuthService({ logger: (level, message) => log(level, null, `[lib] ${message}`) });
     this._apiStatus = new ApiStatusTracker({ logger: log });
-    this._sessions = new SessionRegistry({
-      logger: log,
-      onRelease: (sessionKey) => this._apiStatus.release(sessionKey),
-    });
     this._client = new WebUntisClient({
       mmLog: log,
       formatErr: formatError,
@@ -89,20 +103,74 @@ module.exports = NodeHelper.create({
       responseCache: createResponseCache(),
     });
     this._pendingFetchByCredKey = new Map(); // credKey -> in-flight processGroup() promise
-    this._initInFlightBySession = new Map(); // sessionKey -> in-flight _handleInitModule() promise
+    this._configWarnings = new WeakMap(); // prepared config -> { warnings, warningMeta }
     this._pluginHost = initializeBackendPluginHost({ moduleRoot: __dirname, logger: log });
     this._pluginWarnings = Array.isArray(this._pluginHost?.warnings) ? this._pluginHost.warnings.slice() : [];
     this._pluginWarnings.forEach((warning) => {
       log("warn", null, warning);
+    });
+    this._hub = this._createHub();
+  },
+
+  _createHub() {
+    // The hub logs (message, context); the instance's own logLevel narrows its lines.
+    const hubLog = (level) => (message, context) => {
+      const suffix = context === undefined ? "" : ` ${JSON.stringify(context)}`;
+      const identifier = context?.identifier;
+      const line = `[hub] ${message}${suffix}`;
+      if (identifier) this._loggerFor(identifier)(level, null, line);
+      else this._mmLog(level, null, line);
+    };
+
+    return createInstanceHub({
+      moduleName: "MMM-Webuntis",
+      sendSocketNotification: (notification, payload) => this.sendSocketNotification(notification, payload),
+      logger: { debug: hubLog("debug"), info: hubLog("info"), warn: hubLog("warn"), error: hubLog("error") },
+      // The instance's lifecycle lines follow that instance's logLevel and name it.
+      loggerFor: (identifier) => {
+        const log = this._loggerFor(identifier);
+        const line = (level) => (message, context) =>
+          log(
+            level,
+            null,
+            `[hub] ${identifier}: ${message}${context === undefined ? "" : ` ${JSON.stringify(context)}`}`,
+          );
+        return { debug: line("debug"), info: line("info"), warn: line("warn"), error: line("error") };
+      },
+      // Two displays of one instance must agree on these (the raw frontend config is compared).
+      criticalKeys: ["username", "password", "school", "server", "qrcode", "students"],
+      prepareConfig: (config) => this.prepareConfig(config),
+      lifecycleOptions: (config) => ({
+        updateInterval: config.updateInterval,
+        minUpdateInterval: 30 * 1000,
+        backgroundRefresh: config.backgroundRefresh !== false,
+        quietHours: config.quietHours,
+        // A wrong password must not log in every minute: retries start after 2 minutes.
+        retryInterval: 2 * 60 * 1000,
+        maxRetryInterval: 30 * 60 * 1000,
+      }),
+      isFailure: (data) => data?.allFailed === true,
+      onConfigured: (identifier, config) => this._logLevels.set(identifier, config.logLevel),
+      onReleased: (identifier) => {
+        this._apiStatus?.release(identifier);
+        this._logLevels?.delete(identifier);
+      },
+      describe: (_identifier, config) => ({
+        ...(this._configWarnings.get(config) || { warnings: [], warningMeta: [] }),
+        plugins: buildFrontendPluginRegistry(config, this._pluginHost, __dirname),
+      }),
+      fetch: ({ identifier, config, reason }) => this.fetchInstance({ identifier, config, reason }),
     });
   },
 
   /**
    * Called when the MagicMirror backend shuts the helper down.
    * Logs every cached WebUntis session out (best effort, fire-and-forget) and drops cached auth
-   * state and per-session config so nothing sensitive lingers in memory past shutdown.
+   * state and instance state so nothing sensitive lingers in memory past shutdown.
    */
   stop() {
+    this._hub?.stop();
+    this._hub = null;
     const authService = this._authService;
     this._authService = null;
     if (authService) {
@@ -110,11 +178,9 @@ module.exports = NodeHelper.create({
         this._mmLog("debug", null, `Logout on shutdown failed: ${formatError(error)}`);
       });
     }
-    this._sessions?.clear();
     this._apiStatus?.clear();
     this._client?.responseCache?.clear();
     this._pendingFetchByCredKey?.clear();
-    this._initInFlightBySession?.clear();
     this._runtimeReady = false;
     this._mmLog("debug", null, "Node helper stopped");
   },
@@ -124,93 +190,12 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Main entry point for all frontend-to-backend communication.
-   *   - CONFIGURE: first-time module initialization (config validation, student discovery)
-   *   - REFRESH: data refresh request (periodic updates, manual refresh)
-   *   - SESSION_STATE: per-session lifecycle state updates (paused/active)
+   * Every frontend request goes through the hub, which needs to see all notifications (it keeps
+   * the copy of CONFIGURE with the secrets MagicMirror resolved).
    */
-  async socketNotificationReceived(notification, payload) {
+  socketNotificationReceived(notification, payload) {
     this._ensureRuntime();
-    if (notification !== this.notifications.REQUEST) return;
-
-    const action = payload?.action;
-    const requestData = {
-      ...(payload?.data || {}),
-      id: payload?.identifier || payload?.data?.id || DEFAULT_IDENTIFIER,
-      sessionId: payload?.data?.sessionId || DEFAULT_SESSION_ID,
-    };
-
-    const handlers = {
-      CONFIGURE: () => this._handleInitModule(requestData),
-      REFRESH: () => this._handleFetchData(requestData),
-      SESSION_STATE: () => this._handleSessionState(requestData),
-    };
-
-    const handler = handlers[action];
-    if (!handler) return;
-    try {
-      await handler();
-    } catch (error) {
-      this._mmLog("error", null, `[${action}] Unhandled failure: ${formatError(error)}`);
-    }
-  },
-
-  _emitGotData(payload, route = {}) {
-    this._emitSocketNotification("DATA_UPDATE", payload, route, { preserveExistingRoute: false });
-  },
-
-  _emitInitError(payload, route = {}) {
-    this._emitSocketNotification("MODULE_INIT_FAILED", payload, route, { preserveExistingRoute: true });
-  },
-
-  _emitModuleInitialized(payload, route = {}) {
-    this._emitSocketNotification("MODULE_READY", payload, route, { preserveExistingRoute: true });
-  },
-
-  /**
-   * Ask a frontend session to re-run the CONFIGURE handshake. Sent when a REFRESH arrives for a
-   * session this helper knows nothing about (helper restarted under a live frontend).
-   */
-  _emitInitRequired(payload, route = {}) {
-    this._emitSocketNotification("INIT_REQUIRED", payload, route, { preserveExistingRoute: true });
-  },
-
-  /**
-   * Send an EVENT envelope with consistent id/session routing metadata.
-   *
-   * @param {string} notification - Action name
-   * @param {Object} payload - Event payload
-   * @param {Object} [route] - { identifier, sessionId } override
-   * @param {Object} [options]
-   * @param {boolean} [options.preserveExistingRoute=false] - Keep id/sessionId already set on the payload
-   */
-  _emitSocketNotification(notification, payload, route = {}, options = {}) {
-    if (!payload || typeof payload !== "object") return;
-    this._ensureRuntime();
-
-    const { preserveExistingRoute = false } = options;
-    const nextPayload = { ...payload };
-
-    if (route.identifier && (!preserveExistingRoute || !nextPayload.id)) {
-      nextPayload.id = route.identifier;
-    }
-    if (route.sessionId && (!preserveExistingRoute || !nextPayload.sessionId)) {
-      nextPayload.sessionId = route.sessionId;
-    }
-
-    const isFailure = String(notification).includes("FAILED");
-    this.sendSocketNotification(
-      this.notifications.EVENT,
-      shared.createEnvelope({
-        identifier: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
-        instanceId: nextPayload.id || route.identifier || DEFAULT_IDENTIFIER,
-        action: notification,
-        ok: !isFailure,
-        data: nextPayload,
-        error: isFailure ? nextPayload : null,
-        meta: {},
-      }),
-    );
+    this._hub.socketNotificationReceived(notification, payload);
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -218,296 +203,118 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Handle CONFIGURE - one-time module initialization for a frontend session.
+   * Turn the frontend config into the effective instance config: normalize (legacy mappings,
+   * canonical plugins), validate, and in demo mode check the fixtures. Warnings are kept for
+   * describe() (sent as CONFIGURED).
    *
-   * Flow:
-   *   1. Normalize (legacy mappings, canonical plugins) and validate the config
-   *   2. Register the session and send MODULE_READY right away, so the frontend's init watchdog
-   *      is not coupled to WebUntis response times
-   *   3. Auto-discover students if parent credentials are present (may log in)
-   *   4. Run the first fetch automatically (no separate REFRESH needed)
-   *
-   * A CONFIGURE that arrives for a session whose init is still running is ignored.
+   * @param {Object} rawConfig - Config as sent by the frontend (includes `id`)
+   * @returns {Object} Normalized config
+   * @throws {Error} code CONFIG_INVALID, details { errors, warnings, warningMeta }
    */
-  async _handleInitModule(payload) {
+  prepareConfig(rawConfig) {
     this._ensureRuntime();
-    const { identifier, sessionKey } = buildRouteMeta(payload);
-    const inFlight = this._initInFlightBySession.get(sessionKey);
-    if (inFlight) {
-      this._loggerFor(identifier)(
-        "debug",
-        null,
-        `[CONFIGURE] Ignored duplicate for session ${sessionKey} (init still running)`,
-      );
-      return inFlight;
-    }
-
-    const run = this._runInitModule(payload).finally(() => {
-      if (this._initInFlightBySession.get(sessionKey) === run) this._initInFlightBySession.delete(sessionKey);
+    const { normalizedConfig, configWarnings } = normalizeModuleConfig(JSON.parse(JSON.stringify(rawConfig)), {
+      pluginHost: this._pluginHost,
+      logger: this._mmLog.bind(this),
     });
-    this._initInFlightBySession.set(sessionKey, run);
-    return run;
-  },
-
-  async _runInitModule(payload) {
-    let identifier;
-    try {
-      const payloadCopy = JSON.parse(JSON.stringify(payload));
-      const { normalizedConfig, configWarnings } = normalizeModuleConfig(payloadCopy, {
-        pluginHost: this._pluginHost,
-        logger: this._mmLog.bind(this),
-      });
-      const route = buildRouteMeta({ id: normalizedConfig.id, sessionId: payload.sessionId });
-      identifier = route.identifier;
-      const { sessionId, sessionKey } = route;
-      // Each instance logs at its own logLevel; the shared services follow the widest one.
-      this._logLevels.set(identifier, normalizedConfig.logLevel);
-      const log = this._loggerFor(identifier);
-
-      log(
-        "debug",
-        null,
-        `[CONFIGURE] Received (id=${identifier}, session=${sessionId}, reason=${payload?.reason || "unspecified"})`,
-      );
-      this._sessions.storeInitConfig(sessionKey, normalizedConfig);
-      if (normalizedConfig.debugDate) {
-        log(
-          "debug",
-          null,
-          `[CONFIGURE] Session debugDate="${normalizedConfig.debugDate}" (session-specific, not global)`,
-        );
+    const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
+    if (isDemoMode(normalizedConfig)) {
+      try {
+        loadFixturePayloads(normalizedConfig.demoDataFile, __dirname);
+      } catch (error) {
+        validation.valid = false;
+        validation.errors.push(`demoDataFile: ${formatError(error)}`);
       }
-
-      const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
-      if (isDemoMode(normalizedConfig)) {
-        try {
-          loadFixturePayloads(normalizedConfig.demoDataFile, __dirname);
-        } catch (error) {
-          validation.valid = false;
-          validation.errors.push(`demoDataFile: ${formatError(error)}`);
-        }
-      }
-      if (!validation.valid) {
-        log("error", null, `[CONFIGURE] Config validation failed for ${identifier}`);
-        this._emitInitError(
-          {
-            errors: validation.errors,
-            warnings: validation.warnings,
-            warningMeta: validation.warningMeta,
-            severity: "ERROR",
-            message: "Configuration validation failed",
-          },
-          { identifier, sessionId },
-        );
-        return;
-      }
-
-      this._sessions.configsByIdentifier.set(identifier, normalizedConfig);
-      this._emitInitSuccess(normalizedConfig, identifier, sessionId, validation.warnings, validation.warningMeta);
-
-      if (isDemoMode(normalizedConfig)) {
-        prepareDemoStudents(normalizedConfig);
-      } else {
-        await ensureStudentsFromAppData(normalizedConfig, {
-          authService: this._authService,
-          logger: log,
-          formatError: formatError,
-        });
-      }
-
-      // Same shape as a REFRESH from the frontend - the handler reads nothing else from it, and
-      // the session config it needs was just registered above.
-      await this._handleFetchData({
-        id: identifier,
-        sessionId,
-        reason: "post-init-auto-fetch",
-        backgroundRefresh: normalizedConfig.backgroundRefresh,
-      });
-    } catch (error) {
-      this._loggerFor(identifier)("error", null, `[CONFIGURE] Initialization failed: ${formatError(error)}`);
-      this._emitInitError(
-        {
-          errors: [error.message || "Unknown initialization error"],
-          warnings: [],
-          severity: "ERROR",
-          message: "Module initialization failed",
-        },
-        { identifier: identifier || "unknown", sessionId: payload?.sessionId },
-      );
     }
-  },
 
-  _emitInitSuccess(normalizedConfig, identifier, sessionId, validationWarnings, validationWarningMeta = []) {
-    const warnings = mergeUniqueWarnings(validationWarnings, this._pluginWarnings || []);
-    const metaByMessage = createWarningMetaMap(validationWarningMeta);
+    if (!validation.valid) {
+      const error = new Error(validation.errors.join("\n"));
+      error.code = "CONFIG_INVALID";
+      error.details = { errors: validation.errors, warnings: validation.warnings, warningMeta: validation.warningMeta };
+      throw error;
+    }
+
+    const warnings = mergeUniqueWarnings(validation.warnings, this._pluginWarnings || []);
+    const metaByMessage = createWarningMetaMap(validation.warningMeta);
     buildWarningMetaEntries(warnings, { kind: "config", severity: "warning" }).forEach((entry) => {
       if (!metaByMessage.has(entry.message)) metaByMessage.set(entry.message, entry);
     });
-
-    this._emitModuleInitialized(
-      {
-        config: normalizedConfig,
-        warnings,
-        warningMeta: buildWarningMetaList(warnings, metaByMessage),
-        students: normalizedConfig.students || [],
-        plugins: buildFrontendPluginRegistry(normalizedConfig, this._pluginHost, __dirname),
-      },
-      { identifier, sessionId },
-    );
-  },
-
-  // ---------------------------------------------------------------------------------------------
-  // Demo mode
-  // ---------------------------------------------------------------------------------------------
-
-  /**
-   * Demo mode replaces the WebUntis fetch: emit the fixtures as regular DATA_UPDATEs, each with
-   * the per-student config a live payload carries (see lib/demoData.js).
-   */
-  _emitDemoData(config, route) {
-    // The fixtures were checked at CONFIGURE; failing now means one was changed or removed since.
-    let payloads;
-    try {
-      payloads = buildDemoPayloads(config, __dirname);
-    } catch (error) {
-      this._loggerFor(route.identifier)("error", null, `[DEMO] Cannot read the demo fixtures: ${formatError(error)}`);
-      return;
-    }
-    payloads.forEach((payload) => {
-      this._emitGotData({ ...payload, id: route.identifier }, route);
+    this._configWarnings.set(normalizedConfig, {
+      warnings,
+      warningMeta: buildWarningMetaList(warnings, metaByMessage),
     });
-    this._loggerFor(route.identifier)(
-      "debug",
-      null,
-      `[DEMO] Emitted ${payloads.length} demo payload(s) for ${route.identifier}`,
-    );
+    return normalizedConfig;
   },
 
   // ---------------------------------------------------------------------------------------------
-  // SESSION_STATE / REFRESH
+  // Fetch
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Track frontend visibility per session (suspend/resume). The flag is bookkeeping plus a
-   * fetch gate for frontends that disabled background refresh.
+   * One fetch cycle of an instance, called by the hub on the backend's schedule.
+   *
+   * Groups the students by credential key and processes each group. Groups sharing credentials
+   * with an in-flight fetch (another instance) wait for it: they share one WebUntis session and
+   * would only race each other. Failures become warning-bearing payloads, so the frontend always
+   * learns about them.
+   *
+   * @param {Object} params
+   * @param {string} params.identifier - Module instance
+   * @param {Object} params.config - Prepared config (prepareConfig); student discovery updates it
+   * @param {string} [params.reason] - Why the fetch runs (diagnostics)
+   * @returns {Promise<{students: Object[], allFailed: boolean, warnings: string[]}>} One payload per
+   *   student; `allFailed` when none of them carries data, `warnings` are module-level
    */
-  _handleSessionState(payload = {}) {
+  async fetchInstance({ identifier, config, reason = "unspecified" }) {
     this._ensureRuntime();
-    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
-    const state = payload.state === "active" ? "active" : "paused";
-
-    // Counts as frontend contact, so a hidden-but-refreshing session does not age out.
-    this._sessions.touch(sessionKey);
-    this._sessions.setPaused(sessionKey, state === "paused");
-    this._loggerFor(identifier)(
-      "debug",
-      null,
-      `[SESSION_STATE] ${state} (id=${identifier}, session=${sessionId}, reason=${payload.reason || "unspecified"})`,
-    );
-  },
-
-  /**
-   * Handle REFRESH - data refresh for an initialized session.
-   * Self-healing: if the backend restarted and does not know the session, CONFIGURE is re-run
-   * via an INIT_REQUIRED event. A REFRESH that overlaps a running init waits for it.
-   */
-  async _handleFetchData(payload) {
-    this._ensureRuntime();
-    const { identifier, sessionId, sessionKey } = buildRouteMeta(payload);
-    const fetchReason = payload?.reason || "unspecified";
     const log = this._loggerFor(identifier);
-
-    log("debug", null, `[REFRESH] Received (id=${identifier}, session=${sessionId}, reason=${fetchReason})`);
-    this._sessions.touch(sessionKey);
-
-    // A hidden session may still ask for data: the shared frontend lifecycle keeps
-    // refreshing in the background so the view is warm when it becomes visible.
-    // Only a frontend that explicitly opted out of background refresh is gated here.
-    if (this._sessions.isPaused(sessionKey) && payload?.backgroundRefresh === false) {
-      log(
-        "debug",
-        null,
-        `[REFRESH] Ignored for paused session (id=${identifier}, session=${sessionId}, reason=${fetchReason})`,
-      );
-      return;
-    }
-
-    const inFlightInit = this._initInFlightBySession.get(sessionKey);
-    if (inFlightInit && fetchReason !== "post-init-auto-fetch") {
-      log("debug", null, `[REFRESH] Waiting for running init of session ${sessionKey}`);
-      await inFlightInit.catch(() => {});
-    }
-
-    let config = this._sessions.getOrCreateSessionConfig(sessionKey);
-    if (!config) {
-      // The helper has no config for this session - it was restarted while the frontend kept
-      // running. REFRESH no longer carries the full config, so ask the frontend to redo the
-      // CONFIGURE handshake instead of re-initializing from this payload.
-      log("warn", null, `[REFRESH] ${identifier} not initialized for session ${sessionId}; requesting CONFIGURE`);
-      this._emitInitRequired(
-        { id: identifier, sessionId, reason: "session-config-missing" },
-        { identifier, sessionId },
-      );
-      return;
-    }
-
-    // Session-specific debugDate override (testing)
-    if (payload.debugDate !== undefined) {
-      config = { ...config, debugDate: payload.debugDate };
-      this._sessions.setSessionConfig(sessionKey, config);
-      if (payload.debugDate)
-        log("debug", null, `[REFRESH] Updated debugDate="${payload.debugDate}" (session=${sessionKey})`);
-    }
+    log("debug", null, `[FETCH] Start (id=${identifier}, reason=${reason})`);
 
     if (isDemoMode(config)) {
-      this._emitDemoData(config, { identifier, sessionId });
-      return;
+      // Fixtures are read on every fetch, so edits show up without a restart.
+      if (!config._moduleDefaultsMerged) prepareDemoStudents(config);
+      const students = buildDemoPayloads(config, __dirname).map((payload) => ({ ...payload, id: identifier }));
+      log("debug", null, `[DEMO] Serving ${students.length} demo payload(s) for ${identifier}`);
+      return { students, allFailed: false, warnings: [] };
     }
 
-    await this._executeFetchForSession(sessionKey);
-  },
+    // Retried on every fetch until it worked (idempotent through _moduleDefaultsMerged).
+    const warnings = await ensureStudentsFromAppData(config, {
+      authService: this._authService,
+      logger: log,
+      formatError,
+    });
 
-  /**
-   * Group the session's students by credential key and process each group.
-   * Groups sharing credentials with an in-flight fetch (other session or instance) wait for it:
-   * they share one WebUntis session and would only race each other.
-   */
-  async _executeFetchForSession(sessionKey) {
-    const log = this._loggerFor(parseSessionKey(sessionKey).identifier);
-    const config = this._sessions.getOrCreateSessionConfig(sessionKey);
-    if (!config) {
-      log("warn", null, `Session ${sessionKey} not found, skipping fetch`);
-      return;
-    }
+    const groups = new Map();
+    (Array.isArray(config.students) ? config.students : []).forEach((student) => {
+      const credKey = getCredentialKey(student, config);
+      if (!groups.has(credKey)) groups.set(credKey, []);
+      groups.get(credKey).push(student);
+    });
 
-    try {
-      const groups = new Map();
-      (Array.isArray(config.students) ? config.students : []).forEach((student) => {
-        const credKey = getCredentialKey(student, config);
-        if (!groups.has(credKey)) groups.set(credKey, []);
-        groups.get(credKey).push(student);
-      });
-
-      for (const [credKey, students] of groups.entries()) {
-        // Queue behind whatever runs for this account. Chaining (instead of awaiting the running
-        // fetch once) keeps two waiting sessions from starting at the same time.
-        const previous = this._pendingFetchByCredKey.get(credKey);
-        if (previous) {
-          log("debug", null, `Session ${sessionKey}: waiting for running fetch of credKey=${credKey}`);
-        }
-        const run = (previous || Promise.resolve())
-          .catch(() => {})
-          .then(() => this._processGroup(credKey, students, sessionKey, config));
-        this._pendingFetchByCredKey.set(credKey, run);
-        try {
-          await run;
-        } finally {
-          if (this._pendingFetchByCredKey.get(credKey) === run) this._pendingFetchByCredKey.delete(credKey);
-        }
+    const students = [];
+    let failed = 0;
+    for (const [credKey, groupStudents] of groups.entries()) {
+      // Queue behind whatever runs for this account. Chaining (instead of awaiting the running
+      // fetch once) keeps two waiting instances from starting at the same time.
+      const previous = this._pendingFetchByCredKey.get(credKey);
+      if (previous) {
+        log("debug", null, `Instance ${identifier}: waiting for running fetch of credKey=${credKey}`);
       }
-    } catch (error) {
-      log("error", null, `Error loading Untis data for session ${sessionKey}: ${formatError(error)}`);
+      const run = (previous || Promise.resolve())
+        .catch(() => {})
+        .then(() => this._processGroup(credKey, groupStudents, identifier, config));
+      this._pendingFetchByCredKey.set(credKey, run);
+      try {
+        const result = await run;
+        students.push(...result.payloads);
+        failed += result.failed;
+      } finally {
+        if (this._pendingFetchByCredKey.get(credKey) === run) this._pendingFetchByCredKey.delete(credKey);
+      }
     }
+
+    return { students, allFailed: students.length === 0 || failed === students.length, warnings };
   },
 
   // ---------------------------------------------------------------------------------------------
@@ -515,12 +322,13 @@ module.exports = NodeHelper.create({
   // ---------------------------------------------------------------------------------------------
 
   /**
-   * Authenticate once per credential group, fetch every student of the group and emit one
-   * DATA_UPDATE per student. Failures are converted into warning-bearing payloads so the
-   * frontend always learns about them.
+   * Authenticate once per credential group and fetch every student of the group. Failures are
+   * converted into warning-bearing payloads.
+   *
+   * @returns {Promise<{payloads: Object[], failed: number}>} Payloads in configuration order and
+   *   how many of them come from a failure
    */
-  async _processGroup(credKey, students, sessionKey, config) {
-    const { identifier, sessionId } = parseSessionKey(sessionKey);
+  async _processGroup(credKey, students, identifier, config) {
     const warningsState = createGroupWarningCollector();
     const sample = students[0];
 
@@ -528,51 +336,42 @@ module.exports = NodeHelper.create({
     try {
       authSession = await createAuthSession(this._authService, sample, config, credKey);
     } catch (err) {
-      this._handleGroupAuthFailure({
-        err,
-        credKey,
-        identifier,
-        sessionKey,
-        sessionId,
-        students,
-        config,
-        warningsState,
-      });
-      return;
+      const payloads = this._handleGroupAuthFailure({ err, credKey, identifier, students, config, warningsState });
+      return { payloads, failed: payloads.length };
     }
 
     const { fetchTimegrid: wantsHolidays } = buildFetchFlags(config, this._pluginHost);
     const compactHolidays = wantsHolidays ? extractHolidaysFromAppData(authSession.appData) : [];
 
-    for (const student of students) {
-      let payload;
+    const fetchOne = async (student) => {
       try {
-        payload = await this._fetchStudentPayload({
+        const payload = await this._fetchStudentPayload({
           student,
           authSession,
           identifier,
           credKey,
           compactHolidays,
           config,
-          sessionKey,
           warningsState,
         });
+        return { payload, failed: 0 };
       } catch (err) {
-        payload = this._buildStudentFetchFailurePayload({
-          err,
-          student,
-          identifier,
-          sessionId,
-          sessionKey,
-          config,
-          warningsState,
-        });
+        const payload = this._buildStudentFetchFailurePayload({ err, student, identifier, config, warningsState });
+        return { payload, failed: 1 };
       }
-      if (payload) this._emitGotData(payload, { identifier, sessionId });
-    }
+    };
+
+    // The students share the authenticated session and fetch side by side. Each one still checks
+    // the token with its timetable before its other endpoints (dataFetchOrchestrator), and a token
+    // that turns out dead costs one login for all of them (AuthService joins parallel logins and
+    // keeps a session that replaced the failed one). Payloads stay in configuration order.
+    const results = await mapWithConcurrency(students, STUDENT_FETCH_CONCURRENCY, fetchOne);
+    const payloads = results.map((result) => result.payload).filter(Boolean);
+    const failed = results.reduce((sum, result) => sum + result.failed, 0);
+    return { payloads, failed };
   },
 
-  _handleGroupAuthFailure({ err, credKey, identifier, sessionKey, sessionId, students, config, warningsState }) {
+  _handleGroupAuthFailure({ err, credKey, identifier, students, config, warningsState }) {
     const errorMsg = formatError(err);
     const networkFailure = isNetworkError(err);
     const msg = networkFailure
@@ -590,33 +389,21 @@ module.exports = NodeHelper.create({
       msg,
       classifyWarningMetaFromError(err, { kind: networkFailure ? "network" : "auth" }),
     );
-    students.forEach((student) => {
-      this._emitGotData(
-        this._buildErrorPayload({
-          identifier,
-          sessionId,
-          student,
-          config,
-          apiStatus: null,
-          apiRecords: this._apiStatus.getRecords(sessionKey),
-          warnings: warningsState.groupWarnings,
-          warningMetaByMessage: warningsState.groupWarningMetaByMessage,
-          warningFallbackMeta: { kind: "generic", severity: "warning" },
-        }),
-      );
-    });
+    return students.map((student) =>
+      this._buildErrorPayload({
+        identifier,
+        student,
+        config,
+        apiStatus: null,
+        apiRecords: this._apiStatus.getRecords(apiStatusKey(identifier, student)),
+        warnings: warningsState.groupWarnings,
+        warningMetaByMessage: warningsState.groupWarningMetaByMessage,
+        warningFallbackMeta: { kind: "generic", severity: "warning" },
+      }),
+    );
   },
 
-  async _fetchStudentPayload({
-    student,
-    authSession,
-    identifier,
-    credKey,
-    compactHolidays,
-    config,
-    sessionKey,
-    warningsState,
-  }) {
+  async _fetchStudentPayload({ student, authSession, identifier, credKey, compactHolidays, config, warningsState }) {
     const studentWarnings = collectValidationWarnings(
       validateStudentCredentials(student),
       collectPluginValidationIssues(student, this._pluginHost).warnings,
@@ -636,7 +423,7 @@ module.exports = NodeHelper.create({
       compactHolidays,
       config,
       plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService }),
-      sessionKey,
+      statusKey: apiStatusKey(identifier, student),
       currentFetchWarnings: new Set(),
       mmLog: log,
     });
@@ -651,7 +438,7 @@ module.exports = NodeHelper.create({
     };
   },
 
-  _buildStudentFetchFailurePayload({ err, student, identifier, sessionId, sessionKey, config, warningsState }) {
+  _buildStudentFetchFailurePayload({ err, student, identifier, config, warningsState }) {
     const log = this._loggerFor(identifier);
     log("error", student, `Error fetching data for ${student.title}: ${formatError(err)}`);
 
@@ -667,11 +454,10 @@ module.exports = NodeHelper.create({
 
     return this._buildErrorPayload({
       identifier,
-      sessionId,
       student,
       config,
-      apiStatus: this._apiStatus.buildSnapshot(sessionKey),
-      apiRecords: this._apiStatus.getRecords(sessionKey),
+      apiStatus: this._apiStatus.buildSnapshot(apiStatusKey(identifier, student)),
+      apiRecords: this._apiStatus.getRecords(apiStatusKey(identifier, student)),
       warnings: mergeUniqueWarnings(warningsState.groupWarnings, warningMsg),
       warningMetaByMessage: warningsState.groupWarningMetaByMessage,
       warningFallbackMeta: classifyWarningMetaFromError(err),
@@ -680,7 +466,6 @@ module.exports = NodeHelper.create({
 
   _buildErrorPayload({
     identifier,
-    sessionId,
     student,
     config,
     apiStatus,
@@ -691,7 +476,6 @@ module.exports = NodeHelper.create({
   }) {
     return buildStudentErrorPayload({
       identifier,
-      sessionId,
       student,
       config,
       fetchFlags: buildFetchFlags(buildEffectiveStudentConfig(student, config), this._pluginHost),

@@ -19,7 +19,8 @@
   });
   const {
     log,
-    escapeHtml,
+    el,
+    iconSpan,
     addRow,
     initializeWidgetContextAndHeader,
     formatDisplayDate,
@@ -289,10 +290,10 @@
     if (!dayState) return 0;
 
     const dayLabel = formatDisplayDate(dayDate, lessonsDateFormat);
-    const icon = dayState.inlineIconClass ? `<span class='${dayState.inlineIconClass}' aria-hidden='true'></span>` : "";
+    const icon = dayState.inlineIconClass ? iconSpan(dayState.inlineIconClass) : "";
     const rowClass = dayState.rowClass ? `lessonRow ${dayState.rowClass}` : "lessonRow";
 
-    addRow(container, rowClass, studentLabelText, dayLabel, `${icon}${escapeHtml(dayState.label)}`);
+    addRow(container, rowClass, studentLabelText, dayLabel, [icon, dayState.label]);
     return 1;
   }
 
@@ -537,12 +538,12 @@
     );
     const startHm = Number(entry.startTime) || 0;
     const formattedStart = `${String(Math.floor(startHm / 100)).padStart(2, "0")}:${String(startHm % 100).padStart(2, "0")}`;
-    const dateCell = `<span class="wu-lesson__date">${escapeHtml(formatDisplayDate(entryDate, options.dateFormat))}</span>&nbsp;`;
+    const dateCell = [el("span", "wu-lesson__date", formatDisplayDate(entryDate, options.dateFormat)), "\u00a0"];
 
     const period = options.showStartTime ? undefined : periodLabel(entry, options.startTimesMap);
     return period === undefined
-      ? `${dateCell}<span class="wu-lesson__time">${formattedStart}</span>`
-      : `${dateCell}<span class="wu-lesson__period">${period}</span>`;
+      ? [...dateCell, el("span", "wu-lesson__time", formattedStart)]
+      : [...dateCell, el("span", "wu-lesson__period", period)];
   }
 
   /**
@@ -551,12 +552,9 @@
    */
   function attachedField(value, changed, cssClass, naText) {
     if (value !== "") {
-      const text = `(${escapeHtml(value)})`;
-      return changed
-        ? `&nbsp;<span class="lesson-changed-new">${text}</span>`
-        : `&nbsp;<span class="${cssClass}">${text}</span>`;
+      return ["\u00a0", el("span", changed ? "lesson-changed-new" : cssClass, `(${value})`)];
     }
-    return changed ? `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>` : "";
+    return changed ? ["\u00a0", el("span", "lesson-changed-new", `(${naText})`)] : [];
   }
 
   /** Subject with optional teacher and room, substitution text and lesson text. */
@@ -574,29 +572,30 @@
     const subjectLabel = options.useShortSubject ? subjShort : subjLong;
     log("debug", `[lessons] Adding lesson: ${subjLong} at ${Number(entry.startTime) || 0}`);
 
-    let cell = `<span class="wu-lesson__subject">${escapeHtml(subjectLabel)}</span>`;
+    let subject = el("span", "wu-lesson__subject", subjectLabel);
     if (subjectChanged && !subjectEntry) {
-      cell = `<span class='lesson-changed-new'>${escapeHtml(subjectLabel || naText)}</span>`;
+      subject = el("span", "lesson-changed-new", subjectLabel || naText);
     } else if (subjectChanged) {
-      cell = `<span class='lesson-changed-new'>${cell}</span>`;
+      subject = el("span", "lesson-changed-new", subject);
     }
+    const cell = [subject];
 
     if (options.teacherMode === "initial" || options.teacherMode === "full") {
       const teacher = getFieldDisplayName(teacherEntry, options.teacherMode === "initial" ? "short" : "long");
-      cell += attachedField(teacher, hasEffectiveFieldChange(entry, "teacher"), "teacher-name", naText);
+      cell.push(...attachedField(teacher, hasEffectiveFieldChange(entry, "teacher"), "teacher-name", naText));
     }
     if (options.showRoom) {
       const room = getFieldDisplayName(roomEntry, "short");
-      cell += attachedField(room, hasEffectiveFieldChange(entry, "room"), "lesson-room-name", naText);
+      cell.push(...attachedField(room, hasEffectiveFieldChange(entry, "room"), "lesson-room-name", naText));
     }
     // CHANGED without any field we could show: at least mark it.
     if (entry.status === "CHANGED" && getChangedFieldSet(entry).size === 0 && fallbackLong === "") {
-      cell += `&nbsp;<span class="lesson-changed-new">(${escapeHtml(naText)})</span>`;
+      cell.push("\u00a0", el("span", "lesson-changed-new", `(${naText})`));
     }
 
     const substitutionText = getSubstitutionText(entry);
     if (options.showSubstitution && substitutionText !== "") {
-      cell += `<br/><span class='lesson-substitution-text'>${escapeHtml(substitutionText)}</span>`;
+      cell.push(document.createElement("br"), el("span", "lesson-substitution-text", substitutionText));
     }
 
     // The lesson text, unless it only repeats the subject.
@@ -606,8 +605,7 @@
       (label) => normalizedLessonText === normalizeComparableText(label),
     );
     if (normalizedLessonText !== "" && !repeatsSubject) {
-      if (cell.trim() !== "") cell += "<br/>";
-      cell += `<span class='lesson-info-text'>${escapeHtml(lessonText)}</span>`;
+      cell.push(document.createElement("br"), el("span", "lesson-info-text", lessonText));
     }
     return cell;
   }

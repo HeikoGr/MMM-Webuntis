@@ -251,9 +251,9 @@ Frontend definition shape:
 | `manifest` | The plugin's registry entry |
 | `translate(key, fallback, replacements)` | Plugin-scoped translation lookup, see [Translations](#translations) |
 | `log(level, message, meta)` | Logger prefixed with `[plugin:<id>]` |
-| `dom` | `createElement`, `createContainer`, `addHeader`, `addRow`, `addFullRow`, `escapeHtml` |
+| `dom` | `el`, `createElement`, `iconSpan`, `multilineNodes`, `headerTitleNodes`, `richTextNodes`, `createContainer`, `addHeader`, `addRow`, `addFullRow` (see [Building markup](#building-markup)) |
 | `time` | `getCurrentDateContext`, `currentTimeAsHHMM`, `toMinutesSinceMidnight`, `DEFAULT_TIMEZONE` |
-| `formatting` | `formatDisplayDate`, `formatDisplayTime`, `formatYmd`, `escapeHtml` |
+| `formatting` | `formatDisplayDate`, `formatDisplayTime`, `formatYmd` |
 | `shared` | The full `window.MMMWebuntisFrontendShared` object as an escape hatch |
 
 The four namespaces are forwarded verbatim from `window.MMMWebuntisFrontendShared`, which owns the
@@ -264,11 +264,37 @@ Always prefer `pluginContext.*` over reaching for the global directly. The first
 use the global in places because these namespaces were empty placeholders until recently — that is
 legacy, not the pattern to copy.
 
+### Building markup
+
+Plugins build their output as DOM nodes; there is no `innerHTML` anywhere in the frontend, and
+`tests/frontend-dom.test.js` keeps it that way.
+
+- `dom.el(tag, className, ...children)` creates an element. Children are nodes, strings or arrays
+  of both; **a string is always text**, never parsed as HTML, so fetched values need no escaping
+  (`escapeHtml` no longer exists). `null`, `undefined`, `false` and `""` are skipped.
+- `dom.createElement`, `addHeader`, `addRow` and `addFullRow` take the same kind of content.
+  `addRow` treats `""` as "no content" for its meta and data columns.
+- `dom.iconSpan(className)` is a decorative, `aria-hidden` icon; `dom.multilineNodes(text)` splits
+  a text at `\n` into text and `<br>`; `dom.headerTitleNodes(name, meta)` is the standard widget
+  header "name (meta)".
+- `dom.richTextNodes(html)` is the one exception, for fields the backend deliberately keeps as
+  sanitized HTML (`messagesofday.text`, see `docs/API_REFERENCE.md`): it parses inert with
+  `DOMParser` and rebuilds only the allowed formatting tags, without attributes.
+
+```javascript
+const { el, addRow } = pluginContext.dom;
+addRow(container, "examRow", studentLabel, el("span", "wu-exam__date", date), [
+  el("span", "wu-exam__name", exam.name),
+  "\u00a0",
+  el("span", "teacher-name", `(${teacher})`),
+]);
+```
+
 Use `time.getCurrentDateContext(config)` rather than `new Date()`: it honours the `debugDate` config
 option, which is what makes deterministic screenshots and fixture-based demo mode work.
 
 `renderContext` provides:
-- `moduleId`
+- `identifier`
 - `mode`
 - `students` (each with `student`, `context.config`, `data.*`, `state.warnings`)
 - `warnings`

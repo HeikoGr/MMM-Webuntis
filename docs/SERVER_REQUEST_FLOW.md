@@ -34,16 +34,16 @@ flowchart TD
     FE[Frontend MMM-Webuntis.js]
     NH[node_helper.js]
     INIT[REQUEST: CONFIGURE]
-    FETCH[REQUEST: REFRESH]
     STATE[SESSION_STATE]
-    MODOK[EVENT: MODULE_READY]
-    GOT[EVENT: DATA_UPDATE]
-    INITERR[EVENT: MODULE_INIT_FAILED]
+    MODOK[EVENT: CONFIGURED]
+    GOT[EVENT: DATA]
+    INITERR[EVENT: CONFIG_INVALID]
     INITREQ[EVENT: INIT_REQUIRED]
+    HUB[mmm-shared instance hub\nlifecycle per instance]
 
-    CFG[Config validation and legacy mapping]
+    CFG[prepareConfig: validation and legacy mapping]
     DISCOVER[Optional student auto-discovery via app/data]
-    EXEC[_executeFetchForSession]
+    EXEC[fetchInstance]
     GROUP[Group students by credential key]
     AUTHSESSION[_createAuthSession]
 
@@ -71,17 +71,14 @@ flowchart TD
     API[(WebUntis REST API)]
     RPC[(WebUntis JSON-RPC API)]
 
-    FE --> INIT --> NH --> CFG
-    CFG --> DISCOVER
-    DISCOVER --> MODOK
-    MODOK --> NH
-    NH --> EXEC
-
-    FE --> FETCH --> NH --> EXEC
-    NH -- session unknown --> INITREQ --> FE
+    FE --> INIT --> NH --> HUB --> CFG
+    CFG -- invalid --> INITERR --> FE
+    CFG -- valid --> MODOK --> FE
+    HUB -- on schedule --> EXEC
+    NH -- new connection --> INITREQ --> FE
     FE --> STATE --> NH
 
-    EXEC --> GROUP --> AUTHSESSION --> FACADE
+    EXEC --> DISCOVER --> GROUP --> AUTHSESSION --> FACADE
     FACADE --> CLIENT
     CLIENT --> BUNDLE --> TARGETS --> ORCH
 
@@ -124,8 +121,9 @@ sequenceDiagram
     participant FC as fetchClient
     participant WU as WebUntis
 
-    FE->>NH: REQUEST action CONFIGURE or REFRESH
-    NH->>WF: fetchStudentData(...)
+    FE->>NH: REQUEST action CONFIGURE (once)
+    Note over NH: the hub calls fetchInstance() on schedule
+    NH->>WF: fetchStudentData(...) per student
     WF->>WC: fetchBundle(...)
     WC->>OR: orchestrateFetch(...)
 
@@ -171,7 +169,7 @@ sequenceDiagram
 
     OR-->>WC: timetable + parallel endpoint results
     WC-->>NH: normalized payload
-    NH-->>FE: EVENT action DATA_UPDATE
+    NH-->>FE: EVENT action DATA (one payload per student)
 ```
 
 ## 3. Socket-Level Status Signals
@@ -180,24 +178,26 @@ These are the internal status signals between frontend and backend.
 
 | Signal | Direction | Meaning |
 |--------|-----------|---------|
-| `CONFIGURE` | frontend -> backend | Validate config, set up auth service, optionally auto-discover students, then trigger initial fetch |
-| `MODULE_READY` | backend -> frontend | Initialization finished successfully; includes normalized config, warnings, and students |
-| `MODULE_INIT_FAILED` | backend -> frontend | Initialization failed; includes `errors`, `warnings`, and `severity` |
-| `REFRESH` | frontend -> backend | Start a refresh for an already initialized session. Carries only `id`, `sessionId`, `reason`, `debugDate` and `backgroundRefresh` - the config travels with `CONFIGURE` |
-| `INIT_REQUIRED` | backend -> frontend | A `REFRESH` arrived for a session the backend does not know (helper restarted). The frontend reopens its init gate and re-sends `CONFIGURE` |
-| `DATA_UPDATE` | backend -> frontend | Final payload after auth, fetch, normalization, and payload building |
-| `SESSION_STATE` | frontend -> backend | Mark session as `active` or `paused`; paused sessions ignore fetches |
+| `CONFIGURE` | frontend -> backend | Sent once (and again on `INIT_REQUIRED`): the full config. The backend validates it, starts the instance and its fetch schedule |
+| `SESSION_STATE` | frontend -> backend | Mark the display as `active` or `paused`; with `backgroundRefresh: false` the backend stops fetching while every display is paused |
+| `CONFIGURED` | backend -> frontend | Config accepted; carries config `warnings`/`warningMeta` and the plugin `plugins` registry. Sent before the first fetch |
+| `DATA` | backend -> frontend | Result of one fetch cycle: `students` (one payload per student), `allFailed`, module-level `warnings`. Replayed to a display that connects later |
+| `FETCH_FAILED` | backend -> frontend | The fetch threw as a whole; the frontend keeps its data and shows the message. The retry follows the backoff |
+| `CONFIG_INVALID` | backend -> frontend | Validation failed; `error.details.errors` lists every error, `error.details.warnings` the warnings |
+| `CONFIG_REJECTED` | backend -> frontend | Only to the display concerned: its credentials or students differ from the running instance (`data.mismatchKeys`) |
+| `INIT_REQUIRED` | backend -> frontend | A new socket connected or the instance is unknown (helper restarted). `identifier` is `*` for every instance; the frontend re-sends `CONFIGURE` and `SESSION_STATE` |
 
 ## 4. Request Phases
 
 ### Phase 1: Initialization
 
 1. Frontend sends `CONFIGURE`.
-2. `node_helper.js` applies legacy mappings and validates config.
-3. The process-wide `AuthService` is attached (one instance for all module instances and browser sessions).
-4. If parent credentials are present, `app/data` may be used to auto-discover students.
-5. Backend emits `MODULE_READY`.
-6. Backend immediately runs `_handleFetchData()` for the first fetch.
+2. `prepareConfig()` applies legacy mappings and validates the config (`CONFIG_INVALID` otherwise).
+3. The process-wide `AuthService` is shared by all module instances.
+4. The hub sends `CONFIGURED` and starts the lifecycle, which runs the first `fetchInstance()` right away.
+5. `fetchInstance()` first runs the student discovery when parent credentials are present without
+   configured students (`app/data`, may log in). A failed discovery becomes a module-level warning in
+   `DATA` and is retried by the next fetch (2 min, then doubling).
 
 ### Phase 2: Auth Session Creation
 
@@ -205,7 +205,7 @@ These are the internal status signals between frontend and backend.
 (`_getCredentialKey()`) is the credential fingerprint only — `parent:<user>@<server>/<school>`,
 `user:<user>@<server>/<school>` or `qrcode:<url>` — and is deliberately not scoped by module
 instance, browser session or `carouselId`: every consumer of the same account shares one
-WebUntis session and one login. Parallel fetches with the same key are serialized
+WebUntis session and one login. Fetches of different instances with the same key are serialized
 (`_pendingFetchByCredKey`), parallel logins are deduplicated inside `AuthService` (`_pendingAuth`).
 A session that follows another one of the same account reuses its responses
 (`lib/webuntis/responseCache.js`, keyed by account, server, endpoint, school year and
@@ -253,6 +253,12 @@ Reason:
 Special case:
 - if timetable is disabled, but other endpoints are enabled, the orchestrator still runs a timetable auth canary against the first target
 
+Skipping the check: when the timetable endpoint has vouched for the account's token within the last
+10 seconds (`authService.wasTimetableRecentlyVerified()`, e.g. the previous student of the same
+account), the orchestrator starts the other endpoints together with the timetable instead of after it.
+That saves one round trip per further student. If the timetable call then reports an auth refresh, the
+requests already sent with the old token are awaited and the whole fetch runs again once, as before.
+
 ### Phase 5: Parallel Fetch
 
 After timetable succeeds, the remaining enabled endpoints run in parallel:
@@ -262,6 +268,17 @@ After timetable succeeds, the remaining enabled endpoints run in parallel:
 - messages of day
 
 Homework is additionally filtered by the configured past/next-day window after the endpoint returns.
+
+Students of one account: `fetchInstance()` groups the students by credential key. Inside a group the
+first student is fetched alone (it checks login and token, timetable first); the others follow with at
+most `STUDENT_FETCH_CONCURRENCY` (3) at a time. Payloads keep the configuration order. Groups of the same
+account from different instances are still serialized (`_pendingFetchByCredKey`), and identical
+instances (for example the same content on two Carousel pages) are answered from `responseCache`.
+Measured with the production account: one instance and two identical instances cost the same number of
+WebUntis requests (9 for the first cycle including the login, 5 for each following cycle). With one
+student that only needs the timetable, or with two students, the parallelism gains nothing measurable
+(about 0.22 s for a warm fetch with two students, before and after); it helps from three students on and
+for students that also fetch exams, homework or absences.
 
 Teacher-target note:
 - For `TEACHER` targets, the runtime skips `exams`, `homework`, and `absences` because the currently integrated REST wrappers are student-scoped and may otherwise return server-side 5xx errors.
@@ -287,6 +304,30 @@ Teacher-target note:
 | Bearer JWT | 900s from issue (`exp - iat`) | `timetable/entries` → `401` |
 | Classic session cookie (`/api/exams`, `/api/homeworks/lessons`, `/api/classreg/absences/students`, `api/token/new`) | idle timeout between 4 and 6 min | `302 → /WebUntis/index.do` (or `200` + login state / HTML) — surfaced as `SESSION_EXPIRED`, which triggers a re-login |
 | REST session (`timetable/entries`, cookie + JWT) | idle timeout between 8 and 10 min | `401` |
+
+Additional measurements (2026-09-29, same server):
+
+| Experiment | Result |
+|------------|--------|
+| `token/new` and `app/data` response headers | no new `JSESSIONID`, only a `traceId` cookie: neither call extends the classic session |
+| `token/new` with a valid cookie, three times in a row | a new token each time, `exp` = now + 15 min (`exp - iat` = 900 s) |
+| Session used every 5 min through `app/data` only (REST), token renewal at 10 and 15 min | renewal fails with `SESSION_EXPIRED`; at 16 min `app/data` answers `401`. REST activity does not keep the classic cookie alive |
+| Session idle for 10 min, then `token/new` | `SESSION_EXPIRED` |
+| Session kept alive with a JSON-RPC call (`getLatestImportTime`) every 4 min, `token/new` at 16 min | works. A JSON-RPC call extends the classic session |
+
+The REST session (timetable) idles out earlier than the table above says: with a 5 minute
+`updateInterval` (±10 % jitter) fetches after 4:31, 4:40, 4:51 and 4:56 minutes worked, fetches after
+5:17 and 5:20 got a `401`. Treat the idle limit as about five minutes, not eight to ten. With a five
+minute interval about every other fetch therefore starts with a `401` and a recovery login; the recovery
+path above is normal operation, not an error. The default `updateInterval` is therefore 4 minutes: with
+the ±10 % jitter the longest gap is 4:24, below the gaps that worked in the measurement (up to 4:56), so a
+single instance keeps its session warm and the recovery login only happens after a real interruption. Token renewal (`token/new`) worked at minute 14 of a session
+because the fetches use the classic endpoints (exams, homework, absences), which keep the cookie warm.
+
+Decision: no keep-alive ping. A JSON-RPC call would keep the cookie alive, but the classic session
+idles out after about five minutes, so a ping every ~3 minutes would cost more requests (about five per
+15-minute token lifetime) than the login it saves (three). JSON-RPC stays what it is here: the way to get
+the session cookie. Data is read through the REST APIs only.
 
 Consequences: the timetable-first auth canary only covers the JWT/REST session. Between ~5 and ~9
 minutes of inactivity the timetable still succeeds while exams, homework and absences hit the dead
@@ -320,7 +361,7 @@ Retryable conditions:
 
 The jitter (±25%) helps prevent the "thundering herd" problem where multiple clients hammer the server simultaneously when recovering. The built-in backoff adds at most ~7 seconds total before the final failure is returned.
 
-After the fourth and final attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the frontend fires the next `REFRESH` based on the configured `updateInterval`.
+After the fourth and final attempt fails, `restClient` does not schedule any further immediate retry. Control returns to the normal fetch lifecycle, and the next regular attempt happens when the backend's fetch schedule (the mmm-shared instance hub) fires the next fetch based on the configured `updateInterval`; a failed fetch is retried earlier with backoff (2 minutes, doubling up to 30).
 
 ### Auth Retry in `webuntisApiService`
 
@@ -350,6 +391,21 @@ Action:
 4. rerun the same endpoint once
 
 If that second endpoint call still fails, the error is propagated.
+
+Several endpoints of one fetch (timetable, exams, homework, absences, and the "run everything again"
+round after a timetable refresh) hit the dead session at the same moment and each asks for fresh auth.
+`AuthService` shares one login among callers that wait for it. If that login **fails**, its error
+answers every further request for the same account for 30 seconds (`LOGIN_FAILURE_COOLDOWN_MS`) instead of
+starting another attempt; the cooldown ends on the next successful login. The hub's own retry (2 minutes,
+doubling) is separate.
+
+History (2026-09-29): this login used to fail every time for username/password accounts, and one failure
+was followed by about eight attempts within a second, each answered `200 - bad credentials`. Cause: the
+auth session kept the user name but not the password, so the REST layer logged in again with
+`password: null`. `createAuthSession()` now keeps the password in the session (it stays in the backend and
+is never part of a payload). Before that fix a dead REST session cost a whole fetch cycle: the recovery
+login failed, the circuit breaker (below) then kept the timetable away, and the next cycle logged in
+normally. A raw login right after a dead session (also right after the `401`) always worked in a test.
 
 ### Orchestrator Retry After Timetable Refresh
 
@@ -424,6 +480,14 @@ Behavior:
 
 This applies to every non-permanent, non-success status, including `failureCount` accumulated from
 errors that carry no HTTP status at all.
+
+**Exception: auth failures (status `401`: expired session, rejected login) do not count.** They heal with
+the next login and happen every few minutes with a short `updateInterval`, so they are not a sign that
+the endpoint is broken. The `401` is still recorded as the endpoint's status (the widgets show
+"unavailable" and keep old data), but `failureCount` is left as it was. Before, three timetable
+failures within one fetch (the retry rounds) opened the breaker, and the timetable stayed away for about
+ten minutes even though the next login had worked, while exams, homework and absences came back
+(observed 2026-09-29, `Backing off after 3 consecutive failures (status 401)`).
 
 Skips are graceful: `webuntisClient._executeRestEndpoint()` returns an empty array, exactly as for
 permanent errors — no exception reaches the payload builder.
@@ -529,7 +593,7 @@ The server request model is intentionally layered:
 3. `dataFetchOrchestrator.js` enforces timetable-first auth validation and one controlled rerun after auth refresh.
 4. `webuntisApiService.js` performs one auth-based endpoint retry.
 5. `restClient.js` performs transport retries for rate limits, server failures, and network issues.
-6. `authService.js` caches one session per credential fingerprint for 14 minutes with a 5-minute safety buffer; the session is shared by every module instance using that account, and any endpoint that sees the login page (`302`, `LOGIN_ERROR`, HTML) forces a re-login.
+6. `authService.js` caches one session per credential fingerprint until the token's `exp` (14 minutes without one) with a 60-second safety buffer; the session is shared by every module instance using that account, and any endpoint that sees the login page (`302`, `LOGIN_ERROR`, HTML) forces a re-login.
 
 This combination gives the module three distinct stability layers:
 - proactive auth avoidance through token buffering

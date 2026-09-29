@@ -2,11 +2,10 @@
 /**
  * Guard against commit types that understate what the commit actually changes.
  *
- * Why this exists: `0.7.14` shipped as "chore: update biome schema version to 2.5.0" but also
- * contained a real behavior fix (`lessons.nextDays: 0` was treated as "not configured" and the
- * widget was silently skipped). commitlint accepted it - the *format* was fine. Because the type
- * was `chore`, the change never reached the changelog and had to be reconstructed from diffs
- * months later.
+ * Why this exists: check-commit-msg.js only validates the *format* of a commit message, not whether the
+ * chosen type matches what the diff actually does. A commit typed `chore` but containing a real
+ * behavior fix in runtime source still passes the format check - and because the type is low-signal,
+ * release-please files it under Maintenance instead of Fixes, and the version bump misses it.
  *
  * So: if a low-signal commit type touches runtime source, ask for a better type.
  *
@@ -93,7 +92,7 @@ function main() {
 
   const subject = fs.readFileSync(messageFile, "utf8").split("\n")[0].trim();
   const match = subject.match(/^([a-z]+)(\([^)]*\))?(!)?:/);
-  if (!match) return; // commitlint reports malformed subjects; not this guard's job.
+  if (!match) return; // check-commit-msg.js reports malformed subjects; not this guard's job.
 
   const [, type, , breaking] = match;
   if (breaking || !LOW_SIGNAL_TYPES.has(type)) return;

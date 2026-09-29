@@ -108,8 +108,7 @@ V3 keeps the current metadata pattern.
 Required fields:
 - `moduleVersion`
 - `generatedAt`
-- `moduleId`
-- `sessionId`
+- `identifier`
 
 Optional technical additions:
 - `apiVersion` for a human-readable transport label such as `"v3"`

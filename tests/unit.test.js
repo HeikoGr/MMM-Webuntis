@@ -81,8 +81,15 @@ function loadNodeHelper() {
 }
 
 const helper = loadNodeHelper();
-const { ApiStatusTracker, getTransientBackoffMs, extractHttpStatus } = require("../lib/apiStatusTracker");
-const { SessionRegistry, getSessionTtlMs } = require("../lib/sessionRegistry");
+
+/** Poll a condition instead of sleeping a fixed time: how long async work takes depends on the machine. */
+async function waitFor(condition, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+const { ApiStatusTracker, apiStatusKey, getTransientBackoffMs, extractHttpStatus } = require("../lib/apiStatusTracker");
 const warningUtils = require("../lib/warningUtils");
 const { getCredentialKey } = require("../lib/authSession");
 const { buildFetchFlags } = require("../lib/moduleConfig");
@@ -183,7 +190,6 @@ test("mergeGroupWarningsIntoPayload deduplicates warnings and upgrades generic m
 test("buildStudentErrorPayload returns empty API snapshot and fallback warning metadata", () => {
   const payload = buildStudentErrorPayload({
     identifier: "module-1",
-    sessionId: "session-1",
     student: { title: "Student A" },
     config: { displayMode: "lessons" },
     fetchFlags: { fetchTimetable: true },
@@ -227,63 +233,6 @@ test("createGroupWarningCollector stores one warning entry per message", () => {
   });
 });
 
-test("emit helpers preserve or override route metadata as intended", () => {
-  helper.notifications = { EVENT: "MMM-Webuntis_EVENT" };
-  const emitted = [];
-  helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
-
-  helper._emitGotData(
-    { id: "old", sessionId: "old-session", value: 1 },
-    { identifier: "new", sessionId: "new-session" },
-  );
-  helper._emitInitError(
-    { id: "old", sessionId: "old-session", value: 2 },
-    { identifier: "new", sessionId: "new-session" },
-  );
-  helper._emitModuleInitialized({ value: 3 }, { identifier: "new", sessionId: "new-session" });
-
-  assert.equal(emitted.length, 3);
-
-  const [dataEvt, errEvt, readyEvt] = emitted;
-  assert.equal(dataEvt.name, "MMM-Webuntis_EVENT");
-  assert.equal(dataEvt.payload.action, "DATA_UPDATE");
-  assert.equal(dataEvt.payload.identifier, "new");
-  assert.equal(dataEvt.payload.instanceId, "new");
-  assert.equal(dataEvt.payload.ok, true);
-  assert.deepEqual(dataEvt.payload.data, { id: "new", sessionId: "new-session", value: 1 });
-  assert.equal(dataEvt.payload.error, null);
-  assert.equal(typeof dataEvt.payload.requestId, "string");
-  assert.equal(Number.isFinite(dataEvt.payload.ts), true);
-
-  assert.equal(errEvt.name, "MMM-Webuntis_EVENT");
-  assert.equal(errEvt.payload.action, "MODULE_INIT_FAILED");
-  assert.equal(errEvt.payload.identifier, "old");
-  assert.equal(errEvt.payload.instanceId, "old");
-  assert.equal(errEvt.payload.ok, false);
-  assert.deepEqual(errEvt.payload.data, { id: "old", sessionId: "old-session", value: 2 });
-  assert.deepEqual(errEvt.payload.error, { id: "old", sessionId: "old-session", value: 2 });
-  assert.equal(typeof errEvt.payload.requestId, "string");
-  assert.equal(Number.isFinite(errEvt.payload.ts), true);
-
-  assert.equal(readyEvt.name, "MMM-Webuntis_EVENT");
-  assert.equal(readyEvt.payload.action, "MODULE_READY");
-  assert.equal(readyEvt.payload.identifier, "new");
-  assert.equal(readyEvt.payload.instanceId, "new");
-  assert.equal(readyEvt.payload.ok, true);
-  assert.deepEqual(readyEvt.payload.data, { id: "new", sessionId: "new-session", value: 3 });
-  assert.equal(readyEvt.payload.error, null);
-  assert.equal(typeof readyEvt.payload.requestId, "string");
-  assert.equal(Number.isFinite(readyEvt.payload.ts), true);
-});
-
-test("handleSessionState uses default route values for missing payload metadata", () => {
-  helper._mmLog = () => {};
-  helper._runtimeReady = false;
-  helper._handleSessionState({ state: "paused" });
-
-  assert.equal(helper._sessions.isPaused("default:unknown"), true);
-});
-
 const { parseCliArgs } = require("../scripts/node_helper_wrapper");
 
 function parseCli(argline) {
@@ -291,8 +240,7 @@ function parseCli(argline) {
 }
 
 test("parseCliArgs does not mistake a flag value for the positional config path", () => {
-  // Regression: `auth` used to be picked up as the positional command and reused as --config,
-  // which made every documented `--action <x>` invocation fail with "Config file not found".
+  // `auth` is the value of --action, not the positional command (which would become --config).
   const { flags, command } = parseCli("--action auth --verbose");
 
   assert.equal(flags.action, "auth");
@@ -394,12 +342,22 @@ test("buildFetchFlags derives fetch flags from active plugin capabilities", () =
 test("frontendShared exposes the namespaces backing pluginContext", () => {
   const shared = loadFrontendShared();
 
-  // Regression: pluginContext.dom/time/formatting used to be handed to plugins as empty objects
-  // while docs/PLUGINS.md documented them as provided.
+  // pluginContext.dom/time/formatting are the namespaces docs/PLUGINS.md documents, not empty objects.
   const expected = {
-    dom: ["addFullRow", "addHeader", "addRow", "createContainer", "createElement", "escapeHtml"],
+    dom: [
+      "addFullRow",
+      "addHeader",
+      "addRow",
+      "createContainer",
+      "createElement",
+      "el",
+      "headerTitleNodes",
+      "iconSpan",
+      "multilineNodes",
+      "richTextNodes",
+    ],
     time: ["DEFAULT_TIMEZONE", "currentTimeAsHHMM", "getCurrentDateContext", "toMinutesSinceMidnight"],
-    formatting: ["escapeHtml", "formatDisplayDate", "formatDisplayTime", "formatYmd"],
+    formatting: ["formatDisplayDate", "formatDisplayTime", "formatYmd"],
   };
 
   for (const [namespace, keys] of Object.entries(expected)) {
@@ -466,7 +424,6 @@ test("findPeriodIndex assigns lessons outside a period to the next one", () => {
 test("frontendShared namespace members are callable", () => {
   const shared = loadFrontendShared();
 
-  assert.equal(shared.formatting.escapeHtml("<b>&</b>"), "&lt;b&gt;&amp;&lt;/b&gt;");
   assert.equal(shared.formatting.formatYmd(20260302), "02.03.2026");
   assert.equal(shared.time.currentTimeAsHHMM(new Date(2026, 0, 1, 13, 50)), 1350);
   assert.equal(shared.time.toMinutesSinceMidnight("13:50"), 830);
@@ -476,50 +433,70 @@ test("frontendShared namespace members are callable", () => {
 let tracker;
 function seedApiStatus() {
   tracker = new ApiStatusTracker({ logger: () => {} });
-  return "mirror:session";
+  return apiStatusKey("mirror", { studentId: 1 });
 }
 
-function failEndpoint(sessionKey, endpoint, status, times = 1) {
+function failEndpoint(statusKey, endpoint, status, times = 1) {
   for (let i = 0; i < times; i++) {
-    tracker.recordError(sessionKey, endpoint, { status });
+    tracker.recordError(statusKey, endpoint, { status });
   }
 }
 
-function ageRecord(sessionKey, endpoint, ms) {
-  tracker._bySession.get(sessionKey)[endpoint].recordedAt -= ms;
+function ageRecord(statusKey, endpoint, ms) {
+  tracker._byKey.get(statusKey)[endpoint].recordedAt -= ms;
 }
 
+test("one student's endpoint errors do not hide the endpoint for a sibling of the same instance", () => {
+  const tracker = new ApiStatusTracker({ logger: () => {} });
+  const alice = apiStatusKey("m", { studentId: 1 });
+  const bob = apiStatusKey("m", { studentId: 2 });
+
+  tracker.recordError(alice, "absences", { status: 403 });
+  for (let i = 0; i < 3; i++) tracker.recordError(alice, "homework", { status: 500 });
+
+  assert.equal(tracker.shouldSkip(alice, "absences"), true);
+  assert.equal(tracker.shouldSkip(alice, "homework"), true);
+  assert.equal(tracker.shouldSkip(bob, "absences"), false, "a 403 of one child is not a 403 of its sibling");
+  assert.equal(tracker.shouldSkip(bob, "homework"), false);
+  assert.equal(tracker.buildSnapshot(bob).absences, null, "the sibling's snapshot carries only its own statuses");
+
+  tracker.recordStatus(apiStatusKey("other", { studentId: 1 }), "exams", 200);
+  tracker.release("m");
+  assert.deepEqual(tracker.getRecords(alice), {}, "releasing the instance drops every student's records");
+  assert.equal(tracker.getRecords(apiStatusKey("other", { studentId: 1 })).exams.status, 200, "other instances stay");
+});
+
 test("shouldSkipApi keeps retrying isolated 5xx blips", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false, "two failures must not open the breaker");
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false, "two failures must not open the breaker");
 });
 
 test("shouldSkipApi backs off after repeated 5xx and escalates the window", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 3);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true, "third failure opens the breaker");
+  failEndpoint(statusKey, "homework", 500, 3);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true, "third failure opens the breaker");
 
   // Still inside the first 15min window.
-  ageRecord(sessionKey, "homework", 10 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true);
+  ageRecord(statusKey, "homework", 10 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true);
 
   // Window elapsed - one probe is allowed through.
-  ageRecord(sessionKey, "homework", 6 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  ageRecord(statusKey, "homework", 6 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 
   // Probe fails again -> escalate to the 1h step.
-  failEndpoint(sessionKey, "homework", 500, 1);
-  ageRecord(sessionKey, "homework", 30 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true, "30min must not clear the 1h step");
+  failEndpoint(statusKey, "homework", 500, 1);
+  ageRecord(statusKey, "homework", 30 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true, "30min must not clear the 1h step");
 
-  ageRecord(sessionKey, "homework", 31 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  ageRecord(statusKey, "homework", 31 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 });
 
 test("getTransientBackoffMs caps the escalation", () => {
@@ -531,98 +508,44 @@ test("getTransientBackoffMs caps the escalation", () => {
 });
 
 test("recordApiStatusFromError counts only consecutive failures", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 2);
-  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 2);
+  failEndpoint(statusKey, "homework", 500, 2);
+  assert.equal(tracker.getRecords(statusKey).homework.failureCount, 2);
 
   // A success in between must restart the streak.
-  tracker.recordStatus(sessionKey, "homework", 200);
-  assert.equal(typeof tracker.getRecords(sessionKey).homework.lastSuccessAt, "number");
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 1);
+  tracker.recordStatus(statusKey, "homework", 200);
+  assert.equal(typeof tracker.getRecords(statusKey).homework.lastSuccessAt, "number");
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.getRecords(statusKey).homework.failureCount, 1);
   assert.equal(
-    typeof tracker.getRecords(sessionKey).homework.lastSuccessAt,
+    typeof tracker.getRecords(statusKey).homework.lastSuccessAt,
     "number",
     "last success survives later failures",
   );
 });
 
 test("shouldSkipApi still treats permanent errors as permanent", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
   // A single 403 skips immediately - no threshold, unlike transient errors.
-  failEndpoint(sessionKey, "timetable", 403, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), true);
+  failEndpoint(statusKey, "timetable", 403, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), true);
 
   // ...but is re-probed after the 24h license window.
-  ageRecord(sessionKey, "timetable", 25 * 60 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), false);
-  assert.equal("timetable" in tracker.getRecords(sessionKey), false, "expired record is cleared");
+  ageRecord(statusKey, "timetable", 25 * 60 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), false);
+  assert.equal("timetable" in tracker.getRecords(statusKey), false, "expired record is cleared");
 });
 
 test("shouldSkipApi never skips an endpoint whose last call succeeded", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "exams", 500, 5);
-  assert.equal(tracker.shouldSkip(sessionKey, "exams"), true);
+  failEndpoint(statusKey, "exams", 500, 5);
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), true);
 
-  tracker.recordStatus(sessionKey, "exams", 200);
-  assert.equal(tracker.shouldSkip(sessionKey, "exams"), false);
-});
-
-let sessions;
-let sessionStatus;
-function seedSessionState(sessionKeys = []) {
-  sessionStatus = new ApiStatusTracker({ logger: () => {} });
-  sessions = new SessionRegistry({ logger: () => {}, onRelease: (key) => sessionStatus.release(key) });
-
-  for (const [sessionKey, lastSeenAt] of sessionKeys) {
-    sessions.configsBySession.set(sessionKey, { updateInterval: 300000 });
-    sessionStatus.recordError(sessionKey, "timetable", { status: 403 });
-    sessions.lastSeenAt.set(sessionKey, lastSeenAt);
-  }
-}
-
-test("storeInitSessionConfig releases session state left behind by frontend reloads", () => {
-  const now = Date.now();
-  // Two dead sessions from earlier page loads, one live sibling client still refreshing.
-  seedSessionState([
-    ["mirror:oldsession1", now - 60 * 60 * 1000],
-    ["mirror:oldsession2", now - 45 * 60 * 1000],
-    ["mirror:livesession", now - 1000],
-    ["other:oldsession", now - 60 * 60 * 1000],
-  ]);
-
-  sessions.storeInitConfig("mirror:newsession", { updateInterval: 300000 });
-
-  const remaining = Array.from(sessions.configsBySession.keys()).sort();
-  assert.deepEqual(remaining, ["mirror:livesession", "mirror:newsession", "other:oldsession"]);
-
-  // Per-session side tables must be released together with the config clone.
-  assert.equal(sessionStatus.sessionKeys().includes("mirror:oldsession1"), false);
-  assert.equal(sessions.lastSeenAt.has("mirror:oldsession2"), false);
-
-  // A different identifier is never touched, even when it is equally stale.
-  assert.equal(sessionStatus.sessionKeys().includes("other:oldsession"), true);
-});
-
-test("storeInitSessionConfig keeps concurrent clients of the same identifier alive", () => {
-  const now = Date.now();
-  seedSessionState([["mirror:phoneclient", now - 2 * 60 * 1000]]);
-
-  // Second client attaches under the same identifier while the first is still refreshing.
-  sessions.storeInitConfig("mirror:mirrorclient", { updateInterval: 300000 });
-
-  assert.equal(sessions.configsBySession.has("mirror:phoneclient"), true);
-  assert.equal(sessions.configsBySession.has("mirror:mirrorclient"), true);
-});
-
-test("getSessionTtlMs clamps the eviction window", () => {
-  assert.equal(getSessionTtlMs({ updateInterval: 300000 }), 10 * 60 * 1000); // 2x, raised to min
-  assert.equal(getSessionTtlMs({ updateInterval: 20 * 60 * 1000 }), 40 * 60 * 1000); // 2x, in range
-  assert.equal(getSessionTtlMs({ updateInterval: 10 * 60 * 60 * 1000 }), 60 * 60 * 1000); // capped
-  assert.equal(getSessionTtlMs({}), 10 * 60 * 1000); // no interval -> default, raised to min
+  tracker.recordStatus(statusKey, "exams", 200);
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), false);
 });
 
 test("getCurrentDateContext keeps wall clock time while overriding debug date", () => {
@@ -1206,6 +1129,56 @@ test("a request that hits its own timeout raises an error coded ETIMEDOUT", asyn
   }
 });
 
+test("a cached login lives until the token's exp, not a fixed 14 minutes", () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const jwt = (payload) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+
+  const exp = Math.floor(Date.now() / 1000) + 3 * 60 * 60;
+  assert.equal(service._tokenExpiresAt(jwt({ exp })), exp * 1000);
+
+  // No usable exp: the assumed lifetime applies.
+  for (const token of [jwt({ person_id: 1 }), "not-a-jwt", null]) {
+    const expiresAt = service._tokenExpiresAt(token);
+    assert.ok(Math.abs(expiresAt - (Date.now() + 14 * 60 * 1000)) < 1000);
+  }
+
+  service._cacheAuthResult("key", { token: jwt({ exp }) });
+  assert.equal(service._authCache.get("key").expiresAt, exp * 1000);
+});
+
+test("a token with more than the safety buffer left is reused, one about to expire is not", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const cacheKey = "test:rest";
+  const entry = {
+    token: "t",
+    cookieString: "c",
+    tenantId: 1,
+    schoolYearId: 2,
+    personId: 3,
+    school: "s",
+    server: "srv",
+    appData: {},
+  };
+  let logins = 0;
+  service._performAuth = async () => {
+    logins += 1;
+    return entry;
+  };
+  const getAuth = () =>
+    service.getAuth({ username: "u", password: "p", school: "s", server: "srv", options: { cacheKey } });
+
+  // Five minutes left is plenty: the token is reused, no login.
+  service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 5 * 60 * 1000 });
+  await getAuth();
+  assert.equal(logins, 0);
+
+  service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 30 * 1000 });
+  await getAuth();
+  assert.equal(logins, 1);
+});
+
 test("an empty REST target list surfaces its diagnosis as a config warning", () => {
   const { WebUntisClient } = require("../lib/webuntisClient");
   const client = new WebUntisClient({ mmLog: () => {} });
@@ -1229,74 +1202,124 @@ test("an empty REST target list surfaces its diagnosis as a config warning", () 
   assert.equal(payload.state.warningMeta[0].severity, "warning");
 });
 
-test("REFRESH carries only routing and per-request overrides, not the full config", () => {
+test("CONFIGURE carries the full config with the identifier and no session id", () => {
   const sent = [];
   frontend.identifier = "module_1_MMM-Webuntis";
-  frontend._sessionId = "session-abc";
-  frontend._initialized = true;
-  // The shared `frontend` object is mutated by earlier tests, so pin both layers explicitly.
-  frontend.defaults = { backgroundRefresh: true, debugDate: null };
-  frontend.config = { username: "parent", password: "secret", students: [{ title: "A" }], debugDate: "2026-09-21" };
-  frontend.transport = { sendRequest: (action, data) => sent.push({ action, data }) };
-  frontend._isDemoModeEnabled = () => false;
-
-  frontend._sendFetchData("periodic");
-
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].action, "REFRESH");
-  assert.deepEqual(sent[0].data, {
-    id: "module_1_MMM-Webuntis",
-    sessionId: "session-abc",
-    reason: "periodic",
-    debugDate: "2026-09-21",
-    backgroundRefresh: true,
-  });
-
-  // No secrets and no students travel with a refresh.
-  assert.equal("password" in sent[0].data, false);
-  assert.equal("students" in sent[0].data, false);
-
-  // An explicit opt-out is carried; the backend gates paused sessions on it.
-  frontend.config = { backgroundRefresh: false };
-  frontend._sendFetchData("resume");
-  assert.equal(sent[1].data.backgroundRefresh, false);
-  assert.equal(sent[1].data.debugDate, null);
-});
-
-test("a REFRESH for an unknown session asks the frontend to re-CONFIGURE", async () => {
-  helper.notifications = { EVENT: "MMM-Webuntis_EVENT" };
-  helper._mmLog = () => {};
-  const emitted = [];
-  helper.sendSocketNotification = (name, payload) => emitted.push({ name, payload });
-
-  await helper._handleFetchData({ id: "ghost-module", sessionId: "ghost-session", reason: "periodic" });
-
-  assert.equal(emitted.length, 1);
-  assert.equal(emitted[0].payload.action, "INIT_REQUIRED");
-  assert.equal(emitted[0].payload.data.id, "ghost-module");
-  assert.equal(emitted[0].payload.data.sessionId, "ghost-session");
-  assert.equal(emitted[0].payload.data.reason, "session-config-missing");
-});
-
-test("INIT_REQUIRED reopens the init gate and re-sends CONFIGURE", () => {
-  const sent = [];
   frontend._log = () => {};
-  frontend._initialized = true;
-  frontend._initRequested = true;
-  frontend._initAttemptCount = 3;
-  frontend._initWatchdogTimer = null;
-  frontend.transport = { sendRequest: (action, data) => sent.push({ action, data }) };
   frontend._isDemoModeEnabled = () => false;
-  frontend._buildSendConfig = () => ({ id: frontend.identifier });
-  frontend._armInitWatchdog = () => {};
+  frontend.defaults = { backgroundRefresh: true, debugDate: null };
+  frontend.config = { username: "parent", password: "secret", students: [{ title: "A" }] };
+  frontend.transport = { sendRequest: (action, data) => sent.push({ action, data }) };
 
-  frontend._handleInitRequired({ reason: "session-config-missing" });
+  frontend._sendConfigure();
 
-  assert.equal(frontend._initialized, false);
-  assert.equal(frontend._initRequested, true);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].action, "CONFIGURE");
-  assert.equal(sent[0].data.reason, "backend-init-required");
+  const { config } = sent[0].data;
+  assert.equal(config.id, "module_1_MMM-Webuntis");
+  assert.equal(config.password, "secret");
+  assert.deepEqual(config.students, [{ title: "A" }]);
+  assert.equal("sessionId" in config, false);
+});
+
+test("INIT_REQUIRED for every instance ('*') sends CONFIGURE once and reports the session state", () => {
+  const sent = [];
+  const reports = [];
+  frontend.identifier = "module_1_MMM-Webuntis";
+  frontend.notifications = { EVENT: "MMM-Webuntis_EVENT" };
+  frontend._log = () => {};
+  frontend.lifecycle = { reportSessionState: (reason) => reports.push(reason) };
+  frontend._sendConfigure = () => sent.push("CONFIGURE");
+
+  frontend.socketNotificationReceived("MMM-Webuntis_EVENT", { action: "INIT_REQUIRED", identifier: "*" });
+  frontend.socketNotificationReceived("MMM-Webuntis_EVENT", {
+    action: "INIT_REQUIRED",
+    identifier: frontend.identifier,
+  });
+  frontend.socketNotificationReceived("MMM-Webuntis_EVENT", { action: "INIT_REQUIRED", identifier: "other" });
+
+  assert.deepEqual(sent, ["CONFIGURE", "CONFIGURE"]);
+  assert.deepEqual(reports, ["init-required", "init-required"]);
+});
+
+test("DATA with two students applies both and renders once", () => {
+  const view = loadFrontendModule();
+  view._log = () => {};
+  const applied = [];
+  let renders = 0;
+  view._handleGotData = (payload) => {
+    applied.push(payload.context.student.title);
+    return true;
+  };
+  view._updateRuntimeWarnings = () => false;
+  view.lifecycle = { render: () => renders++ };
+
+  view._handleData({ students: [{ context: { student: { title: "A" } } }, { context: { student: { title: "B" } } }] });
+
+  assert.deepEqual(applied, ["A", "B"]);
+  assert.equal(renders, 1);
+});
+
+test("DATA without any change does not render, and its module warnings replace the old ones", () => {
+  const view = loadFrontendModule();
+  view._log = () => {};
+  view.runtimeWarningsByStudent = { __module__: new Set(["discovery failed"]) };
+  let renders = 0;
+  view.lifecycle = { render: () => renders++ };
+
+  view._handleData({ students: [], warnings: ["discovery failed"] });
+  assert.equal(renders, 0);
+
+  view._handleData({ students: [], warnings: [] });
+  assert.equal(renders, 1);
+  assert.deepEqual(view._getRuntimeWarnings(), []);
+});
+
+test("CONFIG_INVALID shows every validation error as a critical warning", () => {
+  const view = loadFrontendModule();
+  view._log = () => {};
+  view.lifecycle = { render() {} };
+  view.moduleWarningsSet = new Set();
+  view.moduleWarningMetaByMessage = new Map();
+
+  view._handleConfigInvalid({ message: "a\nb", details: { errors: ["a", "b"], warnings: ["w"] } });
+
+  assert.deepEqual([...view.moduleWarningsSet], ["a", "b", "w"]);
+  assert.equal(view._isCriticalModuleWarning("a"), true);
+  assert.equal(view._isCriticalModuleWarning("w"), false);
+
+  const split = loadFrontendModule();
+  split._log = () => {};
+  split.lifecycle = { render() {} };
+  split._handleConfigInvalid({ message: "x\ny" });
+  assert.deepEqual([...split.moduleWarningsSet], ["x", "y"]);
+});
+
+test("the visible tick renders when the day changed, and the backend owns the fetch schedule", () => {
+  const view = loadFrontendModule();
+  let options;
+  let renders = 0;
+  view.shared = {
+    createLifecycle: (given) => {
+      options = given;
+      return { render: () => renders++ };
+    },
+  };
+  view.config = {};
+  view._log = () => {};
+  view.getCurrentDateContext = () => ({ ymd: 20261001, isDebug: false });
+  view._currentTodayYmd = 20260930;
+
+  view._createLifecycle();
+
+  assert.equal(options.updateInterval, 0);
+  assert.equal("onFetch" in options, false);
+  assert.equal(options.visibleTickInterval, 60 * 1000);
+  options.onVisibleTick();
+  assert.equal(view._currentTodayYmd, 20261001);
+  assert.equal(renders, 1);
+  options.onVisibleTick();
+  assert.equal(renders, 1, "no render without a day change");
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -1415,7 +1438,7 @@ test("validateConfig warns about invalid excludeLessons/addLessons entries witho
 test("DATA_UPDATE payload applies excludeLessons and addLessons (student overrides module)", () => {
   const bundle = (student) => ({
     identifier: "mod1",
-    sessionKey: "mod1:sess1",
+    statusKey: "mod1:sess1",
     student,
     config: { excludeLessons: ["Förder"], addLessons: [] },
     compactHolidays: [],
@@ -1465,7 +1488,7 @@ test("excludeLessons also hides homework and exams of the excluded subjects", ()
   const payload = mapBundleToMmmPayload(
     {
       identifier: "mod1",
-      sessionKey: "mod1:sess1",
+      statusKey: "mod1:sess1",
       student: { title: "A" },
       config: { excludeLessons: ["Förder"] },
       compactHolidays: [],
@@ -1510,7 +1533,7 @@ test("addLessons stops before the exclusive timetable end date", () => {
   const payload = mapBundleToMmmPayload(
     {
       identifier: "mod1",
-      sessionKey: "mod1:sess1",
+      statusKey: "mod1:sess1",
       student: { title: "A", addLessons: [{ weekday: [1, 5], startTime: "15:00", endTime: "16:00", subject: "Chor" }] },
       config: {},
       compactHolidays: [],
@@ -1570,47 +1593,78 @@ test("demo mode does not ask for students or credentials", () => {
   assert.match(warned[0], /No students configured/);
 });
 
-test("demo mode serves the fixtures through CONFIGURE and DATA_UPDATE without logging in", async () => {
+test("demo mode serves the fixtures through CONFIGURE and DATA without logging in", async () => {
   const demoHelper = loadNodeHelper();
   demoHelper._mmLog = () => {};
   const emitted = [];
   demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
 
-  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
-    action: "CONFIGURE",
-    identifier: "demo-module",
-    data: {
-      id: "demo-module",
-      sessionId: "demo-session",
-      demoDataFile: "demo/fixtures/single-student-week.json",
-      debugDate: "2026-09-30",
-      mode: "compact",
-      displayMode: "grid",
-      grid: { weekView: true },
-      students: [],
-    },
-  });
+  try {
+    demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+      action: "CONFIGURE",
+      identifier: "demo-module",
+      requestId: "r1",
+      data: {
+        config: {
+          id: "demo-module",
+          demoDataFile: "demo/fixtures/single-student-week.json",
+          debugDate: "2026-09-30",
+          mode: "compact",
+          displayMode: "grid",
+          grid: { weekView: true },
+          students: [],
+        },
+      },
+    });
+    await waitFor(() => emitted.some((event) => event.action === "DATA"));
 
-  assert.deepEqual(
-    emitted.map((event) => event.action),
-    ["MODULE_READY", "DATA_UPDATE"],
-  );
-  assert.equal("_authService" in emitted[0].data.config, false, "MODULE_READY must not carry the auth service");
-  const avery = emitted[1].data;
-  assert.equal(avery.context.student.title, "Avery Finch");
-  assert.equal(avery.sessionId, "demo-session");
-  assert.equal(avery.context.config.mode, "compact", "module config reaches the widgets");
-  assert.equal(avery.context.config.debugDate, "2026-09-30");
-  assert.equal(avery.context.config.plugins.grid.config.weekView, true);
-  assert.ok(avery.data.lessons.length > 0);
+    assert.deepEqual(
+      emitted.map((event) => event.action),
+      ["CONFIGURED", "DATA"],
+    );
+    assert.equal(
+      emitted[0].data.plugins.some((plugin) => plugin.id === "grid"),
+      true,
+    );
+    const { students, allFailed } = emitted[1].data;
+    assert.equal(allFailed, false);
+    assert.equal(students.length, 1);
+    const avery = students[0];
+    assert.equal(avery.context.student.title, "Avery Finch");
+    assert.equal(avery.context.config.mode, "compact", "module config reaches the widgets");
+    assert.equal(avery.context.config.debugDate, "2026-09-30");
+    assert.equal(avery.context.config.plugins.grid.config.weekView, true);
+    assert.equal("__initWarnings" in avery.context.config, false);
+    assert.ok(avery.data.lessons.length > 0);
+  } finally {
+    demoHelper.stop();
+  }
 });
 
-test("sessions of one account fetch one after another, even when several wait at once", async () => {
+test("prepareConfig throws CONFIG_INVALID with every error in details", () => {
+  const configHelper = loadNodeHelper();
+  configHelper._mmLog = () => {};
+  try {
+    assert.throws(
+      () => configHelper.prepareConfig({ id: "x", demoDataFile: "demo/fixtures/missing.json", students: [] }),
+      (error) => {
+        assert.equal(error.code, "CONFIG_INVALID");
+        assert.match(error.details.errors.join(" "), /demoDataFile/);
+        assert.equal(error.message, error.details.errors.join("\n"));
+        return true;
+      },
+    );
+  } finally {
+    configHelper.stop();
+  }
+});
+
+test("instances of one account fetch one after another, even when several wait at once", async () => {
   const serialHelper = loadNodeHelper();
   serialHelper._mmLog = () => {};
   serialHelper._ensureRuntime();
   const student = { title: "Kid", username: "parent", password: "pw", school: "s", server: "x.webuntis.com" };
-  serialHelper._sessions.getOrCreateSessionConfig = () => ({ students: [student] });
+  const config = { students: [student], _moduleDefaultsMerged: true };
 
   let active = 0;
   let maxActive = 0;
@@ -1621,13 +1675,69 @@ test("sessions of one account fetch one after another, even when several wait at
     maxActive = Math.max(maxActive, active);
     await new Promise((resolve) => setTimeout(resolve, 10));
     active -= 1;
+    return { payloads: [{}], failed: 0 };
   };
 
-  await Promise.all(["a:1", "b:1", "c:1"].map((sessionKey) => serialHelper._executeFetchForSession(sessionKey)));
+  try {
+    await Promise.all(["a", "b", "c"].map((identifier) => serialHelper.fetchInstance({ identifier, config })));
 
-  assert.equal(runs, 3);
-  assert.equal(maxActive, 1, "two waiting sessions must not start together once the first finished");
-  assert.equal(serialHelper._pendingFetchByCredKey.size, 0);
+    assert.equal(runs, 3);
+    assert.equal(maxActive, 1, "two waiting instances must not start together once the first finished");
+    assert.equal(serialHelper._pendingFetchByCredKey.size, 0);
+  } finally {
+    serialHelper.stop();
+  }
+});
+
+test("fetchInstance reports allFailed for a failed login and for no students", async () => {
+  const failHelper = loadNodeHelper();
+  failHelper._mmLog = () => {};
+  failHelper._ensureRuntime();
+  failHelper._processGroup = async (_credKey, students) => ({
+    payloads: students.map(() => ({})),
+    failed: students.length,
+  });
+  const student = { title: "Kid", username: "parent", password: "pw", school: "s", server: "x.webuntis.com" };
+
+  try {
+    const failed = await failHelper.fetchInstance({
+      identifier: "m",
+      config: { students: [student], _moduleDefaultsMerged: true },
+    });
+    assert.equal(failed.allFailed, true);
+    assert.equal(failed.students.length, 1);
+
+    const none = await failHelper.fetchInstance({
+      identifier: "m",
+      config: { students: [], _moduleDefaultsMerged: true },
+    });
+    assert.equal(none.allFailed, true);
+  } finally {
+    failHelper.stop();
+  }
+});
+
+test("a failed student discovery comes back as a warning and is retried by the next fetch", async () => {
+  const discoveryHelper = loadNodeHelper();
+  discoveryHelper._mmLog = () => {};
+  discoveryHelper._ensureRuntime();
+  let logins = 0;
+  discoveryHelper._authService.getAuth = async () => {
+    logins += 1;
+    throw new Error("unreachable");
+  };
+  const config = { username: "parent", password: "pw", school: "s", server: "127.0.0.1:9", students: [] };
+
+  try {
+    for (const expected of [1, 2]) {
+      const result = await discoveryHelper.fetchInstance({ identifier: "m", config });
+      assert.equal(result.allFailed, true);
+      assert.match(result.warnings.join(" "), /Auto student discovery failed/);
+      assert.equal(logins, expected, "every fetch tries the discovery again");
+    }
+  } finally {
+    discoveryHelper.stop();
+  }
 });
 
 test("each instance logs at its own logLevel, not the one of the last CONFIGURE", async () => {
@@ -1649,39 +1759,38 @@ test("each instance logs at its own logLevel, not the one of the last CONFIGURE"
   } finally {
     Module._load = originalLoad;
   }
-  logHelper.sendSocketNotification = () => {};
+  const dataEvents = [];
+  logHelper.sendSocketNotification = (_name, payload) => {
+    if (payload?.action === "DATA") dataEvents.push(payload);
+  };
 
   const configure = (id, logLevel) =>
     logHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
       action: "CONFIGURE",
       identifier: id,
       data: {
-        id,
-        sessionId: `${id}-session`,
-        logLevel,
-        demoDataFile: "demo/fixtures/single-student-week.json",
-        displayMode: "grid",
-        students: [],
+        config: {
+          id,
+          logLevel,
+          demoDataFile: "demo/fixtures/single-student-week.json",
+          displayMode: "grid",
+          students: [],
+        },
       },
     });
-  const refresh = (id) =>
-    logHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
-      action: "REFRESH",
-      identifier: id,
-      data: { id, sessionId: `${id}-session`, reason: "test" },
-    });
 
-  await configure("verbose", "debug");
-  await configure("quiet", "error");
-  lines.length = 0;
+  try {
+    configure("verbose", "debug");
+    configure("quiet", "error");
+    await waitFor(() => dataEvents.length >= 2);
 
-  await refresh("verbose");
-  await refresh("quiet");
-
-  const debugFor = (id) => lines.filter((line) => line.level === "debug" && line.message.includes(`id=${id}`));
-  assert.ok(debugFor("verbose").length > 0, "the debug instance keeps its debug lines");
-  assert.equal(debugFor("quiet").length, 0, "the error instance logs no debug lines");
-  assert.equal(logHelper._sharedLogLevel(), "debug", "shared services follow the widest instance level");
+    const debugFor = (id) => lines.filter((line) => line.level === "debug" && line.message.includes(`id=${id}`));
+    assert.ok(debugFor("verbose").length > 0, "the debug instance keeps its debug lines");
+    assert.equal(debugFor("quiet").length, 0, "the error instance logs no debug lines");
+    assert.equal(logHelper._sharedLogLevel(), "debug", "shared services follow the widest instance level");
+  } finally {
+    logHelper.stop();
+  }
 });
 
 test("demo payloads take the configured student's options, one fixture per student", () => {
@@ -1713,13 +1822,262 @@ test("a missing demo fixture fails CONFIGURE with a config error", async () => {
   const emitted = [];
   demoHelper.sendSocketNotification = (_name, payload) => emitted.push(payload);
 
-  await demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
-    action: "CONFIGURE",
-    identifier: "demo-module",
-    data: { id: "demo-module", sessionId: "s", demoDataFile: "demo/fixtures/missing.json", students: [] },
+  try {
+    demoHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
+      action: "CONFIGURE",
+      identifier: "demo-module",
+      data: { config: { id: "demo-module", demoDataFile: "demo/fixtures/missing.json", students: [] } },
+    });
+
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0].action, "CONFIG_INVALID");
+    assert.match(emitted[0].error.details.errors.join(" "), /demoDataFile/);
+  } finally {
+    demoHelper.stop();
+  }
+});
+
+test("a re-login logs the session it replaces out, but not one with the same cookies", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const logouts = [];
+  service.httpClient.logout = async (server, school, cookies) => {
+    logouts.push({ server, school, cookies });
+  };
+  const entry = { token: "t", cookieString: "old", school: "s", server: "srv" };
+
+  service._authCache.set("key", { ...entry, expiresAt: Date.now() });
+  service._cacheAuthResult("key", { ...entry, cookieString: "new" });
+  assert.deepEqual(logouts, [{ server: "srv", school: "s", cookies: "old" }]);
+
+  service._cacheAuthResult("key", { ...entry, cookieString: "new" });
+  service._cacheAuthResult("fresh", { ...entry, cookieString: "first" });
+  assert.equal(logouts.length, 1, "same cookies and first logins retire nothing");
+});
+
+test("a credentials login keeps school and server in the cache, so the session can be logged out later", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  service.httpClient.authenticateWithCredentials = async () => ({ cookies: "c" });
+  service.httpClient.getBearerToken = async () => "t";
+  service._fetchAppData = async () => ({ tenantId: 1, schoolYearId: 2, appData: {} });
+  const logouts = [];
+  service.httpClient.logout = async (server, school, cookies) => {
+    logouts.push({ server, school, cookies });
+  };
+
+  await service._performAuthFromCredentials("key", "school-a", "user", "pw", "srv.example", {});
+  await service.logoutAll();
+
+  assert.deepEqual(logouts, [{ server: "srv.example", school: "school-a", cookies: "c" }]);
+});
+
+function createRenewalService({ renewToken }) {
+  const { AuthService } = require("../lib/webuntisClient");
+  const lines = [];
+  const service = new AuthService({ logger: (level, message) => lines.push({ level, message }) });
+  const calls = { renew: 0, login: 0 };
+  service.httpClient.getBearerToken = async () => {
+    calls.renew += 1;
+    return renewToken();
+  };
+  service._performAuth = async () => {
+    calls.login += 1;
+    return { token: "login-token", cookieString: "c", school: "s", server: "srv" };
+  };
+  const entry = {
+    token: "old",
+    cookieString: "c",
+    tenantId: 1,
+    schoolYearId: 2,
+    personId: 3,
+    school: "s",
+    server: "srv",
+    appData: { user: 1 },
+    sessionStartedAt: Date.now() - 20 * 60 * 1000,
+    expiresAt: Date.now() + 10 * 1000,
+  };
+  service._authCache.set("key", entry);
+  const getAuth = () =>
+    service.getAuth({ school: "s", username: "u", password: "p", server: "srv", options: { cacheKey: "key" } });
+  return { service, calls, lines, entry, getAuth };
+}
+
+test("an expiring token is renewed from the session cookie, keeping the cached app data, without a login", async () => {
+  const { calls, lines, getAuth, service } = createRenewalService({ renewToken: async () => "new-token" });
+
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "new-token");
+  assert.equal(auth.tenantId, 1);
+  assert.deepEqual(auth.appData, { user: 1 });
+  assert.deepEqual(calls, { renew: 1, login: 0 });
+  assert.equal(
+    lines.some((line) => line.level === "info"),
+    false,
+    "a renewal is not a login",
+  );
+  assert.equal(service._authCache.get("key").token, "new-token");
+  assert.ok(service._authCache.get("key").sessionStartedAt < Date.now() - 19 * 60 * 1000, "the session start stays");
+});
+
+test("when the cookie no longer works the renewal falls back to a real login", async () => {
+  const { calls, lines, getAuth } = createRenewalService({
+    renewToken: async () => {
+      throw new Error("Session expired");
+    },
   });
 
-  assert.equal(emitted.length, 1);
-  assert.equal(emitted[0].action, "MODULE_INIT_FAILED");
-  assert.match(emitted[0].data.errors.join(" "), /demoDataFile/);
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "login-token");
+  assert.deepEqual(calls, { renew: 1, login: 1 });
+  assert.equal(lines.filter((line) => line.level === "info").length, 1);
+});
+
+test("a session older than six hours, or without a recorded start, gets a real login", async () => {
+  for (const change of [{ sessionStartedAt: Date.now() - 7 * 60 * 60 * 1000 }, { sessionStartedAt: undefined }]) {
+    const { calls, getAuth, service, entry } = createRenewalService({ renewToken: async () => "new-token" });
+    service._authCache.set("key", { ...entry, ...change });
+
+    await getAuth();
+
+    assert.deepEqual(calls, { renew: 0, login: 1 });
+  }
+});
+
+test("parallel requests during a renewal share it", async () => {
+  const { calls, getAuth } = createRenewalService({
+    renewToken: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return "new-token";
+    },
+  });
+
+  const results = await Promise.all([getAuth(), getAuth(), getAuth()]);
+
+  assert.equal(calls.renew, 1);
+  assert.deepEqual(new Set(results.map((auth) => auth.token)), new Set(["new-token"]));
+});
+
+test("auth failures do not feed the circuit breaker, other failures still do", () => {
+  const tracker = new ApiStatusTracker({ logger: () => {} });
+  const statusKey = "m";
+  const rejectedLogin = Object.assign(new Error("Credentials authentication failed"), { isAuthError: true });
+
+  // An expired session and a rejected login: three in one fetch (timetable retry rounds) is normal.
+  for (const error of [{ status: 401 }, rejectedLogin, { status: 401 }, { status: 401 }]) {
+    tracker.recordError(statusKey, "timetable", error);
+  }
+
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), false, "the next cycle asks the endpoint again");
+  const record = tracker.getRecords(statusKey).timetable;
+  assert.equal(record.status, 401, "the status is still recorded, so the widget shows 'unavailable'");
+  assert.equal(record.failureCount, 0);
+
+  // Server errors still open the breaker.
+  for (let i = 0; i < 3; i++) tracker.recordError(statusKey, "exams", { status: 500 });
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), true);
+
+  // A 401 in the middle of a streak of 5xx does not reset or advance it.
+  tracker.recordError(statusKey, "exams", { status: 401 });
+  assert.equal(tracker.getRecords(statusKey).exams.failureCount, 3);
+});
+
+function createFailingLoginService() {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const attempts = { count: 0, fail: true };
+  service._performAuth = async () => {
+    attempts.count += 1;
+    if (attempts.fail) throw new Error("Credentials authentication failed: 200 - bad credentials");
+    return { token: "t", cookieString: "c", school: "s", server: "srv" };
+  };
+  const getAuth = () =>
+    service.getAuth({ school: "s", username: "u", password: "p", server: "srv", options: { cacheKey: "key" } });
+  return { service, attempts, getAuth };
+}
+
+test("after a failed login further requests get the same error without another login attempt", async () => {
+  const { attempts, getAuth } = createFailingLoginService();
+
+  await assert.rejects(getAuth(), /bad credentials/);
+  // The retry rounds of the endpoints of one fetch arrive within milliseconds.
+  const burst = await Promise.allSettled([getAuth(), getAuth(), getAuth(), getAuth()]);
+
+  assert.equal(attempts.count, 1, "one login attempt for the whole burst");
+  assert.ok(burst.every((result) => result.status === "rejected" && /bad credentials/.test(result.reason.message)));
+});
+
+test("the login is tried again once the cooldown has passed, and a success clears the failure", async () => {
+  const { service, attempts, getAuth } = createFailingLoginService();
+  await assert.rejects(getAuth(), /bad credentials/);
+
+  service._loginFailures.get("key").at = Date.now() - 31 * 1000;
+  attempts.fail = false;
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "t");
+  assert.equal(attempts.count, 2);
+  assert.equal(service._loginFailures.has("key"), false);
+});
+
+test("a failed login does not block another account", async () => {
+  const { service, attempts, getAuth } = createFailingLoginService();
+  await assert.rejects(getAuth(), /bad credentials/);
+
+  attempts.fail = false;
+  const other = await service.getAuth({
+    school: "s",
+    username: "x",
+    password: "p",
+    server: "srv",
+    options: { cacheKey: "other" },
+  });
+
+  assert.equal(other.token, "t");
+});
+
+test("the auth session keeps the password, so the login after a 401 is sent with real credentials", async () => {
+  const { createAuthSession } = require("../lib/authSession");
+  const { WebUntisClient } = require("../lib/webuntisClient");
+  const logins = [];
+  const authService = {
+    getAuth: async (params) => {
+      logins.push(params);
+      return { token: "t", cookieString: "c", tenantId: 1, schoolYearId: 2, personId: 3, appData: {} };
+    },
+    invalidateCache: () => true,
+  };
+  const config = { username: "parent", password: "secret", school: "s", server: "srv" };
+
+  const authSession = await createAuthSession(authService, { studentId: 5, title: "A" }, config, "parent:x");
+  assert.equal(authSession.username, "parent");
+  assert.equal(authSession.password, "secret");
+
+  // What the REST layer does on a 401: invalidate, then get fresh auth with the session's credentials.
+  const client = new WebUntisClient({ mmLog: () => {} });
+  const handlers = client._buildRestAuthHandlers({
+    authService,
+    effectiveCacheKey: "parent:x",
+    school: authSession.school,
+    server: authSession.server,
+    username: authSession.username,
+    password: authSession.password,
+    authOptions: {},
+  });
+  await handlers.getAuth();
+
+  assert.equal(logins.at(-1).username, "parent");
+  assert.equal(logins.at(-1).password, "secret");
+});
+
+test("the default updateInterval keeps a single instance's WebUntis session warm", () => {
+  // The REST session idles out after about five minutes (4:56 worked, 5:17 did not); the lifecycle adds up to +10 % jitter.
+  const { updateInterval } = loadFrontendModule().defaults;
+
+  assert.ok(
+    updateInterval * 1.1 < 4.6 * 60 * 1000,
+    `updateInterval ${updateInterval} ms can exceed the session's idle limit`,
+  );
 });

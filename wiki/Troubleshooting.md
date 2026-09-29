@@ -10,6 +10,32 @@ Check these first:
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.
 5. Make sure the selected date range actually contains timetable data.
 
+## A Reload Does Not Reset The Retry Backoff
+
+The backend owns the fetch schedule. After a failed fetch (wrong password, server unreachable) it
+retries after 2 minutes, then 4, 8 … up to 30 minutes, and an instance stays alive for 10 minutes
+after its last display went away. Reloading the browser therefore does not force an immediate new
+login attempt; restart MagicMirror (or wait for the next retry) after fixing the credentials.
+
+## How Often The Module Logs In
+
+The backend keeps one WebUntis session per account. The bearer token lives about 15 minutes, and the
+module renews it from the session cookie shortly before it expires instead of logging in again (debug
+line `token renewed from the existing session`); a real login follows when that no longer works and at
+the latest after six hours. `logLevel: 'info'` shows one line per real login (`REST auth: logging in ...`).
+
+How many logins you see depends on how busy the account is: the WebUntis REST session idles out after
+about five minutes without a request. With several instances or Carousel pages of one account the
+session stays warm and you see about one login per 15 minutes. A single instance stays warm with the
+default of 4 minutes as well (the longest gap is 4:24 with the ±10 % jitter). With an `updateInterval` of
+5 minutes or more a single instance sits on or beyond that limit: on many fetches it starts with a `401`
+(`Authentication token expired, invalidating cache and retrying...` in the debug log) and recovers with a
+login. That still works, it only costs one extra request and a login per fetch.
+
+If a login fails, the module waits 30 seconds before it tries again with the same credentials, and a
+`401` no longer keeps the timetable away afterwards. When a login replaces a session that had only aged
+out, the old one is logged out in the background, and on shutdown every cached session is.
+
 ## Which Log Level To Pick
 
 All output goes through MagicMirror's `Log`: the global `logLevel` in `config.js` is the upper

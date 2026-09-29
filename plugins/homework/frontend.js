@@ -5,7 +5,7 @@
     return;
   }
 
-  const { addHeader, addRow, createContainer, createElement, escapeHtml } = sharedDom;
+  const { addHeader, addRow, createContainer, createElement, el, headerTitleNodes, multilineNodes } = sharedDom;
 
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== "function") return fallback;
@@ -66,14 +66,14 @@
   }
 
   function buildHeaderTitle(pluginContext, studentName, homeworkConfig) {
-    const title = escapeHtml(translate(pluginContext, "homework", "Homework"));
+    const title = translate(pluginContext, "homework", "Homework");
     const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(homeworkConfig?.nextDays, 0);
     const pastDays = normalizeDays(homeworkConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
-    return `${title} <span class="wu-header-meta">(${escapeHtml(meta)})</span>`;
+    return headerTitleNodes(title, meta);
   }
 
   /**
@@ -91,17 +91,17 @@
   }
 
   function homeworkLabel(pluginContext) {
-    return `<span class="wu-homework__label">${escapeHtml(translate(pluginContext, "homework", "Homework"))}</span>`;
+    return el("span", "wu-homework__label", translate(pluginContext, "homework", "Homework"));
   }
 
   /** Right-hand cell: subject and text as configured, the widget label when both are off or empty. */
   function buildContentCell(pluginContext, homework, homeworkConfig) {
     const subjectLabel = homeworkConfig?.showSubject ? getFieldDisplayName(homework?.subject || null, "long") : "";
     const text = homeworkConfig?.showText ? String(homework?.text || "").trim() : "";
-    const parts = [];
-    if (subjectLabel) parts.push(`<b class="wu-homework__subject">${escapeHtml(subjectLabel)}</b>`);
-    if (text) parts.push(`<span class="wu-homework__text">${escapeHtml(text).replace(/\n/g, "<br>")}</span>`);
-    return parts.length > 0 ? parts.join(": ") : homeworkLabel(pluginContext);
+    const subject = subjectLabel ? el("b", "wu-homework__subject", subjectLabel) : null;
+    const textSpan = text ? el("span", "wu-homework__text", multilineNodes(text)) : null;
+    if (subject && textSpan) return [subject, ": ", textSpan];
+    return subject || textSpan || homeworkLabel(pluginContext);
   }
 
   /** "no homework" or "data unavailable" in place of the list. */
@@ -111,12 +111,10 @@
       container,
       unavailable ? "homeworkRowEmpty unavailable-notice" : "homeworkRowEmpty",
       studentLabelText,
-      escapeHtml(
-        translate(
-          pluginContext,
-          unavailable ? "unavailable" : "no_homework",
-          unavailable ? "data unavailable" : "no homework",
-        ),
+      translate(
+        pluginContext,
+        unavailable ? "unavailable" : "no_homework",
+        unavailable ? "data unavailable" : "no homework",
       ),
     );
   }
@@ -127,7 +125,7 @@
     const homeworkConfig = resolveHomeworkConfig(studentConfig);
     const studentTitle = String(studentSlice?.student?.title || "").trim();
     const verboseMode = isVerboseMode(studentConfig);
-    const studentLabelText = verboseMode ? "" : escapeHtml(studentTitle);
+    const studentLabelText = verboseMode ? "" : studentTitle;
     const container = createContainer();
 
     if (verboseMode && studentTitle) {
@@ -140,7 +138,7 @@
 
     for (const homework of homeworks.slice().sort(compareHomework)) {
       const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, homeworkConfig?.dateFormat) : "";
-      const dateCell = due ? `<span class="wu-homework__date">${escapeHtml(due)}</span>` : homeworkLabel(pluginContext);
+      const dateCell = due ? el("span", "wu-homework__date", due) : homeworkLabel(pluginContext);
       addRow(
         container,
         "homeworkRow",

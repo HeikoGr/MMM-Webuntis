@@ -7,7 +7,7 @@ This page covers the options most users actually need. For a full example file, 
 | Option | Default | What it does |
 | --- | --- | --- |
 | `header` | `MMM-Webuntis` | Module title shown by MagicMirror |
-| `updateInterval` | `5 * 60 * 1000` | Refresh interval in milliseconds |
+| `updateInterval` | `4 * 60 * 1000` | Refresh interval in milliseconds. The default is deliberately below the ~5 minute idle limit of the WebUntis session (see [Troubleshooting](Troubleshooting.md#how-often-the-module-logs-in)); longer intervals log in again on most fetches |
 | `backgroundRefresh` | `true` | Keep refreshing while the module is hidden (e.g. under MMM-Carousel), so showing it never causes a request |
 | `quietHours` | `null` | Optional window without any polling, e.g. `{ from: '22:00', to: '06:00' }` |
 | `displayMode` | `lessons, exams` | Which built-in plugins are enabled |
@@ -19,8 +19,6 @@ This page covers the options most users actually need. For a full example file, 
 | `logLevel` | unset | Optional: `none`, `error`, `warn`, `info`, `debug`. All output (browser console and `pm2 logs`) goes through MagicMirror's `Log`, so the global `logLevel` in `config.js` decides; this option can only narrow it for this instance (several instances keep their own levels; the shared login and HTTP layer follows the most detailed one). `info`/`debug` set here also print the running config to the browser console; `debug` also keeps past lessons and exams visible. |
 | `debugDate` | `null` | Freeze the calendar date for testing |
 | `demoDataFile` | `null` | Show demo data instead of WebUntis data, e.g. `'demo/fixtures/single-student-week.json'` (comma-separated for several students). No login; all other options apply as usual |
-| `initRetryTimeout` | `5000` | Timeout (ms) for the CONFIGURE → MODULE_READY watchdog before retrying |
-| `initRetryMaxAttempts` | `4` | Max CONFIGURE attempts before the init retry gate reopens |
 | `dumpBackendPayloads` | `false` | Dump raw payloads from the backend into `./debug_dumps/` |
 | `dumpRawApiResponses` | `false` | Save raw WebUntis REST responses into `./debug_dumps/raw_api_*.json` |
 
@@ -135,9 +133,26 @@ addLessons: [
 
 Added lessons are regular lessons: the `lessons` widget only lists them with `showRegular: true`, the `grid` always shows them. Invalid entries are ignored and reported as a configuration warning.
 
+## Several Instances And Secrets
+
+**Identical blocks on several Carousel pages** are fine: instances with the same account and options
+share one WebUntis session and reuse each other's responses, so the extra pages add no load on the
+WebUntis server. Give each block its own `position`/Carousel slide; MagicMirror assigns the instance
+identifiers itself.
+
+**`hideConfigSecrets`:** write the secret in `config.js` as `${SECRET_NAME}` (for example
+`password: "${SECRET_WU_PASSWORD}"`) and put the value into the environment or into a `config.env` file next to
+`config.js` (MagicMirror loads it into the environment). MagicMirror shows the browser `**SECRET_NAME**` and restores the value on the server. Two
+limits come from MagicMirror itself, not from this module:
+
+- a module type may only restore the secrets named in its **first** entry in `config.js`; with several
+  MMM-Webuntis blocks the first one has to name every secret any block uses
+- nothing is replaced while `cors` is `allowAll` (the default); set `cors: "disabled"` or
+  `"allowWhitelist"`
+
 ## Debug Options
 
-Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, `demoDataFile`, `initRetryTimeout`, and `initRetryMaxAttempts` in the option table above.
+Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, and `demoDataFile` in the option table above.
 
 **`debugDate` and past school years:** pick a date inside the *current* school year. WebUntis serves homework only for the school year your session was opened in, so a `debugDate` in an earlier school year shows no homework, while the timetable and exams still appear. Normal operation is unaffected. Details: [API_REFERENCE.md](../docs/API_REFERENCE.md#known-limitation-debugdate).
 
