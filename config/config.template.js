@@ -32,7 +32,7 @@ const config = {
       config: {
         // === GLOBAL OPTIONS ===
         header: "Timetable", // optional header text
-        updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+        updateInterval: 4 * 60 * 1000, // fetch interval in milliseconds (default: 4 minutes)
 
         // === DEBUG OPTIONS ===
         // logLevel: "info", // optional: 'none', 'error', 'warn', 'info', 'debug'; unset = global logLevel

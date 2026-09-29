@@ -4,7 +4,7 @@ Module.register("MMM-Webuntis", {
   defaults: {
     // === GLOBAL OPTIONS ===
     header: "MMM-Webuntis", // displayed as module title in MagicMirror
-    updateInterval: 5 * 60 * 1000, // fetch interval in milliseconds (default: 5 minutes)
+    updateInterval: 4 * 60 * 1000, // fetch interval in milliseconds (default: 4 minutes; keep it below ~4.5 min, see wiki/Troubleshooting.md)
     backgroundRefresh: true, // keep refreshing while hidden (e.g. under MMM-Carousel)
     quietHours: null, // optional window without polling, e.g. { from: '22:00', to: '06:00' }
     timezone: "Europe/Berlin", // timezone for date calculations

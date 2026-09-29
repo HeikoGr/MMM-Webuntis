@@ -1229,7 +1229,7 @@
     "inconfig": "0",
     "config": {
       "header": "MMM-Webuntis",
-      "updateInterval": 300000,
+      "updateInterval": 240000,
       "timezone": "Europe/Berlin",
       "logLevel": "none",
       "debugDate": "",

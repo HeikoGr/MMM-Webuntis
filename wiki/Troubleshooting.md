@@ -26,10 +26,11 @@ the latest after six hours. `logLevel: 'info'` shows one line per real login (`R
 
 How many logins you see depends on how busy the account is: the WebUntis REST session idles out after
 about five minutes without a request. With several instances or Carousel pages of one account the
-session stays warm and you see about one login per 15 minutes. A single instance with the default
-5 minute interval sits right on that limit, so on about every other fetch it starts with a `401`
+session stays warm and you see about one login per 15 minutes. A single instance stays warm with the
+default of 4 minutes as well (the longest gap is 4:24 with the ±10 % jitter). With an `updateInterval` of
+5 minutes or more a single instance sits on or beyond that limit: on many fetches it starts with a `401`
 (`Authentication token expired, invalidating cache and retrying...` in the debug log) and recovers with a
-login. That is normal operation.
+login. That still works, it only costs one extra request and a login per fetch.
 
 If a login fails, the module waits 30 seconds before it tries again with the same credentials, and a
 `401` no longer keeps the timetable away afterwards. When a login replaces a session that had only aged

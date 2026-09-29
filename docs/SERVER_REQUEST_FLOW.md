@@ -319,7 +319,9 @@ The REST session (timetable) idles out earlier than the table above says: with a
 `updateInterval` (±10 % jitter) fetches after 4:31, 4:40, 4:51 and 4:56 minutes worked, fetches after
 5:17 and 5:20 got a `401`. Treat the idle limit as about five minutes, not eight to ten. With a five
 minute interval about every other fetch therefore starts with a `401` and a recovery login; the recovery
-path above is normal operation, not an error. Token renewal (`token/new`) worked at minute 14 of a session
+path above is normal operation, not an error. The default `updateInterval` is therefore 4 minutes: with
+the ±10 % jitter the longest gap is 4:24, below the gaps that worked in the measurement (up to 4:56), so a
+single instance keeps its session warm and the recovery login only happens after a real interruption. Token renewal (`token/new`) worked at minute 14 of a session
 because the fetches use the classic endpoints (exams, homework, absences), which keep the cookie warm.
 
 Decision: no keep-alive ping. A JSON-RPC call would keep the cookie alive, but the classic session

@@ -2042,3 +2042,13 @@ test("the auth session keeps the password, so the login after a 401 is sent with
   assert.equal(logins.at(-1).username, "parent");
   assert.equal(logins.at(-1).password, "secret");
 });
+
+test("the default updateInterval keeps a single instance's WebUntis session warm", () => {
+  // The REST session idles out after about five minutes (4:56 worked, 5:17 did not); the lifecycle adds up to +10 % jitter.
+  const { updateInterval } = loadFrontendModule().defaults;
+
+  assert.ok(
+    updateInterval * 1.1 < 4.6 * 60 * 1000,
+    `updateInterval ${updateInterval} ms can exceed the session's idle limit`,
+  );
+});

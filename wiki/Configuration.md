@@ -7,7 +7,7 @@ This page covers the options most users actually need. For a full example file, 
 | Option | Default | What it does |
 | --- | --- | --- |
 | `header` | `MMM-Webuntis` | Module title shown by MagicMirror |
-| `updateInterval` | `5 * 60 * 1000` | Refresh interval in milliseconds |
+| `updateInterval` | `4 * 60 * 1000` | Refresh interval in milliseconds. The default is deliberately below the ~5 minute idle limit of the WebUntis session (see [Troubleshooting](Troubleshooting.md#how-often-the-module-logs-in)); longer intervals log in again on most fetches |
 | `backgroundRefresh` | `true` | Keep refreshing while the module is hidden (e.g. under MMM-Carousel), so showing it never causes a request |
 | `quietHours` | `null` | Optional window without any polling, e.g. `{ from: '22:00', to: '06:00' }` |
 | `displayMode` | `lessons, exams` | Which built-in plugins are enabled |
