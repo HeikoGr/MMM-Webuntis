@@ -1930,3 +1930,115 @@ test("parallel requests during a renewal share it", async () => {
   assert.equal(calls.renew, 1);
   assert.deepEqual(new Set(results.map((auth) => auth.token)), new Set(["new-token"]));
 });
+
+test("auth failures do not feed the circuit breaker, other failures still do", () => {
+  const tracker = new ApiStatusTracker({ logger: () => {} });
+  const sessionKey = "m";
+  const rejectedLogin = Object.assign(new Error("Credentials authentication failed"), { isAuthError: true });
+
+  // An expired session and a rejected login: three in one fetch (timetable retry rounds) is normal.
+  for (const error of [{ status: 401 }, rejectedLogin, { status: 401 }, { status: 401 }]) {
+    tracker.recordError(sessionKey, "timetable", error);
+  }
+
+  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), false, "the next cycle asks the endpoint again");
+  const record = tracker.getRecords(sessionKey).timetable;
+  assert.equal(record.status, 401, "the status is still recorded, so the widget shows 'unavailable'");
+  assert.equal(record.failureCount, 0);
+
+  // Server errors still open the breaker.
+  for (let i = 0; i < 3; i++) tracker.recordError(sessionKey, "exams", { status: 500 });
+  assert.equal(tracker.shouldSkip(sessionKey, "exams"), true);
+
+  // A 401 in the middle of a streak of 5xx does not reset or advance it.
+  tracker.recordError(sessionKey, "exams", { status: 401 });
+  assert.equal(tracker.getRecords(sessionKey).exams.failureCount, 3);
+});
+
+function createFailingLoginService() {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const attempts = { count: 0, fail: true };
+  service._performAuth = async () => {
+    attempts.count += 1;
+    if (attempts.fail) throw new Error("Credentials authentication failed: 200 - bad credentials");
+    return { token: "t", cookieString: "c", school: "s", server: "srv" };
+  };
+  const getAuth = () =>
+    service.getAuth({ school: "s", username: "u", password: "p", server: "srv", options: { cacheKey: "key" } });
+  return { service, attempts, getAuth };
+}
+
+test("after a failed login further requests get the same error without another login attempt", async () => {
+  const { attempts, getAuth } = createFailingLoginService();
+
+  await assert.rejects(getAuth(), /bad credentials/);
+  // The retry rounds of the endpoints of one fetch arrive within milliseconds.
+  const burst = await Promise.allSettled([getAuth(), getAuth(), getAuth(), getAuth()]);
+
+  assert.equal(attempts.count, 1, "one login attempt for the whole burst");
+  assert.ok(burst.every((result) => result.status === "rejected" && /bad credentials/.test(result.reason.message)));
+});
+
+test("the login is tried again once the cooldown has passed, and a success clears the failure", async () => {
+  const { service, attempts, getAuth } = createFailingLoginService();
+  await assert.rejects(getAuth(), /bad credentials/);
+
+  service._loginFailures.get("key").at = Date.now() - 31 * 1000;
+  attempts.fail = false;
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "t");
+  assert.equal(attempts.count, 2);
+  assert.equal(service._loginFailures.has("key"), false);
+});
+
+test("a failed login does not block another account", async () => {
+  const { service, attempts, getAuth } = createFailingLoginService();
+  await assert.rejects(getAuth(), /bad credentials/);
+
+  attempts.fail = false;
+  const other = await service.getAuth({
+    school: "s",
+    username: "x",
+    password: "p",
+    server: "srv",
+    options: { cacheKey: "other" },
+  });
+
+  assert.equal(other.token, "t");
+});
+
+test("the auth session keeps the password, so the login after a 401 is sent with real credentials", async () => {
+  const { createAuthSession } = require("../lib/authSession");
+  const { WebUntisClient } = require("../lib/webuntisClient");
+  const logins = [];
+  const authService = {
+    getAuth: async (params) => {
+      logins.push(params);
+      return { token: "t", cookieString: "c", tenantId: 1, schoolYearId: 2, personId: 3, appData: {} };
+    },
+    invalidateCache: () => true,
+  };
+  const config = { username: "parent", password: "secret", school: "s", server: "srv" };
+
+  const authSession = await createAuthSession(authService, { studentId: 5, title: "A" }, config, "parent:x");
+  assert.equal(authSession.username, "parent");
+  assert.equal(authSession.password, "secret");
+
+  // What the REST layer does on a 401: invalidate, then get fresh auth with the session's credentials.
+  const client = new WebUntisClient({ mmLog: () => {} });
+  const handlers = client._buildRestAuthHandlers({
+    authService,
+    effectiveCacheKey: "parent:x",
+    school: authSession.school,
+    server: authSession.server,
+    username: authSession.username,
+    password: authSession.password,
+    authOptions: {},
+  });
+  await handlers.getAuth();
+
+  assert.equal(logins.at(-1).username, "parent");
+  assert.equal(logins.at(-1).password, "secret");
+});
