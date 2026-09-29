@@ -1103,6 +1103,56 @@ test("a request that hits its own timeout raises an error coded ETIMEDOUT", asyn
   }
 });
 
+test("a cached login lives until the token's exp, not a fixed 14 minutes", () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const jwt = (payload) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+
+  const exp = Math.floor(Date.now() / 1000) + 3 * 60 * 60;
+  assert.equal(service._tokenExpiresAt(jwt({ exp })), exp * 1000);
+
+  // No usable exp: the assumed lifetime applies.
+  for (const token of [jwt({ person_id: 1 }), "not-a-jwt", null]) {
+    const expiresAt = service._tokenExpiresAt(token);
+    assert.ok(Math.abs(expiresAt - (Date.now() + 14 * 60 * 1000)) < 1000);
+  }
+
+  service._cacheAuthResult("key", { token: jwt({ exp }) });
+  assert.equal(service._authCache.get("key").expiresAt, exp * 1000);
+});
+
+test("a token with more than the safety buffer left is reused, one about to expire is not", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const cacheKey = "test:rest";
+  const entry = {
+    token: "t",
+    cookieString: "c",
+    tenantId: 1,
+    schoolYearId: 2,
+    personId: 3,
+    school: "s",
+    server: "srv",
+    appData: {},
+  };
+  let logins = 0;
+  service._performAuth = async () => {
+    logins += 1;
+    return entry;
+  };
+  const getAuth = () =>
+    service.getAuth({ username: "u", password: "p", school: "s", server: "srv", options: { cacheKey } });
+
+  // Five minutes left: the old 5-minute buffer forced a login here, every second fetch.
+  service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 5 * 60 * 1000 });
+  await getAuth();
+  assert.equal(logins, 0);
+
+  service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 30 * 1000 });
+  await getAuth();
+  assert.equal(logins, 1);
+});
+
 test("an empty REST target list surfaces its diagnosis as a config warning", () => {
   const { WebUntisClient } = require("../lib/webuntisClient");
   const client = new WebUntisClient({ mmLog: () => {} });
@@ -1756,4 +1806,127 @@ test("a missing demo fixture fails CONFIGURE with a config error", async () => {
   } finally {
     demoHelper.stop();
   }
+});
+
+test("a re-login logs the session it replaces out, but not one with the same cookies", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  const logouts = [];
+  service.httpClient.logout = async (server, school, cookies) => {
+    logouts.push({ server, school, cookies });
+  };
+  const entry = { token: "t", cookieString: "old", school: "s", server: "srv" };
+
+  service._authCache.set("key", { ...entry, expiresAt: Date.now() });
+  service._cacheAuthResult("key", { ...entry, cookieString: "new" });
+  assert.deepEqual(logouts, [{ server: "srv", school: "s", cookies: "old" }]);
+
+  service._cacheAuthResult("key", { ...entry, cookieString: "new" });
+  service._cacheAuthResult("fresh", { ...entry, cookieString: "first" });
+  assert.equal(logouts.length, 1, "same cookies and first logins retire nothing");
+});
+
+test("a credentials login keeps school and server in the cache, so the session can be logged out later", async () => {
+  const { AuthService } = require("../lib/webuntisClient");
+  const service = new AuthService({ logger: () => {} });
+  service.httpClient.authenticateWithCredentials = async () => ({ cookies: "c" });
+  service.httpClient.getBearerToken = async () => "t";
+  service._fetchAppData = async () => ({ tenantId: 1, schoolYearId: 2, appData: {} });
+  const logouts = [];
+  service.httpClient.logout = async (server, school, cookies) => {
+    logouts.push({ server, school, cookies });
+  };
+
+  await service._performAuthFromCredentials("key", "school-a", "user", "pw", "srv.example", {});
+  await service.logoutAll();
+
+  assert.deepEqual(logouts, [{ server: "srv.example", school: "school-a", cookies: "c" }]);
+});
+
+function createRenewalService({ renewToken }) {
+  const { AuthService } = require("../lib/webuntisClient");
+  const lines = [];
+  const service = new AuthService({ logger: (level, message) => lines.push({ level, message }) });
+  const calls = { renew: 0, login: 0 };
+  service.httpClient.getBearerToken = async () => {
+    calls.renew += 1;
+    return renewToken();
+  };
+  service._performAuth = async () => {
+    calls.login += 1;
+    return { token: "login-token", cookieString: "c", school: "s", server: "srv" };
+  };
+  const entry = {
+    token: "old",
+    cookieString: "c",
+    tenantId: 1,
+    schoolYearId: 2,
+    personId: 3,
+    school: "s",
+    server: "srv",
+    appData: { user: 1 },
+    sessionStartedAt: Date.now() - 20 * 60 * 1000,
+    expiresAt: Date.now() + 10 * 1000,
+  };
+  service._authCache.set("key", entry);
+  const getAuth = () =>
+    service.getAuth({ school: "s", username: "u", password: "p", server: "srv", options: { cacheKey: "key" } });
+  return { service, calls, lines, entry, getAuth };
+}
+
+test("an expiring token is renewed from the session cookie, keeping the cached app data, without a login", async () => {
+  const { calls, lines, getAuth, service } = createRenewalService({ renewToken: async () => "new-token" });
+
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "new-token");
+  assert.equal(auth.tenantId, 1);
+  assert.deepEqual(auth.appData, { user: 1 });
+  assert.deepEqual(calls, { renew: 1, login: 0 });
+  assert.equal(
+    lines.some((line) => line.level === "info"),
+    false,
+    "a renewal is not a login",
+  );
+  assert.equal(service._authCache.get("key").token, "new-token");
+  assert.ok(service._authCache.get("key").sessionStartedAt < Date.now() - 19 * 60 * 1000, "the session start stays");
+});
+
+test("when the cookie no longer works the renewal falls back to a real login", async () => {
+  const { calls, lines, getAuth } = createRenewalService({
+    renewToken: async () => {
+      throw new Error("Session expired");
+    },
+  });
+
+  const auth = await getAuth();
+
+  assert.equal(auth.token, "login-token");
+  assert.deepEqual(calls, { renew: 1, login: 1 });
+  assert.equal(lines.filter((line) => line.level === "info").length, 1);
+});
+
+test("a session older than six hours, or without a recorded start, gets a real login", async () => {
+  for (const change of [{ sessionStartedAt: Date.now() - 7 * 60 * 60 * 1000 }, { sessionStartedAt: undefined }]) {
+    const { calls, getAuth, service, entry } = createRenewalService({ renewToken: async () => "new-token" });
+    service._authCache.set("key", { ...entry, ...change });
+
+    await getAuth();
+
+    assert.deepEqual(calls, { renew: 0, login: 1 });
+  }
+});
+
+test("parallel requests during a renewal share it", async () => {
+  const { calls, getAuth } = createRenewalService({
+    renewToken: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return "new-token";
+    },
+  });
+
+  const results = await Promise.all([getAuth(), getAuth(), getAuth()]);
+
+  assert.equal(calls.renew, 1);
+  assert.deepEqual(new Set(results.map((auth) => auth.token)), new Set(["new-token"]));
 });
