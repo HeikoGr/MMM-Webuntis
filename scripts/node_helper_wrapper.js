@@ -346,10 +346,9 @@ const VALUE_LONG_FLAGS = new Set(["config", "student", "action"]);
 /**
  * Parse CLI arguments into flags plus an optional positional command.
  *
- * Flags and the positional command are resolved in ONE pass. A separate pre-scan for the first
- * non-dash argument used to misread flag values: in `--action auth`, `auth` was taken as the
- * positional command and later reused as the config path, so every documented `--action <x>` call
- * failed with "Config file not found: .../auth".
+ * Flags and the positional command are resolved in ONE pass: a separate pre-scan for the first
+ * non-dash argument would take flag values for the command (in `--action auth`, `auth` would become
+ * the positional command and then the config path).
  *
  * Supported forms: `--flag value`, `--flag=value`, `--flag`, `-c value`, and bundled `-vd`.
  *

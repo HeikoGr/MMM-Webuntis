@@ -294,7 +294,7 @@ Use `time.getCurrentDateContext(config)` rather than `new Date()`: it honours th
 option, which is what makes deterministic screenshots and fixture-based demo mode work.
 
 `renderContext` provides:
-- `moduleId`
+- `identifier`
 - `mode`
 - `students` (each with `student`, `context.config`, `data.*`, `state.warnings`)
 - `warnings`

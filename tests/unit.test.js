@@ -89,7 +89,7 @@ async function waitFor(condition, timeoutMs = 5000) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
-const { ApiStatusTracker, getTransientBackoffMs, extractHttpStatus } = require("../lib/apiStatusTracker");
+const { ApiStatusTracker, apiStatusKey, getTransientBackoffMs, extractHttpStatus } = require("../lib/apiStatusTracker");
 const warningUtils = require("../lib/warningUtils");
 const { getCredentialKey } = require("../lib/authSession");
 const { buildFetchFlags } = require("../lib/moduleConfig");
@@ -240,8 +240,7 @@ function parseCli(argline) {
 }
 
 test("parseCliArgs does not mistake a flag value for the positional config path", () => {
-  // Regression: `auth` used to be picked up as the positional command and reused as --config,
-  // which made every documented `--action <x>` invocation fail with "Config file not found".
+  // `auth` is the value of --action, not the positional command (which would become --config).
   const { flags, command } = parseCli("--action auth --verbose");
 
   assert.equal(flags.action, "auth");
@@ -343,8 +342,7 @@ test("buildFetchFlags derives fetch flags from active plugin capabilities", () =
 test("frontendShared exposes the namespaces backing pluginContext", () => {
   const shared = loadFrontendShared();
 
-  // Regression: pluginContext.dom/time/formatting used to be handed to plugins as empty objects
-  // while docs/PLUGINS.md documented them as provided.
+  // pluginContext.dom/time/formatting are the namespaces docs/PLUGINS.md documents, not empty objects.
   const expected = {
     dom: [
       "addFullRow",
@@ -435,50 +433,70 @@ test("frontendShared namespace members are callable", () => {
 let tracker;
 function seedApiStatus() {
   tracker = new ApiStatusTracker({ logger: () => {} });
-  return "mirror:session";
+  return apiStatusKey("mirror", { studentId: 1 });
 }
 
-function failEndpoint(sessionKey, endpoint, status, times = 1) {
+function failEndpoint(statusKey, endpoint, status, times = 1) {
   for (let i = 0; i < times; i++) {
-    tracker.recordError(sessionKey, endpoint, { status });
+    tracker.recordError(statusKey, endpoint, { status });
   }
 }
 
-function ageRecord(sessionKey, endpoint, ms) {
-  tracker._bySession.get(sessionKey)[endpoint].recordedAt -= ms;
+function ageRecord(statusKey, endpoint, ms) {
+  tracker._byKey.get(statusKey)[endpoint].recordedAt -= ms;
 }
 
+test("one student's endpoint errors do not hide the endpoint for a sibling of the same instance", () => {
+  const tracker = new ApiStatusTracker({ logger: () => {} });
+  const alice = apiStatusKey("m", { studentId: 1 });
+  const bob = apiStatusKey("m", { studentId: 2 });
+
+  tracker.recordError(alice, "absences", { status: 403 });
+  for (let i = 0; i < 3; i++) tracker.recordError(alice, "homework", { status: 500 });
+
+  assert.equal(tracker.shouldSkip(alice, "absences"), true);
+  assert.equal(tracker.shouldSkip(alice, "homework"), true);
+  assert.equal(tracker.shouldSkip(bob, "absences"), false, "a 403 of one child is not a 403 of its sibling");
+  assert.equal(tracker.shouldSkip(bob, "homework"), false);
+  assert.equal(tracker.buildSnapshot(bob).absences, null, "the sibling's snapshot carries only its own statuses");
+
+  tracker.recordStatus(apiStatusKey("other", { studentId: 1 }), "exams", 200);
+  tracker.release("m");
+  assert.deepEqual(tracker.getRecords(alice), {}, "releasing the instance drops every student's records");
+  assert.equal(tracker.getRecords(apiStatusKey("other", { studentId: 1 })).exams.status, 200, "other instances stay");
+});
+
 test("shouldSkipApi keeps retrying isolated 5xx blips", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false, "two failures must not open the breaker");
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false, "two failures must not open the breaker");
 });
 
 test("shouldSkipApi backs off after repeated 5xx and escalates the window", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 3);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true, "third failure opens the breaker");
+  failEndpoint(statusKey, "homework", 500, 3);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true, "third failure opens the breaker");
 
   // Still inside the first 15min window.
-  ageRecord(sessionKey, "homework", 10 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true);
+  ageRecord(statusKey, "homework", 10 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true);
 
   // Window elapsed - one probe is allowed through.
-  ageRecord(sessionKey, "homework", 6 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  ageRecord(statusKey, "homework", 6 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 
   // Probe fails again -> escalate to the 1h step.
-  failEndpoint(sessionKey, "homework", 500, 1);
-  ageRecord(sessionKey, "homework", 30 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), true, "30min must not clear the 1h step");
+  failEndpoint(statusKey, "homework", 500, 1);
+  ageRecord(statusKey, "homework", 30 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), true, "30min must not clear the 1h step");
 
-  ageRecord(sessionKey, "homework", 31 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "homework"), false);
+  ageRecord(statusKey, "homework", 31 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "homework"), false);
 });
 
 test("getTransientBackoffMs caps the escalation", () => {
@@ -490,44 +508,44 @@ test("getTransientBackoffMs caps the escalation", () => {
 });
 
 test("recordApiStatusFromError counts only consecutive failures", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "homework", 500, 2);
-  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 2);
+  failEndpoint(statusKey, "homework", 500, 2);
+  assert.equal(tracker.getRecords(statusKey).homework.failureCount, 2);
 
   // A success in between must restart the streak.
-  tracker.recordStatus(sessionKey, "homework", 200);
-  assert.equal(typeof tracker.getRecords(sessionKey).homework.lastSuccessAt, "number");
-  failEndpoint(sessionKey, "homework", 500, 1);
-  assert.equal(tracker.getRecords(sessionKey).homework.failureCount, 1);
+  tracker.recordStatus(statusKey, "homework", 200);
+  assert.equal(typeof tracker.getRecords(statusKey).homework.lastSuccessAt, "number");
+  failEndpoint(statusKey, "homework", 500, 1);
+  assert.equal(tracker.getRecords(statusKey).homework.failureCount, 1);
   assert.equal(
-    typeof tracker.getRecords(sessionKey).homework.lastSuccessAt,
+    typeof tracker.getRecords(statusKey).homework.lastSuccessAt,
     "number",
     "last success survives later failures",
   );
 });
 
 test("shouldSkipApi still treats permanent errors as permanent", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
   // A single 403 skips immediately - no threshold, unlike transient errors.
-  failEndpoint(sessionKey, "timetable", 403, 1);
-  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), true);
+  failEndpoint(statusKey, "timetable", 403, 1);
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), true);
 
   // ...but is re-probed after the 24h license window.
-  ageRecord(sessionKey, "timetable", 25 * 60 * 60 * 1000);
-  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), false);
-  assert.equal("timetable" in tracker.getRecords(sessionKey), false, "expired record is cleared");
+  ageRecord(statusKey, "timetable", 25 * 60 * 60 * 1000);
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), false);
+  assert.equal("timetable" in tracker.getRecords(statusKey), false, "expired record is cleared");
 });
 
 test("shouldSkipApi never skips an endpoint whose last call succeeded", () => {
-  const sessionKey = seedApiStatus();
+  const statusKey = seedApiStatus();
 
-  failEndpoint(sessionKey, "exams", 500, 5);
-  assert.equal(tracker.shouldSkip(sessionKey, "exams"), true);
+  failEndpoint(statusKey, "exams", 500, 5);
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), true);
 
-  tracker.recordStatus(sessionKey, "exams", 200);
-  assert.equal(tracker.shouldSkip(sessionKey, "exams"), false);
+  tracker.recordStatus(statusKey, "exams", 200);
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), false);
 });
 
 test("getCurrentDateContext keeps wall clock time while overriding debug date", () => {
@@ -1151,7 +1169,7 @@ test("a token with more than the safety buffer left is reused, one about to expi
   const getAuth = () =>
     service.getAuth({ username: "u", password: "p", school: "s", server: "srv", options: { cacheKey } });
 
-  // Five minutes left: the old 5-minute buffer forced a login here, every second fetch.
+  // Five minutes left is plenty: the token is reused, no login.
   service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 5 * 60 * 1000 });
   await getAuth();
   assert.equal(logins, 0);
@@ -1420,7 +1438,7 @@ test("validateConfig warns about invalid excludeLessons/addLessons entries witho
 test("DATA_UPDATE payload applies excludeLessons and addLessons (student overrides module)", () => {
   const bundle = (student) => ({
     identifier: "mod1",
-    sessionKey: "mod1:sess1",
+    statusKey: "mod1:sess1",
     student,
     config: { excludeLessons: ["Förder"], addLessons: [] },
     compactHolidays: [],
@@ -1470,7 +1488,7 @@ test("excludeLessons also hides homework and exams of the excluded subjects", ()
   const payload = mapBundleToMmmPayload(
     {
       identifier: "mod1",
-      sessionKey: "mod1:sess1",
+      statusKey: "mod1:sess1",
       student: { title: "A" },
       config: { excludeLessons: ["Förder"] },
       compactHolidays: [],
@@ -1515,7 +1533,7 @@ test("addLessons stops before the exclusive timetable end date", () => {
   const payload = mapBundleToMmmPayload(
     {
       identifier: "mod1",
-      sessionKey: "mod1:sess1",
+      statusKey: "mod1:sess1",
       student: { title: "A", addLessons: [{ weekday: [1, 5], startTime: "15:00", endTime: "16:00", subject: "Chor" }] },
       config: {},
       compactHolidays: [],
@@ -1944,26 +1962,26 @@ test("parallel requests during a renewal share it", async () => {
 
 test("auth failures do not feed the circuit breaker, other failures still do", () => {
   const tracker = new ApiStatusTracker({ logger: () => {} });
-  const sessionKey = "m";
+  const statusKey = "m";
   const rejectedLogin = Object.assign(new Error("Credentials authentication failed"), { isAuthError: true });
 
   // An expired session and a rejected login: three in one fetch (timetable retry rounds) is normal.
   for (const error of [{ status: 401 }, rejectedLogin, { status: 401 }, { status: 401 }]) {
-    tracker.recordError(sessionKey, "timetable", error);
+    tracker.recordError(statusKey, "timetable", error);
   }
 
-  assert.equal(tracker.shouldSkip(sessionKey, "timetable"), false, "the next cycle asks the endpoint again");
-  const record = tracker.getRecords(sessionKey).timetable;
+  assert.equal(tracker.shouldSkip(statusKey, "timetable"), false, "the next cycle asks the endpoint again");
+  const record = tracker.getRecords(statusKey).timetable;
   assert.equal(record.status, 401, "the status is still recorded, so the widget shows 'unavailable'");
   assert.equal(record.failureCount, 0);
 
   // Server errors still open the breaker.
-  for (let i = 0; i < 3; i++) tracker.recordError(sessionKey, "exams", { status: 500 });
-  assert.equal(tracker.shouldSkip(sessionKey, "exams"), true);
+  for (let i = 0; i < 3; i++) tracker.recordError(statusKey, "exams", { status: 500 });
+  assert.equal(tracker.shouldSkip(statusKey, "exams"), true);
 
   // A 401 in the middle of a streak of 5xx does not reset or advance it.
-  tracker.recordError(sessionKey, "exams", { status: 401 });
-  assert.equal(tracker.getRecords(sessionKey).exams.failureCount, 3);
+  tracker.recordError(statusKey, "exams", { status: 401 });
+  assert.equal(tracker.getRecords(statusKey).exams.failureCount, 3);
 });
 
 function createFailingLoginService() {

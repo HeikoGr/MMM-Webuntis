@@ -88,10 +88,10 @@ Responsibilities:
 - validate and normalize module config
 - discover plugin manifests and backend entrypoints
 - normalize legacy `displayMode` and namespaced widget config into canonical `plugins.<id>` config
-- manage session identifiers and lifecycle
+- hand the config to the mmm-shared instance hub, which keeps one lifecycle (schedule, pause, retry backoff) per instance
 - derive fetch capabilities from active plugins
 - coordinate fetches per credential group; one process-wide `AuthService` shares a WebUntis session
-  between every module instance and browser session that uses the same account
+  between every module instance that uses the same account
 - compose WebUntis core results with the MMM payload adapter
 - convert backend results into MagicMirror socket notifications
 

@@ -46,7 +46,7 @@ function createGroupHelper(fetchStudent) {
   return { helper, config };
 }
 
-test("the first student of an account runs alone, the others fetch side by side in configuration order", async () => {
+test("the students of an account fetch side by side, at most three at a time, in configuration order", async () => {
   const events = [];
   let active = 0;
   let maxActive = 0;
@@ -69,12 +69,31 @@ test("the first student of an account runs alone, the others fetch side by side 
       ["Kid 1", "Kid 2", "Kid 3", "Kid 4", "Kid 5"],
     );
     assert.equal(failed, 0);
-    assert.deepEqual(
-      events.slice(0, 2),
-      ["start Kid 1", "end Kid 1"],
-      "the first student checks login and token alone",
-    );
+    assert.deepEqual(events.slice(0, 3), ["start Kid 1", "start Kid 2", "start Kid 3"], "no student waits for another");
     assert.equal(maxActive, 3, "at most three students at a time");
+  } finally {
+    helper.stop();
+  }
+});
+
+test("two students of an account fetch at the same time", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const { helper, config } = createGroupHelper(async (student) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await delay(20);
+    active -= 1;
+    return { title: student.title };
+  });
+
+  try {
+    const { payloads } = await helper._processGroup("parent:x", config.students.slice(0, 2), "m", config);
+    assert.deepEqual(
+      payloads.map((payload) => payload.title),
+      ["Kid 1", "Kid 2"],
+    );
+    assert.equal(maxActive, 2);
   } finally {
     helper.stop();
   }
