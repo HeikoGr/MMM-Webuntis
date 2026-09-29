@@ -57,6 +57,8 @@ test("without a MagicMirror config the browser language is used", () => {
 
 test("instances in one window share the plugin translation requests and load the languages side by side", async () => {
   const requested = [];
+  let inFlight = 0;
+  let peakInFlight = 0;
   const answers = {
     "en.json": { greeting: "Hello", only_en: "en" },
     "de.json": { greeting: "Hallo" },
@@ -71,7 +73,10 @@ test("instances in one window share the plugin translation requests and load the
     navigator: { language: "de-DE" },
     fetch: async (url, options) => {
       requested.push({ url, options });
+      inFlight += 1;
+      peakInFlight = Math.max(peakInFlight, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 10));
+      inFlight -= 1;
       const body = answers[/([a-z-]+\.json)/i.exec(url)?.[1]];
       return body ? { ok: true, status: 200, json: async () => body } : { ok: false, status: 404 };
     },
@@ -90,11 +95,10 @@ test("instances in one window share the plugin translation requests and load the
   const first = makeInstance();
   const second = makeInstance();
 
-  const started = Date.now();
   await Promise.all([first._loadPluginTranslations(entry), second._loadPluginTranslations(entry)]);
 
   assert.equal(requested.length, 2, "one request per language, not per instance");
-  assert.ok(Date.now() - started < 40, "the two languages are fetched side by side");
+  assert.equal(peakInFlight, 2, "the two languages are fetched side by side, not one after the other");
   assert.equal(requested[0].options, undefined, "the HTTP cache stays enabled");
   assert.match(requested[0].url, /\?v=/, "the module version keeps stale texts out");
   for (const instance of [first, second]) {

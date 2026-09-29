@@ -81,6 +81,14 @@ function loadNodeHelper() {
 }
 
 const helper = loadNodeHelper();
+
+/** Poll a condition instead of sleeping a fixed time: how long async work takes depends on the machine. */
+async function waitFor(condition, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
 const { ApiStatusTracker, getTransientBackoffMs, extractHttpStatus } = require("../lib/apiStatusTracker");
 const warningUtils = require("../lib/warningUtils");
 const { getCredentialKey } = require("../lib/authSession");
@@ -1590,7 +1598,7 @@ test("demo mode serves the fixtures through CONFIGURE and DATA without logging i
         },
       },
     });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => emitted.some((event) => event.action === "DATA"));
 
     assert.deepEqual(
       emitted.map((event) => event.action),
@@ -1733,7 +1741,10 @@ test("each instance logs at its own logLevel, not the one of the last CONFIGURE"
   } finally {
     Module._load = originalLoad;
   }
-  logHelper.sendSocketNotification = () => {};
+  const dataEvents = [];
+  logHelper.sendSocketNotification = (_name, payload) => {
+    if (payload?.action === "DATA") dataEvents.push(payload);
+  };
 
   const configure = (id, logLevel) =>
     logHelper.socketNotificationReceived("MMM-Webuntis_REQUEST", {
@@ -1753,7 +1764,7 @@ test("each instance logs at its own logLevel, not the one of the last CONFIGURE"
   try {
     configure("verbose", "debug");
     configure("quiet", "error");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => dataEvents.length >= 2);
 
     const debugFor = (id) => lines.filter((line) => line.level === "debug" && line.message.includes(`id=${id}`));
     assert.ok(debugFor("verbose").length > 0, "the debug instance keeps its debug lines");
