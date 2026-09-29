@@ -109,7 +109,7 @@
       "label": "pm2: restart & clean",
       "type": "shell",
       "command": "./scripts/require-devcontainer.sh",
-      "args": ["bash", "-lc", "pm2 stop all && pm2 flush && pm2 start all"],
+      "args": ["bash", "-lc", "pm2 flush && pm2 restart all"],
       "presentation": {
         "echo": true,
         "reveal": "always",
