@@ -183,7 +183,7 @@ function getModuleRootElement(ctx) {
     const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
 
     return {
-      identifier: `${renderContext?.moduleId || "mmm-webuntis"}-grid-plugin`,
+      identifier: `${renderContext?.identifier || "mmm-webuntis"}-grid-plugin`,
       config: effectiveConfig,
       studentConfig: effectiveConfig,
       holidayMapByStudent: {

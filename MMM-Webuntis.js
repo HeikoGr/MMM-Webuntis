@@ -517,9 +517,8 @@ Module.register("MMM-Webuntis", {
    * Build the context object handed to a frontend plugin's create().
    *
    * The dom/time/formatting/shared namespaces are forwarded from the shared frontend API
-   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. They used to be empty
-   * placeholders, which is why plugins reach for the global directly; new plugin code should use
-   * `pluginContext.*` instead. See docs/PLUGINS.md.
+   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. Some plugins still reach for
+   * the global directly; new plugin code should use `pluginContext.*`. See docs/PLUGINS.md.
    *
    * @param {Object} pluginEntry - Registry entry for the plugin
    * @returns {Object} Plugin context
@@ -588,7 +587,7 @@ Module.register("MMM-Webuntis", {
     }
 
     const renderContext = {
-      moduleId: this.identifier,
+      identifier: this.identifier,
       mode: this.config?.mode || "verbose",
       students: this._buildPluginStudentRuntimeSlices(studentTitles),
       warnings: this._getRuntimeWarnings(),
@@ -1246,23 +1245,10 @@ Module.register("MMM-Webuntis", {
     this.transport = this.shared.createTransport({
       moduleName: "MMM-Webuntis",
       identifier: this.identifier,
-      instanceId: this.identifier,
       sendSocketNotification: this.sendSocketNotification.bind(this),
     });
     this.notifications = this.transport.notifications;
 
-    // Multi-instance support via explicit identifiers.
-    // For multiple MMM-Webuntis instances, you MUST add unique 'identifier' fields in config.js:
-    // { module: 'MMM-Webuntis', identifier: 'student_alice', position: '...', config: { ... } }
-    // Without explicit identifiers, MagicMirror will auto-assign them (MMM-Webuntis_0, MMM-Webuntis_1, etc)
-    if (this.identifier) {
-      this._log("debug", `[start] Using explicit identifier from config: ${this.identifier}`);
-    } else {
-      this._log(
-        "warn",
-        '[start] No explicit identifier set. For multiple instances, add "identifier" to module config in config.js',
-      );
-    }
     this._log("info", `[start] identifier="${this.identifier}"`);
 
     try {

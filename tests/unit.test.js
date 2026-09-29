@@ -240,8 +240,7 @@ function parseCli(argline) {
 }
 
 test("parseCliArgs does not mistake a flag value for the positional config path", () => {
-  // Regression: `auth` used to be picked up as the positional command and reused as --config,
-  // which made every documented `--action <x>` invocation fail with "Config file not found".
+  // `auth` is the value of --action, not the positional command (which would become --config).
   const { flags, command } = parseCli("--action auth --verbose");
 
   assert.equal(flags.action, "auth");
@@ -343,8 +342,7 @@ test("buildFetchFlags derives fetch flags from active plugin capabilities", () =
 test("frontendShared exposes the namespaces backing pluginContext", () => {
   const shared = loadFrontendShared();
 
-  // Regression: pluginContext.dom/time/formatting used to be handed to plugins as empty objects
-  // while docs/PLUGINS.md documented them as provided.
+  // pluginContext.dom/time/formatting are the namespaces docs/PLUGINS.md documents, not empty objects.
   const expected = {
     dom: [
       "addFullRow",
@@ -1171,7 +1169,7 @@ test("a token with more than the safety buffer left is reused, one about to expi
   const getAuth = () =>
     service.getAuth({ username: "u", password: "p", school: "s", server: "srv", options: { cacheKey } });
 
-  // Five minutes left: the old 5-minute buffer forced a login here, every second fetch.
+  // Five minutes left is plenty: the token is reused, no login.
   service._authCache.set(cacheKey, { ...entry, expiresAt: Date.now() + 5 * 60 * 1000 });
   await getAuth();
   assert.equal(logins, 0);

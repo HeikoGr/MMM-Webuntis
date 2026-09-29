@@ -44,8 +44,8 @@ Ziel ist ein robustes Feed-System, das tatsächlich stattfindende Stunden und Kl
   - kleiner interner HTTP-Server auf konfigurierbarem Port, falls eine getrennte externe Bereitstellung spaeter ausdruecklich gewuenscht ist
 
 4. Feed-Lebenszyklus und Caching designen
-- Definiere Feed-Cache pro sessionKey + student + feedType:
-  - Schlüssel: identifier, sessionId, studentId/studentTitle, feedType
+- Definiere Feed-Cache pro identifier + student + feedType:
+  - Schlüssel: identifier, studentId/studentTitle, feedType
   - Update: bei erfolgreichem Fetch und erfolgreicher Payload-Aufbereitung
   - Read: HTTP-Endpunkt liefert zuletzt bekannte Version
 - Definiere Stale-Verhalten:
