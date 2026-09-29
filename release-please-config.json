@@ -18,8 +18,8 @@
         { "type": "docs", "section": "📚 Documentation" },
         { "type": "test", "section": "🧪 Testing" },
         { "type": "build", "section": "📦 Build & Dependencies" },
-        { "type": "ci", "section": "🔧 Tooling", "hidden": true },
-        { "type": "chore", "section": "🔧 Maintenance", "hidden": true },
+        { "type": "ci", "section": "🔧 Tooling" },
+        { "type": "chore", "section": "🔧 Maintenance" },
         { "type": "revert", "section": "⏪ Reverts" }
       ]
     }
