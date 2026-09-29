@@ -10,22 +10,24 @@
 
 **Frontend → Backend Socket Flow**:
 ```
-MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="CONFIGURE")
-  → node_helper.js:socketNotificationReceived() → _handleInitModule()
-    → moduleConfig.normalizeModuleConfig() + validateNormalizedConfig()
-    → socketNotification("MMM-Webuntis_EVENT", action="MODULE_READY") to FE (immediately)
-    → studentDiscovery.ensureStudentsFromAppData() (optional, may log in)
-    → _handleFetchData() auto-runs first fetch (no FE action="REFRESH" needed)
-      → orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
-      → buildUpdatePayload() → socketNotification("MMM-Webuntis_EVENT", action="DATA_UPDATE", data)
-  → MMM-Webuntis.js:socketNotificationReceived() → widgets render
+MMM-Webuntis.js (start) → SESSION_STATE, then CONFIGURE (config once; no REFRESH, no sessionId)
+  → node_helper.js → mmm-shared instance hub (one lifecycle per identifier, backend owns the cadence)
+    → prepareConfig(): normalizeModuleConfig() + validateNormalizedConfig()
+        invalid → CONFIG_INVALID; other credentials than the running instance → CONFIG_REJECTED
+    → EVENT CONFIGURED (warnings + plugin registry) to FE, before the first fetch
+    → fetchInstance() on schedule (first one immediately, then updateInterval, backoff after failures)
+      → studentDiscovery.ensureStudentsFromAppData() (parent account, may log in; retried each fetch)
+      → per credential group: orchestrateFetch() → authService.getAuth() → webuntisApiService.callWebUntisAPI()
+      → returns { students: [payload per student], allFailed, warnings }
+    → EVENT DATA to FE (also FETCH_FAILED); a new socket connection gets INIT_REQUIRED
+  → MMM-Webuntis.js:socketNotificationReceived() → _handleData() → one render per DATA
 ```
 
 **Critical Services** (ordered by importance):
-1. **authService.js** - Auth + 14min token caching with 5min buffer (QR code, credentials, parent accounts); ONE instance process-wide, cache keyed by credential fingerprint (`node_helper._getCredentialKey()`), so every module instance using the same account shares a single WebUntis session
+1. **authService.js** - Auth + token caching until the JWT `exp` (14min fallback) with a 60s buffer (QR code, credentials, parent accounts); ONE instance process-wide, cache keyed by credential fingerprint (`node_helper._getCredentialKey()`), so every module instance using the same account shares a single WebUntis session
 2. **webuntisApiService.js** - REST endpoint wrappers (getTimetable, getExams, getHomework, etc.)
 3. **dataFetchOrchestrator.js** - Timetable-first + parallel fetching (prevents silent token failures)
-4. **apiStatusTracker.js** - API status tracking per session (skips permanent errors 403/404/410, circuit breaker); `node_helper.js` is only the socket adapter
+4. **apiStatusTracker.js** - API status tracking per instance (skips permanent errors 403/404/410, circuit breaker); `node_helper.js` is only the socket adapter
 5. **dataOrchestration.js** - Data normalization (timetable→lessons, dates→YYYYMMDD integers)
 
 **REST API Strategy**: Migrate away from deprecated JSON-RPC. Use REST for all data; JSON-RPC only for auth/OTP.
@@ -34,10 +36,12 @@ MMM-Webuntis.js (start) → socketNotification("MMM-Webuntis_REQUEST", action="C
 
 ### Authentication Pattern
 - **Always** use `authService.getAuth()` - never call httpClient or fetch directly
-- `getAuth()` caches tokens for 14 minutes with **5-minute buffer** (prevents silent API failures from expired tokens)
+- `getAuth()` caches tokens until the JWT `exp` (14 minutes when it has none) with a **60-second buffer**; a fetch takes seconds, and silent empty answers of an expired token are caught by timetable-first
+- A re-login logs the session it replaces out in the background (`_retireReplacedSession`), so sessions do not pile up on the server
 - QR code auth: extract `person_id` from JWT token via `extractPersonIdFromToken()`
 - Parent account: fetches app/data to auto-discover student IDs
 - On token expiry: `onAuthError` callback invalidates cache automatically
+- A failed login answers all requests for the same account with its error for 30 s (`LOGIN_FAILURE_COOLDOWN_MS`); several endpoints of one fetch otherwise each start a login. Auth failures (`401`) do not count toward the `apiStatusTracker` circuit breaker
 - `fetchClient` never follows redirects: `302 → index.do`, a `200 {"state":"LOGIN_ERROR"}` body or HTML are thrown as `SESSION_EXPIRED` (auth error) — never treat them as empty data
 - Rejected logins arrive as HTTP 200 (JSON-RPC error body); use `errorHandler.isAuthError()` before looking at numeric statuses, and never record such an error as status 200
 - Race condition protection: `_forceReauth` Set is cleared after use, `_pendingAuth` Map coordinates parallel requests
@@ -91,7 +95,7 @@ This was NOT always the case. Previously it whitelisted explicit field names, ca
 webuntisApiService.js#mapPositionsToFields()  – adds field to lesson object
   → mmm-adapter/mmmPayloadMapper.js#schemas.lesson – declares field for compaction
     → mmm-adapter/mmmPayloadMapper.js#compactArray() – compacts lessons
-      → socket DATA_UPDATE payload            – field present in data.lessons[]
+      → DATA payload (students[])             – field present in data.lessons[]
         → plugins/grid/frontend.js#extractDayLessons() – spread: auto-forwarded ✅
             → buildLessonContent()                 – field available on `lesson`
 ```
@@ -126,16 +130,15 @@ this._log('warn', '[feature] Warning:', error);
 ## File Organization (Updated: `lib/webuntis/` contains internal WebUntis API logic)
 
 **Essential files** (most editing happens here):
-- `node_helper.js` (~600 LOC) - Socket protocol, session lifecycle, per-credential fetch loop - nothing else; adapter logic lives in the `lib/` modules below
-- `lib/mmm-shared/` - Git submodule shared by all of the author's modules (`createTransport`, `createLogger`, `createLifecycle`). Do not edit it here. `MMM-Webuntis.js` `_createLifecycle()` wires `createLifecycle` for the refresh timer, suspend/resume, deferred init and `SESSION_STATE`; do not add own timers or visibility logic next to it
+- `node_helper.js` (~450 LOC) - wires the mmm-shared instance hub, `prepareConfig()`, `fetchInstance()` with the per-credential fetch loop, demo mode - nothing else; adapter logic lives in the `lib/` modules below
+- `lib/mmm-shared/` - Git submodule shared by all of the author's modules (`createTransport`, `createLogger`, `createLifecycle`). Do not edit it here. `MMM-Webuntis.js` `_createLifecycle()` wires `createLifecycle` for suspend/resume, render gating, `SESSION_STATE` and the day-change tick (the fetch schedule lives in the backend hub, `updateInterval: 0` here); do not add own timers or visibility logic next to it
 - `lib/moduleConfig.js` - Legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
-- `lib/sessionRegistry.js` - Frontend session configs, paused flags, TTL eviction
-- `lib/apiStatusTracker.js` - Per-session endpoint status (`lastSuccessAt`), 24h permanent-error skip, circuit breaker
+- `lib/apiStatusTracker.js` - Per-instance endpoint status (`lastSuccessAt`), 24h permanent-error skip, circuit breaker
 - `lib/authSession.js` - Credential fingerprint (`getCredentialKey`), auth session creation, parent auth
 - `lib/studentDiscovery.js` - Parent-account student auto-discovery
 - `lib/warningUtils.js` - Warning classification (`classifyWarningMetaFromError`), group collectors, payload merge
 - `lib/webuntisClient.js` - Public WebUntis entry point for backend consumers
-- `lib/webuntis/authService.js` - Auth, QR code, token caching (14min TTL, 5min buffer)
+- `lib/webuntis/authService.js` - Auth, QR code, token caching (JWT `exp`, 60s buffer)
 - `lib/webuntis/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
 - `lib/webuntis/restClient.js` - REST wrapper (headers, error handling, retry, returns HTTP status)
 - `lib/webuntis/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
@@ -209,7 +212,9 @@ Boundary rule:
 
 ### Debugger: Node & Chrome
 
-- The devcontainer's `entrypoint.sh` starts PM2 with `--node-args="--inspect-brk"` and `--watch` by default, enabling live debugging and auto-restart on file changes.
+- The devcontainer's `entrypoint.sh` runs `exec pm2-runtime start /opt/magic_mirror/ecosystem.config.js`: `watch: false`, no inspector. The mirror does **not** restart on file changes; use `pm2 restart magicmirror` after backend changes. To attach a debugger, restart it with `pm2 restart magicmirror --node-args="--inspect=0.0.0.0:9229"` (a plain `pm2 restart magicmirror` turns the inspector off again).
+
+- **Never `pm2 stop`, `pm2 delete` or `pm2 kill`:** `pm2-runtime` is PID 1 of the container, so stopping the app ends the whole devcontainer (and every background process in it). Only `pm2 restart magicmirror`. To keep the mirror quiet for a measurement, freeze it (`kill -STOP` its node process, `kill -CONT` afterwards) or use a separate test mirror on another port.
 
 - VS Code debugging is already configured in `.vscode/launch.json` with two predefined configurations:
   - **Attach to node process** (port 9229) — Debug the backend Node.js process via `node_helper.js`.
@@ -225,7 +230,7 @@ Boundary rule:
 - VS Code automatically handles port forwarding from the devcontainer — no manual port configuration needed.
 
 - Notes:
-  - `--inspect-brk` pauses execution until a debugger attaches; use `--inspect` (no `-brk`) if you do not want this behavior.
+  - `--inspect-brk` pauses execution until a debugger attaches; use `--inspect` (no `-brk`) if you do not want this behavior. The mirror starts without an inspector; enable it as described above before starting the "Attach to node process" configuration.
   - Debug breakpoints on Node will pause the entire process — ideal for step-through debugging, but can slow interactive testing.
   - Use `console.log()` / `logger()` for non-blocking debugging, especially during development cycles.
 

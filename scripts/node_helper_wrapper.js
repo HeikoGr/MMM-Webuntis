@@ -74,16 +74,11 @@ function setLogLevel() {
   void 0;
 }
 
-const capturedPayloads = new Map();
-
 const NodeHelper = {
   create: (moduleImpl) => ({
     ...moduleImpl,
     sendSocketNotification: (name, payload) => {
-      if (name === "MMM-Webuntis_EVENT" && payload?.action === "DATA_UPDATE" && payload?.data?.id) {
-        capturedPayloads.set(payload.data.id, payload.data);
-      }
-      Log.debug(`[sendSocketNotification] ${name} for ${payload?.data?.id || payload?.id || "unknown"}`);
+      Log.debug(`[sendSocketNotification] ${name} ${payload?.action || ""} for ${payload?.identifier || "unknown"}`);
     },
   }),
 };
@@ -152,7 +147,6 @@ async function cmdFetch(flags) {
   const studentIndexFlag = flags.student || flags.s;
   const verbose = flags.verbose || flags.v;
   const debugApi = flags["debug-api"] || flags.x;
-  const allStudents = flags.all || flags.a_all;
 
   if (verbose) setLogLevel("debug");
 
@@ -187,72 +181,46 @@ async function cmdFetch(flags) {
 
       try {
         const cliIdentifier = `cli-wrapper-${moduleIdx}`;
-        const cliSessionId = `cli-session-${moduleIdx}`;
-        const initPayload = {
-          ...moduleEntry.config,
-          id: cliIdentifier,
-          sessionId: cliSessionId,
-          debugApi: debugApi,
-        };
+        nodeHelper._ensureRuntime();
 
-        await nodeHelper._handleInitModule(initPayload);
-
-        if (!nodeHelper._sessions.configsByIdentifier.has(cliIdentifier)) {
-          throw new Error("Config initialization failed - no config stored after _handleInitModule");
-        }
-
-        const moduleConfig = nodeHelper._sessions.configsByIdentifier.get(cliIdentifier);
-
-        const widgetNamespaces = ["lessons", "grid", "exams", "homework", "absences", "messagesofday"];
-        if (Array.isArray(moduleConfig.students)) {
-          moduleConfig.students.forEach((stu) => {
-            widgetNamespaces.forEach((widget) => {
-              if (!stu[widget] && moduleConfig[widget]) {
-                stu[widget] = { ...moduleConfig[widget] };
-              }
-            });
+        let moduleConfig;
+        try {
+          moduleConfig = nodeHelper.prepareConfig({ ...moduleEntry.config, id: cliIdentifier, debugApi: debugApi });
+        } catch (err) {
+          (err.details?.errors || [err.message]).forEach((message) => {
+            Log.error(`  ✗ Config: ${message}`);
           });
+          throw new Error("Config initialization failed", { cause: err });
         }
 
-        let studentIndices = [];
+        // Student discovery for parent accounts runs inside the fetch, so the students are known after it.
+        const result = await nodeHelper.fetchInstance({
+          identifier: cliIdentifier,
+          config: moduleConfig,
+          reason: "cli",
+        });
+        result.warnings.forEach((warning) => {
+          Log.warn(`  ⚠️ ${warning}`);
+        });
+
+        const studentPayloads = result.students;
+        Log.wrapper_info(`  📋 Configuration loaded with ${studentPayloads.length} student(s)`);
+        if (studentPayloads.length === 0) {
+          Log.warn("  ⚠️ No student data.");
+          failureCount++;
+          continue;
+        }
+
+        let studentIndices = studentPayloads.map((_, i) => i);
         if (studentIndexFlag !== undefined && studentIndexFlag !== null && studentIndexFlag !== "") {
-          const idx = parseInt(studentIndexFlag, 10);
-          studentIndices = [idx];
-        } else if (allStudents) {
-          studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
-        } else {
-          studentIndices = Array.from({ length: moduleConfig.students.length }, (_, i) => i);
+          studentIndices = [parseInt(studentIndexFlag, 10)];
         }
-
-        Log.wrapper_info(`  📋 Configuration loaded with ${moduleConfig.students.length} student(s)`);
         Log.wrapper_info(`  Testing student(s): [${studentIndices.join(", ")}]`);
-
-        const fetchPayload = {
-          ...moduleConfig,
-          id: cliIdentifier,
-          sessionId: cliSessionId,
-        };
-        await nodeHelper._handleFetchData(fetchPayload);
 
         for (const idx of studentIndices) {
           try {
-            const stu = moduleConfig.students[idx] || {};
-            const title = stu.title || `Student ${idx}`;
-
-            const payload = capturedPayloads.get(cliIdentifier);
-            if (!payload) {
-              Log.warn(`  ⚠️ No payload captured for ${title}.`);
-              failureCount++;
-              continue;
-            }
-
-            let studentData = payload;
-
-            if (Array.isArray(payload.students)) {
-              studentData = payload.students.find((s) => s.title === title || s.studentId === stu.studentId);
-            } else if (payload.title !== title && moduleConfig.students.length > 1) {
-              continue;
-            }
+            const studentData = studentPayloads[idx];
+            const title = studentData?.context?.student?.title || `Student ${idx}`;
 
             if (!studentData) {
               Log.warn(`  ⚠️ No data for student ${title}.`);
@@ -301,6 +269,8 @@ async function cmdFetch(flags) {
         failureCount++;
       }
     }
+
+    nodeHelper.stop();
 
     Log.wrapper_info(
       `\n✓ Summary: ${successCount} successful, ${failureCount} failed, ${disabledCount} disabled (skipped)`,

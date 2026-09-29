@@ -109,7 +109,6 @@ Required fields:
 - `moduleVersion`
 - `generatedAt`
 - `moduleId`
-- `sessionId`
 
 Optional technical additions:
 - `apiVersion` for a human-readable transport label such as `"v3"`
