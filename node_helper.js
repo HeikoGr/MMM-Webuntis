@@ -41,6 +41,25 @@ const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
 
 const LOG_LEVEL_WEIGHTS = Object.freeze({ none: -1, error: 0, warn: 1, info: 2, debug: 3 });
 
+// Students of one account fetched at the same time (the first one runs alone, see _processGroup).
+const STUDENT_FETCH_CONCURRENCY = 3;
+
+/**
+ * map() with an async callback and at most `limit` calls in flight; results keep the input order.
+ */
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 /**
  * MagicMirror adapter for MMM-Webuntis.
  *
@@ -324,12 +343,9 @@ module.exports = NodeHelper.create({
     const { fetchTimegrid: wantsHolidays } = buildFetchFlags(config, this._pluginHost);
     const compactHolidays = wantsHolidays ? extractHolidaysFromAppData(authSession.appData) : [];
 
-    const payloads = [];
-    let failed = 0;
-    for (const student of students) {
-      let payload;
+    const fetchOne = async (student) => {
       try {
-        payload = await this._fetchStudentPayload({
+        const payload = await this._fetchStudentPayload({
           student,
           authSession,
           identifier,
@@ -338,12 +354,20 @@ module.exports = NodeHelper.create({
           config,
           warningsState,
         });
+        return { payload, failed: 0 };
       } catch (err) {
-        failed += 1;
-        payload = this._buildStudentFetchFailurePayload({ err, student, identifier, config, warningsState });
+        const payload = this._buildStudentFetchFailurePayload({ err, student, identifier, config, warningsState });
+        return { payload, failed: 1 };
       }
-      if (payload) payloads.push(payload);
-    }
+    };
+
+    // The first student checks login and token (timetable first); the others share that
+    // authenticated session and fetch side by side, so N students cost about as many round trips
+    // as one. Payloads stay in configuration order.
+    const [first, ...others] = students;
+    const results = [await fetchOne(first), ...(await mapWithConcurrency(others, STUDENT_FETCH_CONCURRENCY, fetchOne))];
+    const payloads = results.map((result) => result.payload).filter(Boolean);
+    const failed = results.reduce((sum, result) => sum + result.failed, 0);
     return { payloads, failed };
   },
 
