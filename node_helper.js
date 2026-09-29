@@ -10,7 +10,7 @@ const {
   convertRestErrorToWarning,
   buildFetchPlan,
 } = require("./lib/webuntisClient");
-const { ApiStatusTracker } = require("./lib/apiStatusTracker");
+const { ApiStatusTracker, apiStatusKey } = require("./lib/apiStatusTracker");
 const {
   buildEffectiveStudentConfig,
   buildFetchFlags,
@@ -395,7 +395,7 @@ module.exports = NodeHelper.create({
         student,
         config,
         apiStatus: null,
-        apiRecords: this._apiStatus.getRecords(identifier),
+        apiRecords: this._apiStatus.getRecords(apiStatusKey(identifier, student)),
         warnings: warningsState.groupWarnings,
         warningMetaByMessage: warningsState.groupWarningMetaByMessage,
         warningFallbackMeta: { kind: "generic", severity: "warning" },
@@ -423,7 +423,7 @@ module.exports = NodeHelper.create({
       compactHolidays,
       config,
       plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService }),
-      sessionKey: identifier,
+      statusKey: apiStatusKey(identifier, student),
       currentFetchWarnings: new Set(),
       mmLog: log,
     });
@@ -456,8 +456,8 @@ module.exports = NodeHelper.create({
       identifier,
       student,
       config,
-      apiStatus: this._apiStatus.buildSnapshot(identifier),
-      apiRecords: this._apiStatus.getRecords(identifier),
+      apiStatus: this._apiStatus.buildSnapshot(apiStatusKey(identifier, student)),
+      apiRecords: this._apiStatus.getRecords(apiStatusKey(identifier, student)),
       warnings: mergeUniqueWarnings(warningsState.groupWarnings, warningMsg),
       warningMetaByMessage: warningsState.groupWarningMetaByMessage,
       warningFallbackMeta: classifyWarningMetaFromError(err),
