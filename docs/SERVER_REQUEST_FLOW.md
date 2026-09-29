@@ -253,6 +253,12 @@ Reason:
 Special case:
 - if timetable is disabled, but other endpoints are enabled, the orchestrator still runs a timetable auth canary against the first target
 
+Skipping the check: when the timetable endpoint has vouched for the account's token within the last
+10 seconds (`authService.wasTimetableRecentlyVerified()`, e.g. the previous student of the same
+account), the orchestrator starts the other endpoints together with the timetable instead of after it.
+That saves one round trip per further student. If the timetable call then reports an auth refresh, the
+requests already sent with the old token are awaited and the whole fetch runs again once, as before.
+
 ### Phase 5: Parallel Fetch
 
 After timetable succeeds, the remaining enabled endpoints run in parallel:
@@ -262,6 +268,17 @@ After timetable succeeds, the remaining enabled endpoints run in parallel:
 - messages of day
 
 Homework is additionally filtered by the configured past/next-day window after the endpoint returns.
+
+Students of one account: `fetchInstance()` groups the students by credential key. Inside a group the
+first student is fetched alone (it checks login and token, timetable first); the others follow with at
+most `STUDENT_FETCH_CONCURRENCY` (3) at a time. Payloads keep the configuration order. Groups of the same
+account from different instances are still serialized (`_pendingFetchByCredKey`), and identical
+instances (for example the same content on two Carousel pages) are answered from `responseCache`.
+Measured with the production account: one instance and two identical instances cost the same number of
+WebUntis requests (9 for the first cycle including the login, 5 for each following cycle). With one
+student that only needs the timetable, or with two students, the parallelism gains nothing measurable
+(about 0.22 s for a warm fetch with two students, before and after); it helps from three students on and
+for students that also fetch exams, homework or absences.
 
 Teacher-target note:
 - For `TEACHER` targets, the runtime skips `exams`, `homework`, and `absences` because the currently integrated REST wrappers are student-scoped and may otherwise return server-side 5xx errors.
@@ -287,6 +304,28 @@ Teacher-target note:
 | Bearer JWT | 900s from issue (`exp - iat`) | `timetable/entries` → `401` |
 | Classic session cookie (`/api/exams`, `/api/homeworks/lessons`, `/api/classreg/absences/students`, `api/token/new`) | idle timeout between 4 and 6 min | `302 → /WebUntis/index.do` (or `200` + login state / HTML) — surfaced as `SESSION_EXPIRED`, which triggers a re-login |
 | REST session (`timetable/entries`, cookie + JWT) | idle timeout between 8 and 10 min | `401` |
+
+Additional measurements (2026-09-29, same server):
+
+| Experiment | Result |
+|------------|--------|
+| `token/new` and `app/data` response headers | no new `JSESSIONID`, only a `traceId` cookie: neither call extends the classic session |
+| `token/new` with a valid cookie, three times in a row | a new token each time, `exp` = now + 15 min (`exp - iat` = 900 s) |
+| Session used every 5 min through `app/data` only (REST), token renewal at 10 and 15 min | renewal fails with `SESSION_EXPIRED`; at 16 min `app/data` answers `401`. REST activity does not keep the classic cookie alive |
+| Session idle for 10 min, then `token/new` | `SESSION_EXPIRED` |
+| Session kept alive with a JSON-RPC call (`getLatestImportTime`) every 4 min, `token/new` at 16 min | works. A JSON-RPC call extends the classic session |
+
+The REST session (timetable) idles out earlier than the table above says: with a 5 minute
+`updateInterval` (±10 % jitter) fetches after 4:31, 4:40, 4:51 and 4:56 minutes worked, fetches after
+5:17 and 5:20 got a `401`. Treat the idle limit as about five minutes, not eight to ten. With a five
+minute interval about every other fetch therefore starts with a `401` and a recovery login; the recovery
+path above is normal operation, not an error. Token renewal (`token/new`) worked at minute 14 of a session
+because the fetches use the classic endpoints (exams, homework, absences), which keep the cookie warm.
+
+Decision: no keep-alive ping. A JSON-RPC call would keep the cookie alive, but the classic session
+idles out after about five minutes, so a ping every ~3 minutes would cost more requests (about five per
+15-minute token lifetime) than the login it saves (three). JSON-RPC stays what it is here: the way to get
+the session cookie. Data is read through the REST APIs only.
 
 Consequences: the timetable-first auth canary only covers the JWT/REST session. Between ~5 and ~9
 minutes of inactivity the timetable still succeeds while exams, homework and absences hit the dead
@@ -350,6 +389,21 @@ Action:
 4. rerun the same endpoint once
 
 If that second endpoint call still fails, the error is propagated.
+
+Several endpoints of one fetch (timetable, exams, homework, absences, and the "run everything again"
+round after a timetable refresh) hit the dead session at the same moment and each asks for fresh auth.
+`AuthService` shares one login among callers that wait for it. If that login **fails**, its error
+answers every further request for the same account for 30 seconds (`LOGIN_FAILURE_COOLDOWN_MS`) instead of
+starting another attempt; the cooldown ends on the next successful login. The hub's own retry (2 minutes,
+doubling) is separate.
+
+History (2026-09-29): this login used to fail every time for username/password accounts, and one failure
+was followed by about eight attempts within a second, each answered `200 - bad credentials`. Cause: the
+auth session kept the user name but not the password, so the REST layer logged in again with
+`password: null`. `createAuthSession()` now keeps the password in the session (it stays in the backend and
+is never part of a payload). Before that fix a dead REST session cost a whole fetch cycle: the recovery
+login failed, the circuit breaker (below) then kept the timetable away, and the next cycle logged in
+normally. A raw login right after a dead session (also right after the `401`) always worked in a test.
 
 ### Orchestrator Retry After Timetable Refresh
 
@@ -424,6 +478,14 @@ Behavior:
 
 This applies to every non-permanent, non-success status, including `failureCount` accumulated from
 errors that carry no HTTP status at all.
+
+**Exception: auth failures (status `401`: expired session, rejected login) do not count.** They heal with
+the next login and happen every few minutes with a short `updateInterval`, so they are not a sign that
+the endpoint is broken. The `401` is still recorded as the endpoint's status (the widgets show
+"unavailable" and keep old data), but `failureCount` is left as it was. Before, three timetable
+failures within one fetch (the retry rounds) opened the breaker, and the timetable stayed away for about
+ten minutes even though the next login had worked, while exams, homework and absences came back
+(observed 2026-09-29, `Backing off after 3 consecutive failures (status 401)`).
 
 Skips are graceful: `webuntisClient._executeRestEndpoint()` returns an empty array, exactly as for
 permanent errors — no exception reaches the payload builder.

@@ -176,6 +176,12 @@ instance share one fetch cycle.
 8. Frontend keeps previous data for `unavailable` collections and renders "data unavailable" when
    it has nothing to keep; plugin renderers consume the normalized result.
 
+Sharing between instances: the account's WebUntis session (`AuthService`, keyed by credential
+fingerprint) and the short-lived GET responses (`responseCache`) are process-wide. Two instances with
+the same account and content, such as identical blocks on two Carousel pages, therefore cost no
+additional WebUntis requests; they only add a render each. Different students or plugin options fetch
+what differs.
+
 A new socket connection is greeted with `INIT_REQUIRED` (for `*`, every instance), so a frontend
 that outlives a helper restart re-sends `CONFIGURE` and `SESSION_STATE` within seconds. An instance
 lives until its last display has been gone for 10 minutes, so a reload keeps the retry backoff.

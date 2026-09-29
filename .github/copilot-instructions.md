@@ -41,6 +41,7 @@ MMM-Webuntis.js (start) → SESSION_STATE, then CONFIGURE (config once; no REFRE
 - QR code auth: extract `person_id` from JWT token via `extractPersonIdFromToken()`
 - Parent account: fetches app/data to auto-discover student IDs
 - On token expiry: `onAuthError` callback invalidates cache automatically
+- A failed login answers all requests for the same account with its error for 30 s (`LOGIN_FAILURE_COOLDOWN_MS`); several endpoints of one fetch otherwise each start a login. Auth failures (`401`) do not count toward the `apiStatusTracker` circuit breaker
 - `fetchClient` never follows redirects: `302 → index.do`, a `200 {"state":"LOGIN_ERROR"}` body or HTML are thrown as `SESSION_EXPIRED` (auth error) — never treat them as empty data
 - Rejected logins arrive as HTTP 200 (JSON-RPC error body); use `errorHandler.isAuthError()` before looking at numeric statuses, and never record such an error as status 200
 - Race condition protection: `_forceReauth` Set is cleared after use, `_pendingAuth` Map coordinates parallel requests
@@ -211,7 +212,9 @@ Boundary rule:
 
 ### Debugger: Node & Chrome
 
-- The devcontainer's `entrypoint.sh` starts PM2 with `--node-args="--inspect-brk"` and `--watch` by default, enabling live debugging and auto-restart on file changes.
+- The devcontainer's `entrypoint.sh` runs `exec pm2-runtime start /opt/magic_mirror/ecosystem.config.js`: `watch: false`, no inspector. The mirror does **not** restart on file changes; use `pm2 restart magicmirror` after backend changes. To attach a debugger, restart it with `pm2 restart magicmirror --node-args="--inspect=0.0.0.0:9229"` (a plain `pm2 restart magicmirror` turns the inspector off again).
+
+- **Never `pm2 stop`, `pm2 delete` or `pm2 kill`:** `pm2-runtime` is PID 1 of the container, so stopping the app ends the whole devcontainer (and every background process in it). Only `pm2 restart magicmirror`. To keep the mirror quiet for a measurement, freeze it (`kill -STOP` its node process, `kill -CONT` afterwards) or use a separate test mirror on another port.
 
 - VS Code debugging is already configured in `.vscode/launch.json` with two predefined configurations:
   - **Attach to node process** (port 9229) — Debug the backend Node.js process via `node_helper.js`.
@@ -227,7 +230,7 @@ Boundary rule:
 - VS Code automatically handles port forwarding from the devcontainer — no manual port configuration needed.
 
 - Notes:
-  - `--inspect-brk` pauses execution until a debugger attaches; use `--inspect` (no `-brk`) if you do not want this behavior.
+  - `--inspect-brk` pauses execution until a debugger attaches; use `--inspect` (no `-brk`) if you do not want this behavior. The mirror starts without an inspector; enable it as described above before starting the "Attach to node process" configuration.
   - Debug breakpoints on Node will pause the entire process — ideal for step-through debugging, but can slow interactive testing.
   - Use `console.log()` / `logger()` for non-blocking debugging, especially during development cycles.
 

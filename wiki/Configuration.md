@@ -133,6 +133,23 @@ addLessons: [
 
 Added lessons are regular lessons: the `lessons` widget only lists them with `showRegular: true`, the `grid` always shows them. Invalid entries are ignored and reported as a configuration warning.
 
+## Several Instances And Secrets
+
+**Identical blocks on several Carousel pages** are fine: instances with the same account and options
+share one WebUntis session and reuse each other's responses, so the extra pages add no load on the
+WebUntis server. Give each block its own `position`/Carousel slide; MagicMirror assigns the instance
+identifiers itself.
+
+**`hideConfigSecrets`:** write the secret in `config.js` as `${SECRET_NAME}` (for example
+`password: "${SECRET_WU_PASSWORD}"`) and put the value into the environment or into a `config.env` file next to
+`config.js` (MagicMirror loads it into the environment). MagicMirror shows the browser `**SECRET_NAME**` and restores the value on the server. Two
+limits come from MagicMirror itself, not from this module:
+
+- a module type may only restore the secrets named in its **first** entry in `config.js`; with several
+  MMM-Webuntis blocks the first one has to name every secret any block uses
+- nothing is replaced while `cors` is `allowAll` (the default); set `cors: "disabled"` or
+  `"allowWhitelist"`
+
 ## Debug Options
 
 Use these only when you need to investigate problems — see `logLevel`, `debugDate`, `dumpBackendPayloads`, `dumpRawApiResponses`, and `demoDataFile` in the option table above.
