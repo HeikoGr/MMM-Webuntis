@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.14.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.2...v0.14.3) (2026-09-29)
+
+
+### 🐛 Fixes
+
+* keep a replacing session when a request that outlived its session gets a 401 ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+* render fetched text as text in every widget, build all markup as DOM nodes ([#113](https://github.com/HeikoGr/MMM-Webuntis/issues/113)) ([eed05ee](https://github.com/HeikoGr/MMM-Webuntis/commit/eed05eebe8a385153cd78ca4583474b4f64056ae))
+* track the endpoint status per student, so one student's 403 no longer hides the endpoint for its siblings ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+
+
+### ⚡ Performance
+
+* fetch the students of an account side by side from two students on ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+
+
+### 🧱 Refactoring
+
+* describe the current behavior in comments ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+* let the backend own the fetch schedule via the mmm-shared instance hub ([#116](https://github.com/HeikoGr/MMM-Webuntis/issues/116)) ([acf24dc](https://github.com/HeikoGr/MMM-Webuntis/commit/acf24dc0906f97bd1852e535278877af559070d9))
+* name the instance identifier the same everywhere ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+
+
+### 📚 Documentation
+
+* describe the backend-owned fetch schedule where REFRESH was still named ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+
+
+### 📦 Build & Dependencies
+
+* **deps:** bump mmm-shared to 0.4.0 ([#119](https://github.com/HeikoGr/MMM-Webuntis/issues/119)) ([5ae606b](https://github.com/HeikoGr/MMM-Webuntis/commit/5ae606b755e86e13a8fae7dacfe67bf7f8f6bf11))
+* **deps:** drop commitlint and otplib, align package.json ([#114](https://github.com/HeikoGr/MMM-Webuntis/issues/114)) ([3b074ef](https://github.com/HeikoGr/MMM-Webuntis/commit/3b074efd95dc663947083493209d2ab10a3380c3))
+
+
+### 🔧 Tooling
+
+* keep ci-only commits out of releases and the changelog ([#112](https://github.com/HeikoGr/MMM-Webuntis/issues/112)) ([6b058ac](https://github.com/HeikoGr/MMM-Webuntis/commit/6b058ac28e0914976a8a26678df159ebf682e90c))
+* skip the commit message check on the release PR ([#110](https://github.com/HeikoGr/MMM-Webuntis/issues/110)) ([275b0e0](https://github.com/HeikoGr/MMM-Webuntis/commit/275b0e053ed121df20f1c48056e43717131830ad))
+
+
+### 🔧 Maintenance
+
+* **deps-dev:** bump lint-staged from 17.5.1 to 17.6.0 ([#115](https://github.com/HeikoGr/MMM-Webuntis/issues/115)) ([e1150fd](https://github.com/HeikoGr/MMM-Webuntis/commit/e1150fd27f7574787d7114cac91becaa22bf7559))
+* list ci and chore commits in the changelog ([34d2d9d](https://github.com/HeikoGr/MMM-Webuntis/commit/34d2d9d3ef88fd101ce711e642ecf8c37e9e6e94))
+* restart instead of stop in the pm2 clean task ([#117](https://github.com/HeikoGr/MMM-Webuntis/issues/117)) ([48d2b81](https://github.com/HeikoGr/MMM-Webuntis/commit/48d2b815904dc8248603d37a31c3fb54e054df8f))
+
 ## [0.14.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.1...v0.14.2) (2026-09-25)
 
 
