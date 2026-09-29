@@ -41,7 +41,7 @@ const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
 
 const LOG_LEVEL_WEIGHTS = Object.freeze({ none: -1, error: 0, warn: 1, info: 2, debug: 3 });
 
-// Students of one account fetched at the same time (the first one runs alone, see _processGroup).
+// Students of one account fetched at the same time (see _processGroup).
 const STUDENT_FETCH_CONCURRENCY = 3;
 
 /**
@@ -361,11 +361,11 @@ module.exports = NodeHelper.create({
       }
     };
 
-    // The first student checks login and token (timetable first); the others share that
-    // authenticated session and fetch side by side, so N students cost about as many round trips
-    // as one. Payloads stay in configuration order.
-    const [first, ...others] = students;
-    const results = [await fetchOne(first), ...(await mapWithConcurrency(others, STUDENT_FETCH_CONCURRENCY, fetchOne))];
+    // The students share the authenticated session and fetch side by side. Each one still checks
+    // the token with its timetable before its other endpoints (dataFetchOrchestrator), and a token
+    // that turns out dead costs one login for all of them (AuthService joins parallel logins and
+    // keeps a session that replaced the failed one). Payloads stay in configuration order.
+    const results = await mapWithConcurrency(students, STUDENT_FETCH_CONCURRENCY, fetchOne);
     const payloads = results.map((result) => result.payload).filter(Boolean);
     const failed = results.reduce((sum, result) => sum + result.failed, 0);
     return { payloads, failed };
