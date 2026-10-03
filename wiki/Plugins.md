@@ -86,7 +86,7 @@ For compatibility, top-level namespaces such as `lessons`, `grid`, `exams`, `hom
 
 | Plugin | Most-used options |
 | --- | --- |
-| `lessons` | `nextDays`, `pastDays`, `dateFormat`, `hideWeekends`, `showStartTime`, `showTeacherMode`, `showRoom`, `showSubstitution` |
+| `lessons` | `nextDays`, `pastDays`, `previewNext`, `dateFormat`, `hideWeekends`, `showStartTime`, `showTeacherMode`, `showRoom`, `showSubstitution` |
 | `grid` | `weekView`, `nextDays`, `pastDays`, `hideWeekends`, `showNowLine`, `maxLessons`, `pxPerMinute`, `fields.primary`, `fields.secondary`, `fields.additional` |
 | `exams` | `nextDays`, `dateFormat`, `showSubject`, `showTeacher` |
 | `homework` | `nextDays`, `pastDays`, `dateFormat`, `showSubject`, `showText` |

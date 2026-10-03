@@ -35,6 +35,8 @@ The old top-level namespace `lessons: { ... }` is still accepted for compatibili
 | --- | --- | --- | --- |
 | `nextDays` | number `>= 0` | `2` | How many future days are shown after today |
 | `pastDays` | number `>= 0` | `0` | How many previous visible days are shown before today |
+| `previewNext` | boolean | `false` | Once today has nothing left to show, the list rolls over to the next school day (see below) |
+| `previewFrom` | `"HH:MM"` or `""` | `""` | Earliest time for that rollover on a school day; empty means right after the last entry of the day |
 | `dateFormat` | string | `EEE` | Date label format for each lesson day |
 | `hideWeekends` | boolean | `false` | Hides weekend rows unless that weekend day actually contains lessons |
 | `showStartTime` | boolean | `false` | Shows clock times like `08:15` instead of period labels |
@@ -51,6 +53,7 @@ The old top-level namespace `lessons: { ... }` is still accepted for compatibili
 - Past lessons are hidden in normal operation. If `logLevel` is `debug`, past entries stay visible for troubleshooting.
 - If `showStartTime` is `false`, the plugin uses timetable period labels when the backend provides time-unit data.
 - `hideWeekends` only removes empty weekend days. Weekend days with lessons still appear.
+- `previewNext` replaces today with the next school day once today has nothing left to show: every entry the list would show has started, or today is a weekend or holiday day. The next school day skips weekends and holidays (up to three weeks ahead, longer breaks get no preview); `nextDays` then counts from that day, `pastDays` still from today. The header says "preview", preview rows carry the CSS class `lesson-preview`, and a preview day without changes shows "no changes". With `showRegular: false` a school day without any change rolls over right away in the morning; set `previewFrom` (e.g. `'14:00'`) to keep today until then. `previewFrom` does not apply on weekends and holidays.
 - Lessons can be hidden with `excludeLessons` (this also hides homework and exams of the same subject) and own lessons added with `addLessons`, see [Hiding and Adding Lessons](Configuration#hiding-and-adding-lessons).
 
 ## Typical Config
@@ -64,6 +67,8 @@ plugins: {
       pastDays: 1,
       dateFormat: 'EEEE dd.MM.',
       hideWeekends: true,
+      previewNext: true,
+      previewFrom: '13:00',
       showStartTime: true,
       showTeacherMode: 'initial',
       showRoom: true,

@@ -58,6 +58,8 @@
   --wu-error-bg: var(--wu-accent-red-bg);
   --wu-error-border: var(--wu-accent-red);
   --wu-legacy-exam-row-color: var(--wu-accent-yellow);
+  /* Lessons list: day label and header hint of a previewed next school day (previewNext) */
+  --wu-preview-color: var(--wu-lesson-border);
 
   /* Feedback: today variants (same color system, stronger intensity) */
   --wu-today-replacement-bg: var(--wu-accent-blue-bg-strong);

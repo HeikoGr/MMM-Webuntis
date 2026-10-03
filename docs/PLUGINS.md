@@ -138,10 +138,50 @@ Supported config layers:
 - module-level `plugins.<id>.config`
 - student-level `students[].plugins.<id>.config`
 
-Merge order for plugin config is:
-1. inherited plugin config
-2. legacy top-level namespace such as `lessons` or `grid`
-3. explicit `plugins.<id>.config`
+Merge order for plugin config is (`moduleConfig.buildCanonicalPluginsConfig()`):
+1. the backend plugin's `getDefaultConfig()`
+2. inherited plugin config
+3. legacy top-level namespace such as `lessons` or `grid`
+4. explicit `plugins.<id>.config`
+
+The merge spreads whole objects, so it keeps every key, including ones no default declares.
+
+### How a config value reaches a frontend plugin
+
+A frontend plugin does not read the module's own `this.config`. It reads the student config the
+backend sends back:
+
+```
+config.js (served by MagicMirror at page load)
+  → browser: module.config                       – fixed for the lifetime of the page
+    → CONFIGURE (socket, once per page load and after INIT_REQUIRED)
+      → backend-session hub: the first CONFIGURE of an identifier wins
+        → node_helper.prepareConfig() → normalizeModuleConfig() → buildCanonicalPluginsConfig()
+          → DATA payload: context.config (per student, canonical plugins map)
+            → frontend: configByStudent[title] → studentSlice.context.config
+              → plugin: plugins.<id>.config via createWidgetContext().getConfig()
+```
+
+A new plugin option needs only its default in `getDefaultConfig()` (plus its check in
+`validateConfig()`). No mapping or whitelist has to learn it. A backend that reads it for fetching
+gets it from the same canonical map (`webuntisClient.buildFetchPlan()` → `pluginConfig(id)`).
+
+**Pitfall: a changed `config.js` seems to be ignored.** The backend keeps the config of the
+first client that configures an instance. A later client with a different config is answered with
+the running one and only logged: `[hub] client config differs, the running config keeps
+precedence {"keys":[...]}` (critical keys such as credentials or `students` are rejected with
+`CONFIG_REJECTED` instead). After `pm2 restart`, every browser tab that was open reconnects and sends
+**the config it loaded before the edit**. If such a tab is quicker than a freshly loaded one, the
+backend keeps the old values until the next restart. Seen while adding `lessons.previewNext`
+(2026-10-03): the option was in `config.js`, but the plugin got `previewNext: false` (the default),
+because an old tab won the race. What to do:
+
+- Reload or close every open tab of the mirror, then `pm2 restart magicmirror`.
+- Check what the backend uses, not what the file says: in the browser,
+  `MM.getModules().find(m => m.name === "MMM-Webuntis").configByStudent[<title>].plugins.<id>.config`.
+- With Playwright, `page.goto()` to the same URL with only another `#hash` does **not** reload the
+  page (same-document navigation); the page keeps its old config. Add a query string
+  (`/?r=2#1`) or call `page.reload()`.
 
 ## Discovery And Loading
 
@@ -345,8 +385,8 @@ Supported instance hooks are:
 
 | Hook | Called by | Purpose |
 | --- | --- | --- |
-| `getDefaultConfig()` | `node_helper._getBackendPluginDefaultConfig()` | Defaults merged under the plugin's config namespace |
-| `validateConfig(pluginConfig, ctx)` | `node_helper._collectPluginValidationIssues()` | Returns config issues as strings or `{ message, severity }` |
+| `getDefaultConfig()` | `moduleConfig.getBackendPluginDefaultConfig()` | Defaults merged under the plugin's config namespace |
+| `validateConfig(pluginConfig, ctx)` | `moduleConfig.collectPluginValidationIssues()` | Returns config issues as strings or `{ message, severity }` |
 | `getCapabilities(pluginConfig, helpers)` | `pluginCapabilityResolver.collectCapabilities()` | Overrides the manifest's `capabilities` — use only for config-dependent capabilities |
 
 All three are optional. When `getCapabilities()` is absent, the manifest's `capabilities` array is

@@ -94,6 +94,8 @@ const config = {
             config: {
               nextDays: 2,
               pastDays: 0,
+              previewNext: false, // once today has nothing left to show, show the next school day
+              previewFrom: "", // earliest time for that on a school day, e.g. '14:00'; empty = right away
               dateFormat: "EEEE",
               hideWeekends: false,
               showStartTime: false,
