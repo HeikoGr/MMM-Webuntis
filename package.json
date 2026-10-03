@@ -41,10 +41,10 @@
   },
   "dependencies": {
     "entities": "^8.1.0",
-    "sanitize-html": "^2.17.7"
+    "sanitize-html": "^2.18.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.14",
+    "@biomejs/biome": "^2.5.15",
     "lint-staged": "^17.6.0",
     "simple-git-hooks": "^2.14.0"
   },
