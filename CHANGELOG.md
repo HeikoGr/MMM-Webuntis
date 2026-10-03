@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.15.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.3...v0.15.0) (2026-10-03)
+
+
+### 🔌 Features
+
+* **lessons:** preview the next school day once today has nothing left to show ([457d566](https://github.com/HeikoGr/MMM-Webuntis/commit/457d5669be855e98428f278f3e4e87e14cb6b28c))
+* **lessons:** preview the next school day once today has nothing left to show ([0686b02](https://github.com/HeikoGr/MMM-Webuntis/commit/0686b0291335029467e03c0d0f6aabcd189ecee1))
+
+
+### 📚 Documentation
+
+* **plugins:** describe how a config value reaches a frontend plugin ([544949d](https://github.com/HeikoGr/MMM-Webuntis/commit/544949d7a2366f67680c17ddf1d051210a282036))
+
+
+### 📦 Build & Dependencies
+
+* **deps:** bump sanitize-html to 2.18.0 and biome to 2.5.15 ([9ed6d16](https://github.com/HeikoGr/MMM-Webuntis/commit/9ed6d16977dd748c6d2a6ac5e4fc318a4eb59bd0))
+* **deps:** bump sanitize-html to 2.18.0 and biome to 2.5.15 ([204c7e3](https://github.com/HeikoGr/MMM-Webuntis/commit/204c7e3b5547000be03bb7f44ad6a2ed1d656811))
+
 ## [0.14.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.2...v0.14.3) (2026-09-29)
 
 
