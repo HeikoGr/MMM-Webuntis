@@ -422,7 +422,7 @@ module.exports = NodeHelper.create({
       credKey,
       compactHolidays,
       config,
-      plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService }),
+      plan: buildFetchPlan({ student, config, fetchFlags, authService: this._authService, compactHolidays }),
       statusKey: apiStatusKey(identifier, student),
       currentFetchWarnings: new Set(),
       mmLog: log,

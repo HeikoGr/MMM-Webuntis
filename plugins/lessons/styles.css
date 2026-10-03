@@ -44,3 +44,13 @@
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
+
+/* previewNext: the day label of a previewed school day and the header hint, so it does not read as today. */
+.wu-plugin-lessons .lesson-preview .wu-col-meta {
+  color: var(--wu-preview-color);
+  font-style: italic;
+}
+
+.wu-plugin-lessons .wu-header-meta__suffix {
+  color: var(--wu-preview-color);
+}
