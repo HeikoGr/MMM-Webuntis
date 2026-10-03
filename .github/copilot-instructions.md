@@ -106,6 +106,18 @@ grid: `buildLessonContent()`, `timeUnitLabel()`), so fetched data only ever beco
 parsed markup is `messagesofday.text` via `dom.richTextNodes()` (inert `DOMParser`, tag whitelist, no
 attributes). See `docs/PLUGINS.md` → "Building markup".
 
+### ⚠️ Known Pitfall: a config change that does not reach the plugin
+
+Frontend plugins read their config from the backend's DATA payload (`context.config` →
+`configByStudent`), not from the browser's `module.config`. The backend keeps the config of the
+**first** client that sends CONFIGURE for an instance; a later, different one is only logged
+(`[hub] client config differs, the running config keeps precedence`). After `pm2 restart`, old
+browser tabs reconnect and resend the config they loaded before the edit, and may win. Reload or
+close all tabs before restarting, and check `configByStudent[...]` in the browser rather than the
+file. Playwright's `page.goto()` to the same URL with only another `#hash` does not reload the page.
+A new plugin option needs no mapping: its default in the plugin's `getDefaultConfig()` is enough.
+Details: `docs/PLUGINS.md` → "How a config value reaches a frontend plugin".
+
 ### Configuration
 - 25 legacy config key mappings in `configValidator.js#applyLegacyMappings()` - don't break them
 - Widget-specific validation in `widgetConfigValidator.js` - check before assuming config structure
