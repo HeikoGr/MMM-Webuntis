@@ -3,5 +3,7 @@
   "no-lessons": "kein Unterricht",
   "weekend": "Wochenende",
   "timetable-restricted": "Plan gesperrt",
-  "unavailable": "Daten nicht verfügbar"
+  "unavailable": "Daten nicht verfügbar",
+  "preview": "Vorschau",
+  "preview-no-changes": "keine Änderungen"
 }

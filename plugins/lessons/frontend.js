@@ -101,7 +101,11 @@
     return day === 0 || day === 6;
   }
 
-  function buildDisplayDates(baseDate, { pastDays, daysToShow, hideWeekends, lessonsByDate }) {
+  /**
+   * Days to list: pastDays before baseDate, then the start day and daysToShow after it. The start
+   * day is baseDate, or startDate when the list rolled over to a preview of the next school day.
+   */
+  function buildDisplayDates(baseDate, { pastDays, daysToShow, hideWeekends, lessonsByDate, startDate = baseDate }) {
     const shouldIncludeDate = (date) => {
       if (!hideWeekends) return true;
       if (!isWeekendDay(date)) return true;
@@ -125,8 +129,8 @@
     }
 
     let extraFutureDays = 0;
-    if (shouldIncludeDate(baseDate)) {
-      displayDates.push(cloneDayDate(baseDate));
+    if (shouldIncludeDate(startDate)) {
+      displayDates.push(cloneDayDate(startDate));
     } else {
       extraFutureDays = 1;
     }
@@ -135,7 +139,7 @@
     let futureDaysAdded = 0;
     let futureOffset = 1;
     while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
+      const dayDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + futureOffset);
       if (shouldIncludeDate(dayDate)) {
         displayDates.push(dayDate);
         futureDaysAdded += 1;
@@ -144,6 +148,41 @@
     }
 
     return displayDates;
+  }
+
+  /** How far the preview looks for the next school day; longer breaks get no preview (as the backend). */
+  const PREVIEW_LOOKAHEAD_DAYS = 21;
+
+  /** Not inside a holiday, and a weekday or a weekend day that has lessons. */
+  function isSchoolDay(date, lessonsByDate, holidayMap) {
+    const dateYmd = getDayYmd(date);
+    if (holidayMap?.[dateYmd]) return false;
+    return !isWeekendDay(date) || (Array.isArray(lessonsByDate?.[dateYmd]) && lessonsByDate[dateYmd].length > 0);
+  }
+
+  /** The first school day after today, or null within PREVIEW_LOOKAHEAD_DAYS. */
+  function findNextSchoolDay(today, lessonsByDate, holidayMap) {
+    for (let offset = 1; offset <= PREVIEW_LOOKAHEAD_DAYS; offset += 1) {
+      const dayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset);
+      if (isSchoolDay(dayDate, lessonsByDate, holidayMap)) return dayDate;
+    }
+    return null;
+  }
+
+  /**
+   * previewNext: the day the list rolls over to, or null to stay on today. It rolls over once today
+   * has nothing left to show - every entry the list would show has started (debug mode keeping past
+   * entries does not count), or today is no school day. On a school day previewFrom sets the
+   * earliest time for that; on a weekend or holiday there is nothing to wait for.
+   */
+  function resolvePreviewDate(today, { nowYmd, nowHm, previewFrom, lessonsByDate, holidayMap, options }) {
+    if (isSchoolDay(today, lessonsByDate, holidayMap)) {
+      const liveOptions = { ...options, keepPast: false };
+      const pending = (lessonsByDate[nowYmd] || []).some((entry) => !isFilteredOut(entry, liveOptions, nowYmd, nowHm));
+      if (pending) return null;
+      if (previewFrom !== null && nowHm < previewFrom) return null;
+    }
+    return findNextSchoolDay(today, lessonsByDate, holidayMap);
   }
 
   function resolveStudentConfig(studentSlice) {
@@ -286,12 +325,12 @@
     return getLessonText(entry);
   }
 
-  function renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState) {
+  function renderEmptyDayRow(container, studentLabelText, dayDate, lessonsDateFormat, dayState, extraClass = "") {
     if (!dayState) return 0;
 
     const dayLabel = formatDisplayDate(dayDate, lessonsDateFormat);
     const icon = dayState.inlineIconClass ? iconSpan(dayState.inlineIconClass) : "";
-    const rowClass = dayState.rowClass ? `lessonRow ${dayState.rowClass}` : "lessonRow";
+    const rowClass = `${dayState.rowClass ? `lessonRow ${dayState.rowClass}` : "lessonRow"}${extraClass}`;
 
     addRow(container, rowClass, studentLabelText, dayLabel, [icon, dayState.label]);
     return 1;
@@ -359,16 +398,6 @@
       `[lessons] window: ${pastDays + 1 + nextDays} total days (${pastDays} past + today + ${nextDays} future)`,
     );
 
-    // The header goes in once the config is known to be usable.
-    const { studentLabelText } = initializeWidgetContextAndHeader(
-      "lessons",
-      ctx,
-      container,
-      studentCellTitle,
-      studentConfig,
-      { widgetCtx },
-    );
-
     const options = {
       dateFormat: getLessonsConfig("dateFormat"),
       useShortSubject: Boolean(getLessonsConfig("useShortSubject")),
@@ -382,31 +411,72 @@
       startTimesMap,
     };
 
-    const displayDates = buildDisplayDates(resolveBaseDate(ctx, nowContext.date), {
+    const today = resolveBaseDate(ctx, nowContext.date);
+    const previewDate = getLessonsConfig("previewNext")
+      ? resolvePreviewDate(today, {
+          nowYmd: Number(nowYmd),
+          nowHm,
+          previewFrom: normalizeHHMMValue(getLessonsConfig("previewFrom")),
+          lessonsByDate,
+          holidayMap: ctx.holidayMapByStudent?.[effectiveStudentTitle],
+          options,
+        })
+      : null;
+    const previewYmd = previewDate ? getDayYmd(previewDate) : null;
+    if (previewDate) log("debug", `[lessons] preview: today ${nowYmd} is done, showing from ${previewYmd}`);
+
+    // The header goes in once the config is known to be usable.
+    const { studentLabelText } = initializeWidgetContextAndHeader(
+      "lessons",
+      ctx,
+      container,
+      studentCellTitle,
+      studentConfig,
+      { widgetCtx, headerMetaSuffix: previewDate ? ctx.translate("preview", undefined, "preview") : "" },
+    );
+
+    const displayDates = buildDisplayDates(today, {
       pastDays,
       daysToShow: nextDays,
       hideWeekends: Boolean(getLessonsConfig("hideWeekends")),
       lessonsByDate,
+      startDate: previewDate || today,
     });
 
     let addedRows = 0;
     for (const dayDate of displayDates) {
       const dateYmd = getDayYmd(dayDate);
       const entries = (lessonsByDate[dateYmd] || []).slice().sort(compareLessonsOfDay);
+      const isPreviewDay = previewYmd !== null && dateYmd >= previewYmd;
+      const previewClass = isPreviewDay ? " lesson-preview" : "";
+      const renderDayNotice = (dayState) =>
+        renderEmptyDayRow(container, studentLabelText, dayDate, options.dateFormat, dayState, previewClass);
 
       if (entries.length === 0) {
-        const dayState = getEmptyDayState(ctx, effectiveStudentTitle, dayDate);
-        addedRows += renderEmptyDayRow(container, studentLabelText, dayDate, options.dateFormat, dayState);
+        addedRows += renderDayNotice(getEmptyDayState(ctx, effectiveStudentTitle, dayDate));
         continue;
       }
 
       log("debug", `[lessons] ${dateYmd}: ${entries.length} entries`);
+      let dayRows = 0;
       for (const entry of entries) {
         if (isFilteredOut(entry, options, nowYmd, nowHm)) continue;
-        addedRows++;
+        dayRows++;
         const subject = buildSubjectCell(entry, options);
-        addRow(container, "lessonRow", studentLabelText, buildTimeCell(entry, options), subject, lessonRowClass(entry));
+        const rowType = `lessonRow${previewClass}`;
+        addRow(container, rowType, studentLabelText, buildTimeCell(entry, options), subject, lessonRowClass(entry));
       }
+
+      // A preview day without anything to show says so, instead of the list falling back to "nothing".
+      if (isPreviewDay && dayRows === 0) {
+        const noChanges = {
+          label: ctx.translate("preview-no-changes", undefined, "no changes"),
+          rowClass: "empty-day-notice",
+          inlineIconClass: "wu-inline-icon wu-inline-icon--no-lessons",
+        };
+        dayRows += renderDayNotice(noChanges);
+      }
+      addedRows += dayRows;
     }
 
     if (addedRows === 0) {
@@ -610,13 +680,15 @@
     return cell;
   }
 
-  /** "exam" for an exam lesson, "cancelled" for a cancelled one. */
+  /** "exam" for an exam lesson, "cancelled" for a cancelled one; a cancelled exam lesson gets both. */
   function lessonRowClass(entry) {
     const isExam =
       Array.isArray(entry.displayIcons) &&
       entry.displayIcons.some((icon) => String(icon || "").toUpperCase() === LESSON_ACTIVITY_TYPE.EXAM);
-    if (isExam) return "exam";
-    return entry.status === "CANCELLED" ? "cancelled" : "";
+    const classes = [];
+    if (isExam) classes.push("exam");
+    if (entry.status === "CANCELLED") classes.push("cancelled");
+    return classes.join(" ");
   }
 
   host.registerFrontendPlugin({

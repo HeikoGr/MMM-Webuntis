@@ -3,5 +3,7 @@
   "no-lessons": "no lessons",
   "weekend": "Weekend",
   "timetable-restricted": "Locked",
-  "unavailable": "Data unavailable"
+  "unavailable": "Data unavailable",
+  "preview": "preview",
+  "preview-no-changes": "no changes"
 }

@@ -408,6 +408,15 @@
                           "minimum": 0,
                           "description": "How many past days should be included."
                         },
+                        "previewNext": {
+                          "type": "boolean",
+                          "description": "Roll over to the next school day once today has nothing left to show."
+                        },
+                        "previewFrom": {
+                          "type": "string",
+                          "pattern": "^$|^([01]?\\d|2[0-3]):[0-5]\\d$",
+                          "description": "Earliest time (HH:MM) for that rollover on a school day; empty = right away."
+                        },
                         "dateFormat": {
                           "type": "string",
                           "description": "Date format pattern used in the UI."
@@ -934,6 +943,16 @@
                   "description": "How many past days should be included."
                 },
                 {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.previewNext",
+                  "title": "previewNext",
+                  "description": "Roll over to the next school day once today has nothing left to show."
+                },
+                {
+                  "key": "MMM-Webuntis.config.plugins.lessons.config.previewFrom",
+                  "title": "previewFrom",
+                  "description": "Earliest time (HH:MM) for that rollover on a school day; empty = right away."
+                },
+                {
                   "key": "MMM-Webuntis.config.plugins.lessons.config.dateFormat",
                   "title": "dateFormat",
                   "description": "Date format pattern used in the UI."
@@ -1258,6 +1277,8 @@
           "config": {
             "nextDays": 2,
             "pastDays": 0,
+            "previewNext": false,
+            "previewFrom": "",
             "dateFormat": "EEE",
             "hideWeekends": false,
             "showStartTime": false,
