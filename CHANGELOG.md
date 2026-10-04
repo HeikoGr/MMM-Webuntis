@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.0...v0.15.1) (2026-10-04)
+
+
+### 🐛 Fixes
+
+* **timetable:** report positions that were only removed ([39225b7](https://github.com/HeikoGr/MMM-Webuntis/commit/39225b7001a076d20f91421e2677f00b8fd77fa4))
+* **timetable:** report positions that were only removed ([198b85f](https://github.com/HeikoGr/MMM-Webuntis/commit/198b85f3bc11b7eedbae850012e4f7ca42ff53d9))
+
+
+### 🔧 Tooling
+
+* **deps:** group automated dependency updates weekly ([#127](https://github.com/HeikoGr/MMM-Webuntis/issues/127)) ([b7eba0a](https://github.com/HeikoGr/MMM-Webuntis/commit/b7eba0a61eb216fefd98a5ee9ff54a8ba877e4cf))
+
 ## [0.15.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.14.3...v0.15.0) (2026-10-03)
 
 
