@@ -25,7 +25,6 @@
     "node": ">=22.21.1"
   },
   "scripts": {
-    "prepare": "node scripts/install-hooks.js",
     "postinstall": "node scripts/install-mmm-shared-submodule.js",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -44,20 +43,6 @@
     "sanitize-html": "^2.18.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
-    "lint-staged": "^17.6.0",
-    "simple-git-hooks": "^2.14.0"
-  },
-  "lint-staged": {
-    "*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc,css}": [
-      "biome check --write --files-ignore-unknown=true"
-    ]
-  },
-  "simple-git-hooks": {
-    "pre-commit": "npx --no-install lint-staged",
-    "commit-msg": "node scripts/check-commit-msg.js $1 && node scripts/check-commit-scope.js $1"
-  },
-  "allowScripts": {
-    "simple-git-hooks@2.14.0": true
+    "@biomejs/biome": "^2.5.15"
   }
 }

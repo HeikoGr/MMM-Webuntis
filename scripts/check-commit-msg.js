@@ -1,24 +1,20 @@
 #!/usr/bin/env node
 /**
- * Conventional Commits check for commit messages and PR titles.
+ * Conventional Commits check for PR titles.
  *
  * Replaces commitlint with @commitlint/config-conventional: same rules, same levels, same
- * messages that are exempt (merges, reverts, fixup!), without its ~80 packages. Whether the type
- * matches what the diff touches is a separate question, answered by check-commit-scope.js.
+ * messages that are exempt (merges, reverts, fixup!), without its ~80 packages. A PR is squash-merged
+ * and its title becomes the commit release-please reads, so the title is the only message checked.
+ * Whether the type matches what the diff touches is a separate question, answered by
+ * check-commit-scope.js.
  *
  * The types below are the ones release-please maps to changelog sections in
  * release-please-config.json - keep both lists in sync when adding a type.
  *
- * Usage:
- *   node scripts/check-commit-msg.js <commit-msg-file>          commit-msg hook
- *   node scripts/check-commit-msg.js --from <sha> --to <sha>    every commit in from..to (CI)
- *   printf '%s\n' "$TITLE" | node scripts/check-commit-msg.js --stdin   PR title (CI)
- *
- * Bypass for a single commit: `SKIP_SIMPLE_GIT_HOOKS=1 git commit ...`
+ * Usage: printf '%s\n' "$TITLE" | node scripts/check-commit-msg.js --stdin
  */
 
 const fs = require("node:fs");
-const { execFileSync } = require("node:child_process");
 
 const TYPES = [
   "feat", // user-visible behavior added
@@ -47,7 +43,6 @@ const HEADER_PATTERN = /^(\w*)(?:\((.*)\))?!?: (.*)$/;
 // "Token #123", "BREAKING CHANGE: ..."); everything from there on belongs to it.
 const FOOTER_TOKEN_PATTERN = /^(?:BREAKING CHANGE|[\w-]+)(?::\s+|\s+#).+/i;
 const NOTE_PATTERN = /^(?:\*\s+)?(?:BREAKING CHANGE|BREAKING-CHANGE):\s*/i;
-const SCISSORS = "# ------------------------ >8 ------------------------";
 // Long lines that carry a URL are exempt from the line-length rules.
 const URL_PATTERN = /\bhttps?:\/\/\S+/;
 
@@ -84,20 +79,11 @@ function isVersionHeader(message) {
 /**
  * The message split into lines, surrounding blank lines trimmed.
  *
- * A commit-msg file still holds git's comment lines and, with `git commit -v`, the diff below the
- * scissors line; git strips both before storing the message, so they go here too. Messages read
- * from history are kept as they are - a "#" line there is content.
- *
- * @param {string} raw - Commit message
- * @param {boolean} [stripComments=false] - Treat the input as an unsaved commit-msg file
+ * @param {string} raw - Message
  * @returns {string[]} Lines of the message
  */
-function cleanLines(raw, stripComments = false) {
-  let kept = String(raw).split(/\r?\n/);
-  if (stripComments) {
-    const scissors = kept.indexOf(SCISSORS);
-    kept = (scissors === -1 ? kept : kept.slice(0, scissors)).filter((line) => !line.startsWith("#"));
-  }
+function cleanLines(raw) {
+  const kept = String(raw).split(/\r?\n/);
   while (kept.length && !kept[0].trim()) kept.shift();
   while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
   return kept;
@@ -108,15 +94,13 @@ function exceedsLineLength(lines, max) {
 }
 
 /**
- * Check one commit message (or PR title).
+ * Check one PR title (or commit message).
  *
- * @param {string} raw - Commit message
- * @param {Object} [options]
- * @param {boolean} [options.stripComments=false] - Input is an unsaved commit-msg file
+ * @param {string} raw - Message
  * @returns {{ ignored: boolean, problems: Array<{ level: number, name: string, message: string }> }}
  */
-function lintMessage(raw, { stripComments = false } = {}) {
-  const lines = cleanLines(raw, stripComments);
+function lintMessage(raw) {
+  const lines = cleanLines(raw);
   const message = lines.join("\n");
   const problems = [];
   const report = (level, name, text) => problems.push({ level, name, message: text });
@@ -205,69 +189,23 @@ function lintMessage(raw, { stripComments = false } = {}) {
   return { ignored: false, problems };
 }
 
-/**
- * Commit messages in from..to, oldest first.
- *
- * @param {string} from - Excluded start revision
- * @param {string} to - Included end revision
- * @returns {Array<{ label: string, message: string }>}
- */
-function readRange(from, to) {
-  const output = execFileSync("git", ["log", "--reverse", "-z", "--format=%H%n%B", `${from}..${to}`], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return output
-    .split("\0")
-    .filter((entry) => entry.trim())
-    .map((entry) => {
-      const newline = entry.indexOf("\n");
-      return { label: entry.slice(0, 12), message: entry.slice(newline + 1) };
-    });
-}
-
-function parseArgs(argv) {
-  const args = { from: null, to: "HEAD", stdin: false, file: null };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--from") args.from = argv[++i];
-    else if (arg === "--to") args.to = argv[++i];
-    else if (arg === "--stdin") args.stdin = true;
-    else if (arg === "--help" || arg === "-h") args.help = true;
-    else args.file = arg;
-  }
-  return args;
-}
-
-function collectInputs(args) {
-  if (args.from) return readRange(args.from, args.to);
-  if (args.stdin) return [{ label: "stdin", message: fs.readFileSync(0, "utf8") }];
-  if (args.file) return [{ label: args.file, message: fs.readFileSync(args.file, "utf8"), stripComments: true }];
-  return null;
-}
-
 function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const inputs = args.help ? null : collectInputs(args);
-  if (!inputs) {
-    console.error("Usage: check-commit-msg.js <commit-msg-file> | --from <sha> [--to <sha>] | --stdin");
-    process.exit(args.help ? 0 : 2);
+  if (!process.argv.includes("--stdin")) {
+    console.error("Usage: printf '%s\\n' \"$TITLE\" | node scripts/check-commit-msg.js --stdin");
+    process.exit(2);
   }
 
-  let errors = 0;
-  for (const { label, message, stripComments } of inputs) {
-    const { ignored, problems } = lintMessage(message, { stripComments });
-    if (ignored || problems.length === 0) continue;
+  const message = fs.readFileSync(0, "utf8");
+  const { ignored, problems } = lintMessage(message);
+  if (ignored || problems.length === 0) return;
 
-    const header = cleanLines(message, stripComments)[0] ?? "";
-    console.error(`${inputs.length > 1 ? `${label} ` : ""}⧗ input: ${header}`);
-    for (const problem of problems) {
-      console.error(`${problem.level === ERROR ? "✖" : "⚠"}   ${problem.message} [${problem.name}]`);
-    }
-    console.error("");
-    errors += problems.filter((problem) => problem.level === ERROR).length;
+  console.error(`⧗ input: ${cleanLines(message)[0] ?? ""}`);
+  for (const problem of problems) {
+    console.error(`${problem.level === ERROR ? "✖" : "⚠"}   ${problem.message} [${problem.name}]`);
   }
+  console.error("");
 
+  const errors = problems.filter((problem) => problem.level === ERROR).length;
   if (errors > 0) {
     console.error(`✖ ${errors} problem(s) found. Format: type(scope): subject - see .github/commit-instructions.md`);
     process.exit(1);

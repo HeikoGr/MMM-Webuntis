@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Guard against commit types that understate what the commit actually changes.
+ * Guard against PR types that understate what the PR actually changes.
  *
- * Why this exists: check-commit-msg.js only validates the *format* of a commit message, not whether the
- * chosen type matches what the diff actually does. A commit typed `chore` but containing a real
+ * Why this exists: check-commit-msg.js only validates the *format* of a PR title, not whether the
+ * chosen type matches what the diff actually does. A PR typed `chore` but containing a real
  * behavior fix in runtime source still passes the format check - and because the type is low-signal,
  * release-please files it under Maintenance instead of Fixes, and the version bump misses it.
  *
- * So: if a low-signal commit type touches runtime source, ask for a better type.
+ * So: if a low-signal type touches runtime source, ask for a better type.
  *
- * Usage: node scripts/check-commit-scope.js <commit-msg-file>
+ * Usage: TITLE="chore: x" node scripts/check-commit-scope.js <base-sha> <head-sha>
+ * Deliberate exception: put `[allow-scope-mismatch]` in the PR title.
  */
 
-const fs = require("node:fs");
 const { execFileSync } = require("node:child_process");
 
 // Types that promise "nothing user-visible changed".
@@ -37,9 +37,9 @@ function isRuntimePath(file) {
   return RUNTIME_PATHS.some((pattern) => pattern.test(file));
 }
 
-function getStagedFiles() {
+function getChangedFiles(base, head) {
   try {
-    return execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], { encoding: "utf8" })
+    return execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", `${base}...${head}`], { encoding: "utf8" })
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
@@ -55,14 +55,16 @@ function getStagedFiles() {
  * type. Comparing with whitespace ignored keeps those out of the way, so the guard fires on
  * changes that actually alter code.
  *
- * @param {string[]} files - Staged runtime files
+ * @param {string} base - Base revision
+ * @param {string} head - Head revision
+ * @param {string[]} files - Changed runtime files
  * @returns {number} Number of substantive added/removed lines
  */
-function countSubstantiveChanges(files) {
+function countSubstantiveChanges(base, head, files) {
   try {
     const diff = execFileSync(
       "git",
-      ["diff", "--cached", "--ignore-all-space", "--ignore-blank-lines", "--unified=0", "--", ...files],
+      ["diff", "--ignore-all-space", "--ignore-blank-lines", "--unified=0", `${base}...${head}`, "--", ...files],
       {
         encoding: "utf8",
         maxBuffer: 32 * 1024 * 1024,
@@ -79,47 +81,45 @@ function countSubstantiveChanges(files) {
         return !(content.startsWith("//") || content.startsWith("*") || content.startsWith("/*"));
       }).length;
   } catch {
-    // If the diff cannot be read, do not block the commit.
+    // If the diff cannot be read, do not block the PR.
     return 0;
   }
 }
 
 function main() {
-  if (process.env.WEBUNTIS_ALLOW_SCOPE_MISMATCH === "1") return;
+  const [base, head] = process.argv.slice(2);
+  const title = (process.env.TITLE ?? "").split("\n")[0].trim();
+  if (!base || !head || /\[allow-scope-mismatch\]/.test(title)) return;
 
-  const messageFile = process.argv[2];
-  if (!messageFile || !fs.existsSync(messageFile)) return;
-
-  const subject = fs.readFileSync(messageFile, "utf8").split("\n")[0].trim();
-  const match = subject.match(/^([a-z]+)(\([^)]*\))?(!)?:/);
-  if (!match) return; // check-commit-msg.js reports malformed subjects; not this guard's job.
+  const match = title.match(/^([a-z]+)(\([^)]*\))?(!)?:/);
+  if (!match) return; // check-commit-msg.js reports malformed titles; not this guard's job.
 
   const [, type, , breaking] = match;
   if (breaking || !LOW_SIGNAL_TYPES.has(type)) return;
 
-  const runtimeFiles = getStagedFiles().filter(isRuntimePath);
+  const runtimeFiles = getChangedFiles(base, head).filter(isRuntimePath);
   if (runtimeFiles.length === 0) return;
 
-  const substantiveChanges = countSubstantiveChanges(runtimeFiles);
+  const substantiveChanges = countSubstantiveChanges(base, head, runtimeFiles);
   if (substantiveChanges === 0) return; // formatting/comments only - fine under any type.
 
   const shown = runtimeFiles.slice(0, 8);
   const more = runtimeFiles.length - shown.length;
 
   console.error(`
-✖ Commit type "${type}" changes runtime source.
+✖ PR type "${type}" changes runtime source.
 
   ${substantiveChanges} non-formatting line(s) in:
 ${shown.map((file) => `    - ${file}`).join("\n")}${more > 0 ? `\n    ... and ${more} more` : ""}
 
-  "${type}" tells the changelog that nothing user-visible changed, so this commit would be
+  "${type}" tells the changelog that nothing user-visible changed, so this PR would be
   released silently. If the behavior really did change, use "feat" or "fix" instead.
 
   If the change is genuinely invisible to users, pick "refactor" or "perf" - both keep the
   runtime-source signal without promising a new feature or a bugfix.
 
   Deliberate exception:
-    WEBUNTIS_ALLOW_SCOPE_MISMATCH=1 git commit ...
+    add [allow-scope-mismatch] to the PR title
 `);
   process.exit(1);
 }

@@ -1,11 +1,11 @@
 version: 2
 updates:
-  # Grouped minor/patch bumps: one PR and one CI run per week instead of one per package.
+  # Grouped minor/patch bumps: one PR and one CI run per day instead of one per package.
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: daily
     groups:
       actions:
         update-types: [minor, patch]
@@ -14,7 +14,7 @@ updates:
     directory: /
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: daily
     groups:
       npm:
         update-types: [minor, patch]
@@ -26,4 +26,4 @@ updates:
     directory: /
     target-branch: develop
     schedule:
-      interval: weekly
+      interval: daily
