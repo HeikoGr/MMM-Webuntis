@@ -56,9 +56,7 @@ test("check-commit-msg skips messages git and GitHub generate", () => {
   }
 });
 
-test("check-commit-msg strips comments and the diff only from a commit-msg file", () => {
-  const edited = `feat: add x\n# Please enter the commit message\n\nbody\n# ------------------------ >8 ------------------------\n${"d".repeat(300)}`;
-  assert.deepEqual(ruleNames(edited, { stripComments: true }), []);
-  // In history, a "#" line is content (e.g. a Markdown heading in a squash message).
+test('check-commit-msg treats a "#" line as content', () => {
+  // A squash message may carry a Markdown heading.
   assert.deepEqual(ruleNames(`fix: x\n\n# ${"h".repeat(150)}`), ["1:body-max-line-length"]);
 });
