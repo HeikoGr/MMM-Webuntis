@@ -1,0 +1,61 @@
+name: Dependabot Biome Migrate
+
+# Dependabot bumps @biomejs/biome in package.json, but not biome.jsonc (the $schema version and
+# options Biome renamed). This runs `biome migrate --write` on such a PR and pushes the result.
+#
+# The push must come from RELEASE_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so CI
+# would never run on the new head and the auto-merge would wait forever. Because this runs on a
+# Dependabot PR, the secret has to exist as a *Dependabot* secret too (Settings > Secrets and
+# variables > Dependabot).
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - package.json
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.2'
+          cache: npm
+
+      # No lifecycle scripts: the PR content is third-party and this job holds a write token.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Migrate the Biome configuration
+        run: npx --no-install biome migrate --write
+
+      - name: Commit the migration
+        env:
+          HAS_TOKEN: ${{ secrets.RELEASE_TOKEN != '' }}
+        run: |
+          if git diff --quiet; then
+            echo "biome.jsonc is up to date."
+            exit 0
+          fi
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::biome.jsonc needs a migration, but no RELEASE_TOKEN (Dependabot secret) is set; run 'npx biome migrate --write' on this branch."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "build(deps): migrate the Biome configuration"
+          git push
