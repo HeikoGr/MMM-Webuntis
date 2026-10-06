@@ -1,6 +1,6 @@
 {
   "name": "mmm-webuntis",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
   "description": "MagicMirror module to access Webuntis school timetables.",
   "keywords": [

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.1...v0.15.2) (2026-10-06)
+
+
+### 🔧 Tooling
+
+* ship releases via auto-merged release-ship PR and drop commit hooks ([#130](https://github.com/HeikoGr/MMM-Webuntis/issues/130)) ([a61cd74](https://github.com/HeikoGr/MMM-Webuntis/commit/a61cd74c5046623f524f455630698f76e78add3d))
+
 ## [0.15.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.0...v0.15.1) (2026-10-04)
 
 
