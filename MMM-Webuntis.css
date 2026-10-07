@@ -159,7 +159,7 @@
   margin-bottom: var(--wu-widget-stack-gap);
 }
 
-.MMM-Webuntis>.wu-widget-container:last-child {
+.MMM-Webuntis > .wu-widget-container:last-child {
   margin-bottom: 0;
 }
 
@@ -414,7 +414,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .wu-shared-popover,
   .wu-shared-popover__shell,
   .wu-shared-popover.is-open,
@@ -497,7 +496,7 @@
   padding: 0.1rem 0.4rem 0.1rem 0;
 }
 
-.MMM-Webuntis .grid-combined .grid-timecell>div {
+.MMM-Webuntis .grid-combined .grid-timecell > div {
   line-height: 1;
   font-size: 0.78rem;
 }
@@ -591,7 +590,7 @@
   /* For absolute positioning of homework icon */
 }
 
-.MMM-Webuntis .grid-combined .grid-lesson>.lesson-content {
+.MMM-Webuntis .grid-combined .grid-lesson > .lesson-content {
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
@@ -661,7 +660,7 @@
 }
 
 /* Ensure inner content fills the parent cell for consistent visuals */
-.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision>.lesson-content {
+.MMM-Webuntis .grid-combined .grid-lesson.lesson-break-supervision > .lesson-content {
   position: absolute;
   inset: 0;
   display: flex;
@@ -1177,7 +1176,6 @@
 }
 
 @keyframes pulse-warning {
-
   0%,
   100% {
     opacity: 1;
