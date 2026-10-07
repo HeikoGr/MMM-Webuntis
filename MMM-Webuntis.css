@@ -407,6 +407,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -610,6 +611,7 @@
   border-right: 1px solid var(--wu-split-divider);
   overflow: hidden;
 }
+
 .MMM-Webuntis .grid-combined .split-right {
   left: auto;
   right: 0;
@@ -966,6 +968,12 @@
   content: var(--wu-icon-warning);
 }
 
+.MMM-Webuntis .wu-inline-icon--no-lessons {
+  margin-right: 0.4rem;
+  position: relative;
+  top: -0.4em;
+}
+
 .MMM-Webuntis .wu-inline-icon--no-lessons::before {
   content: var(--wu-icon-no-lessons);
 }
@@ -1074,7 +1082,8 @@
   column-gap: var(--wu-message-card-gap);
   column-fill: balance;
   margin-bottom: var(--wu-message-card-gap);
-  grid-column: 1 / -1; /* Ensure it spans full width of widget container */
+  grid-column: 1 / -1;
+  /* Ensure it spans full width of widget container */
   width: 100%;
 }
 
@@ -1083,7 +1092,8 @@
 }
 
 .MMM-Webuntis .messages-grid .messageRow {
-  display: flex; /* Override display: contents from .wu-row */
+  display: flex;
+  /* Override display: contents from .wu-row */
   background-color: var(--wu-message-card-bg);
   border-left: 3px solid var(--wu-message-card-border);
   border-radius: var(--wu-message-card-radius);
@@ -1092,7 +1102,8 @@
 }
 
 .MMM-Webuntis .messages-grid .messageRowEmpty {
-  display: block; /* Override display: contents */
+  display: block;
+  /* Override display: contents */
   color: var(--wu-muted-text);
   font-style: italic;
 }
