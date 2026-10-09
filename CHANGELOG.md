@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.2...v0.15.3) (2026-10-07)
+
+
+### 🐛 Fixes
+
+* **css:** improve CSS formatting and spacing for consistency ([#133](https://github.com/HeikoGr/MMM-Webuntis/issues/133)) ([eb76c08](https://github.com/HeikoGr/MMM-Webuntis/commit/eb76c0899c06c9b53aeeceb672d57a811345de96))
+
 ## [0.15.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.1...v0.15.2) (2026-10-06)
 
 
