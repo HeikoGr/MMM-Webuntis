@@ -1,11 +1,26 @@
 .wu-plugin-lessons {
   width: 100%;
+  /* Larger icons than the shared default; an 18px glyph in a 20px box still fits the 25px lesson row. */
+  --wu-icon-chip-size: 20px;
+  --wu-icon-glyph-size-emoji: 18px;
 }
 
 .wu-plugin-lessons .holiday-notice {
   color: var(--wu-holiday-notice-color);
   font-weight: 600;
   padding-left: 0.25rem;
+}
+
+/* Icons of empty-day rows (holiday, locked, unavailable, no lessons): bare glyphs without the grid's chip,
+   centered on the text at any size. An em offset would scale with the glyph size, so the small correction is in rem. */
+.wu-plugin-lessons .lessonRow .wu-inline-icon {
+  margin-right: 0.4rem;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  vertical-align: middle;
+  position: relative;
+  top: -0.1rem;
 }
 
 .wu-plugin-lessons .cancelled {
