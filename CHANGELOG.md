@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.4](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.3...v0.15.4) (2026-10-16)
+
+
+### 🐛 Fixes
+
+* **lessons:** enlarge and center icons of empty-day rows ([#136](https://github.com/HeikoGr/MMM-Webuntis/issues/136)) ([c2081b0](https://github.com/HeikoGr/MMM-Webuntis/commit/c2081b07d73afd7a868e236a3286199bb04f9ed9))
+
 ## [0.15.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.2...v0.15.3) (2026-10-07)
 
 
