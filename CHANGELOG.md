@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.5](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.4...v0.15.5) (2026-10-21)
+
+
+### ⚡ Performance
+
+* **plugins:** use textContent in grid, update dependencies and Biome to 2.6 ([#139](https://github.com/HeikoGr/MMM-Webuntis/issues/139)) ([3fdc297](https://github.com/HeikoGr/MMM-Webuntis/commit/3fdc297ed37f1ac9141e29e3810fa95660836b72))
+
 ## [0.15.4](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.3...v0.15.4) (2026-10-16)
 
 
