@@ -710,7 +710,7 @@ function getModuleRootElement(ctx) {
         ? formatDisplayDate(dayDate, gridDateFormat)
         : dayDate.toLocaleDateString(ctx.config.language, { weekday: "short", day: "numeric", month: "numeric" });
 
-      dayLabel.innerText = dayLabelText;
+      dayLabel.textContent = dayLabelText;
       const col = 2 + d;
       dayLabel.style.gridColumn = `${col}`;
       header.appendChild(dayLabel);
@@ -813,7 +813,7 @@ function getModuleRootElement(ctx) {
       lab.style.left = "4px";
       lab.style.fontSize = "0.85em";
       lab.style.color = "#666";
-      lab.innerText = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      lab.textContent = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
       timeInner.appendChild(lab);
       timeInner.appendChild(createHourLine(top));
     }
@@ -1295,7 +1295,7 @@ function getModuleRootElement(ctx) {
   function addMoreBadge(inner, hiddenCount, ctx) {
     const moreBadge = document.createElement("div");
     moreBadge.className = "grid-more-badge";
-    moreBadge.innerText = ctx.translate("more");
+    moreBadge.textContent = ctx.translate("more");
     const hiddenLessonsKey = hiddenCount > 1 ? "hidden_lessons_plural" : "hidden_lessons";
     const hiddenLessonsLabel = ctx.translate
       ? ctx.translate(hiddenLessonsKey)
