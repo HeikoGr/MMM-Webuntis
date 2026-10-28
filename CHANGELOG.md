@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.15.6](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.5...v0.15.6) (2026-10-28)
+
+
+### 🐛 Fixes
+
+* **tests:** escape non-breaking space in fake-dom regexes ([#142](https://github.com/HeikoGr/MMM-Webuntis/issues/142)) ([3f3b5c3](https://github.com/HeikoGr/MMM-Webuntis/commit/3f3b5c33bf55f50ffa45d6a06d8b5f235b972a9b))
+
+
+### 📦 Build & Dependencies
+
+* **deps:** read the Biome schema from node_modules and update mmm-shared ([#145](https://github.com/HeikoGr/MMM-Webuntis/issues/145)) ([c6be0ee](https://github.com/HeikoGr/MMM-Webuntis/commit/c6be0ee1753e6fc7f4a170cdf4f9f289d0e92e03))
+
+
+### 🔧 Maintenance
+
+* **deps-dev:** bump @biomejs/biome from 2.6.2 to 2.6.3 in the npm group ([#144](https://github.com/HeikoGr/MMM-Webuntis/issues/144)) ([314b225](https://github.com/HeikoGr/MMM-Webuntis/commit/314b225e35130724947d1136dc1de9b7c405394a))
+
 ## [0.15.5](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.4...v0.15.5) (2026-10-21)
 
 
