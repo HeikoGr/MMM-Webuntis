@@ -1,7 +1,8 @@
 name: Dependabot Biome Migrate
 
-# Dependabot bumps @biomejs/biome in package.json, but not biome.jsonc (the $schema version and
-# options Biome renamed). This runs `biome migrate --write` on such a PR and pushes the result.
+# Dependabot bumps @biomejs/biome in package.json, but not biome.jsonc (options Biome renamed or
+# removed; the $schema points at node_modules and follows the bump by itself). This runs
+# `biome migrate --write` on such a PR and pushes the result.
 #
 # The push must come from RELEASE_TOKEN: a push made with GITHUB_TOKEN starts no workflows, so CI
 # would never run on the new head and the auto-merge would wait forever. Because this runs on a

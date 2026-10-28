@@ -2,7 +2,7 @@
 // MMM-HomeConnect2, MMM-LibraryMonitor, MMM-Photoprism2, MMM-Webuntis). Keep it identical across the repos;
 // only defaultBranch, the asset ignores and module-specific globals differ.
 {
-  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
