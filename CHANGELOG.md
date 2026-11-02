@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.8](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.7...v0.15.8) (2026-11-02)
+
+
+### 🧪 Testing
+
+* check redacted secrets without building a RegExp ([#151](https://github.com/HeikoGr/MMM-Webuntis/issues/151)) ([92d541d](https://github.com/HeikoGr/MMM-Webuntis/commit/92d541d3de9d5cc97820d94347885632a5184a95))
+
 ## [0.15.7](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.6...v0.15.7) (2026-11-02)
 
 
