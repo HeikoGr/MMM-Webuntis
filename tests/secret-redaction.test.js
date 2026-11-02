@@ -83,7 +83,7 @@ test("registered config secrets are removed wherever they appear, also URL-encod
   registerSecrets(secrets);
 
   assert.equal(redactSecrets(`login with ${PASSWORD} failed`), "login with *** failed");
-  assert.doesNotMatch(redactSecrets(`qr=${encodeURIComponent(QR)}`), new RegExp(OTP_KEY));
+  assert.ok(!redactSecrets(`qr=${encodeURIComponent(QR)}`).includes(OTP_KEY));
   assert.equal(redactSecrets(`secret ${OTP_KEY} somewhere`), "secret *** somewhere");
   // Too short to be replaced safely: "abc" would hit ordinary words.
   assert.equal(redactSecrets("abc def"), "abc def");
@@ -122,12 +122,13 @@ test("a failed QR-code login reaches the mirror and the log without the key", as
     ]);
     assert.equal(payload.state.warningMeta[0].kind, "network");
     assert.equal(payload.context.config.qrcode, undefined, "the student's own QR code is not sent back");
-    assert.doesNotMatch(JSON.stringify(result), new RegExp(OTP_KEY));
+    assert.ok(!JSON.stringify(result).includes(OTP_KEY));
 
     const errorLine = lines.find((line) => line.level === "error" && line.message.includes("Cannot reach"));
     assert.ok(errorLine, "the technical detail stays in the log");
     assert.match(errorLine.message, /qrcode:max\.muster@demo\.webuntis\.com\/demo-school/);
-    assert.doesNotMatch(lines.map((line) => line.message).join("\n"), new RegExp(OTP_KEY));
+    const logText = lines.map((line) => line.message).join("\n");
+    assert.ok(!logText.includes(OTP_KEY));
   } finally {
     helper.stop();
   }
@@ -156,7 +157,7 @@ test("a rejected password login warns with the server's message, never with the 
 
     const [warning] = result.students[0].state.warnings;
     assert.match(warning, /^Authentication failed for "Lea": Credentials authentication failed: 200 - bad credentials/);
-    assert.doesNotMatch(JSON.stringify(result), new RegExp(PASSWORD.replace(/[!-]/g, "\\$&")));
+    assert.ok(!JSON.stringify(result).includes(PASSWORD));
     assert.doesNotMatch(lines.map((line) => line.message).join("\n"), /Pa55word/);
   } finally {
     helper.stop();
@@ -192,7 +193,7 @@ test("a fetch that fails as a whole sends FETCH_FAILED without secrets", async (
     };
     await assert.rejects(helper.fetchInstance({ identifier: "x", config: {} }), (error) => {
       assert.match(error.message, /^unexpected failure for /);
-      assert.doesNotMatch(error.message, new RegExp(OTP_KEY));
+      assert.ok(!error.message.includes(OTP_KEY));
       return true;
     });
   } finally {
