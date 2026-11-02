@@ -39,10 +39,10 @@
     "debug": "node scripts/node_helper_wrapper.js"
   },
   "dependencies": {
-    "entities": "^8.1.0",
+    "entities": "^9.0.0",
     "sanitize-html": "^2.18.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.3"
+    "@biomejs/biome": "^2.6.4"
   }
 }

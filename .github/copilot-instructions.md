@@ -118,6 +118,17 @@ file. Playwright's `page.goto()` to the same URL with only another `#hash` does 
 A new plugin option needs no mapping: its default in the plugin's `getDefaultConfig()` is enough.
 Details: `docs/PLUGINS.md` → "How a config value reaches a frontend plugin".
 
+### ⚠️ Known Pitfall: credentials in messages (issue #147)
+
+A QR-code credential key is `qrcode:<whole QR URL>`, including the `key=` OTP secret. Never put a
+`credKey`/`cacheKey` or an unfiltered error into a log line or warning: use
+`describeCredentialKey(credKey)` (`qrcode:user@server/school`). `node_helper` redacts at the exits
+(`_writeLog`, `fetchInstance()` result and errors, `prepareConfig()` warnings/errors) via
+`lib/secretRedaction.js`; a new path to the frontend that bypasses these needs `redactSecrets()` too.
+Warnings on the mirror are short user texts (`convertRestErrorToWarning()`); technical detail
+(`formatError()`) belongs in the log. The frontend shows at most three warning boxes with a line clamp
+(`MMM-Webuntis.css` `.mmm-webuntis-warning`), so a warning can never widen or break the layout.
+
 ### Configuration
 - 25 legacy config key mappings in `configValidator.js#applyLegacyMappings()` - don't break them
 - Widget-specific validation in `widgetConfigValidator.js` - check before assuming config structure
@@ -146,7 +157,8 @@ this._log('warn', '[feature] Warning:', error);
 - `lib/mmm-shared/` - Git submodule shared by all of the author's modules (`createTransport`, `createLogger`, `createLifecycle`). Do not edit it here. `MMM-Webuntis.js` `_createLifecycle()` wires `createLifecycle` for suspend/resume, render gating, `SESSION_STATE` and the day-change tick (the fetch schedule lives in the backend hub, `updateInterval: 0` here); do not add own timers or visibility logic next to it
 - `lib/moduleConfig.js` - Legacy mapping, canonical `plugins.<id>` map, validation, frontend plugin registry, fetch flags
 - `lib/apiStatusTracker.js` - Per-instance endpoint status (`lastSuccessAt`), 24h permanent-error skip, circuit breaker
-- `lib/authSession.js` - Credential fingerprint (`getCredentialKey`), auth session creation, parent auth
+- `lib/authSession.js` - Credential fingerprint (`getCredentialKey`, printable via `describeCredentialKey`), auth session creation, parent auth, `resolveServerName` for user-facing texts
+- `lib/secretRedaction.js` - `redactSecrets()` for every text leaving the backend (logs, warnings, FETCH_FAILED/CONFIG_INVALID), config secrets registered in `prepareConfig()`
 - `lib/studentDiscovery.js` - Parent-account student auto-discovery
 - `lib/warningUtils.js` - Warning classification (`classifyWarningMetaFromError`), group collectors, payload merge
 - `lib/webuntisClient.js` - Public WebUntis entry point for backend consumers

@@ -29,5 +29,12 @@ test("generateTotp defaults to 6 digits and 30-second steps", () => {
 test("decodeBase32 ignores case, whitespace and padding, and rejects foreign characters", () => {
   assert.equal(decodeBase32("gezd gnbv\n").toString("ascii"), "12345");
   assert.equal(decodeBase32("GEZDGNBV===").toString("ascii"), "12345");
-  assert.throws(() => decodeBase32("GEZ1"), /Invalid Base32 character "1"/);
+  assert.throws(
+    () => decodeBase32("GEZ1"),
+    (error) => {
+      assert.match(error.message, /Invalid Base32 character at position 4/);
+      assert.doesNotMatch(error.message, /"1"/, "the message must not quote a character of the secret");
+      return true;
+    },
+  );
 });

@@ -5,5 +5,6 @@
   "widget_timetable": "timetable",
   "widget_filter_days": "days",
   "widget_filter_week_view": "week view",
-  "widget_filter_all": "all"
+  "widget_filter_all": "all",
+  "more_warnings": "… and {count} more (see log)"
 }
