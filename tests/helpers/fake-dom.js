@@ -48,6 +48,12 @@ class FakeElement {
   }
 
   appendChild(node) {
+    // Like the DOM: appending a fragment moves its children, not the fragment itself.
+    if (node?.nodeType === 11) {
+      this.childNodes.push(...node.childNodes);
+      node.childNodes = [];
+      return node;
+    }
     this.childNodes.push(node);
     return node;
   }
@@ -67,6 +73,10 @@ class FakeElement {
 
   get textContent() {
     return this.childNodes.map((node) => (node.nodeType === 3 ? node.data : node.textContent)).join("");
+  }
+
+  set textContent(value) {
+    this.childNodes = [new FakeText(value ?? "")];
   }
 
   /** All descendant elements with the given tag name (lower case). */
@@ -111,6 +121,7 @@ function createFakeDocument() {
   return {
     createElement: (tag) => new FakeElement(tag),
     createTextNode: (data) => new FakeText(data),
+    createDocumentFragment: () => Object.assign(new FakeElement("#document-fragment"), { nodeType: 11 }),
   };
 }
 

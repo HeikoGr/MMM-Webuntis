@@ -556,6 +556,21 @@ Any success closes it immediately.
 | generic `4xx` | `HTTP <status> error for "<student>": ...` |
 | generic `5xx` | `Server error (HTTP <status>): ...` |
 
+A failed login of a credential group (`node_helper._handleGroupAuthFailure`) shows the same texts,
+with the group's student titles as `<student>`; the technical detail (error code, cause) goes to the
+log only, as `Cannot reach WebUntis server for <account>: …` or `Authentication failed for <account>: …`.
+
+### No credentials in messages
+
+Everything that leaves the backend passes `lib/secretRedaction.js#redactSecrets()`: every log line
+(`node_helper._writeLog`), the warnings of each DATA payload and of CONFIGURED, the CONFIG_INVALID
+errors and the FETCH_FAILED message. It removes `key=`/`password=`/`token=`-style values, JSON
+`"password": "…"` pairs, bearer tokens, JWTs and session cookies, and the literal passwords and QR-code
+keys of every configured instance (registered in `prepareConfig()`). Credential keys appear in texts
+only through `describeCredentialKey()`, which shows a QR-code login as `qrcode:<user>@<server>/<school>`
+instead of the QR URL with its OTP key (issue #147). `context.config` of a payload carries no
+`password` or `qrcode`.
+
 ### Operational log messages worth knowing
 
 | Situation | Typical log message |

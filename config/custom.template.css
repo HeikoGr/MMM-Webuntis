@@ -21,6 +21,7 @@
   --wu-alpha-strong: 0.85;
 
   --wu-warning-color: #e0b000;
+  --wu-warning-max-lines: 3;
   --wu-critical-color: #d64545;
   --wu-error-border: #d64545;
 

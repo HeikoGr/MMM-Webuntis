@@ -153,7 +153,7 @@ Required fields remain:
 - `range.endYmd`
 
 Rule changes for V3:
-- `context.config` remains part of the contract
+- `context.config` remains part of the contract, without the student's own `password` and `qrcode`
 - the contract does not derive plugin-specific helper arrays from config
 - frontend may use `context.config` for presentation and plugin-local derivation
 - backend may internally use config for fetch decisions, but those decisions must not appear as plugin-specific transport structures
