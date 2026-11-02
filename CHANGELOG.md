@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.7](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.6...v0.15.7) (2026-11-02)
+
+
+### 🐛 Fixes
+
+* keep credentials out of warnings and logs ([#147](https://github.com/HeikoGr/MMM-Webuntis/issues/147)) ([#148](https://github.com/HeikoGr/MMM-Webuntis/issues/148)) ([2dc6444](https://github.com/HeikoGr/MMM-Webuntis/commit/2dc6444326077a4c1b6d8e3a33e76e37dfd7917f))
+
 ## [0.15.6](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.5...v0.15.6) (2026-10-28)
 
 
