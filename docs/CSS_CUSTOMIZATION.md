@@ -22,6 +22,7 @@ These are frequently useful but were easy to miss in older examples:
 - **Current-time line:** `--wu-nowline-start`, `--wu-nowline-end`, `--wu-nowline-glow`
 - **Today emphasis (grid):** `--wu-today-replacement-bg`, `--wu-today-cancelled-bg`, `--wu-today-regular-bg`
 - **Ticker spacing:** `--wu-ticker-padding-block`, `--wu-ticker-padding-inline`, `--wu-ticker-stack-gap`, `--wu-ticker-item-gap`
+- **Warning boxes:** `--wu-warning-max-lines` (see [Warning Boxes](#warning-boxes))
 - **UI icons:** `--wu-icon-warning`, `--wu-icon-homework`, `--wu-icon-break-supervision`, `--wu-icon-holiday`, `--wu-icon-no-lessons`, `--wu-icon-absence`, `--wu-icon-moved`
 
 ## Icon Configuration (CSS)
@@ -195,6 +196,26 @@ Related card styling options:
 - `--wu-message-card-bg`
 - `--wu-message-card-border`
 - `--wu-message-text`
+
+## Warning Boxes
+
+Warnings (login or connection failures, config problems) are drawn so that they never change the
+layout of the mirror:
+
+- a box takes the width the widgets give the module and never widens it; long words such as URLs
+  wrap inside the box. Only a module without other content grows to `15rem` so the text stays
+  readable;
+- each box shows at most `--wu-warning-max-lines` lines (default `3`) and ends with `…`;
+- at most three boxes are shown, critical ones first; further warnings collapse into one line
+  ("… and 2 more (see log)").
+
+The full texts are in the browser console and the MagicMirror log.
+
+```css
+.MMM-Webuntis {
+  --wu-warning-max-lines: 2;
+}
+```
 
 ## High Contrast Example (for Visual Impairments)
 
@@ -388,6 +409,7 @@ Naming convention for new hooks:
 ## Full CSS Class Reference
 
 ### Layout Classes
+- `.mmm-webuntis-warning` - Warning box (`.critical`, `.runtime` for fetch warnings, `.more` for the "… and N more" line)
 - `.wu-widget-container` - Main widget container
 - `.wu-row` - Table row equivalent
 - `.wu-col` - Table cell equivalent

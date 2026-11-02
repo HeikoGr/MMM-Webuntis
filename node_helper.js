@@ -10,7 +10,7 @@ const {
   convertRestErrorToWarning,
   buildFetchPlan,
 } = require("./lib/webuntisClient");
-const { ApiStatusTracker, apiStatusKey } = require("./lib/apiStatusTracker");
+const { ApiStatusTracker, apiStatusKey, extractHttpStatus } = require("./lib/apiStatusTracker");
 const {
   buildEffectiveStudentConfig,
   buildFetchFlags,
@@ -19,7 +19,7 @@ const {
   normalizeModuleConfig,
   validateNormalizedConfig,
 } = require("./lib/moduleConfig");
-const { createAuthSession, getCredentialKey } = require("./lib/authSession");
+const { createAuthSession, describeCredentialKey, getCredentialKey, resolveServerName } = require("./lib/authSession");
 const { createResponseCache } = require("./lib/webuntis/responseCache");
 const { ensureStudentsFromAppData } = require("./lib/studentDiscovery");
 const { isDemoMode, buildDemoPayloads, loadFixturePayloads, prepareDemoStudents } = require("./lib/demoData");
@@ -35,7 +35,10 @@ const {
   isNetworkError,
   mergeGroupWarningsIntoPayload,
   mergeUniqueWarnings,
+  redactPayloadWarnings,
+  redactWarningList,
 } = require("./lib/warningUtils");
+const { collectConfigSecrets, redactSecrets, registerSecrets } = require("./lib/secretRedaction");
 const { initializeBackendPluginHost } = require("./lib/pluginHostBackend");
 const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
 
@@ -213,6 +216,8 @@ module.exports = NodeHelper.create({
    */
   prepareConfig(rawConfig) {
     this._ensureRuntime();
+    // Before anything logs or validates: from here on these values never leave the backend.
+    registerSecrets(collectConfigSecrets(rawConfig));
     const { normalizedConfig, configWarnings } = normalizeModuleConfig(JSON.parse(JSON.stringify(rawConfig)), {
       pluginHost: this._pluginHost,
       logger: this._mmLog.bind(this),
@@ -228,9 +233,10 @@ module.exports = NodeHelper.create({
     }
 
     if (!validation.valid) {
-      const error = new Error(validation.errors.join("\n"));
+      const errors = validation.errors.map((message) => redactSecrets(message));
+      const error = new Error(errors.join("\n"));
       error.code = "CONFIG_INVALID";
-      error.details = { errors: validation.errors, warnings: validation.warnings, warningMeta: validation.warningMeta };
+      error.details = { errors, ...redactWarningList(validation.warnings, validation.warningMeta) };
       throw error;
     }
 
@@ -239,10 +245,10 @@ module.exports = NodeHelper.create({
     buildWarningMetaEntries(warnings, { kind: "config", severity: "warning" }).forEach((entry) => {
       if (!metaByMessage.has(entry.message)) metaByMessage.set(entry.message, entry);
     });
-    this._configWarnings.set(normalizedConfig, {
-      warnings,
-      warningMeta: buildWarningMetaList(warnings, metaByMessage),
-    });
+    this._configWarnings.set(
+      normalizedConfig,
+      redactWarningList(warnings, buildWarningMetaList(warnings, metaByMessage)),
+    );
     return normalizedConfig;
   },
 
@@ -266,6 +272,22 @@ module.exports = NodeHelper.create({
    *   student; `allFailed` when none of them carries data, `warnings` are module-level
    */
   async fetchInstance({ identifier, config, reason = "unspecified" }) {
+    try {
+      const result = await this._fetchInstanceData({ identifier, config, reason });
+      // Everything below ends up on the mirror: no credentials in warnings (issue #147).
+      return {
+        ...result,
+        students: result.students.map(redactPayloadWarnings),
+        warnings: redactWarningList(result.warnings).warnings,
+      };
+    } catch (error) {
+      // The hub sends the message as FETCH_FAILED to the frontend.
+      if (error instanceof Error) error.message = redactSecrets(error.message);
+      throw error;
+    }
+  },
+
+  async _fetchInstanceData({ identifier, config, reason }) {
     this._ensureRuntime();
     const log = this._loggerFor(identifier);
     log("debug", null, `[FETCH] Start (id=${identifier}, reason=${reason})`);
@@ -299,7 +321,7 @@ module.exports = NodeHelper.create({
       // fetch once) keeps two waiting instances from starting at the same time.
       const previous = this._pendingFetchByCredKey.get(credKey);
       if (previous) {
-        log("debug", null, `Instance ${identifier}: waiting for running fetch of credKey=${credKey}`);
+        log("debug", null, `Instance ${identifier}: waiting for running fetch of ${describeCredentialKey(credKey)}`);
       }
       const run = (previous || Promise.resolve())
         .catch(() => {})
@@ -372,21 +394,37 @@ module.exports = NodeHelper.create({
   },
 
   _handleGroupAuthFailure({ err, credKey, identifier, students, config, warningsState }) {
-    const errorMsg = formatError(err);
+    const account = describeCredentialKey(credKey);
     const networkFailure = isNetworkError(err);
-    const msg = networkFailure
-      ? `Cannot reach WebUntis server for ${credKey}: ${errorMsg}`
-      : `Authentication failed for ${credKey}: ${errorMsg}`;
     const log = this._loggerFor(identifier);
-    log("error", null, msg);
+    log(
+      "error",
+      null,
+      `${networkFailure ? "Cannot reach WebUntis server" : "Authentication failed"} for ${account}: ${formatError(err)}`,
+    );
 
     // Only the failing credentials are forced to re-login; other accounts keep their sessions.
     if (this._authService?.invalidateCache(credKey)) {
-      log("warn", null, `[REAUTH] Forcing re-authentication for ${credKey} on the next fetch`);
+      log("warn", null, `[REAUTH] Forcing re-authentication for ${account} on the next fetch`);
     }
 
+    // The mirror gets the short, user-facing text; the technical detail (codes, causes) stays in
+    // the log line above. convertRestErrorToWarning() reads an error without HTTP status as a
+    // network failure, but a login can fail before any request (e.g. a malformed QR-code key).
+    const studentTitle =
+      students
+        .map((student) => student.title)
+        .filter(Boolean)
+        .join(", ") || "Student";
+    const knownCause = networkFailure || extractHttpStatus(err) > 0;
+    const warning =
+      (knownCause &&
+        convertRestErrorToWarning(err, { studentTitle, server: resolveServerName(students[0], config) })) ||
+      (networkFailure
+        ? "Cannot reach the WebUntis server. Will retry automatically."
+        : `Authentication failed for "${studentTitle}": ${err?.message || "unknown error"}`);
     warningsState.addGroupWarning(
-      msg,
+      warning,
       classifyWarningMetaFromError(err, { kind: networkFailure ? "network" : "auth" }),
     );
     return students.map((student) =>
@@ -445,7 +483,7 @@ module.exports = NodeHelper.create({
     const warningMsg = convertRestErrorToWarning(err, {
       studentTitle: student.title,
       school: student.school || config?.school,
-      server: student.server || config?.server || "webuntis.com",
+      server: resolveServerName(student, config),
     });
     if (warningMsg) {
       warningsState.addGroupWarning(warningMsg, classifyWarningMetaFromError(err));
@@ -528,7 +566,7 @@ module.exports = NodeHelper.create({
     const own = LOG_LEVEL_WEIGHTS[String(ownLevel || "").toLowerCase()];
     if (own !== undefined && (LOG_LEVEL_WEIGHTS[level] ?? LOG_LEVEL_WEIGHTS.info) > own) return;
     const studentTag = student?.title ? `[${String(student.title).trim()}] ` : "";
-    const formatted = `${studentTag}${message}`;
+    const formatted = redactSecrets(`${studentTag}${message}`);
     if (level === "debug") return Log.debug(formatted);
     if (level === "error") return Log.error(formatted);
     if (level === "warn") return Log.warn(formatted);

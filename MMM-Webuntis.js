@@ -1,5 +1,7 @@
 Module.register("MMM-Webuntis", {
   _cacheVersion: "2.0.2",
+  // Warning boxes shown at once (getDom); further warnings collapse into one "… and N more" line.
+  _maxVisibleWarnings: 3,
 
   defaults: {
     // === GLOBAL OPTIONS ===
@@ -1413,38 +1415,37 @@ Module.register("MMM-Webuntis", {
       wrapper.appendChild(errorDiv);
     };
 
-    if (this.moduleWarningsSet && this.moduleWarningsSet.size > 0) {
+    // Warnings must not reshape the mirror: at most _maxVisibleWarnings boxes (critical ones
+    // first), the rest summarized in one line. Width and line count are bounded in the CSS
+    // (.mmm-webuntis-warning); the full texts are in the browser console and the backend log.
+    const warningEntries = [
+      ...Array.from(this.moduleWarningsSet || []).map((text) => ({
+        text,
+        variant: this._isCriticalModuleWarning(text) ? "critical" : "",
+        fallback: "Configuration warning",
+      })),
+      ...this._getRuntimeWarnings().map((text) => ({ text, variant: "runtime", fallback: "Fetch warning" })),
+    ].sort((a, b) => Number(b.variant === "critical") - Number(a.variant === "critical"));
+    if (warningEntries.length > 0) {
       const warnContainer = document.createDocumentFragment();
-      for (const w of Array.from(this.moduleWarningsSet)) {
+      for (const entry of warningEntries.slice(0, this._maxVisibleWarnings)) {
         const warnDiv = document.createElement("div");
-        const isCritical = this._isCriticalModuleWarning(w);
-        warnDiv.className = isCritical
-          ? "mmm-webuntis-warning critical small bright"
-          : "mmm-webuntis-warning small bright";
+        warnDiv.className = `mmm-webuntis-warning ${entry.variant} small bright`.replace(/\s+/g, " ");
         try {
-          withWarningIcon(warnDiv, w);
+          withWarningIcon(warnDiv, entry.text);
         } catch {
-          withWarningIcon(warnDiv, "Configuration warning");
+          withWarningIcon(warnDiv, entry.fallback);
         }
         warnContainer.appendChild(warnDiv);
       }
-      wrapper.appendChild(warnContainer);
-    }
-
-    const runtimeWarnings = this._getRuntimeWarnings();
-    if (runtimeWarnings.length > 0) {
-      const runtimeContainer = document.createDocumentFragment();
-      for (const warning of runtimeWarnings) {
-        const warnDiv = document.createElement("div");
-        warnDiv.className = "mmm-webuntis-warning runtime small bright";
-        try {
-          withWarningIcon(warnDiv, warning);
-        } catch {
-          withWarningIcon(warnDiv, "Fetch warning");
-        }
-        runtimeContainer.appendChild(warnDiv);
+      const hidden = warningEntries.length - this._maxVisibleWarnings;
+      if (hidden > 0) {
+        const moreDiv = document.createElement("div");
+        moreDiv.className = "mmm-webuntis-warning more small dimmed";
+        moreDiv.textContent = this.translate("more_warnings", { count: hidden });
+        warnContainer.appendChild(moreDiv);
       }
-      wrapper.appendChild(runtimeContainer);
+      wrapper.appendChild(warnContainer);
     }
 
     const widgetRenderers = this._createWidgetRenderers(wrapper, sortedStudentTitles, appendWidgetError);

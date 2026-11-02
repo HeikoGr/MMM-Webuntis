@@ -52,6 +52,7 @@
   --wu-warning-color: var(--wu-accent-yellow);
   --wu-warning-bg-soft: rgba(255, 241, 191, var(--wu-alpha-soft));
   --wu-warning-bg-strong: rgba(255, 241, 191, var(--wu-alpha-medium));
+  --wu-warning-max-lines: 3;
   --wu-critical-color: var(--wu-accent-red);
   --wu-critical-bg: rgba(var(--wu-rgb-accent-red), var(--wu-alpha-soft));
   --wu-error-text: var(--wu-accent-red-text);
@@ -1157,14 +1158,41 @@
   line-height: 1.3;
 }
 
+/*
+ * Warnings must never reshape the mirror (issue #147):
+ * - contain: inline-size keeps the text out of the module's width, so the box takes the width the
+ *   widgets give the module instead of widening it; min-width is the floor for a module without
+ *   other content (a percentage would not count while the module sizes itself);
+ * - overflow-wrap: anywhere breaks long tokens such as URLs instead of overflowing the box;
+ * - the line clamp caps the height; the full text is in the browser console and the backend log.
+ */
 .MMM-Webuntis .mmm-webuntis-warning {
-  display: inline-block;
-  padding: 0.4rem 0.6rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--wu-warning-max-lines);
+  line-clamp: var(--wu-warning-max-lines);
+  overflow: hidden;
+  contain: inline-size;
+  box-sizing: border-box;
+  min-width: 15rem;
+  width: auto;
+  overflow-wrap: anywhere;
+  /* Vertical spacing as transparent borders, not padding: overflow clips at the padding edge,
+     so a padding would show the top of the first clamped line. */
+  border-block: 0.4rem solid transparent;
+  padding: 0 0.6rem;
   background-color: var(--wu-warning-bg-soft);
   color: var(--wu-warning-color);
   font-size: 0.9em;
   font-weight: 500;
   line-height: 1.3;
+}
+
+.MMM-Webuntis .mmm-webuntis-warning.more {
+  border-left-color: transparent;
+  border-block-width: 0;
+  background-color: transparent;
+  font-weight: 400;
 }
 
 .MMM-Webuntis .mmm-webuntis-warning.critical {

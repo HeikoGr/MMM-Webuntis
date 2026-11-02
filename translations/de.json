@@ -5,5 +5,6 @@
   "widget_timetable": "Stundenplan",
   "widget_filter_days": "Tage",
   "widget_filter_week_view": "Wochenansicht",
-  "widget_filter_all": "alle"
+  "widget_filter_all": "alle",
+  "more_warnings": "… und {count} weitere (siehe Log)"
 }
