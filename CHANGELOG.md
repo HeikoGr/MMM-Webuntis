@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.9](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.8...v0.15.9) (2026-11-05)
+
+
+### 📦 Build & Dependencies
+
+* **deps:** bump Biome to 2.6.5 and move the devcontainer to the trixie-slim image ([#154](https://github.com/HeikoGr/MMM-Webuntis/issues/154)) ([78f3d79](https://github.com/HeikoGr/MMM-Webuntis/commit/78f3d7960d317ec829543cda58d10731e60e33ca))
+
 ## [0.15.8](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.7...v0.15.8) (2026-11-02)
 
 
