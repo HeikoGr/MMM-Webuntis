@@ -5,7 +5,7 @@ This devcontainer provides a complete development environment for MMM-Webuntis.
 ## Installed Tools
 
 ### Base Image
-- Shared base image: `ghcr.io/heikogr/mmm-devcontainer-base:node24-trixie-slim`
+- Shared base image: `ghcr.io/heikogr/mmm-devcontainer:trixie-slim`
 - Node.js 24
 - MagicMirror² preinstalled at `/opt/magic_mirror`
 - Playwright, `playwright-mcp`, and Chrome preinstalled in the image
