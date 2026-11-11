@@ -22,7 +22,7 @@
   "type": "commonjs",
   "main": "MMM-Webuntis.js",
   "engines": {
-    "node": ">=22.21.1"
+    "node": ">=22.22.2 <23 || >=24"
   },
   "scripts": {
     "postinstall": "node scripts/install-mmm-shared-submodule.js",

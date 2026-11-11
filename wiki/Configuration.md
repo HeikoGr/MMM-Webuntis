@@ -2,11 +2,19 @@
 
 This page covers the options most users actually need. For a full example file, see `config/config.template.js` in the repository.
 
+## Module Title
+
+The title above the module is MagicMirror's own `header` property of the module entry, next to
+`module` and `position`, not an option inside `config`:
+
+```js
+{ module: "MMM-Webuntis", position: "top_right", header: "Timetable", config: { /* ... */ } }
+```
+
 ## Top-Level Options You Will Usually Touch
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `header` | `MMM-Webuntis` | Module title shown by MagicMirror |
 | `updateInterval` | `4 * 60 * 1000` | Refresh interval in milliseconds. The default is deliberately below the ~5 minute idle limit of the WebUntis session (see [Troubleshooting](Troubleshooting.md#how-often-the-module-logs-in)); longer intervals log in again on most fetches |
 | `backgroundRefresh` | `true` | Keep refreshing while the module is hidden (e.g. under MMM-Carousel), so showing it never causes a request |
 | `quietHours` | `null` | Optional window without any polling, e.g. `{ from: '22:00', to: '06:00' }` |
