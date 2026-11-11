@@ -1812,7 +1812,7 @@ test("demoDataFile cannot point outside the module folder", () => {
   const { resolveFixturePaths } = require("../lib/demoData");
   const moduleRoot = require("node:path").join(__dirname, "..");
 
-  assert.throws(() => resolveFixturePaths("../../config/config.js", moduleRoot), /inside the module folder/);
+  assert.throws(() => resolveFixturePaths("../../config/config.js", moduleRoot), /inside the demo\/ folder/);
   assert.equal(resolveFixturePaths("/demo/fixtures/single-student-week.json", moduleRoot).length, 1);
 });
 
