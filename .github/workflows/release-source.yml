@@ -1,0 +1,36 @@
+name: Release source
+
+# The default branch only takes releases: develop -> release-ship -> default branch (release-please.yml).
+# A PR from any other branch - a Dependabot branch, a feature branch - would put changes there that
+# develop does not have, and the next release PR then conflicts. The branch ruleset of the default
+# branch requires this check.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    # "edited" catches a PR whose base was switched to the default branch after it was opened.
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  release-source:
+    name: Release source
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Only the release branch may target the default branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+          ALLOWED_HEAD: release-ship
+        run: |
+          if [ "$HEAD_REF" = "$ALLOWED_HEAD" ] && [ "$HEAD_REPO" = "$REPOSITORY" ]; then
+            echo "PR from $ALLOWED_HEAD - allowed."
+            exit 0
+          fi
+          echo "::error::Only $ALLOWED_HEAD may open PRs against the default branch, this PR comes from $HEAD_REPO:$HEAD_REF. Open it against develop instead."
+          exit 1
