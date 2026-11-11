@@ -7,14 +7,16 @@
 #          credentials work correctly.
 #
 # Usage:
-#   1. Direct parameters:
-#      ./scripts/test_auth_with_curl.sh "schulexyz" "schulexyz.webuntis.com" "username" "password"
+#   1. Direct parameters (the password is asked for, or taken from WEBUNTIS_PASSWORD - never
+#      as an argument, where it would show up in the process list and the shell history):
+#      ./scripts/test_auth_with_curl.sh "schulexyz" "schulexyz.webuntis.com" "username"
 #
 #   2. Read from config.js (if available):
 #      ./scripts/test_auth_with_curl.sh --from-config
 #
 # Requirements:
 #   - curl (for HTTP request)
+#   - node (builds the JSON body and encodes the school name)
 #   - python3 (for JSON formatting, optional)
 #   - jq (alternative for JSON formatting, optional)
 #
@@ -45,12 +47,15 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 print_usage() {
   cat <<EOF
 Usage:
-  $0 <school> <server> <username> <password>
+  $0 <school> <server> <username>
   $0 --from-config
 
 Examples:
-  # Test with direct parameters
-  $0 "schulexyz" "schulexyz.webuntis.com" "Kai Uwe.Müller" "mypassword"
+  # Test with direct parameters; asks for the password
+  $0 "schulexyz" "schulexyz.webuntis.com" "Kai Uwe.Müller"
+
+  # Non-interactive
+  WEBUNTIS_PASSWORD='...' $0 "schulexyz" "schulexyz.webuntis.com" "Kai Uwe.Müller"
 
   # Test with config.js credentials
   $0 --from-config
@@ -59,7 +64,6 @@ Parameters:
   school      School identifier (e.g., "schulexyz")
   server      Server hostname (e.g., "schulexyz.webuntis.com")
   username    Username (supports spaces and umlauts, e.g., "P. Müller")
-  password    Password
 
 Options:
   --from-config   Read credentials from config/config.js
@@ -145,11 +149,16 @@ fi
 
 if [[ "$1" == "--from-config" ]]; then
   read_from_config
-elif [[ $# -eq 4 ]]; then
+elif [[ $# -eq 3 ]]; then
   SCHOOL="$1"
   SERVER="$2"
   USER="$3"
-  PASS="$4"
+  if [[ -n "${WEBUNTIS_PASSWORD:-}" ]]; then
+    PASS="$WEBUNTIS_PASSWORD"
+  else
+    read -r -s -p "Password for $USER: " PASS
+    echo ""
+  fi
 else
   echo -e "${RED}Error: Invalid number of arguments${NC}" >&2
   print_usage
@@ -162,23 +171,22 @@ if [[ -z "$SCHOOL" || -z "$SERVER" || -z "$USER" || -z "$PASS" ]]; then
   exit 1
 fi
 
-# Build URL
-URL="https://$SERVER/WebUntis/jsonrpc.do?school=$SCHOOL"
+# Build URL (school URL-encoded) and JSON body with node: a password with " or \ stays valid JSON.
+# The values go through the environment, not the command line.
+SCHOOL_ENCODED=$(WU_SCHOOL="$SCHOOL" node -e 'process.stdout.write(encodeURIComponent(process.env.WU_SCHOOL))')
+URL="https://$SERVER/WebUntis/jsonrpc.do?school=$SCHOOL_ENCODED"
+JSON_DATA=$(WU_USER="$USER" WU_PASS="$PASS" node -e '
+  process.stdout.write(JSON.stringify({
+    id: "1",
+    jsonrpc: "2.0",
+    method: "authenticate",
+    params: { user: process.env.WU_USER, password: process.env.WU_PASS, client: "MMM-Webuntis-Test" },
+  }));
+')
 
-# Build JSON payload
-# Note: Using heredoc with -r flag to preserve exact formatting
-read -r -d '' JSON_DATA <<EOF || true
-{
-    "id": "1",
-    "jsonrpc": "2.0",
-    "method": "authenticate",
-    "params": {
-        "user": "$USER",
-        "password": "$PASS",
-        "client": "MMM-Webuntis-Test"
-    }
-}
-EOF
+# The response holds a live session id: a private temp file, removed on every exit.
+RESPONSE_FILE=$(mktemp)
+trap 'rm -f "$RESPONSE_FILE"' EXIT
 
 # Print test info
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -196,7 +204,7 @@ echo ""
 # Perform authentication request
 # Use --data-binary to preserve exact UTF-8 encoding
 # Add -w to capture HTTP status code
-HTTP_STATUS=$(curl -s -w "%{http_code}" -o /tmp/webuntis_auth_response.json \
+HTTP_STATUS=$(curl -s -w "%{http_code}" -o "$RESPONSE_FILE" \
   -X POST "$URL" \
   -H "Content-Type: application/json; charset=utf-8" \
   --data-binary "$JSON_DATA")
@@ -206,14 +214,12 @@ if [[ "$HTTP_STATUS" != "200" ]]; then
   echo -e "${RED}✗ Authentication failed (HTTP $HTTP_STATUS)${NC}"
   echo ""
   echo "Response:"
-  cat /tmp/webuntis_auth_response.json | $JSON_FORMATTER 2>/dev/null || cat /tmp/webuntis_auth_response.json
-  rm -f /tmp/webuntis_auth_response.json
+  $JSON_FORMATTER <"$RESPONSE_FILE" 2>/dev/null || cat "$RESPONSE_FILE"
   exit 2
 fi
 
 # Parse response
-RESPONSE=$(cat /tmp/webuntis_auth_response.json)
-rm -f /tmp/webuntis_auth_response.json
+RESPONSE=$(cat "$RESPONSE_FILE")
 
 # Check for JSON-RPC error
 if echo "$RESPONSE" | grep -q '"error"'; then
@@ -242,13 +248,17 @@ KLASS_ID=$(echo "$RESPONSE" | grep -o '"klasseId"[[:space:]]*:[[:space:]]*[0-9]*
 echo -e "${GREEN}✓ Authentication successful!${NC}"
 echo ""
 echo -e "${GREEN}Result:${NC}"
-echo -e "  Session ID:  $SESSION_ID"
+echo -e "  Session ID:  ${SESSION_ID:0:4}… (shortened)"
 echo -e "  Person ID:   $PERSON_ID"
 echo -e "  Person Type: $PERSON_TYPE"
 echo -e "  Class ID:    $KLASS_ID"
 echo ""
-echo -e "${BLUE}Full response:${NC}"
-echo "$RESPONSE" | $JSON_FORMATTER 2>/dev/null || echo "$RESPONSE"
+echo -e "${BLUE}Full response (session id shortened):${NC}"
+SHOWN_RESPONSE="$RESPONSE"
+if [[ -n "$SESSION_ID" ]]; then
+  SHOWN_RESPONSE="${RESPONSE//$SESSION_ID/${SESSION_ID:0:4}…}"
+fi
+echo "$SHOWN_RESPONSE" | $JSON_FORMATTER 2>/dev/null || echo "$SHOWN_RESPONSE"
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✓ Test completed successfully${NC}"

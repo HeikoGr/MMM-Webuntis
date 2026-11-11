@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node.js `>=22.22.1`
+- Node.js `>=22.22.2 <23` or `>=24`, the same range as MagicMirror² 2.38
 - a working MagicMirror² installation
 - a valid WebUntis account or QR code
 
@@ -12,10 +12,14 @@ Older Node builds have caused auth and runtime issues in real installations. If 
 
 ```bash
 cd ~/MagicMirror/modules
-git clone https://github.com/HeikoGr/MMM-Webuntis
+git clone --recurse-submodules https://github.com/HeikoGr/MMM-Webuntis
 cd MMM-Webuntis
 npm ci --omit=dev
 ```
+
+The module needs the `lib/mmm-shared` git submodule; a ZIP download does not contain it. If the
+module fails to start with `Cannot find module './lib/mmm-shared/mmm-shared'`, run
+`git submodule update --init --recursive` in the module folder.
 
 ## Add It To MagicMirror
 

@@ -27,7 +27,7 @@ Supported options:
 | `--config`, `-c` | Path to `config.js` |
 | `--student`, `-s` | Student index to test |
 | `--action`, `-a` | Restrict fetch scope: `all`, `auth`, `lessons`, `grid`, `exams`, `homework`, `absences`, `messagesofday` |
-| `--dump`, `-d` | Also write debug dumps to `debug_dumps/` |
+| `--dump`, `-d` | Also write debug dumps to `.debug_dumps/` |
 | `--verbose`, `-v` | Show detailed output |
 | `--debug-api`, `-x` | Show detailed API requests and truncated responses |
 | `--help`, `-h` | Show built-in help |
@@ -72,16 +72,16 @@ Do not use it as the source of truth for endpoint details, configuration semanti
 
 ## Output And Dumps
 
-With `--dump` or the corresponding config flags, the CLI writes files into `debug_dumps/`.
+With `--dump` or the corresponding config flags, the CLI writes files into `.debug_dumps/`.
 
 Typical uses:
 
 ```bash
 # Inspect lesson data in the newest dump
-cat debug_dumps/*.json | jq '.data.lessons' | head -20
+cat .debug_dumps/*.json | jq '.data.lessons' | head -20
 
 # Count exams across dumps
-cat debug_dumps/*.json | jq '.data.exams | length'
+cat .debug_dumps/*.json | jq '.data.exams | length'
 ```
 
 ## Troubleshooting

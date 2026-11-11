@@ -67,14 +67,23 @@
           "type": "object",
           "title": "config",
           "properties": {
-            "header": {
-              "type": "string",
-              "description": "Title text shown above this module."
-            },
             "updateInterval": {
               "type": "integer",
               "minimum": 10000,
               "description": "How often data is refreshed, in milliseconds."
+            },
+            "backgroundRefresh": {
+              "type": "boolean",
+              "default": true,
+              "description": "Keep refreshing while the module is hidden (e.g. on another MMM-Carousel slide)."
+            },
+            "quietHours": {
+              "type": "object",
+              "description": "Optional window without polling, e.g. from 22:00 to 06:00. Leave both empty to poll all day.",
+              "properties": {
+                "from": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$", "description": "Start (HH:MM)." },
+                "to": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$", "description": "End (HH:MM)." }
+              }
             },
             "timezone": {
               "type": "string",
@@ -83,7 +92,7 @@
             "logLevel": {
               "type": "string",
               "enum": ["none", "error", "warn", "info", "debug"],
-              "description": "Verbosity of frontend logging for troubleshooting."
+              "description": "Optional: narrows the log output of this module (frontend and backend). Unset = MagicMirror's global logLevel alone."
             },
             "debugDate": {
               "type": "string",
@@ -772,14 +781,19 @@
           "title": "https://github.com/HeikoGr/MMM-Webuntis/blob/master/README.md"
         },
         {
-          "key": "MMM-Webuntis.config.header",
-          "title": "config.header",
-          "description": "Title text shown above this module."
-        },
-        {
           "key": "MMM-Webuntis.config.updateInterval",
           "title": "updateInterval",
           "description": "How often data is refreshed, in milliseconds."
+        },
+        {
+          "key": "MMM-Webuntis.config.backgroundRefresh",
+          "title": "backgroundRefresh",
+          "description": "Keep refreshing while the module is hidden (e.g. on another MMM-Carousel slide)."
+        },
+        {
+          "key": "MMM-Webuntis.config.quietHours",
+          "title": "quietHours",
+          "description": "Optional window without polling, e.g. from 22:00 to 06:00. Leave both empty to poll all day."
         },
         {
           "key": "MMM-Webuntis.config.timezone",
@@ -789,7 +803,7 @@
         {
           "key": "MMM-Webuntis.config.logLevel",
           "title": "logLevel",
-          "description": "Verbosity of frontend logging for troubleshooting."
+          "description": "Optional: narrows the log output of this module (frontend and backend). Unset = MagicMirror's global logLevel alone."
         },
         {
           "key": "MMM-Webuntis.config.debugDate",
@@ -1247,10 +1261,9 @@
     "order": "*",
     "inconfig": "0",
     "config": {
-      "header": "MMM-Webuntis",
       "updateInterval": 240000,
+      "backgroundRefresh": true,
       "timezone": "Europe/Berlin",
-      "logLevel": "none",
       "debugDate": "",
       "demoDataFile": "",
       "dumpBackendPayloads": false,

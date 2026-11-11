@@ -4,7 +4,7 @@
  * Tests arbitrary WebUntis REST API endpoints using existing auth infrastructure.
  * Useful for exploring new endpoints without fully integrating them.
  *
- * All API responses are automatically saved to debug_dumps/ directory with metadata.
+ * All API responses are automatically saved to .debug_dumps/ (redacted) with metadata.
  *
  * Usage:
  *   node scripts/test_api_endpoint.js <path> [queryParams] [options]
@@ -19,7 +19,7 @@
  *   # Separate query params (optional)
  *   node scripts/test_api_endpoint.js "/WebUntis/api/rest/view/v2/calendar-entry/detail" "elementId=7211&elementType=5"
  *
- *   # Output raw JSON to stdout (dump still saved to debug_dumps/)
+ *   # Output raw JSON to stdout (dump still saved to .debug_dumps/)
  *   node scripts/test_api_endpoint.js "/api/rest/view/v2/calendar-entry/733133/detail" "" --raw > output.json
  *
  * Options:
@@ -32,6 +32,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const AuthService = require("../lib/webuntis/authService");
 const { callRestAPI } = require("../lib/webuntis/restClient");
+const { DEBUG_DUMP_DIR, cleanupOldDumps, redactDumpFields, writeDumpFile } = require("../lib/webuntis/debugDumpUtils");
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -136,20 +137,12 @@ function getEndpointName(path) {
   return relevantParts.join("-").replace(/[^a-zA-Z0-9-]/g, "_");
 }
 
-// Save API response to debug_dumps directory (like MMM module dumps)
+// Save API response to .debug_dumps/ like the module's own dumps: redacted, owner-only, capped.
 function saveToDumpFile(endpoint, params, response, authConfig, elapsed) {
-  const dumpDir = path.join(__dirname, "../debug_dumps");
-
-  // Create directory if it doesn't exist
-  if (!fs.existsSync(dumpDir)) {
-    fs.mkdirSync(dumpDir, { recursive: true });
-  }
-
   // Generate filename with timestamp
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5); // Remove milliseconds
   const endpointName = getEndpointName(endpoint);
   const filename = `${timestamp}_${endpointName}_api-test.json`;
-  const filePath = path.join(dumpDir, filename);
 
   // Build dump payload similar to MMM module structure
   const dumpData = {
@@ -169,8 +162,9 @@ function saveToDumpFile(endpoint, params, response, authConfig, elapsed) {
     response: response.data,
   };
 
-  // Write to file
-  fs.writeFileSync(filePath, JSON.stringify(dumpData, null, 2), "utf8");
+  redactDumpFields(dumpData);
+  const filePath = writeDumpFile(filename, dumpData);
+  cleanupOldDumps(DEBUG_DUMP_DIR, 25, (f) => f.endsWith("_api-test.json"));
 
   return path.relative(process.cwd(), filePath);
 }
@@ -280,7 +274,7 @@ async function main() {
     log("info", `✓ API call completed (${elapsed}ms)`);
     log("info", `  Status: ${response.status}`);
 
-    // Save response to debug_dumps directory
+    // Save response to .debug_dumps/
     const dumpPath = saveToDumpFile(cleanPath, allQueryParams, response, authConfig, elapsed);
     log("info", `  Saved: ${dumpPath}`);
 

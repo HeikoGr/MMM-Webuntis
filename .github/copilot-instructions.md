@@ -286,7 +286,13 @@ Boundary rule:
 
 ### Debug dumps structure
 
-Debug dumps are generated when `dumpBackendPayloads: true` is set in config. Files are stored in `debug_dumps/` (git-ignored):
+Debug dumps are generated when `dumpBackendPayloads: true` is set in config. Files are stored in `.debug_dumps/` (git-ignored):
+
+- The dot folder is deliberate: MagicMirror serves `modules/` over HTTP and skips dot paths. Path,
+  file mode (`0600`) and writing live in `lib/webuntis/debugDumpUtils.js` (`DEBUG_DUMP_DIR`,
+  `writeDumpFile()`); every dump writer goes through it. `start()` moves an old `debug_dumps/`.
+- Credential field names for dumps are defined once: `SECRET_FIELD_PATTERN` / `redactSecretFields()`
+  in `lib/secretRedaction.js`.
 
 **Filename pattern**: `TIMESTAMP_StudentName_api.json`
 
@@ -306,7 +312,7 @@ Debug dumps are generated when `dumpBackendPayloads: true` is set in config. Fil
 }
 ```
 
-Use `jq` to inspect: `cat debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head`
+Use `jq` to inspect: `cat .debug_dumps/TIMESTAMP_StudentName_api.json | jq '.timetableRange' | head`
 
 ### Available CLI Tools in Devcontainer
 
@@ -422,7 +428,7 @@ If you're uncertain whether something is an issue, don't comment. False positive
 **Good Patterns:**
 - `pm2 logs --lines 200` → get last 200 lines, returns immediately
 - `pm2 logs --lines 100 \| grep "error"` → filtered view, returns immediately
-- `cat debug_dumps/TIMESTAMP_StudentName_api.json \| jq '.timetableRange' \| head` → inspect specific data
+- `cat .debug_dumps/TIMESTAMP_StudentName_api.json \| jq '.timetableRange' \| head` → inspect specific data
 - `node --run debug` → interactive backend test, returns when user quits
 
 **Bad Patterns:**

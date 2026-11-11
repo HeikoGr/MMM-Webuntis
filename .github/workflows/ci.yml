@@ -16,9 +16,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Lint, test
+  test:
+    name: Test (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # MagicMirror 2.38 runs on >=22.22.2 <23 || >=24 (engines in package.json): the lower
+        # bound and the current 24.
+        node: ["22.22.2", "24"]
 
     steps:
       - name: Check out repository
@@ -30,13 +36,16 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          # Pinned to a patch release for reproducible runs. package.json engines follows
-          # a floor of >=22.22.1; that exact floor is not exercised here.
-          node-version: "22.22.2"
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      # Known vulnerabilities in what runs on the mirror (dev tools excluded), high and critical.
+      - name: Audit runtime dependencies
+        if: matrix.node == '22.22.2'
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
         run: node --run lint
@@ -54,3 +63,16 @@ jobs:
         run: node --run test
         env:
           TZ: Europe/Berlin
+
+  # The branch rulesets require this check by name; it passes only when every Node version passed.
+  check:
+    name: Lint, test
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: All Node versions passed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: test "$RESULT" = "success"
