@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.11](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.10...v0.15.11) (2026-11-11)
+
+
+### 🔧 Tooling
+
+* only accept release PRs on the default branch ([#165](https://github.com/HeikoGr/MMM-Webuntis/issues/165)) ([25f7e37](https://github.com/HeikoGr/MMM-Webuntis/commit/25f7e37d6a52b10e1f1f0763e0df51cfe0b09018))
+
 ## [0.15.10](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.9...v0.15.10) (2026-11-11)
 
 
