@@ -378,7 +378,7 @@ Total: 7 API calls (40% MORE than existing architecture)
 
 - ✅ Flexible endpoint testing with any parameters
 - ✅ Authentication via existing config (QR code, username/password, parent accounts)
-- ✅ Auto-save all responses to `debug_dumps/` directory
+- ✅ Auto-save all responses to `.debug_dumps/` directory
 - ✅ Metadata tracking (timestamp, endpoint, params, status, duration)
 - ✅ CLI flags for different output modes
 - ✅ Multi-student support
@@ -482,7 +482,7 @@ Unique dates: 1 (2026-03-17)
 
 #### Debug Dump File
 
-Automatically saved to `debug_dumps/<timestamp>_<endpoint-slug>_api-test.json`:
+Automatically saved to `.debug_dumps/<timestamp>_<endpoint-slug>_api-test.json`:
 
 ```json
 {
@@ -509,19 +509,19 @@ Use `jq` for JSON analysis:
 
 ```bash
 # Count entries
-cat debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries | length'
+cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries | length'
 
 # Extract unique dates
-cat debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '[.response.calendarEntries[].startDateTime | split("T")[0]] | unique'
+cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '[.response.calendarEntries[].startDateTime | split("T")[0]] | unique'
 
 # Show only subjects
-cat debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | {subject: .subject.longName, start: .startDateTime}'
+cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | {subject: .subject.longName, start: .startDateTime}'
 
 # Check for homeworks
-cat debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | select(.homeworks | length > 0) | {subject: .subject.longName, homework: .homeworks[0].text}'
+cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | select(.homeworks | length > 0) | {subject: .subject.longName, homework: .homeworks[0].text}'
 
 # Check for exams
-cat debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | select(.exam != null) | {subject: .subject.longName, exam: .exam.name}'
+cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq '.response.calendarEntries[] | select(.exam != null) | {subject: .subject.longName, exam: .exam.name}'
 ```
 
 ### Authentication
