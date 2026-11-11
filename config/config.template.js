@@ -29,9 +29,9 @@ const config = {
     {
       module: "MMM-Webuntis",
       position: "top_right",
+      header: "Timetable", // optional title above the module (MagicMirror option, not inside config)
       config: {
         // === GLOBAL OPTIONS ===
-        header: "Timetable", // optional header text
         updateInterval: 4 * 60 * 1000, // fetch interval in milliseconds (default: 4 minutes)
 
         // === DEBUG OPTIONS ===
