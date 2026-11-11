@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.10](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.9...v0.15.10) (2026-11-11)
+
+
+### 🐛 Fixes
+
+* **api:** keep "=" in cookie values and time out stalled response bodies ([#158](https://github.com/HeikoGr/MMM-Webuntis/issues/158)) ([4734b00](https://github.com/HeikoGr/MMM-Webuntis/commit/4734b0036c695f9b0fb4d4a199683ee363d59556))
+* **api:** keep debug dumps out of the served module folder ([#159](https://github.com/HeikoGr/MMM-Webuntis/issues/159)) ([13199a8](https://github.com/HeikoGr/MMM-Webuntis/commit/13199a8a9a042aa0dfd3629f7553dfdabf2e7e9b))
+* **config:** align schema, Node version and docs with the module ([#161](https://github.com/HeikoGr/MMM-Webuntis/issues/161)) ([45eee3c](https://github.com/HeikoGr/MMM-Webuntis/commit/45eee3c2709957322fcd8f812598bef1e6de567d))
+* **config:** check server host names, limit demoDataFile to demo/ and strip demo credentials ([#160](https://github.com/HeikoGr/MMM-Webuntis/issues/160)) ([9096b6e](https://github.com/HeikoGr/MMM-Webuntis/commit/9096b6eee04106c8576e8c343650e6f7920a3c26))
+
+
+### 🔧 Tooling
+
+* keep the write token away from Dependabot code and test Node 22 and 24 ([#162](https://github.com/HeikoGr/MMM-Webuntis/issues/162)) ([1bef52d](https://github.com/HeikoGr/MMM-Webuntis/commit/1bef52d46e5aec61360752d7f17fd51f59dd6117))
+
+
+### 🔧 Maintenance
+
+* **deps-dev:** bump @biomejs/biome from 2.6.5 to 2.6.6 in the npm group ([#157](https://github.com/HeikoGr/MMM-Webuntis/issues/157)) ([9eb9a76](https://github.com/HeikoGr/MMM-Webuntis/commit/9eb9a76b6ad00eb0672d183d552dadad87b1fd9f))
+
 ## [0.15.9](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.8...v0.15.9) (2026-11-05)
 
 

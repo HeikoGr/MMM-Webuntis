@@ -302,7 +302,7 @@ OPTIONS:
   --action  | -a   <widget>  Which widget(s) to fetch (default: all):
                              all, auth, lessons, grid, exams, homework, absences, messagesofday
                              or combinations: lessons,grid  or  exams,homework
-  --dump    | -d             Also write debug dump JSON to debug_dumps/
+  --dump    | -d             Also write debug dump JSON to .debug_dumps/
   --verbose | -v             Show detailed output
   --debug-api | -x           Show detailed API requests and truncated responses
   --help    | -h             Show this help

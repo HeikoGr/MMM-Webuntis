@@ -5,7 +5,6 @@ Module.register("MMM-Webuntis", {
 
   defaults: {
     // === GLOBAL OPTIONS ===
-    header: "MMM-Webuntis", // displayed as module title in MagicMirror
     updateInterval: 4 * 60 * 1000, // fetch interval in milliseconds (default: 4 minutes; keep it below ~4.5 min, see wiki/Troubleshooting.md)
     backgroundRefresh: true, // keep refreshing while hidden (e.g. under MMM-Carousel)
     quietHours: null, // optional window without polling, e.g. { from: '22:00', to: '06:00' }
@@ -17,8 +16,8 @@ Module.register("MMM-Webuntis", {
     logLevel: null,
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional fixture path(s), comma-separated: render demo data instead of fetching from WebUntis
-    dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
-    dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
+    dumpBackendPayloads: false, // dump raw payloads from backend in ./.debug_dumps/ folder
+    dumpRawApiResponses: false, // save raw REST API responses to ./.debug_dumps/raw_api_*.json
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).

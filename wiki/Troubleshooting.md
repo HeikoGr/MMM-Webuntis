@@ -4,7 +4,7 @@
 
 Check these first:
 
-1. Verify the Node version is at least `22.22.1`.
+1. Verify the Node version is `>=22.22.2 <23` or `>=24`.
 2. Confirm the auth method matches the account type.
 3. Set `logLevel: 'debug'` (and add `DEBUG` to the global `logLevel` in `config.js`).
 4. For parent setups, confirm `students: []` is present if you expect auto-discovery.
@@ -76,7 +76,8 @@ For investigations, verify these separately:
 
 ### Telling the four empty states apart
 
-With `dumpBackendPayloads: true`, open the newest `debug_dumps/<timestamp>_<student>_api.json`
+With `dumpBackendPayloads: true` (see [Privacy](Privacy) before sharing the file), open the newest
+`.debug_dumps/<timestamp>_<student>_api.json`
 and look at `state.collections` first - it says per collection whether the latest fetch succeeded
 (`ok`), failed or was skipped (`unavailable`) or was not requested (`disabled`), and when the last
 success was (`lastSuccessAt`). Then `state.fetch`, `state.api`, `state.warnings`, `data.lessons`
@@ -129,6 +130,11 @@ node --run debug
 node --run test:auth:curl
 pm2 logs --lines 100
 ```
+
+## Sharing Logs And Dumps
+
+Logs and debug dumps contain children's personal data. Read [Privacy](Privacy) before attaching
+them to an issue.
 
 ## When You Need More Detail
 

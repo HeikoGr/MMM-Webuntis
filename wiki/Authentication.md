@@ -77,3 +77,18 @@ You can mix credentials across `students` if needed, but start simple unless you
 - Check whether the account should use QR instead of direct credentials.
 - Confirm `school` and `server` are correct.
 - Enable `logLevel: 'debug'` and continue with [Troubleshooting](Troubleshooting).
+
+## Keeping Credentials Safe
+
+- **Treat the QR code like a password.** The `key=` part is a permanent secret that generates the
+  login codes. Anyone with the QR URL can sign in as that account until you create a new QR code in
+  your WebUntis profile (where the QR code for the mobile app is shown), which replaces the old one.
+- **Keep the secrets out of the browser.** Write them as `${SECRET_WEBUNTIS_PASSWORD}` or
+  `${SECRET_WEBUNTIS_QRCODE}` in `config.js`, put the values into `config/config.env` and set
+  `hideConfigSecrets: true` (see the MagicMirror documentation on config variables). The module's
+  backend reads the real values; its payloads never send passwords or QR codes to the browser.
+- **Limit who can reach the mirror.** MagicMirror serves its page and the `modules/` folder on its
+  port. `address: "0.0.0.0"` with `ipWhitelist: []` opens it to every device in your network; list
+  only the devices that need it, and never forward the port to the internet.
+- **Do not paste credentials into issues.** Logs and warnings are redacted, but check anything you
+  share. Security problems go through [SECURITY.md](https://github.com/HeikoGr/MMM-Webuntis/blob/master/SECURITY.md).

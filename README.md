@@ -14,7 +14,7 @@ A MagicMirror² module that displays WebUntis timetables, exams, homework, absen
 
 ## Requirements
 
-- Node.js `>=22.22.1` (see `engines` in `package.json`; also the version tested in CI)
+- Node.js `>=22.22.2 <23` or `>=24`, the same range as MagicMirror² 2.38 (`engines` in `package.json`)
 
 Older Node versions have shown authentication and runtime failures in real-world setups, especially around the module's native HTTP stack. If direct login or QR login suddenly stops working, update Node first and then run `npm ci --omit=dev` again.
 
@@ -125,4 +125,6 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-**Note:** This module contains AI-generated code. Review and test thoroughly before production use.
+## Credits
+
+Based on [MMM-Webuntis](https://github.com/thyed/MMM-Webuntis) by thyed (MIT).

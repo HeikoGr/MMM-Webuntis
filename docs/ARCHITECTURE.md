@@ -239,7 +239,7 @@ The fixtures must satisfy the same contract as a real payload, minus `context.co
 ### Logging & Credential Handling
 
 - Live console/DevTools logging (`this._log(...)` in the frontend) is **deliberately not redacted**. The config dump at start is only printed when the module's own `logLevel` is explicitly `info` or `debug` - never by MagicMirror's global level alone. MagicMirror already passes the full config in plaintext between server and frontend, so the browser console has nothing left to protect; the intent is that a user can raise `logLevel` and paste the exact running config back to the maintainer for support.
-- Anything written to disk is a different trust boundary and **must stay redacted** - `dumpBackendPayloads`/`dumpRawApiResponses` go through `redactSensitiveFields()` in `lib/mmm-adapter/mmmPayloadMapper.js` before hitting `debug_dumps/`, because those files are the artifacts users actually send the maintainer and must not leak credentials.
+- Anything written to disk is a different trust boundary and **must stay redacted** - `dumpBackendPayloads`/`dumpRawApiResponses` go through `redactSensitiveFields()` in `lib/mmm-adapter/mmmPayloadMapper.js` before hitting `.debug_dumps/`, because those files are the artifacts users actually send the maintainer and must not leak credentials.
 - When adding a new debug/log output, decide explicitly which bucket it falls into rather than copying whichever pattern is nearby.
 
 ### Styling Rules
