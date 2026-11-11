@@ -15,3 +15,4 @@
 	- [Absences Plugin](Plugin-Absences)
 	- [Messages Of Day Plugin](Plugin-MessagesOfDay)
 - [Troubleshooting](Troubleshooting)
+- [Privacy](Privacy)

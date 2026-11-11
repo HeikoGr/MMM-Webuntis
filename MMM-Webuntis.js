@@ -17,8 +17,8 @@ Module.register("MMM-Webuntis", {
     logLevel: null,
     debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
     demoDataFile: null, // optional fixture path(s), comma-separated: render demo data instead of fetching from WebUntis
-    dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
-    dumpRawApiResponses: false, // save raw REST API responses to ./debug_dumps/raw_api_*.json
+    dumpBackendPayloads: false, // dump raw payloads from backend in ./.debug_dumps/ folder
+    dumpRawApiResponses: false, // save raw REST API responses to ./.debug_dumps/raw_api_*.json
 
     // === DISPLAY OPTIONS ===
     // Comma-separated list of widgets to render (top-to-bottom).

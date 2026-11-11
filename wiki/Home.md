@@ -30,6 +30,7 @@ Use this wiki if you want to:
 - [Authentication](Authentication)
 - [Plugins](Plugins)
 - [Troubleshooting](Troubleshooting)
+- [Privacy](Privacy)
 
 ## Typical Setup Path
 

@@ -21,6 +21,7 @@ const {
 } = require("./lib/moduleConfig");
 const { createAuthSession, describeCredentialKey, getCredentialKey, resolveServerName } = require("./lib/authSession");
 const { createResponseCache } = require("./lib/webuntis/responseCache");
+const { migrateLegacyDumpDir } = require("./lib/webuntis/debugDumpUtils");
 const { ensureStudentsFromAppData } = require("./lib/studentDiscovery");
 const { isDemoMode, buildDemoPayloads, loadFixturePayloads, prepareDemoStudents } = require("./lib/demoData");
 const { extractHolidaysFromAppData } = require("./lib/webuntis/dataOrchestration");
@@ -80,6 +81,10 @@ async function mapWithConcurrency(items, limit, fn) {
 module.exports = NodeHelper.create({
   start() {
     this._ensureRuntime();
+    // Dumps of versions up to 0.15.9 lay in debug_dumps/, which MagicMirror serves over HTTP.
+    if (migrateLegacyDumpDir()) {
+      this._mmLog("info", null, "Moved old debug dumps from debug_dumps/ to .debug_dumps/ (not served over HTTP)");
+    }
     this._hub.attach(this.io);
     this._mmLog("debug", null, "Node helper started");
   },
@@ -223,6 +228,7 @@ module.exports = NodeHelper.create({
       logger: this._mmLog.bind(this),
     });
     const validation = validateNormalizedConfig(normalizedConfig, configWarnings, this._pluginHost);
+    this._warnAboutDebugDumps(normalizedConfig);
     if (isDemoMode(normalizedConfig)) {
       try {
         loadFixturePayloads(normalizedConfig.demoDataFile, __dirname);
@@ -250,6 +256,22 @@ module.exports = NodeHelper.create({
       redactWarningList(warnings, buildWarningMetaList(warnings, metaByMessage)),
     );
     return normalizedConfig;
+  },
+
+  // Dumps hold children's names, timetables, absences and messages - say so once per option.
+  _warnAboutDebugDumps(config) {
+    const entries = [config, ...(Array.isArray(config?.students) ? config.students : [])];
+    this._dumpWarningsLogged = this._dumpWarningsLogged || new Set();
+    for (const option of ["dumpBackendPayloads", "dumpRawApiResponses"]) {
+      if (this._dumpWarningsLogged.has(option) || !entries.some((entry) => entry?.[option] === true)) continue;
+      this._dumpWarningsLogged.add(option);
+      this._mmLog(
+        "warn",
+        null,
+        `${option} is on: personal data (names, timetables, absences, messages) is written to .debug_dumps/. ` +
+          "Turn it off after debugging and anonymize files before sharing them.",
+      );
+    }
   },
 
   // ---------------------------------------------------------------------------------------------

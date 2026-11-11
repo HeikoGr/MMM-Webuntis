@@ -38,8 +38,8 @@ const config = {
         // logLevel: "info", // optional: 'none', 'error', 'warn', 'info', 'debug'; unset = global logLevel
         debugDate: null, // set to 'YYYY-MM-DD' to freeze the calendar day for debugging (null = disabled)
         demoDataFile: null, // optional: show demo data instead of WebUntis (e.g. 'demo/fixtures/single-student-week.json'; comma-separated for several students)
-        dumpBackendPayloads: false, // dump raw payloads from backend in ./debug_dumps/ folder
-        dumpRawApiResponses: false, // when true, save raw REST API responses to ./debug_dumps/raw_api_*.json
+        dumpBackendPayloads: false, // dump raw payloads from backend in ./.debug_dumps/ folder
+        dumpRawApiResponses: false, // when true, save raw REST API responses to ./.debug_dumps/raw_api_*.json
         timezone: "Europe/Berlin", // timezone for date calculations (important for schools outside UTC)
 
         // === DISPLAY OPTIONS ===
