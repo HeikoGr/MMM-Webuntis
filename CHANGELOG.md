@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.11...v0.16.0) (2026-11-12)
+
+
+### 🔌 Features
+
+* **plugins:** allow several frontend scripts per plugin, split the grid layout ([#168](https://github.com/HeikoGr/MMM-Webuntis/issues/168)) ([6ed171b](https://github.com/HeikoGr/MMM-Webuntis/commit/6ed171baefccbd6f738a74a2e2593379d7863f73))
+
 ## [0.15.11](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.10...v0.15.11) (2026-11-11)
 
 
