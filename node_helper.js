@@ -41,7 +41,7 @@ const {
 } = require("./lib/warningUtils");
 const { collectConfigSecrets, redactSecrets, registerSecrets } = require("./lib/secretRedaction");
 const { initializeBackendPluginHost } = require("./lib/pluginHostBackend");
-const { validateStudentCredentials } = require("./lib/widgetConfigValidator");
+const { validateStudentCredentials } = require("./lib/studentConfigValidator");
 
 const LOG_LEVEL_WEIGHTS = Object.freeze({ none: -1, error: 0, warn: 1, info: 2, debug: 3 });
 
