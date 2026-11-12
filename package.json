@@ -29,6 +29,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "test": "node --test tests/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage --test-reporter=spec '--test-coverage-exclude=tests/**' '--test-coverage-exclude=scripts/**' '--test-coverage-exclude=lib/mmm-shared/**' tests/*.test.js",
     "check": "node scripts/magicmirror-check.mjs --current",
     "shared:update": "git submodule update --remote --init --checkout lib/mmm-shared && git submodule status lib/mmm-shared",
     "deps:update": "npx --yes npm-check-updates -u && npm install && biome migrate --write",

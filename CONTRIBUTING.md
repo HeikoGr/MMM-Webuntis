@@ -73,6 +73,11 @@ Merging it bumps the version and writes the changelog entry on `develop`, and th
 step: a PR to `master` (merge commit, not squashed) is then opened for exactly that release commit
 and merges itself once its checks pass. The merge tags the release and creates the GitHub release.
 
+Dependencies: Dependabot opens grouped PRs against `develop` (minor and patch, new releases wait
+3 days). Updates of GitHub Actions and devDependencies merge themselves once CI passes; runtime
+dependencies run on the mirror next to the user's credentials and wait for a review. Actions are
+pinned to a commit SHA with the version as a comment; Dependabot keeps both up to date.
+
 6. Style
 
 - Use Biome. Run `node --run lint:fix` to auto-fix style issues.

@@ -22,14 +22,19 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Only tooling merges itself: GitHub Actions and devDependencies. Runtime dependencies run on
+      # the mirror next to the user's credentials, so their PRs wait for a review. A grouped PR
+      # that contains a single runtime package reports direct:production and waits as well.
       - name: Enable auto-merge
         if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-patch'
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-patch') &&
+          (steps.metadata.outputs.package-ecosystem == 'github_actions' ||
+           steps.metadata.outputs.dependency-type == 'direct:development')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
