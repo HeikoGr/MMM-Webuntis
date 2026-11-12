@@ -1,11 +1,10 @@
 (function registerExamsPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function") {
     return;
   }
 
-  const { addHeader, addRow, createContainer, createElement, el, headerTitleNodes } = sharedDom;
+  // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
   function formatFallbackDate(ymd) {
     const numeric = Number(ymd) || 0;
@@ -14,21 +13,12 @@
     return `${fallbackDay}.${fallbackMonth}.`;
   }
 
-  function formatDisplayDateValue(ymd, format) {
-    const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
+  function formatDisplayDateValue(pluginContext, ymd, format) {
+    const formatter = pluginContext.formatting?.formatDisplayDate;
     if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
     return formatFallbackDate(ymd);
-  }
-
-  function currentTimeAsHHMM(date = new Date()) {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return 0;
-    return date.getHours() * 100 + date.getMinutes();
-  }
-
-  function getCurrentDateContext(studentConfig) {
-    return root.MMMWebuntisFrontendShared.time.getCurrentDateContext(studentConfig);
   }
 
   function compareByDateAndStartTime(left, right) {
@@ -94,6 +84,7 @@
   }
 
   function buildHeaderTitle(pluginContext, studentName, examConfig) {
+    const { headerTitleNodes } = pluginContext.dom;
     const title = translate(pluginContext, "exams", "Exams");
     const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(examConfig?.nextDays, 0);
@@ -111,7 +102,8 @@
   }
 
   /** Name cell of one exam: optional subject, name, optional teacher, description. */
-  function buildNameCell(exam, showSubject, showTeacher) {
+  function buildNameCell(pluginContext, exam, showSubject, showTeacher) {
+    const { el } = pluginContext.dom;
     const name = el("span", "wu-exam__name", exam?.name);
     const cell = showSubject ? [el("span", "wu-exam__subject", exam?.subject), ": \u00a0", name] : [name];
 
@@ -129,6 +121,7 @@
   function createStudentContainer(pluginContext, studentSlice, studentConfig, examConfig) {
     const studentTitle = String(studentSlice?.student?.title || "").trim();
     const verboseMode = isVerboseMode(studentConfig);
+    const { addHeader, createContainer } = pluginContext.dom;
     const container = createContainer();
     if (verboseMode && studentTitle) {
       addHeader(container, buildHeaderTitle(pluginContext, studentTitle, examConfig));
@@ -141,6 +134,8 @@
    * (nextDays <= 0), no exam is ahead, or the list is empty without the collection being unavailable.
    */
   function renderStudent(pluginContext, studentSlice, includePastExams) {
+    const { addRow, el } = pluginContext.dom;
+    const { currentTimeAsHHMM, getCurrentDateContext } = pluginContext.time;
     const exams = Array.isArray(studentSlice?.data?.exams) ? studentSlice.data.exams : [];
     const studentConfig = resolveStudentConfig(studentSlice);
     const examConfig = resolveExamConfig(studentConfig);
@@ -181,9 +176,15 @@
     const showSubject = Boolean(examConfig?.showSubject);
     const showTeacher = Boolean(examConfig?.showTeacher);
     for (const exam of visibleExams) {
-      const formattedDate = formatDisplayDateValue(Number(exam?.examDate) || 0, examConfig?.dateFormat);
+      const formattedDate = formatDisplayDateValue(pluginContext, Number(exam?.examDate) || 0, examConfig?.dateFormat);
       const dateTimeCell = formattedDate ? el("span", "wu-exam__date", formattedDate) : "";
-      addRow(container, "examRow", studentLabelText, dateTimeCell, buildNameCell(exam, showSubject, showTeacher));
+      addRow(
+        container,
+        "examRow",
+        studentLabelText,
+        dateTimeCell,
+        buildNameCell(pluginContext, exam, showSubject, showTeacher),
+      );
     }
     return container;
   }
@@ -195,7 +196,7 @@
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement("section", "wu-plugin wu-plugin-exams");
+          const wrapper = pluginContext.dom.createElement("section", "wu-plugin wu-plugin-exams");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           // Debug mode keeps past exams visible.
           const logLevel = String(renderContext?.runtime?.logLevel || root.MMMWebuntisLogLevel || "")

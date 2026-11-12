@@ -1,6 +1,19 @@
 # Grid Widget Rendering Logic
 
-This document describes the **current** rendering logic of the Grid widget in `plugins/grid/frontend.js`.
+This document describes the **current** rendering logic of the Grid widget in `plugins/grid/layout.js` and
+`plugins/grid/frontend.js`.
+
+## Code Layout
+
+Two files, loaded in this order (`entry.frontend` in `plugins/grid/manifest.json`):
+
+- `plugins/grid/layout.js`: `createGridLayout()`, the arithmetic without DOM or host helpers: visible time
+  range, `maxLessons` cut-off, pixel placement, overlap groups, the strategy classification below
+  (`classifyLessonRenderGroup`), split-view pairing and the list of displayed days. It publishes itself as
+  `MMMWebuntisGridLayout` and is tested directly in `tests/grid-layout.test.js` (the plugin definition also
+  carries it as `layout`, which the host ignores).
+- `plugins/grid/frontend.js`: `createGridRenderer()` builds the elements from those results and registers the
+  plugin. Without `layout.js` it does not register and logs an error.
 
 ## Overview
 
@@ -124,6 +137,7 @@ flowchart TD
 
 ## References
 
-- `plugins/grid/frontend.js` (source of truth)
+- `plugins/grid/layout.js`, `plugins/grid/frontend.js` (source of truth)
+- `tests/grid-layout.test.js` (layout cases)
 - `docs/ARCHITECTURE.md`
 - `https://github.com/HeikoGr/MMM-Webuntis/wiki/Configuration`

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const { calculateFetchRanges } = require("../lib/webuntis/dataOrchestration");
 const lessonsBackend = require("../plugins/lessons/backend");
-const { loadFrontendShared, loadPlugin } = require("./helpers/fake-dom");
+const { loadFrontendShared, loadPlugin, pluginContextFor } = require("./helpers/fake-dom");
 
 // 2026-10-02 is a Friday, 2026-10-03 a Saturday, 2026-10-05 a Monday.
 const FRIDAY = 20261002;
@@ -41,7 +41,7 @@ function renderLessons({ now, lessons, holidays = [], lessonsConfig = {}, studen
     ...studentConfig,
     plugins: { lessons: { config: { nextDays: 0, dateFormat: "yyyyMMdd", ...lessonsConfig } } },
   };
-  const section = plugin.create({ translate: (_key, fallback) => fallback }).render({
+  const section = plugin.create(pluginContextFor(context, { translate: (_key, fallback) => fallback })).render({
     students: [
       {
         student: { title: "Kind" },

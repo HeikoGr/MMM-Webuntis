@@ -1,11 +1,10 @@
 (function registerAbsencesPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function") {
     return;
   }
 
-  const { addHeader, addRow, createContainer, createElement, el, headerTitleNodes, multilineNodes } = sharedDom;
+  // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== "function") return fallback;
@@ -19,8 +18,8 @@
     return Math.max(0, parsed);
   }
 
-  function formatDisplayDateValue(ymd, format) {
-    const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
+  function formatDisplayDateValue(pluginContext, ymd, format) {
+    const formatter = pluginContext.formatting?.formatDisplayDate;
     if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
@@ -31,8 +30,8 @@
     return `${fallbackDay}.${fallbackMonth}.`;
   }
 
-  function formatDisplayTimeValue(value) {
-    const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayTime;
+  function formatDisplayTimeValue(pluginContext, value) {
+    const formatter = pluginContext.formatting?.formatDisplayTime;
     if (typeof formatter === "function") {
       return formatter(value);
     }
@@ -65,10 +64,6 @@
     return getFieldDisplayName(entries[0], format);
   }
 
-  function getCurrentDateContext(studentConfig) {
-    return root.MMMWebuntisFrontendShared.time.getCurrentDateContext(studentConfig);
-  }
-
   function resolveStudentConfig(studentSlice) {
     const config = studentSlice?.context?.config;
     if (!config || typeof config !== "object" || Array.isArray(config)) return {};
@@ -93,6 +88,7 @@
   }
 
   function buildHeaderTitle(pluginContext, studentName, absencesConfig) {
+    const { headerTitleNodes } = pluginContext.dom;
     const title = translate(pluginContext, "absences", "Absences");
     const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(absencesConfig?.nextDays, 0);
@@ -104,6 +100,7 @@
   }
 
   function createWarningInfo(pluginContext) {
+    const { createElement } = pluginContext.dom;
     const infoDiv = createElement("div", "dimmed small wu-absence__unavailable-info absences-unavailable-info");
     const icon = createElement("span", "wu-inline-icon wu-inline-icon--warning");
     icon.setAttribute("aria-hidden", "true");
@@ -147,7 +144,7 @@
   }
 
   function absencesLabel(pluginContext) {
-    return el("span", "wu-absence__label", translate(pluginContext, "absences", "Absences"));
+    return pluginContext.dom.el("span", "wu-absence__label", translate(pluginContext, "absences", "Absences"));
   }
 
   /** Parts (each a node or node list) separated by single spaces. */
@@ -157,8 +154,9 @@
 
   /** Data cell of one absence: time range, subject with excuse note, reason. */
   function buildAbsenceDataNodes(pluginContext, absence, options) {
-    const start = formatDisplayTimeValue(absence?.startTime);
-    const end = formatDisplayTimeValue(absence?.endTime);
+    const { el, multilineNodes } = pluginContext.dom;
+    const start = formatDisplayTimeValue(pluginContext, absence?.startTime);
+    const end = formatDisplayTimeValue(pluginContext, absence?.endTime);
     const timeRange = start && end ? `${start}-${end}` : start || end || "";
     const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], "long");
     const reason = String(absence?.reason || "").trim();
@@ -181,6 +179,7 @@
 
   /** "no absences" or "data unavailable" in place of the list. */
   function addEmptyRow(pluginContext, container, studentSlice, studentLabelText) {
+    const { addRow } = pluginContext.dom;
     const unavailable = studentSlice?.state?.collections?.absences?.status === "unavailable";
     addRow(
       container,
@@ -196,6 +195,7 @@
 
   /** One student's absences: filtered to the day window, sorted, cut to maxItems. */
   function renderStudent(pluginContext, studentSlice) {
+    const { addHeader, addRow, createContainer, el } = pluginContext.dom;
     const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
     const studentConfig = resolveStudentConfig(studentSlice);
     const absencesConfig = resolveAbsencesConfig(studentConfig);
@@ -213,7 +213,7 @@
       return container;
     }
 
-    const nowYmd = Number(getCurrentDateContext(studentConfig)?.ymd) || 0;
+    const nowYmd = Number(pluginContext.time.getCurrentDateContext(studentConfig)?.ymd) || 0;
     const maxItems = Number(absencesConfig?.maxItems);
     const limit = Number.isFinite(maxItems) && maxItems > 0 ? Math.ceil(maxItems) : Number.POSITIVE_INFINITY;
     const options = {
@@ -226,7 +226,9 @@
       .slice(0, limit);
 
     for (const absence of visible) {
-      const dateStr = absence?.date ? formatDisplayDateValue(absence.date, absencesConfig?.dateFormat) : "";
+      const dateStr = absence?.date
+        ? formatDisplayDateValue(pluginContext, absence.date, absencesConfig?.dateFormat)
+        : "";
       const meta = absencesConfig?.showDate && dateStr ? el("span", "wu-absence__date", dateStr) : "";
       addRow(
         container,
@@ -247,7 +249,7 @@
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement("section", "wu-plugin wu-plugin-absences");
+          const wrapper = pluginContext.dom.createElement("section", "wu-plugin wu-plugin-absences");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           if (students.some((studentSlice) => studentSlice?.state?.absencesUnavailable === true)) {
             wrapper.appendChild(createWarningInfo(pluginContext));

@@ -5,7 +5,7 @@
   "title": "Timetable",
   "type": "widget",
   "entry": {
-    "frontend": "frontend.js",
+    "frontend": ["layout.js", "frontend.js"],
     "backend": "backend.js",
     "styles": ["styles.css"]
   },

@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { loadFrontendShared, loadPlugin } = require("./helpers/fake-dom");
+const { loadFrontendShared, loadPlugin, pluginContextFor } = require("./helpers/fake-dom");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "MMM-Webuntis.js"), "utf8");
 
@@ -39,7 +39,7 @@ function renderHeader(pluginId) {
   );
 
   const section = plugin
-    .create({ translate: (key, fallback) => english[key] ?? fallback })
+    .create(pluginContextFor(context, { translate: (key, fallback) => english[key] ?? fallback }))
     .render({ students: [{ student: { title: "Avery" }, context: { config: { mode: "verbose" } }, data: {} }] });
   return section.findAll("div").find((div) => div.className.includes("wu-row-header")).textContent;
 }
@@ -91,7 +91,7 @@ test("instances in one window share the plugin translation requests and load the
     config: {},
     _pluginTranslationsById: new Map(),
   });
-  const entry = { id: "demo", entry: { frontend: "plugins/demo/frontend.js" } };
+  const entry = { id: "demo", entry: { frontend: ["plugins/demo/frontend.js"] } };
   const first = makeInstance();
   const second = makeInstance();
 
