@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -57,7 +57,7 @@ ln -s "$MAGICMIRROR_PATH" "/opt/magicmirror" 2>/dev/null || true
 git config --global alias.pr '!f() { git fetch -fu ${2:-origin} refs/pull/$1/head:pr/$1 && git switch pr/$1; }; f'
 
 # Copy templates if missing
-copy_from_template "${MODULE_DIR}/config/config.js" "${MODULE_DIR}/config/config.template.js" "config.js"
+copy_from_template "${MODULE_DIR}/config/.config.js" "${MODULE_DIR}/config/config.template.js" ".config.js"
 copy_from_template "${MODULE_DIR}/config/custom.css" "${MODULE_DIR}/config/custom.template.css" "custom.css"
 copy_from_template "${MODULE_DIR}/config/.env" "${MODULE_DIR}/config/.env.template" ".env"
 
@@ -65,7 +65,7 @@ copy_from_template "${MODULE_DIR}/config/.env" "${MODULE_DIR}/config/.env.templa
 mkdir -p "${MAGICMIRROR_PATH}/config" "${MAGICMIRROR_PATH}/css"
 
 # Create symlinks (BEFORE loading .env)
-create_symlink "${MODULE_DIR}/config/config.js" "${MAGICMIRROR_PATH}/config/config.js" "config.js"
+create_symlink "${MODULE_DIR}/config/.config.js" "${MAGICMIRROR_PATH}/config/config.js" "config.js"
 create_symlink "${MODULE_DIR}/config/custom.css" "${MAGICMIRROR_PATH}/config/custom.css" "custom.css"
 create_symlink "${MODULE_DIR}/config/.env" "${MAGICMIRROR_PATH}/.env" ".env"
 
@@ -76,6 +76,8 @@ if [ -f "$ENV_FILE" ]; then
   # Fix line endings (CRLF -> LF) before sourcing
   sed -i 's/\r$//' "$ENV_FILE" 2>/dev/null || true
   set -a
+  # The .env is the user's own file, created from config/.env.template.
+  # shellcheck source=/dev/null
   . "$ENV_FILE"
   set +a
 fi

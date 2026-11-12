@@ -5,7 +5,8 @@
 # The blocks below copy host credentials *out of read-only bind mounts* into the
 # container's own HOME instead of mounting them writable. The container runs as root
 # while the host files belong to uid 1000, so a writable mount would leave root-owned
-# files behind in the host's ~/.ssh, ~/.claude and ~/.gitconfig.
+# files behind in the host's ~/.claude and ~/.gitconfig. SSH keys are not mounted at
+# all: git uses the SSH agent VS Code forwards from the host.
 
 set -eu
 
@@ -22,17 +23,18 @@ else
 fi
 
 # --- Git over SSH -----------------------------------------------------------
-# Needs openssh-client in the image; git only *recommends* it, so the base image
-# installs it explicitly.
-if [ -d /tmp/host-ssh ]; then
-  mkdir -p /root/.ssh
-  chmod 700 /root/.ssh
-  # -L dereferences symlinks; some hosts keep keys behind links.
-  cp -rL /tmp/host-ssh/. /root/.ssh/ 2>/dev/null || true
-  find /root/.ssh -type f -exec chmod 600 {} +
-  echo "✓ SSH keys inherited from host"
+# git authenticates through the SSH agent VS Code forwards from the host
+# (SSH_AUTH_SOCK). The private key never enters the container, where every
+# process - npm install scripts included - could read it. The host needs a running
+# ssh-agent with the key loaded before VS Code starts. Needs openssh-client in the
+# image; git only *recommends* it, so the base image installs it explicitly.
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+if [ -n "${SSH_AUTH_SOCK:-}" ] && ssh-add -l >/dev/null 2>&1; then
+  echo "✓ SSH agent forwarded from host"
 else
-  echo "· No host SSH directory mounted - git over SSH will not authenticate"
+  echo "· No SSH agent visible here - check with 'ssh-add -l' in a terminal. Without one, start"
+  echo "  ssh-agent on the host, 'ssh-add' the key and reopen VS Code."
 fi
 
 # GitHub's host keys, so a fetch does not stall on host verification.
@@ -52,7 +54,7 @@ fi
 # credential-helper entry in /root/.gitconfig survives.
 #
 # Deliberately NOT inherited: the host's url."https://github.com/".insteadOf
-# rewrite. Inside the container git authenticates with the SSH key copied above,
+# rewrite. Inside the container git authenticates through the forwarded SSH agent,
 # so the git@github.com: remotes must stay SSH.
 if [ -f /tmp/host-gitconfig ]; then
   for key in user.name user.email; do

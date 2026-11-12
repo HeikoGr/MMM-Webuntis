@@ -526,7 +526,7 @@ cat .debug_dumps/2026-03-16T11-25-03_v2-calendar-entry-detail_api-test.json | jq
 
 ### Authentication
 
-The script uses your existing `config/config.js` configuration:
+The script uses your existing `config/.config.js` configuration (the module-local copy; MagicMirror serves the module folder over HTTP, but not dot files):
 
 - **QR Code Auth**: Uses `qrCodeData` if present
 - **Username/Password**: Uses `username`, `password`, `school`, `server`

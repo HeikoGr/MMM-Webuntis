@@ -23,7 +23,7 @@ echo "Note: Will make MINIMAL requests to avoid server stress"
 echo ""
 
 # Load config to get server
-CONFIG_FILE="$PROJECT_DIR/config/config.js"
+CONFIG_FILE="$PROJECT_DIR/config/.config.js"
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo -e "${RED}Error: config.js not found. Please configure first.${NC}"
   exit 1
@@ -107,7 +107,6 @@ echo "    (Low timeout to simulate real connection issues)"
 echo ""
 
 SUCCESS_COUNT=0
-ERROR_COUNT=0
 TIMEOUT_COUNT=0
 SERVER_ERROR_COUNT=0
 

@@ -15,8 +15,8 @@ echo ""
 
 # Get student ID from config if available
 STUDENT_ID=""
-if [ -f "config/config.js" ]; then
-  STUDENT_ID=$(grep -oP "studentId:\s*\K\d+" config/config.js 2>/dev/null | head -1 || echo "")
+if [ -f "config/.config.js" ]; then
+  STUDENT_ID=$(grep -oP "studentId:\s*\K\d+" config/.config.js 2>/dev/null | head -1 || echo "")
 fi
 
 if [ -z "$STUDENT_ID" ]; then
@@ -25,11 +25,6 @@ if [ -z "$STUDENT_ID" ]; then
   echo -e "${YELLOW}   Results may vary - edit this script or config.js with real ID${NC}"
   echo ""
 fi
-
-START_DATE="20260317"
-END_DATE="20260321"
-START_DATETIME="2026-03-17T00:00:00"
-END_DATETIME="2026-03-17T23:59:00"
 
 # Counters
 FOUND=0

@@ -6,8 +6,10 @@ npm-debug.log*
 # Dependencies
 node_modules/
 
-# Local MagicMirror overrides (generate these from the *.template files in config/)
+# Local MagicMirror overrides (generate these from the *.template files in config/).
+# The config lives in a dot file: MagicMirror serves the module folder over HTTP, but not dot paths.
 config/.env
+config/.config.js
 config/config.js
 config/custom.css
 
