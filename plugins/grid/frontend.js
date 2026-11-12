@@ -42,2206 +42,1679 @@ function getModuleRootElement(ctx) {
     return;
   }
 
-  const root = globalRoot.MMMWebuntisFrontendShared || {};
-  const {
-    log,
-    el,
-    iconSpan,
-    multilineNodes,
-    addHeader,
-    getWidgetConfigResolved,
-    formatDisplayDate,
-    formatDisplayTime,
-    toMinutesSinceMidnight,
-    findPeriodIndex,
-    createWidgetContext,
-    getTeachers,
-    getSubject,
-    getRoom,
-    getClass,
-    getStudentGroup,
-    getInfo,
-    buildWidgetHeaderTitle,
-    getEmptyDayState,
-    isIrregularStatus,
-    getChangedFieldSet,
-    getFirstFieldName,
-    normalizeComparableText,
-  } = root.util?.resolveWidgetHelpers?.(root) || {};
-
+  // One popover for every grid instance on the page, as before: it lives outside the per-instance
+  // renderer below.
   let sharedLessonPopover = null;
 
-  function getSharedLessonPopoverController() {
-    if (sharedLessonPopover) return sharedLessonPopover;
-    const createPopoverController = root?.util?.createPopoverController;
-    if (typeof createPopoverController !== "function") return null;
-    sharedLessonPopover = createPopoverController({
-      baseClassName: "wu-shared-popover wu-shared-popover--grid",
-      presentation: "modal",
-    });
-    return sharedLessonPopover;
+  // Everything that renders is built per instance from pluginContext.shared (docs/PLUGINS.md):
+  // the plugin reads no global helpers of its own.
+
+  // The layout arithmetic lives in layout.js, which the manifest loads before this file.
+  const gridLayout = globalRoot.MMMWebuntisGridLayout?.createGridLayout?.();
+  if (!gridLayout) {
+    globalRoot.Log?.error?.("[MMM-Webuntis] grid: layout.js is not loaded, the grid stays off");
+    return;
   }
 
-  function getCurrentDateContext(config) {
-    return globalRoot.MMMWebuntisFrontendShared.time.getCurrentDateContext(config);
-  }
+  function createGridRenderer(root) {
+    const {
+      log,
+      el,
+      iconSpan,
+      multilineNodes,
+      addHeader,
+      getWidgetConfigResolved,
+      formatDisplayDate,
+      formatDisplayTime,
+      toMinutesSinceMidnight,
+      findPeriodIndex,
+      createWidgetContext,
+      getTeachers,
+      getSubject,
+      getRoom,
+      getClass,
+      getStudentGroup,
+      getInfo,
+      buildWidgetHeaderTitle,
+      getEmptyDayState,
+      isIrregularStatus,
+      getChangedFieldSet,
+      getFirstFieldName,
+      normalizeComparableText,
+    } = root.util?.resolveWidgetHelpers?.(root) || {};
+    const {
+      resolvePxPerMinute,
+      rollingRange,
+      calculateTimeRange,
+      applyMaxLessonsLimit,
+      getTimeUnitBounds,
+      getVisibleTimeBlockPlacement,
+      lessonHasDisplayIcon,
+      lessonHasExam,
+      lessonIsBreakSupervision,
+      lessonIsMoved,
+      groupLessonsByTimeSlot,
+      byStartThenEnd,
+      pairCancelledWithReplacements,
+      removePairedLessons,
+      calcIsPast,
+      classifyLessonRenderGroup,
+      formatDateKey,
+      buildRollingDisplayDates,
+    } = gridLayout;
 
-  function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== "function") return fallback;
-    const translated = pluginContext.translate(key, fallback, replacements);
-    return translated || fallback;
-  }
-
-  function resolveStudentConfig(studentSlice) {
-    const config = studentSlice?.context?.config;
-    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
-    return config;
-  }
-
-  function resolveGridConfig(studentConfig) {
-    const pluginConfig =
-      studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === "object"
-        ? studentConfig.plugins.grid.config
-        : {};
-
-    const pluginFields =
-      pluginConfig?.fields && typeof pluginConfig.fields === "object" && !Array.isArray(pluginConfig.fields)
-        ? pluginConfig.fields
-        : {};
-
-    const pluginFormat =
-      pluginFields?.format && typeof pluginFields.format === "object" && !Array.isArray(pluginFields.format)
-        ? pluginFields.format
-        : {};
-
-    return {
-      ...pluginConfig,
-      fields: {
-        ...pluginFields,
-        format: {
-          ...pluginFormat,
-        },
-      },
-    };
-  }
-
-  function buildEffectiveGridStudentConfig(studentConfig, gridConfig) {
-    const plugins =
-      studentConfig?.plugins && typeof studentConfig.plugins === "object" && !Array.isArray(studentConfig.plugins)
-        ? studentConfig.plugins
-        : {};
-    const gridPlugin =
-      plugins?.grid && typeof plugins.grid === "object" && !Array.isArray(plugins.grid) ? plugins.grid : {};
-
-    return {
-      ...studentConfig,
-      grid: gridConfig,
-      plugins: {
-        ...plugins,
-        grid: {
-          ...gridPlugin,
-          config: gridConfig,
-        },
-      },
-    };
-  }
-
-  function buildGroupedRawLessons(lessons) {
-    const grouped = {};
-    (Array.isArray(lessons) ? lessons : []).forEach((lesson) => {
-      const key = lesson?.date != null ? String(lesson.date) : "";
-      if (!key) return;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(lesson);
-    });
-    Object.keys(grouped).forEach((key) => {
-      grouped[key].sort((left, right) => (left?.startTime || 0) - (right?.startTime || 0));
-    });
-    return grouped;
-  }
-
-  function buildHolidayMapFromRanges(holidays) {
-    return globalRoot.MMMWebuntisFrontendShared.util.buildHolidayMapFromRanges(holidays);
-  }
-
-  function buildDayNoticeMap(dayNotices) {
-    return globalRoot.MMMWebuntisFrontendShared.util.buildDayNoticeMap(dayNotices);
-  }
-
-  function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
-    const effectiveConfig = {
-      ...studentConfig,
-      language:
-        studentConfig?.language ||
-        // MagicMirror's config is a global `let` in the browser, not a globalThis property.
-        (typeof config !== "undefined" && config?.language ? config.language : undefined),
-      logLevel: renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
-    };
-    const dateContext = getCurrentDateContext(effectiveConfig);
-    const studentTitle = String(studentSlice?.student?.title || "").trim();
-    const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
-    const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
-
-    return {
-      identifier: `${renderContext?.identifier || "mmm-webuntis"}-grid-plugin`,
-      config: effectiveConfig,
-      studentConfig: effectiveConfig,
-      holidayMapByStudent: {
-        [studentTitle]: buildHolidayMapFromRanges(holidays),
-      },
-      dayNoticeMapByStudent: {
-        [studentTitle]: buildDayNoticeMap(dayNotices),
-      },
-      collectionStateByStudent: {
-        [studentTitle]: studentSlice?.state?.collections || {},
-      },
-      preprocessedByStudent: {
-        [studentTitle]: {
-          rawGroupedByDate: buildGroupedRawLessons(studentSlice?.data?.lessons),
-        },
-      },
-      _currentTodayYmd: dateContext.ymd,
-      _hasWidget(name) {
-        return (
-          String(name || "")
-            .trim()
-            .toLowerCase() === "grid"
-        );
-      },
-      _getWidgetApi() {
-        return root || null;
-      },
-      _usesLiveClock(nowContext = this.getCurrentDateContext()) {
-        return nowContext?.isDebug !== true;
-      },
-      _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
-        const nextTodayYmd = Number(nowContext?.ymd);
-        if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
-        if (nextTodayYmd === this._currentTodayYmd) return false;
-        this._currentTodayYmd = nextTodayYmd;
-        return true;
-      },
-      _toMinutes(value) {
-        return toMinutesSinceMidnight(value);
-      },
-      getCurrentDateContext(configOverride = null) {
-        return getCurrentDateContext(configOverride || effectiveConfig);
-      },
-      translate(key, replacements, fallback = key) {
-        return translate(pluginContext, key, fallback, replacements);
-      },
-    };
-  }
-
-  function getModuleDateContext(ctx, configOverride = null) {
-    return ctx.getCurrentDateContext(configOverride || ctx.config || {});
-  }
-
-  function getCurrentDayDate(ctx) {
-    const nowContext = getModuleDateContext(ctx);
-    return new Date(nowContext.date.getFullYear(), nowContext.date.getMonth(), nowContext.date.getDate());
-  }
-
-  /**
-   * Determine lesson display mode based on available fields
-   * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
-   *
-   * @param {Object} lesson - Lesson object from backend
-   * @returns {Object} Display mode object with flags:
-   *   - isTeacherView: boolean - Lesson has class info (teacher perspective)
-   *   - isStudentView: boolean - Lesson has studentGroup info (student perspective)
-   *   - hasTeacher/hasSubject/hasRoom/hasClass/hasStudentGroup: field availability flags
-   *   - primaryInfo/secondaryInfo: suggested field types for display
-   *   - showStudentGroup: boolean - Whether to show student group
-   */
-  function getLessonDisplayMode(lesson) {
-    const hasTeacher = Array.isArray(lesson?.teachers) && lesson.teachers.length > 0;
-    const hasSubject = Array.isArray(lesson?.subjects) && lesson.subjects.length > 0;
-    const hasRoom = Array.isArray(lesson?.rooms) && lesson.rooms.length > 0;
-    const hasClass = Array.isArray(lesson?.classes) && lesson.classes.length > 0;
-    const hasStudentGroup = Array.isArray(lesson?.studentGroups) && lesson.studentGroups.length > 0;
-
-    const isTeacherView = hasClass && !hasStudentGroup;
-    const isStudentView = hasStudentGroup && !hasClass;
-
-    return {
-      isTeacherView,
-      isStudentView,
-      hasTeacher,
-      hasSubject,
-      hasRoom,
-      hasClass,
-      hasStudentGroup,
-      primaryInfo: isTeacherView ? "class" : "subject",
-      secondaryInfo: isTeacherView ? "room" : "teacher",
-      showStudentGroup: hasStudentGroup && !isTeacherView,
-    };
-  }
-
-  /**
-   * Resolve field configuration from config
-   * Extracts grid.fields.{primary, secondary, additional, format} from student config
-   *
-   * Single source of truth: defaults are merged centrally in MMM-Webuntis.js / node_helper.js.
-   * This widget only validates values and applies minimal safety fallbacks for invalid/missing data.
-   *
-   * @param {Object} config - Student configuration object
-   * @returns {Object} Resolved field configuration
-   */
-  function resolveFieldConfig(config) {
-    const gridConfig = config?.grid?.fields || {};
-    const defaultFields = {
-      primary: "subject",
-      secondary: "teacher",
-      additional: ["room"],
-      format: {
-        subject: "long",
-        teacher: "long",
-        class: "short",
-        room: "short",
-        studentGroup: "short",
-      },
-    };
-    const validFieldTypes = ["subject", "teacher", "room", "class", "studentGroup", "info", "none"];
-    const validFormats = ["short", "long"];
-
-    const normalizeFieldType = (value, fallback) => {
-      const normalized = typeof value === "string" ? value.trim() : "";
-      return validFieldTypes.includes(normalized) ? normalized : fallback;
-    };
-
-    const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ["room"];
-    const inputAdditional = Array.isArray(gridConfig.additional) ? gridConfig.additional : fallbackAdditional;
-    const additional = inputAdditional
-      .map((field) => normalizeFieldType(field, null))
-      .filter((field) => typeof field === "string");
-
-    const defaultFormat = defaultFields.format && typeof defaultFields.format === "object" ? defaultFields.format : {};
-    const localFormat = gridConfig.format && typeof gridConfig.format === "object" ? gridConfig.format : {};
-    const rawFormat = { ...defaultFormat, ...localFormat };
-    const format = {};
-    Object.keys(rawFormat).forEach((key) => {
-      if (!validFieldTypes.includes(key)) return;
-      const value = String(rawFormat[key] || "").trim();
-      if (validFormats.includes(value)) {
-        format[key] = value;
-      }
-    });
-
-    return {
-      primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, "subject")),
-      secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, "teacher")),
-      additional: additional.length > 0 ? additional : fallbackAdditional,
-      format,
-    };
-  }
-
-  /**
-   * Get field value based on flexible configuration
-   * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
-   *
-   * @param {Object} lesson - Lesson object from backend
-   * @param {string} fieldType - Field type to extract ('subject', 'teacher', 'room', 'class', 'studentGroup', 'info')
-   * @param {Object} fieldConfig - Field configuration with format specifications
-   * @returns {string} Extracted field value or empty string if not found/invalid type
-   */
-  function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
-    if (!lesson || !fieldType || fieldType === "none") return "";
-
-    const format = fieldConfig?.format?.[fieldType] || "short";
-
-    switch (fieldType) {
-      case "subject":
-        return getSubject(lesson, format);
-      case "teacher": {
-        const teachers = getTeachers(lesson, format);
-        return teachers.length > 0 ? teachers[0] : "";
-      }
-      case "room":
-        return getRoom(lesson, format);
-      case "class":
-        return getClass(lesson, format);
-      case "studentGroup":
-        return getStudentGroup(lesson, format);
-      case "info":
-        return getInfo(lesson, format);
-      default:
-        return "";
-    }
-  }
-
-  /**
-   * Build lesson display using flexible field configuration
-   * Extracts primary, secondary, and additional fields based on grid.fields config
-   * Automatically deduplicates additional fields if they match primary/secondary
-   *
-   * @param {Object} lesson - Lesson object from backend
-   * @param {Object} config - Student configuration object
-   * @param {Object} options - Display options (includeAdditional: boolean)
-   * @returns {Object} Display parts object:
-   *   - primary: string - Primary field value
-   *   - secondary: string - Secondary field value
-   *   - additional: string[] - Additional field values (deduplicated)
-   */
-  function buildFlexibleLessonDisplay(lesson, config, options = {}) {
-    const { includeAdditional = true } = options;
-    const fieldConfig = resolveFieldConfig(config);
-    const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
-    const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
-
-    const parts = { primary, secondary, additional: [] };
-
-    if (includeAdditional && Array.isArray(fieldConfig.additional)) {
-      for (const additionalField of fieldConfig.additional) {
-        const value = getConfiguredFieldValue(lesson, additionalField, fieldConfig);
-        if (value && value !== primary && value !== secondary) {
-          parts.additional.push(value);
-        }
-      }
-    }
-
-    return parts;
-  }
-
-  /**
-   * Start the now-line updater (runs every minute)
-   * Updates now-line position and refreshes past lesson masks
-   * and notes a day rollover. It fetches nothing itself; new data comes with the lifecycle's next
-   * periodic fetch.
-   * Started and stopped by the lifecycle's onVisible/onHidden, so it never runs while hidden.
-   *
-   * @param {Object} ctx - Main module context
-   */
-  function startNowLineUpdater(ctx) {
-    if (!ctx) return;
-    if (!ctx._hasWidget("grid")) return;
-    const state = getNowLineState(ctx);
-    if (state.timer || state.initialTimeout) return;
-
-    const tick = () => {
-      try {
-        const nowContext = getModuleDateContext(ctx);
-        // Skip clock-driven updates when debugDate is active (time is frozen)
-        if (nowContext?.isDebug) return;
-
-        ctx._handleClockDrivenDayRollover(nowContext);
-
-        const gridWidget = ctx._getWidgetApi()?.grid;
-        const moduleRoot = getModuleRootElement(ctx);
-        if (gridWidget) {
-          if (typeof gridWidget.updateNowLinesAll === "function") gridWidget.updateNowLinesAll(ctx, moduleRoot);
-          if (typeof gridWidget.refreshPastMasks === "function") gridWidget.refreshPastMasks(ctx, moduleRoot);
-        }
-      } catch (err) {
-        log("debug", "minute tick update failed", err);
-      }
-    };
-
-    const now = getModuleDateContext(ctx).date;
-    const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-
-    state.initialTimeout = setTimeout(
-      () => {
-        tick();
-        state.timer = setInterval(tick, 60 * 1000);
-        state.initialTimeout = null;
-      },
-      Math.max(0, msToNextMinute),
-    );
-
-    tick();
-  }
-
-  /**
-   * Stop the now-line updater
-   * Clears both minute timer and initial timeout
-   *
-   * @param {Object} ctx - Main module context
-   */
-  function stopNowLineUpdater(ctx) {
-    if (!ctx) return;
-    const state = getNowLineState(ctx);
-    if (state.timer) {
-      clearInterval(state.timer);
-      state.timer = null;
-    }
-    if (state.initialTimeout) {
-      clearTimeout(state.initialTimeout);
-      state.initialTimeout = null;
-    }
-  }
-
-  /**
-   * Validate and extract grid configuration
-   * Supports two modes:
-   *   - weekView: true → Always show Mon-Fri of current/next week (auto-advance on Fri 16:00+ / Sat/Sun)
-   *   - weekView: false → Show configurable past/future days (pastDays + today + nextDays)
-   *
-   * @param {Object} ctx - Main module context (provides debugDate support)
-   * @param {Object} studentConfig - Student-specific configuration
-   * @returns {Object} Grid configuration with calculated offsets:
-   *   - daysToShow: number - Number of future days to show (not including today)
-   *   - pastDays: number - Number of past days to show
-   *   - startOffset: number - Day offset from base date (negative = past)
-   *   - totalDisplayDays: number - Total days to display
-   *   - gridDateFormat: string - Date format for day labels
-   *   - maxGridLessons: number - Maximum lessons per day (0 = no limit)
-   *   - weekView: boolean - Whether week view mode is active
-   */
-  function validateAndExtractGridConfig(ctx, studentConfig) {
-    const getGridConfig = (key) => {
-      return getWidgetConfigResolved(studentConfig, ctx, "grid", key);
-    };
-
-    const weekView = Boolean(getGridConfig("weekView"));
-    const configuredNext = getGridConfig("nextDays");
-    const configuredPast = getGridConfig("pastDays");
-    const gridDateFormat = getGridConfig("dateFormat");
-    const hideWeekends = Boolean(getGridConfig("hideWeekends"));
-    const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig("maxLessons") ?? 0)));
-    const pxPerMinute = resolvePxPerMinute(getGridConfig("pxPerMinute"));
-    const { daysToShow, pastDays, startOffset, totalDisplayDays } = weekView
-      ? weekViewRange(ctx)
-      : rollingRange(configuredNext, configuredPast);
-
-    return {
-      daysToShow,
-      pastDays,
-      startOffset,
-      totalDisplayDays,
-      gridDateFormat,
-      maxGridLessons,
-      pxPerMinute,
-      hideWeekends,
-      weekView,
-    };
-  }
-
-  /** Configured pixels per minute when positive, else the default 0.8. */
-  function resolvePxPerMinute(raw) {
-    const value = Number(raw);
-    return raw !== undefined && raw !== null && Number.isFinite(value) && value > 0 ? value : 0.8;
-  }
-
-  /**
-   * Week view: Monday to Friday of the current week - or of the next one from Friday 15:45 (live
-   * clock only) and at the weekend.
-   */
-  function weekViewRange(ctx) {
-    const baseDate =
-      typeof ctx._currentTodayYmd === "number" ? getBaseDateFromYmd(ctx._currentTodayYmd, ctx) : getCurrentDayDate(ctx);
-    const dayOfWeek = baseDate.getDay();
-    const nowContext = getModuleDateContext(ctx);
-    const currentHour = nowContext.date.getHours();
-    const currentMinute = nowContext.date.getMinutes();
-
-    const afterFridaySchool =
-      dayOfWeek === 5 &&
-      ctx._usesLiveClock(nowContext) &&
-      (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45));
-    const weekOffset = afterFridaySchool || dayOfWeek === 6 || dayOfWeek === 0 ? 1 : 0;
-
-    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const totalDisplayDays = 5;
-    return {
-      daysToShow: totalDisplayDays - 1,
-      pastDays: 0,
-      startOffset: daysToMonday + weekOffset * 7,
-      totalDisplayDays,
-    };
-  }
-
-  /** Rolling view: pastDays before today, today, nextDays after. */
-  function rollingRange(configuredNext, configuredPast) {
-    const daysToShow = configuredNext && Number(configuredNext) > 0 ? parseInt(configuredNext, 10) : 0;
-    const pastDays = Math.max(0, parseInt(configuredPast, 10));
-    return { daysToShow, pastDays, startOffset: -pastDays, totalDisplayDays: pastDays + 1 + daysToShow };
-  }
-
-  /**
-   * Calculate time range for grid (vertical axis)
-   * Uses time units if available, otherwise infers from lesson data
-   * Filters out lessons longer than 12 hours (likely data errors)
-   * Also checks for lessons outside timeUnits range (e.g., early supervision, late activities)
-   *
-   * @param {Array} timetable - Array of lesson objects
-   * @param {Array} timeUnits - Array of time unit objects (startMin, endMin, name, startTime)
-   * @param {Object} ctx - Main module context (provides _toMinutes helper)
-   * @returns {Object} Time range object:
-   *   - allStart: number - Earliest minute of day (default: 7*60 = 7:00 AM)
-   *   - allEnd: number - Latest minute of day (default: 17*60 = 5:00 PM)
-   */
-  function calculateTimeRange(timetable, timeUnits, ctx) {
-    let allStart = Infinity;
-    let allEnd = -Infinity;
-
-    if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-      timeUnits.forEach((u) => {
-        if (u.startMin !== undefined && u.startMin !== null) allStart = Math.min(allStart, u.startMin);
-        if (u.endMin !== undefined && u.endMin !== null) allEnd = Math.max(allEnd, u.endMin);
+    function getSharedLessonPopoverController() {
+      if (sharedLessonPopover) return sharedLessonPopover;
+      const createPopoverController = root?.util?.createPopoverController;
+      if (typeof createPopoverController !== "function") return null;
+      sharedLessonPopover = createPopoverController({
+        baseClassName: "wu-shared-popover wu-shared-popover--grid",
+        presentation: "modal",
       });
-
-      (Array.isArray(timetable) ? timetable : []).forEach((el) => {
-        const s = ctx._toMinutes(el.startTime);
-        const e = el.endTime ? ctx._toMinutes(el.endTime) : null;
-        if (s !== null && s !== undefined && e !== null && e !== undefined) {
-          if (s < allStart || e > allEnd) {
-            if (e - s < 12 * 60) {
-              allStart = Math.min(allStart, s);
-              allEnd = Math.max(allEnd, e);
-            }
-          }
-        }
-      });
-    } else {
-      (Array.isArray(timetable) ? timetable : []).forEach((el) => {
-        const s = ctx._toMinutes(el.startTime);
-        const e = el.endTime ? ctx._toMinutes(el.endTime) : null;
-        if (s !== null && s !== undefined && e !== null && e !== undefined) {
-          if (e - s < 12 * 60) {
-            allStart = Math.min(allStart, s);
-            allEnd = Math.max(allEnd, e);
-          }
-        } else if (s !== null && s !== undefined) {
-          allStart = Math.min(allStart, s);
-        }
-      });
+      return sharedLessonPopover;
     }
 
-    if (!Number.isFinite(allStart) || allEnd <= allStart) {
-      allStart = 7 * 60;
-      allEnd = 17 * 60;
+    function getCurrentDateContext(config) {
+      return root.time.getCurrentDateContext(config);
     }
 
-    return { allStart, allEnd };
-  }
-
-  /**
-   * Apply max lessons limit to time range cutoff
-   * Limits visible time range to first N periods (respects time unit boundaries)
-   *
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes (before limit)
-   * @param {number} maxGridLessons - Maximum number of periods to show (0 = no limit)
-   * @param {Array} timeUnits - Array of time unit objects
-   * @returns {number} New end time in minutes (clamped to period boundary)
-   */
-  function applyMaxLessonsLimit(allStart, allEnd, maxGridLessons, timeUnits) {
-    if (maxGridLessons >= 1 && Array.isArray(timeUnits) && timeUnits.length > 0) {
-      const targetIndex = Math.min(timeUnits.length - 1, maxGridLessons - 1);
-      let cutoff = timeUnits[targetIndex].endMin;
-
-      if (cutoff === undefined || cutoff === null) {
-        if (targetIndex + 1 < timeUnits.length && timeUnits[targetIndex + 1]?.startMin !== undefined) {
-          cutoff = timeUnits[targetIndex + 1].startMin;
-        } else if (timeUnits[targetIndex].startMin !== undefined) {
-          cutoff = timeUnits[targetIndex].startMin + 60;
-        }
-      }
-
-      if (
-        cutoff !== undefined &&
-        cutoff !== null &&
-        targetIndex + 1 < timeUnits.length &&
-        timeUnits[targetIndex + 1]?.startMin !== undefined
-      ) {
-        cutoff = timeUnits[targetIndex + 1].startMin;
-      }
-
-      if (cutoff !== undefined && cutoff !== null && cutoff > allStart && cutoff < allEnd) {
-        return cutoff;
-      }
-    }
-    return allEnd;
-  }
-
-  function getTimeUnitBounds(timeUnits, ui) {
-    if (!Array.isArray(timeUnits) || ui < 0 || ui >= timeUnits.length) {
-      return { startMin: null, lineMin: null };
+    function translate(pluginContext, key, fallback, replacements) {
+      if (typeof pluginContext?.translate !== "function") return fallback;
+      const translated = pluginContext.translate(key, fallback, replacements);
+      return translated || fallback;
     }
 
-    const u = timeUnits[ui];
-    const startMin = u?.startMin ?? null;
-    let lineMin = null;
-
-    if (ui + 1 < timeUnits.length && timeUnits[ui + 1]?.startMin !== undefined) {
-      lineMin = timeUnits[ui + 1].startMin;
-    } else if (u?.endMin !== undefined) {
-      lineMin = u.endMin;
-    } else if (startMin !== null) {
-      lineMin = startMin + 60;
+    function resolveStudentConfig(studentSlice) {
+      const config = studentSlice?.context?.config;
+      if (!config || typeof config !== "object" || Array.isArray(config)) return {};
+      return config;
     }
 
-    return { startMin, lineMin };
-  }
+    function resolveGridConfig(studentConfig) {
+      const pluginConfig =
+        studentConfig?.plugins?.grid?.config && typeof studentConfig.plugins.grid.config === "object"
+          ? studentConfig.plugins.grid.config
+          : {};
 
-  /**
-   * Create grid header with day labels
-   * Creates a grid row with empty corner cell + day column labels
-   *
-   * @param {number} totalDisplayDays - Number of days to display
-   * @param {Date} baseDate - Base date for calculations
-   * @param {number} startOffset - Day offset from base date
-   * @param {string} gridDateFormat - Date format for day labels
-   * @param {Object} ctx - Main module context
-   * @param {Object} util - Utility object with formatDisplayDate function
-   * @returns {Object} Object with header element and gridTemplateColumns string
-   */
-  function createGridHeader(displayDates, gridDateFormat, ctx, { formatDisplayDate }) {
-    const header = document.createElement("div");
-    header.className = "grid-days-header";
+      const pluginFields =
+        pluginConfig?.fields && typeof pluginConfig.fields === "object" && !Array.isArray(pluginConfig.fields)
+          ? pluginConfig.fields
+          : {};
 
-    const cols = ["minmax(80px,auto)"];
-    for (let d = 0; d < displayDates.length; d++) {
-      cols.push("1fr");
-    }
-    header.style.gridTemplateColumns = cols.join(" ");
+      const pluginFormat =
+        pluginFields?.format && typeof pluginFields.format === "object" && !Array.isArray(pluginFields.format)
+          ? pluginFields.format
+          : {};
 
-    const emptyHeader = document.createElement("div");
-    emptyHeader.className = "grid-days-header-empty";
-    header.appendChild(emptyHeader);
-
-    for (let d = 0; d < displayDates.length; d++) {
-      const dayDate = displayDates[d];
-      const dayLabel = document.createElement("div");
-      dayLabel.className = "grid-daylabel";
-
-      const dayLabelText = formatDisplayDate
-        ? formatDisplayDate(dayDate, gridDateFormat)
-        : dayDate.toLocaleDateString(ctx.config.language, { weekday: "short", day: "numeric", month: "numeric" });
-
-      dayLabel.textContent = dayLabelText;
-      const col = 2 + d;
-      dayLabel.style.gridColumn = `${col}`;
-      header.appendChild(dayLabel);
-    }
-
-    return { header, gridTemplateColumns: cols.join(" ") };
-  }
-
-  function formatAxisTime(value) {
-    const raw = String(value ?? "").trim();
-    if (!raw) return "";
-
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) return "";
-
-    const padded = digits.padStart(4, "0");
-    return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
-  }
-
-  function resolveAxisLabelMode(unitHeightPx) {
-    if (!Number.isFinite(unitHeightPx) || unitHeightPx <= 0) return "compact";
-    if (unitHeightPx < 18) return "tight";
-    if (unitHeightPx < 34) return "compact";
-    return "roomy";
-  }
-
-  /**
-   * Content of one period label. How much fits depends on the period's height: "tight" shows only
-   * the start time, "compact" the period and one time, "roomy" the period and start-end.
-   * @returns {{nodes: Node[], title: string}} Label content and its tooltip ("" for none)
-   */
-  function timeUnitLabel(unit, labelMode, ctx) {
-    const unitName = String(unit?.name ?? "").trim();
-    const startText = formatAxisTime(unit?.startTime);
-    const endText = formatAxisTime(unit?.endTime);
-    const range = startText && endText ? `${startText}-${endText}` : startText || endText;
-
-    if (!unitName) {
-      const fallbackTime = startText || endText || "";
-      return { nodes: [el("span", "grid-timeunit-time", fallbackTime)], title: fallbackTime };
-    }
-
-    const periodText = formatTimeUnitPeriodText(unitName, ctx);
-    if (labelMode === "tight") {
-      return { nodes: [el("span", "grid-timeunit-time", startText || periodText)], title: range || "" };
-    }
-    const time = labelMode === "compact" ? startText || endText : range;
-    const nodes = [el("span", "grid-timeunit-period", periodText)];
-    if (time) nodes.push(el("span", "grid-timeunit-time", time));
-    return { nodes, title: range || "" };
-  }
-
-  function createHourLine(top) {
-    const line = document.createElement("div");
-    line.className = "grid-hourline";
-    line.style.top = `${top}px`;
-    return line;
-  }
-
-  /** Period labels and period lines from the school's timegrid. */
-  function appendTimeUnitAxis(timeInner, timeUnits, { allStart, allEnd, totalHeight, totalMinutes }, ctx) {
-    const toPx = (minutes) => Math.round(((minutes - allStart) / totalMinutes) * totalHeight);
-    for (let ui = 0; ui < timeUnits.length; ui++) {
-      const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
-      if (startMin === null) continue;
-
-      const lab = document.createElement("div");
-      lab.style.position = "absolute";
-      lab.style.top = `${toPx(startMin)}px`;
-      lab.style.left = "4px";
-      lab.style.zIndex = 2;
-      lab.className = "grid-timeunit-label";
-
-      const unitHeightPx =
-        Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
-          ? Math.round(((lineMin - startMin) / totalMinutes) * totalHeight)
-          : null;
-      const labelMode = resolveAxisLabelMode(unitHeightPx);
-      lab.classList.add(`is-${labelMode}`);
-
-      const { nodes, title } = timeUnitLabel(timeUnits[ui], labelMode, ctx);
-      lab.append(...nodes);
-      if (title) lab.title = title;
-      timeInner.appendChild(lab);
-
-      if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
-        timeInner.appendChild(createHourLine(toPx(lineMin)));
-      }
-    }
-  }
-
-  /** Without a timegrid: a label and a line at every full hour. */
-  function appendHourlyAxis(timeInner, { allStart, allEnd, totalHeight, totalMinutes }) {
-    for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
-      const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-      const lab = document.createElement("div");
-      lab.style.position = "absolute";
-      lab.style.top = `${top}px`;
-      lab.style.zIndex = 2;
-      lab.style.left = "4px";
-      lab.style.fontSize = "0.85em";
-      lab.style.color = "#666";
-      lab.textContent = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-      timeInner.appendChild(lab);
-      timeInner.appendChild(createHourLine(top));
-    }
-  }
-
-  /**
-   * Create time axis (left column with hour labels and grid lines)
-   * Renders either time units (periods) or hourly grid lines
-   *
-   * @param {Array} timeUnits - Array of time unit objects (name, startTime, startMin, endMin)
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes
-   * @param {number} totalHeight - Total height in pixels
-   * @param {number} totalMinutes - Total minutes span (allEnd - allStart)
-   * @param {Object} ctx - Main module context (provides translate)
-   * @returns {HTMLElement} Time axis div element
-   */
-  function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
-    const timeAxis = document.createElement("div");
-    timeAxis.className = "grid-timecell";
-    const timeInner = document.createElement("div");
-    timeInner.style.position = "relative";
-    timeInner.style.height = `${totalHeight}px`;
-    timeInner.style.width = "100%";
-
-    const scale = { allStart, allEnd, totalHeight, totalMinutes };
-    if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-      appendTimeUnitAxis(timeInner, timeUnits, scale, ctx);
-    } else {
-      appendHourlyAxis(timeInner, scale);
-    }
-
-    timeAxis.appendChild(timeInner);
-    timeAxis.style.gridColumn = "1";
-    return timeAxis;
-  }
-
-  function formatEnglishOrdinal(value) {
-    const number = Number(value);
-    if (!Number.isInteger(number) || number <= 0) return String(value || "");
-    const mod100 = number % 100;
-    if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
-    const mod10 = number % 10;
-    if (mod10 === 1) return `${number}st`;
-    if (mod10 === 2) return `${number}nd`;
-    if (mod10 === 3) return `${number}rd`;
-    return `${number}th`;
-  }
-
-  function formatTimeUnitPeriodText(unitName, ctx) {
-    const normalizedUnitName = String(unitName || "").trim();
-    if (!normalizedUnitName) return "";
-
-    const language = String(ctx?.config?.language || "")
-      .trim()
-      .toLowerCase();
-    const isEnglish = language === "en" || language.startsWith("en-");
-
-    if (isEnglish) {
-      const periodUnit = translate(ctx, "period_unit", "period");
-      return `${formatEnglishOrdinal(normalizedUnitName)} ${periodUnit}`.trim();
-    }
-
-    const periodSuffix = translate(ctx, "period_suffix", ctx?.translate?.("period") || "").trim();
-    return periodSuffix ? `${normalizedUnitName}.${periodSuffix}` : normalizedUnitName;
-  }
-
-  /**
-   * Extract and normalize lessons for a single day
-   * Converts backend lesson objects to grid-specific format with:
-   * - Time values (startMin/endMin in minutes)
-   * - Flexible field extraction (subject/teacher/room/class/etc.)
-   * - Display mode detection (teacher view vs student view)
-   * - Legacy field support
-   *
-   * @param {Array} sourceForDay - Array of lesson objects for one day
-   * @param {Object} ctx - Main module context (provides _toMinutes helper)
-   * @returns {Array} Normalized lesson objects
-   */
-  function extractDayLessons(sourceForDay, ctx) {
-    return sourceForDay.map((el) => {
-      const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
-
-      // IMPORTANT: Spread `el` first so ALL payload fields are forwarded automatically.
-      // Explicit keys below override where the grid needs computed/normalized values.
-      // Without the spread, any new field added to
-      // lib/mmm-adapter/mmmPayloadMapper.js/schemas.lesson would silently vanish
-      // here and never reach buildLessonContent().
       return {
-        ...el,
-        dateStr: String(el.date),
-        startMin: ctx._toMinutes(el.startTime),
-        endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
-        startTime: el.startTime ? String(el.startTime).padStart(4, "0") : "",
-        endTime: el.endTime ? String(el.endTime).padStart(4, "0") : null,
-        subjectShort: getSubject(el, "short") || "N/A",
-        subject: getSubject(el, "long") || "N/A",
-        teacherInitial: getTeachers(el, "short")[0] || "N/A",
-        teacher: getTeachers(el, "long")[0] || "N/A",
-        room: getRoom(el, "short") || "",
-        roomLong: getRoom(el, "long") || "",
-        class: getClass(el, "short") || "",
-        classLong: getClass(el, "long") || "",
-        studentGroup: getStudentGroup(el, "short") || "",
-        studentGroupLong: getStudentGroup(el, "long") || "",
-        infoShort: getInfo(el, "short") || "",
-        infoLong: getInfo(el, "long") || "",
-        isTeacherView: displayMode.isTeacherView,
-        isStudentView: displayMode.isStudentView,
-        code: el.code || "",
-        substitutionText: el.substitutionText || "",
-        text: el.lessonText || "",
-        lessonId: el.id ?? null,
+        ...pluginConfig,
+        fields: {
+          ...pluginFields,
+          format: {
+            ...pluginFormat,
+          },
+        },
       };
-    });
-  }
-
-  /**
-   * Validate and normalize lessons
-   * Ensures all lessons have startMin/endMin values
-   * Fills missing endMin with startMin + 45 minutes (default lesson duration)
-   *
-   * @param {Array} dayLessons - Array of extracted lesson objects
-   * @param {Function} log - Logging function
-   * @returns {Array} Validated lesson objects (mutated in-place)
-   */
-  function validateAndNormalizeLessons(dayLessons, log) {
-    for (const curr of dayLessons) {
-      curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
-
-      if (curr.startMin === undefined || curr.startMin === null) {
-        log(
-          "debug",
-          "Lesson missing startMin; backend should provide numeric startMin/endMin",
-          curr.lessonId ? { lessonId: curr.lessonId } : curr,
-        );
-      }
-
-      if (curr.endMin === undefined || curr.endMin === null) {
-        if (curr.startMin !== undefined && curr.startMin !== null) {
-          curr.endMin = curr.startMin + 45;
-        }
-      }
     }
-    return dayLessons;
-  }
 
-  /**
-   * Filter lessons by maximum periods limit
-   * When maxGridLessons is set:
-   * - Filters ALL lessons (including cancelled/irregular) by period index
-   * - Only shows lessons in the first N periods
-   * When maxGridLessons is not set:
-   * - Filters by allEnd cutoff time
-   * - Keeps cancelled/irregular lessons regardless of time
-   *
-   * @param {Array} dayLessons - Array of normalized lesson objects
-   * @param {number} maxGridLessons - Maximum number of periods (0 = no limit)
-   * @param {Array} timeUnits - Array of time unit objects
-   * @param {string} studentTitle - Student name (for logging)
-   * @param {string} dateStr - Date string (YYYYMMDD)
-   * @param {Object} ctx - Main module context
-   * @param {number} allEnd - End time cutoff in minutes
-   * @returns {Array} Filtered lesson objects
-   */
-  function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd) {
-    if (allEnd === undefined || allEnd === null) {
-      allEnd = Infinity;
+    function buildEffectiveGridStudentConfig(studentConfig, gridConfig) {
+      const plugins =
+        studentConfig?.plugins && typeof studentConfig.plugins === "object" && !Array.isArray(studentConfig.plugins)
+          ? studentConfig.plugins
+          : {};
+      const gridPlugin =
+        plugins?.grid && typeof plugins.grid === "object" && !Array.isArray(plugins.grid) ? plugins.grid : {};
+
+      return {
+        ...studentConfig,
+        grid: gridConfig,
+        plugins: {
+          ...plugins,
+          grid: {
+            ...gridPlugin,
+            config: gridConfig,
+          },
+        },
+      };
     }
-    if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
-      return dayLessons.filter((lesson) => {
-        if (lesson.status === "CANCELLED" || isIrregularStatus(lesson.status)) {
+
+    function buildGroupedRawLessons(lessons) {
+      const grouped = {};
+      (Array.isArray(lessons) ? lessons : []).forEach((lesson) => {
+        const key = lesson?.date != null ? String(lesson.date) : "";
+        if (!key) return;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(lesson);
+      });
+      Object.keys(grouped).forEach((key) => {
+        grouped[key].sort((left, right) => (left?.startTime || 0) - (right?.startTime || 0));
+      });
+      return grouped;
+    }
+
+    function buildHolidayMapFromRanges(holidays) {
+      return root.util.buildHolidayMapFromRanges(holidays);
+    }
+
+    function buildDayNoticeMap(dayNotices) {
+      return root.util.buildDayNoticeMap(dayNotices);
+    }
+
+    function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
+      const effectiveConfig = {
+        ...studentConfig,
+        language:
+          studentConfig?.language ||
+          // MagicMirror's config is a global `let` in the browser, not a globalThis property.
+          (typeof config !== "undefined" && config?.language ? config.language : undefined),
+        logLevel:
+          renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
+      };
+      const dateContext = getCurrentDateContext(effectiveConfig);
+      const studentTitle = String(studentSlice?.student?.title || "").trim();
+      const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
+      const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
+
+      return {
+        identifier: `${renderContext?.identifier || "mmm-webuntis"}-grid-plugin`,
+        config: effectiveConfig,
+        studentConfig: effectiveConfig,
+        holidayMapByStudent: {
+          [studentTitle]: buildHolidayMapFromRanges(holidays),
+        },
+        dayNoticeMapByStudent: {
+          [studentTitle]: buildDayNoticeMap(dayNotices),
+        },
+        collectionStateByStudent: {
+          [studentTitle]: studentSlice?.state?.collections || {},
+        },
+        preprocessedByStudent: {
+          [studentTitle]: {
+            rawGroupedByDate: buildGroupedRawLessons(studentSlice?.data?.lessons),
+          },
+        },
+        _currentTodayYmd: dateContext.ymd,
+        _hasWidget(name) {
+          return (
+            String(name || "")
+              .trim()
+              .toLowerCase() === "grid"
+          );
+        },
+        _getWidgetApi() {
+          return root || null;
+        },
+        _usesLiveClock(nowContext = this.getCurrentDateContext()) {
+          return nowContext?.isDebug !== true;
+        },
+        _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
+          const nextTodayYmd = Number(nowContext?.ymd);
+          if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
+          if (nextTodayYmd === this._currentTodayYmd) return false;
+          this._currentTodayYmd = nextTodayYmd;
           return true;
+        },
+        _toMinutes(value) {
+          return toMinutesSinceMidnight(value);
+        },
+        getCurrentDateContext(configOverride = null) {
+          return getCurrentDateContext(configOverride || effectiveConfig);
+        },
+        translate(key, replacements, fallback = key) {
+          return translate(pluginContext, key, fallback, replacements);
+        },
+      };
+    }
+
+    function getModuleDateContext(ctx, configOverride = null) {
+      return ctx.getCurrentDateContext(configOverride || ctx.config || {});
+    }
+
+    function getCurrentDayDate(ctx) {
+      const nowContext = getModuleDateContext(ctx);
+      return new Date(nowContext.date.getFullYear(), nowContext.date.getMonth(), nowContext.date.getDate());
+    }
+
+    /**
+     * Determine lesson display mode based on available fields
+     * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
+     *
+     * @param {Object} lesson - Lesson object from backend
+     * @returns {Object} Display mode object with flags:
+     *   - isTeacherView: boolean - Lesson has class info (teacher perspective)
+     *   - isStudentView: boolean - Lesson has studentGroup info (student perspective)
+     *   - hasTeacher/hasSubject/hasRoom/hasClass/hasStudentGroup: field availability flags
+     *   - primaryInfo/secondaryInfo: suggested field types for display
+     *   - showStudentGroup: boolean - Whether to show student group
+     */
+    function getLessonDisplayMode(lesson) {
+      const hasTeacher = Array.isArray(lesson?.teachers) && lesson.teachers.length > 0;
+      const hasSubject = Array.isArray(lesson?.subjects) && lesson.subjects.length > 0;
+      const hasRoom = Array.isArray(lesson?.rooms) && lesson.rooms.length > 0;
+      const hasClass = Array.isArray(lesson?.classes) && lesson.classes.length > 0;
+      const hasStudentGroup = Array.isArray(lesson?.studentGroups) && lesson.studentGroups.length > 0;
+
+      const isTeacherView = hasClass && !hasStudentGroup;
+      const isStudentView = hasStudentGroup && !hasClass;
+
+      return {
+        isTeacherView,
+        isStudentView,
+        hasTeacher,
+        hasSubject,
+        hasRoom,
+        hasClass,
+        hasStudentGroup,
+        primaryInfo: isTeacherView ? "class" : "subject",
+        secondaryInfo: isTeacherView ? "room" : "teacher",
+        showStudentGroup: hasStudentGroup && !isTeacherView,
+      };
+    }
+
+    /**
+     * Resolve field configuration from config
+     * Extracts grid.fields.{primary, secondary, additional, format} from student config
+     *
+     * Single source of truth: defaults are merged centrally in MMM-Webuntis.js / node_helper.js.
+     * This widget only validates values and applies minimal safety fallbacks for invalid/missing data.
+     *
+     * @param {Object} config - Student configuration object
+     * @returns {Object} Resolved field configuration
+     */
+    function resolveFieldConfig(config) {
+      const gridConfig = config?.grid?.fields || {};
+      const defaultFields = {
+        primary: "subject",
+        secondary: "teacher",
+        additional: ["room"],
+        format: {
+          subject: "long",
+          teacher: "long",
+          class: "short",
+          room: "short",
+          studentGroup: "short",
+        },
+      };
+      const validFieldTypes = ["subject", "teacher", "room", "class", "studentGroup", "info", "none"];
+      const validFormats = ["short", "long"];
+
+      const normalizeFieldType = (value, fallback) => {
+        const normalized = typeof value === "string" ? value.trim() : "";
+        return validFieldTypes.includes(normalized) ? normalized : fallback;
+      };
+
+      const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ["room"];
+      const inputAdditional = Array.isArray(gridConfig.additional) ? gridConfig.additional : fallbackAdditional;
+      const additional = inputAdditional
+        .map((field) => normalizeFieldType(field, null))
+        .filter((field) => typeof field === "string");
+
+      const defaultFormat =
+        defaultFields.format && typeof defaultFields.format === "object" ? defaultFields.format : {};
+      const localFormat = gridConfig.format && typeof gridConfig.format === "object" ? gridConfig.format : {};
+      const rawFormat = { ...defaultFormat, ...localFormat };
+      const format = {};
+      Object.keys(rawFormat).forEach((key) => {
+        if (!validFieldTypes.includes(key)) return;
+        const value = String(rawFormat[key] || "").trim();
+        if (validFormats.includes(value)) {
+          format[key] = value;
         }
-        const s = lesson.startMin;
-        return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+      });
+
+      return {
+        primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, "subject")),
+        secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, "teacher")),
+        additional: additional.length > 0 ? additional : fallbackAdditional,
+        format,
+      };
+    }
+
+    /**
+     * Get field value based on flexible configuration
+     * Generic wrapper around field extractors (getSubject, getTeachers, getRoom, etc.)
+     *
+     * @param {Object} lesson - Lesson object from backend
+     * @param {string} fieldType - Field type to extract ('subject', 'teacher', 'room', 'class', 'studentGroup', 'info')
+     * @param {Object} fieldConfig - Field configuration with format specifications
+     * @returns {string} Extracted field value or empty string if not found/invalid type
+     */
+    function getConfiguredFieldValue(lesson, fieldType, fieldConfig) {
+      if (!lesson || !fieldType || fieldType === "none") return "";
+
+      const format = fieldConfig?.format?.[fieldType] || "short";
+
+      switch (fieldType) {
+        case "subject":
+          return getSubject(lesson, format);
+        case "teacher": {
+          const teachers = getTeachers(lesson, format);
+          return teachers.length > 0 ? teachers[0] : "";
+        }
+        case "room":
+          return getRoom(lesson, format);
+        case "class":
+          return getClass(lesson, format);
+        case "studentGroup":
+          return getStudentGroup(lesson, format);
+        case "info":
+          return getInfo(lesson, format);
+        default:
+          return "";
+      }
+    }
+
+    /**
+     * Build lesson display using flexible field configuration
+     * Extracts primary, secondary, and additional fields based on grid.fields config
+     * Automatically deduplicates additional fields if they match primary/secondary
+     *
+     * @param {Object} lesson - Lesson object from backend
+     * @param {Object} config - Student configuration object
+     * @param {Object} options - Display options (includeAdditional: boolean)
+     * @returns {Object} Display parts object:
+     *   - primary: string - Primary field value
+     *   - secondary: string - Secondary field value
+     *   - additional: string[] - Additional field values (deduplicated)
+     */
+    function buildFlexibleLessonDisplay(lesson, config, options = {}) {
+      const { includeAdditional = true } = options;
+      const fieldConfig = resolveFieldConfig(config);
+      const primary = getConfiguredFieldValue(lesson, fieldConfig.primary, fieldConfig);
+      const secondary = getConfiguredFieldValue(lesson, fieldConfig.secondary, fieldConfig);
+
+      const parts = { primary, secondary, additional: [] };
+
+      if (includeAdditional && Array.isArray(fieldConfig.additional)) {
+        for (const additionalField of fieldConfig.additional) {
+          const value = getConfiguredFieldValue(lesson, additionalField, fieldConfig);
+          if (value && value !== primary && value !== secondary) {
+            parts.additional.push(value);
+          }
+        }
+      }
+
+      return parts;
+    }
+
+    /**
+     * Start the now-line updater (runs every minute)
+     * Updates now-line position and refreshes past lesson masks
+     * and notes a day rollover. It fetches nothing itself; new data comes with the lifecycle's next
+     * periodic fetch.
+     * Started and stopped by the lifecycle's onVisible/onHidden, so it never runs while hidden.
+     *
+     * @param {Object} ctx - Main module context
+     */
+    function startNowLineUpdater(ctx) {
+      if (!ctx) return;
+      if (!ctx._hasWidget("grid")) return;
+      const state = getNowLineState(ctx);
+      if (state.timer || state.initialTimeout) return;
+
+      const tick = () => {
+        try {
+          const nowContext = getModuleDateContext(ctx);
+          // Skip clock-driven updates when debugDate is active (time is frozen)
+          if (nowContext?.isDebug) return;
+
+          ctx._handleClockDrivenDayRollover(nowContext);
+
+          const gridWidget = ctx._getWidgetApi()?.grid;
+          const moduleRoot = getModuleRootElement(ctx);
+          if (gridWidget) {
+            if (typeof gridWidget.updateNowLinesAll === "function") gridWidget.updateNowLinesAll(ctx, moduleRoot);
+            if (typeof gridWidget.refreshPastMasks === "function") gridWidget.refreshPastMasks(ctx, moduleRoot);
+          }
+        } catch (err) {
+          log("debug", "minute tick update failed", err);
+        }
+      };
+
+      const now = getModuleDateContext(ctx).date;
+      const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+
+      state.initialTimeout = setTimeout(
+        () => {
+          tick();
+          state.timer = setInterval(tick, 60 * 1000);
+          state.initialTimeout = null;
+        },
+        Math.max(0, msToNextMinute),
+      );
+
+      tick();
+    }
+
+    /**
+     * Stop the now-line updater
+     * Clears both minute timer and initial timeout
+     *
+     * @param {Object} ctx - Main module context
+     */
+    function stopNowLineUpdater(ctx) {
+      if (!ctx) return;
+      const state = getNowLineState(ctx);
+      if (state.timer) {
+        clearInterval(state.timer);
+        state.timer = null;
+      }
+      if (state.initialTimeout) {
+        clearTimeout(state.initialTimeout);
+        state.initialTimeout = null;
+      }
+    }
+
+    /**
+     * Validate and extract grid configuration
+     * Supports two modes:
+     *   - weekView: true → Always show Mon-Fri of current/next week (auto-advance on Fri 16:00+ / Sat/Sun)
+     *   - weekView: false → Show configurable past/future days (pastDays + today + nextDays)
+     *
+     * @param {Object} ctx - Main module context (provides debugDate support)
+     * @param {Object} studentConfig - Student-specific configuration
+     * @returns {Object} Grid configuration with calculated offsets:
+     *   - daysToShow: number - Number of future days to show (not including today)
+     *   - pastDays: number - Number of past days to show
+     *   - startOffset: number - Day offset from base date (negative = past)
+     *   - totalDisplayDays: number - Total days to display
+     *   - gridDateFormat: string - Date format for day labels
+     *   - maxGridLessons: number - Maximum lessons per day (0 = no limit)
+     *   - weekView: boolean - Whether week view mode is active
+     */
+    function validateAndExtractGridConfig(ctx, studentConfig) {
+      const getGridConfig = (key) => {
+        return getWidgetConfigResolved(studentConfig, ctx, "grid", key);
+      };
+
+      const weekView = Boolean(getGridConfig("weekView"));
+      const configuredNext = getGridConfig("nextDays");
+      const configuredPast = getGridConfig("pastDays");
+      const gridDateFormat = getGridConfig("dateFormat");
+      const hideWeekends = Boolean(getGridConfig("hideWeekends"));
+      const maxGridLessons = Math.max(0, Math.floor(Number(getGridConfig("maxLessons") ?? 0)));
+      const pxPerMinute = resolvePxPerMinute(getGridConfig("pxPerMinute"));
+      const { daysToShow, pastDays, startOffset, totalDisplayDays } = weekView
+        ? weekViewRange(ctx)
+        : rollingRange(configuredNext, configuredPast);
+
+      return {
+        daysToShow,
+        pastDays,
+        startOffset,
+        totalDisplayDays,
+        gridDateFormat,
+        maxGridLessons,
+        pxPerMinute,
+        hideWeekends,
+        weekView,
+      };
+    }
+
+    /**
+     * Week view: Monday to Friday of the current week - or of the next one from Friday 15:45 (live
+     * clock only) and at the weekend.
+     */
+    function weekViewRange(ctx) {
+      const baseDate =
+        typeof ctx._currentTodayYmd === "number"
+          ? getBaseDateFromYmd(ctx._currentTodayYmd, ctx)
+          : getCurrentDayDate(ctx);
+      const dayOfWeek = baseDate.getDay();
+      const nowContext = getModuleDateContext(ctx);
+      const currentHour = nowContext.date.getHours();
+      const currentMinute = nowContext.date.getMinutes();
+
+      const afterFridaySchool =
+        dayOfWeek === 5 &&
+        ctx._usesLiveClock(nowContext) &&
+        (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45));
+      const weekOffset = afterFridaySchool || dayOfWeek === 6 || dayOfWeek === 0 ? 1 : 0;
+
+      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const totalDisplayDays = 5;
+      return {
+        daysToShow: totalDisplayDays - 1,
+        pastDays: 0,
+        startOffset: daysToMonday + weekOffset * 7,
+        totalDisplayDays,
+      };
+    }
+
+    /**
+     * Create grid header with day labels
+     * Creates a grid row with empty corner cell + day column labels
+     *
+     * @param {number} totalDisplayDays - Number of days to display
+     * @param {Date} baseDate - Base date for calculations
+     * @param {number} startOffset - Day offset from base date
+     * @param {string} gridDateFormat - Date format for day labels
+     * @param {Object} ctx - Main module context
+     * @param {Object} util - Utility object with formatDisplayDate function
+     * @returns {Object} Object with header element and gridTemplateColumns string
+     */
+    function createGridHeader(displayDates, gridDateFormat, ctx, { formatDisplayDate }) {
+      const header = document.createElement("div");
+      header.className = "grid-days-header";
+
+      const cols = ["minmax(80px,auto)"];
+      for (let d = 0; d < displayDates.length; d++) {
+        cols.push("1fr");
+      }
+      header.style.gridTemplateColumns = cols.join(" ");
+
+      const emptyHeader = document.createElement("div");
+      emptyHeader.className = "grid-days-header-empty";
+      header.appendChild(emptyHeader);
+
+      for (let d = 0; d < displayDates.length; d++) {
+        const dayDate = displayDates[d];
+        const dayLabel = document.createElement("div");
+        dayLabel.className = "grid-daylabel";
+
+        const dayLabelText = formatDisplayDate
+          ? formatDisplayDate(dayDate, gridDateFormat)
+          : dayDate.toLocaleDateString(ctx.config.language, { weekday: "short", day: "numeric", month: "numeric" });
+
+        dayLabel.textContent = dayLabelText;
+        const col = 2 + d;
+        dayLabel.style.gridColumn = `${col}`;
+        header.appendChild(dayLabel);
+      }
+
+      return { header, gridTemplateColumns: cols.join(" ") };
+    }
+
+    function formatAxisTime(value) {
+      const raw = String(value ?? "").trim();
+      if (!raw) return "";
+
+      const digits = raw.replace(/\D/g, "");
+      if (!digits) return "";
+
+      const padded = digits.padStart(4, "0");
+      return `${padded.slice(0, 2)}:${padded.slice(2, 4)}`;
+    }
+
+    function resolveAxisLabelMode(unitHeightPx) {
+      if (!Number.isFinite(unitHeightPx) || unitHeightPx <= 0) return "compact";
+      if (unitHeightPx < 18) return "tight";
+      if (unitHeightPx < 34) return "compact";
+      return "roomy";
+    }
+
+    /**
+     * Content of one period label. How much fits depends on the period's height: "tight" shows only
+     * the start time, "compact" the period and one time, "roomy" the period and start-end.
+     * @returns {{nodes: Node[], title: string}} Label content and its tooltip ("" for none)
+     */
+    function timeUnitLabel(unit, labelMode, ctx) {
+      const unitName = String(unit?.name ?? "").trim();
+      const startText = formatAxisTime(unit?.startTime);
+      const endText = formatAxisTime(unit?.endTime);
+      const range = startText && endText ? `${startText}-${endText}` : startText || endText;
+
+      if (!unitName) {
+        const fallbackTime = startText || endText || "";
+        return { nodes: [el("span", "grid-timeunit-time", fallbackTime)], title: fallbackTime };
+      }
+
+      const periodText = formatTimeUnitPeriodText(unitName, ctx);
+      if (labelMode === "tight") {
+        return { nodes: [el("span", "grid-timeunit-time", startText || periodText)], title: range || "" };
+      }
+      const time = labelMode === "compact" ? startText || endText : range;
+      const nodes = [el("span", "grid-timeunit-period", periodText)];
+      if (time) nodes.push(el("span", "grid-timeunit-time", time));
+      return { nodes, title: range || "" };
+    }
+
+    function createHourLine(top) {
+      const line = document.createElement("div");
+      line.className = "grid-hourline";
+      line.style.top = `${top}px`;
+      return line;
+    }
+
+    /** Period labels and period lines from the school's timegrid. */
+    function appendTimeUnitAxis(timeInner, timeUnits, { allStart, allEnd, totalHeight, totalMinutes }, ctx) {
+      const toPx = (minutes) => Math.round(((minutes - allStart) / totalMinutes) * totalHeight);
+      for (let ui = 0; ui < timeUnits.length; ui++) {
+        const { startMin, lineMin } = getTimeUnitBounds(timeUnits, ui);
+        if (startMin === null) continue;
+
+        const lab = document.createElement("div");
+        lab.style.position = "absolute";
+        lab.style.top = `${toPx(startMin)}px`;
+        lab.style.left = "4px";
+        lab.style.zIndex = 2;
+        lab.className = "grid-timeunit-label";
+
+        const unitHeightPx =
+          Number.isFinite(startMin) && Number.isFinite(lineMin) && lineMin > startMin
+            ? Math.round(((lineMin - startMin) / totalMinutes) * totalHeight)
+            : null;
+        const labelMode = resolveAxisLabelMode(unitHeightPx);
+        lab.classList.add(`is-${labelMode}`);
+
+        const { nodes, title } = timeUnitLabel(timeUnits[ui], labelMode, ctx);
+        lab.append(...nodes);
+        if (title) lab.title = title;
+        timeInner.appendChild(lab);
+
+        if (lineMin !== undefined && lineMin !== null && lineMin >= allStart && lineMin <= allEnd) {
+          timeInner.appendChild(createHourLine(toPx(lineMin)));
+        }
+      }
+    }
+
+    /** Without a timegrid: a label and a line at every full hour. */
+    function appendHourlyAxis(timeInner, { allStart, allEnd, totalHeight, totalMinutes }) {
+      for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
+        const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
+        const lab = document.createElement("div");
+        lab.style.position = "absolute";
+        lab.style.top = `${top}px`;
+        lab.style.zIndex = 2;
+        lab.style.left = "4px";
+        lab.style.fontSize = "0.85em";
+        lab.style.color = "#666";
+        lab.textContent = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+        timeInner.appendChild(lab);
+        timeInner.appendChild(createHourLine(top));
+      }
+    }
+
+    /**
+     * Create time axis (left column with hour labels and grid lines)
+     * Renders either time units (periods) or hourly grid lines
+     *
+     * @param {Array} timeUnits - Array of time unit objects (name, startTime, startMin, endMin)
+     * @param {number} allStart - Start time in minutes
+     * @param {number} allEnd - End time in minutes
+     * @param {number} totalHeight - Total height in pixels
+     * @param {number} totalMinutes - Total minutes span (allEnd - allStart)
+     * @param {Object} ctx - Main module context (provides translate)
+     * @returns {HTMLElement} Time axis div element
+     */
+    function createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx) {
+      const timeAxis = document.createElement("div");
+      timeAxis.className = "grid-timecell";
+      const timeInner = document.createElement("div");
+      timeInner.style.position = "relative";
+      timeInner.style.height = `${totalHeight}px`;
+      timeInner.style.width = "100%";
+
+      const scale = { allStart, allEnd, totalHeight, totalMinutes };
+      if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+        appendTimeUnitAxis(timeInner, timeUnits, scale, ctx);
+      } else {
+        appendHourlyAxis(timeInner, scale);
+      }
+
+      timeAxis.appendChild(timeInner);
+      timeAxis.style.gridColumn = "1";
+      return timeAxis;
+    }
+
+    function formatEnglishOrdinal(value) {
+      const number = Number(value);
+      if (!Number.isInteger(number) || number <= 0) return String(value || "");
+      const mod100 = number % 100;
+      if (mod100 >= 11 && mod100 <= 13) return `${number}th`;
+      const mod10 = number % 10;
+      if (mod10 === 1) return `${number}st`;
+      if (mod10 === 2) return `${number}nd`;
+      if (mod10 === 3) return `${number}rd`;
+      return `${number}th`;
+    }
+
+    function formatTimeUnitPeriodText(unitName, ctx) {
+      const normalizedUnitName = String(unitName || "").trim();
+      if (!normalizedUnitName) return "";
+
+      const language = String(ctx?.config?.language || "")
+        .trim()
+        .toLowerCase();
+      const isEnglish = language === "en" || language.startsWith("en-");
+
+      if (isEnglish) {
+        const periodUnit = translate(ctx, "period_unit", "period");
+        return `${formatEnglishOrdinal(normalizedUnitName)} ${periodUnit}`.trim();
+      }
+
+      const periodSuffix = translate(ctx, "period_suffix", "").trim();
+      return periodSuffix ? `${normalizedUnitName}.${periodSuffix}` : normalizedUnitName;
+    }
+
+    /**
+     * Extract and normalize lessons for a single day
+     * Converts backend lesson objects to grid-specific format with:
+     * - Time values (startMin/endMin in minutes)
+     * - Flexible field extraction (subject/teacher/room/class/etc.)
+     * - Display mode detection (teacher view vs student view)
+     * - Legacy field support
+     *
+     * @param {Array} sourceForDay - Array of lesson objects for one day
+     * @param {Object} ctx - Main module context (provides _toMinutes helper)
+     * @returns {Array} Normalized lesson objects
+     */
+    function extractDayLessons(sourceForDay, ctx) {
+      return sourceForDay.map((el) => {
+        const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
+
+        // IMPORTANT: Spread `el` first so ALL payload fields are forwarded automatically.
+        // Explicit keys below override where the grid needs computed/normalized values.
+        // Without the spread, any new field added to
+        // lib/mmm-adapter/mmmPayloadMapper.js/schemas.lesson would silently vanish
+        // here and never reach buildLessonContent().
+        return {
+          ...el,
+          dateStr: String(el.date),
+          startMin: ctx._toMinutes(el.startTime),
+          endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
+          startTime: el.startTime ? String(el.startTime).padStart(4, "0") : "",
+          endTime: el.endTime ? String(el.endTime).padStart(4, "0") : null,
+          subjectShort: getSubject(el, "short") || "N/A",
+          subject: getSubject(el, "long") || "N/A",
+          teacherInitial: getTeachers(el, "short")[0] || "N/A",
+          teacher: getTeachers(el, "long")[0] || "N/A",
+          room: getRoom(el, "short") || "",
+          roomLong: getRoom(el, "long") || "",
+          class: getClass(el, "short") || "",
+          classLong: getClass(el, "long") || "",
+          studentGroup: getStudentGroup(el, "short") || "",
+          studentGroupLong: getStudentGroup(el, "long") || "",
+          infoShort: getInfo(el, "short") || "",
+          infoLong: getInfo(el, "long") || "",
+          isTeacherView: displayMode.isTeacherView,
+          isStudentView: displayMode.isStudentView,
+          code: el.code || "",
+          substitutionText: el.substitutionText || "",
+          text: el.lessonText || "",
+          lessonId: el.id ?? null,
+        };
       });
     }
 
-    const filtered = dayLessons.filter((lesson) => {
-      const s = lesson.startMin;
-      if (s === undefined || s === null || Number.isNaN(s)) {
-        return true;
-      }
+    /**
+     * Validate and normalize lessons
+     * Ensures all lessons have startMin/endMin values
+     * Fills missing endMin with startMin + 45 minutes (default lesson duration)
+     *
+     * @param {Array} dayLessons - Array of extracted lesson objects
+     * @param {Function} log - Logging function
+     * @returns {Array} Validated lesson objects (mutated in-place)
+     */
+    function validateAndNormalizeLessons(dayLessons, log) {
+      for (const curr of dayLessons) {
+        curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
 
-      // Always show break supervisions (they can occur outside regular periods, e.g., early morning supervision)
-      if (lessonIsBreakSupervision(lesson)) {
-        return true;
-      }
-
-      if (maxGridLessons >= 1) {
-        const periodIndex = findPeriodIndex(s, timeUnits);
-        return periodIndex !== -1 && periodIndex < maxGridLessons;
-      }
-
-      if (s >= allEnd) {
-        return false;
-      }
-
-      return true;
-    });
-
-    if (filtered.length < dayLessons.length) {
-      const hidden = dayLessons.length - filtered.length;
-      log(
-        ctx,
-        "debug",
-        `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-          `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`,
-      );
-    }
-
-    return filtered;
-  }
-
-  function lessonHasDisplayIcon(lesson, iconName) {
-    if (!lesson || !Array.isArray(lesson.displayIcons) || lesson.displayIcons.length === 0 || !iconName) {
-      return false;
-    }
-
-    const normalizedIcon = String(iconName).trim().toUpperCase();
-    return lesson.displayIcons.some((icon) => String(icon).trim().toUpperCase() === normalizedIcon);
-  }
-
-  /**
-   * Check if lesson is an exam.
-   *
-   * @param {Object} lesson - Lesson object
-   * @returns {boolean} True if lesson is an exam
-   */
-  function lessonHasExam(lesson) {
-    return lessonHasDisplayIcon(lesson, "EXAM");
-  }
-
-  function lessonIsBreakSupervision(lesson) {
-    return lessonHasDisplayIcon(lesson, "BREAK_SUPERVISION");
-  }
-
-  function lessonIsEvent(lesson) {
-    return lessonHasDisplayIcon(lesson, "EVENT");
-  }
-
-  function lessonIsMoved(lesson) {
-    return lessonHasDisplayIcon(lesson, "MOVED");
-  }
-
-  function getPopoverFieldDisplayName(entry, format = "short") {
-    if (entry === null || entry === undefined) return "";
-    if (typeof entry === "string" || typeof entry === "number") return String(entry).trim();
-    if (typeof entry !== "object") return "";
-    const shortName = String(entry.name ?? "").trim();
-    const longName = String(entry.longname ?? "").trim();
-    return format === "long" ? longName || shortName : shortName || longName;
-  }
-
-  function joinNamedEntries(entries, format = "long") {
-    if (!Array.isArray(entries) || entries.length === 0) return "";
-    return entries
-      .map((entry) => getPopoverFieldDisplayName(entry, format))
-      .filter(Boolean)
-      .join(", ");
-  }
-
-  function joinStringList(values) {
-    if (!Array.isArray(values) || values.length === 0) return "";
-    return values
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-      .join(", ");
-  }
-
-  function describeLessonStatus(lesson, ctx) {
-    const status = String(lesson?.status || "")
-      .trim()
-      .toUpperCase();
-    if (!status) return "";
-
-    const key = `lesson_status_${status.toLowerCase()}`;
-    const translated = ctx?.translate?.(key);
-    if (translated && translated !== key) return translated;
-
-    return status
-      .toLowerCase()
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-
-  function buildLessonPopoverSections(lesson, ctx) {
-    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
-      .filter(Boolean)
-      .join(" - ");
-
-    const displayIcons = joinStringList(lesson?.displayIcons);
-    const changedFields = joinStringList(lesson?.changedFields);
-
-    return [
-      {
-        title: translate(ctx, "popover_section_general", "General"),
-        entries: [
-          { label: translate(ctx, "popover_date", "Date"), value: formatDisplayDate(lesson?.date, "EEEE, dd.MM.yyyy") },
-          { label: translate(ctx, "popover_time", "Time"), value: timeLabel },
-          { label: translate(ctx, "popover_period", "Period"), value: lesson?.periodText || "" },
-          { label: translate(ctx, "popover_status", "Status"), value: describeLessonStatus(lesson, ctx) },
-          { label: translate(ctx, "popover_activity", "Activity"), value: lesson?.activityType || "" },
-          { label: translate(ctx, "popover_icons", "Icons"), value: displayIcons },
-        ],
-      },
-      {
-        title: translate(ctx, "popover_section_people", "People & Context"),
-        entries: [
-          { label: translate(ctx, "popover_subject", "Subject"), value: joinNamedEntries(lesson?.subjects, "long") },
-          { label: translate(ctx, "popover_teacher", "Teacher"), value: joinNamedEntries(lesson?.teachers, "long") },
-          { label: translate(ctx, "popover_room", "Room"), value: joinNamedEntries(lesson?.rooms, "long") },
-          { label: translate(ctx, "popover_class", "Class"), value: joinNamedEntries(lesson?.classes, "long") },
-          {
-            label: translate(ctx, "popover_student_group", "Student Group"),
-            value: joinNamedEntries(lesson?.studentGroups, "long"),
-          },
-          { label: translate(ctx, "popover_info", "Info"), value: joinNamedEntries(lesson?.info, "long") },
-        ],
-      },
-      {
-        title: translate(ctx, "popover_section_changes", "Changes"),
-        entries: [
-          { label: translate(ctx, "popover_changed_fields", "Changed Fields"), value: changedFields },
-          {
-            label: translate(ctx, "popover_previous_subject", "Previous Subject"),
-            value: joinNamedEntries(lesson?.previousSubjects, "long"),
-          },
-          {
-            label: translate(ctx, "popover_previous_teacher", "Previous Teacher"),
-            value: joinNamedEntries(lesson?.previousTeachers, "long"),
-          },
-          {
-            label: translate(ctx, "popover_previous_room", "Previous Room"),
-            value: joinNamedEntries(lesson?.previousRooms, "long"),
-          },
-          {
-            label: translate(ctx, "popover_substitution_text", "Substitution Text"),
-            value: lesson?.substitutionText || "",
-          },
-          {
-            label: translate(ctx, "popover_lesson_text", "Lesson Text"),
-            value: lesson?.lessonText || lesson?.text || "",
-          },
-        ],
-      },
-    ];
-  }
-
-  function openLessonPopover(anchorEl, lesson, ctx) {
-    const popover = getSharedLessonPopoverController();
-    if (!popover || !lesson || !anchorEl) return;
-
-    const primaryTitle =
-      getSubject(lesson, "long") ||
-      getClass(lesson, "long") ||
-      getStudentGroup(lesson, "long") ||
-      describeLessonStatus(lesson, ctx) ||
-      translate(ctx, "popover_lesson_fallback_title", "Lesson");
-
-    const dateLabel = formatDisplayDate(lesson?.date, "EEE dd.MM.yyyy");
-    const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
-      .filter(Boolean)
-      .join(" - ");
-    const subtitle = [dateLabel, timeLabel].filter(Boolean).join(" • ");
-
-    popover.toggle({
-      anchorEl,
-      toggleKey: `${lesson?.id ?? lesson?.lessonId ?? "noid"}_${lesson?.date ?? ""}_${lesson?.startTime ?? ""}_${lesson?.endTime ?? ""}`,
-      title: primaryTitle,
-      subtitle,
-      sections: buildLessonPopoverSections(lesson, ctx),
-      rawData: lesson,
-      rawLabel: translate(ctx, "popover_raw_payload", "Raw lesson payload"),
-      emptyLabel: translate(ctx, "popover_empty", "No details available."),
-      closeLabel: translate(ctx, "popover_close", "Close details"),
-      className: "wu-shared-popover--grid",
-    });
-  }
-
-  /**
-   * Add horizontal grid lines to day column
-   * Renders either time unit boundaries or hourly lines
-   *
-   * @param {HTMLElement} inner - Day column inner container
-   * @param {Array} timeUnits - Array of time unit objects
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes
-   * @param {number} totalMinutes - Total minutes span
-   * @param {number} totalHeight - Total height in pixels
-   */
-  function addHourLinesToColumn(inner, timeUnits, allStart, allEnd, totalMinutes, totalHeight) {
-    try {
-      if (Array.isArray(timeUnits) && timeUnits.length > 0) {
-        for (let ui = 0; ui < timeUnits.length; ui++) {
-          const { lineMin } = getTimeUnitBounds(timeUnits, ui);
-          if (lineMin === undefined || lineMin === null) continue;
-          if (lineMin < allStart || lineMin > allEnd) continue;
-
-          const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
-          const line = document.createElement("div");
-          line.className = "grid-hourline";
-          line.style.top = `${top}px`;
-          inner.appendChild(line);
+        if (curr.startMin === undefined || curr.startMin === null) {
+          log(
+            "debug",
+            "Lesson missing startMin; backend should provide numeric startMin/endMin",
+            curr.lessonId ? { lessonId: curr.lessonId } : curr,
+          );
         }
-      } else {
-        for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
-          const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
-          const line = document.createElement("div");
-          line.className = "grid-hourline";
-          line.style.top = `${top}px`;
-          inner.appendChild(line);
+
+        if (curr.endMin === undefined || curr.endMin === null) {
+          if (curr.startMin !== undefined && curr.startMin !== null) {
+            curr.endMin = curr.startMin + 45;
+          }
         }
       }
-    } catch (e) {
-      log("debug", "failed to draw hour lines", e);
-    }
-  }
-
-  /**
-   * Add now-line placeholder to day column
-   * Creates hidden now-line element (visibility controlled by updateNowLinesAll)
-   * Stores time range and height for dynamic positioning
-   *
-   * @param {HTMLElement} inner - Day column inner container
-   * @param {number} allStart - Start time in minutes
-   * @param {number} allEnd - End time in minutes
-   * @param {number} totalHeight - Total height in pixels
-   */
-  function addNowLineToColumn(inner, allStart, allEnd, totalHeight) {
-    const nowLine = document.createElement("div");
-    nowLine.className = "grid-nowline";
-    nowLine.style.display = "none";
-    inner.appendChild(nowLine);
-
-    inner._nowLine = nowLine;
-    inner._allStart = allStart;
-    inner._allEnd = allEnd;
-    inner._totalHeight = totalHeight;
-  }
-
-  /**
-   * Add a day-wide notice (holiday or "no lessons")
-   * Creates a full-height notice with icon and text
-   *
-   * @param {HTMLElement} inner - Day column inner container
-   * @param {number} totalHeight - Total height in pixels
-   * @param {string} noticeType - Notice type ('holiday' or 'no-lessons')
-   * @param {string} text - Notice text (HTML allowed)
-   * @param {string} iconSize - Icon font size (default: '1.5em')
-   */
-  function addDayNotice(inner, totalHeight, noticeType, text, iconSize = "1.5em") {
-    const notice = document.createElement("div");
-    notice.className = "grid-lesson lesson lesson-content no-lesson";
-    notice.style.height = `${totalHeight}px`;
-    const icon = document.createElement("span");
-    icon.className = `day-notice-icon day-notice-icon-${noticeType}`;
-    icon.setAttribute("aria-hidden", "true");
-    icon.style.fontSize = iconSize;
-
-    const label = document.createElement("div");
-    label.style.fontWeight = "bold";
-    label.appendChild(el("b", null, text));
-
-    notice.appendChild(icon);
-    notice.appendChild(label);
-    inner.appendChild(notice);
-  }
-
-  /**
-   * Add "more" badge to indicate hidden lessons
-   * Displayed when maxGridLessons limit is active
-   *
-   * @param {HTMLElement} inner - Day column inner container
-   * @param {number} hiddenCount - Number of hidden lessons
-   * @param {Object} ctx - Main module context (provides translate)
-   */
-  function addMoreBadge(inner, hiddenCount, ctx) {
-    const moreBadge = document.createElement("div");
-    moreBadge.className = "grid-more-badge";
-    moreBadge.textContent = ctx.translate("more");
-    const hiddenLessonsKey = hiddenCount > 1 ? "hidden_lessons_plural" : "hidden_lessons";
-    const hiddenLessonsLabel = ctx.translate
-      ? ctx.translate(hiddenLessonsKey)
-      : hiddenCount > 1
-        ? "more lessons"
-        : "more lesson";
-    moreBadge.title = `${hiddenCount} ${hiddenLessonsLabel}`;
-    inner.appendChild(moreBadge);
-  }
-
-  /**
-   * Apply CSS classes to lesson element
-   * Centralized function for consistent class assignment across all lesson rendering modes
-   *
-   * @param {HTMLElement} element - Lesson cell element
-   * @param {Object} lesson - Lesson object
-   * @param {Object} options - Options for class assignment
-   * @param {boolean} options.hasExam - True if lesson has exam
-   * @param {boolean} options.isPast - True if lesson is in the past (used when nowYmd/nowMin not provided)
-   * @param {Array<string>} options.additionalClasses - Additional classes (e.g., 'split-left', 'split-right')
-   * @param {number|null} options.nowYmd - Current date as YYYYMMDD integer (for individual isPast calculation)
-   * @param {number|null} options.nowMin - Current time in minutes (for individual isPast calculation)
-   */
-  function applyLessonClasses(element, lesson, options = {}) {
-    const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
-
-    if (lessonIsBreakSupervision(lesson)) {
-      element.classList.add("lesson-break-supervision");
-    } else if (lesson.status === "CANCELLED") {
-      element.classList.add("lesson-cancelled");
-    } else if (isIrregularStatus(lesson.status)) {
-      // CHANGED lessons where only teacher and/or room differ are kept in the
-      // regular colour — the inline change markers still highlight the diff.
-      // Any other irregular status (ADDITIONAL, SUBSTITUTION, …) or CHANGED
-      // with a more significant field (subject, class, …) keeps the blue tint.
-      const changedFields = getChangedFieldSet(lesson);
-      const isMinorChange =
-        lesson.status === "CHANGED" &&
-        changedFields.size > 0 &&
-        [...changedFields].every((f) => f === "teacher" || f === "room");
-      element.classList.add(isMinorChange ? "lesson-regular" : "lesson-substitution");
-    } else {
-      element.classList.add("lesson-regular");
+      return dayLessons;
     }
 
-    if (additionalClasses.length > 0) {
-      element.classList.add(...additionalClasses);
-    }
-
-    let lessonIsPast = isPast;
-    if (nowYmd !== null && nowMin !== null) {
-      const lessonYmd = Number(lesson.dateStr) || 0;
-      lessonIsPast = false;
-      if (lessonYmd < nowYmd) {
-        lessonIsPast = true;
-      } else if (lessonYmd === nowYmd) {
-        if (lesson.endMin <= nowMin) lessonIsPast = true;
+    /**
+     * Filter lessons by maximum periods limit
+     * When maxGridLessons is set:
+     * - Filters ALL lessons (including cancelled/irregular) by period index
+     * - Only shows lessons in the first N periods
+     * When maxGridLessons is not set:
+     * - Filters by allEnd cutoff time
+     * - Keeps cancelled/irregular lessons regardless of time
+     *
+     * @param {Array} dayLessons - Array of normalized lesson objects
+     * @param {number} maxGridLessons - Maximum number of periods (0 = no limit)
+     * @param {Array} timeUnits - Array of time unit objects
+     * @param {string} studentTitle - Student name (for logging)
+     * @param {string} dateStr - Date string (YYYYMMDD)
+     * @param {Object} ctx - Main module context
+     * @param {number} allEnd - End time cutoff in minutes
+     * @returns {Array} Filtered lesson objects
+     */
+    function filterLessonsByMaxPeriods(dayLessons, maxGridLessons, timeUnits, studentTitle, dateStr, ctx, allEnd) {
+      if (allEnd === undefined || allEnd === null) {
+        allEnd = Infinity;
       }
-    }
-
-    if (lessonIsPast) element.classList.add("past");
-    if (hasExam) element.classList.add("has-exam");
-  }
-
-  /**
-   * Create a lesson cell container
-   * Base element for all lesson types(regular, cancelled, substitution, exam)
-   *
-   * @param { number } topPx - Top position in pixels
-   * @param { number } heightPx - Height in pixels
-   * @param { string } dateStr - Date string(YYYYMMDD)
-   * @param { number } eMin - End time in minutes
-   * @returns { HTMLElement } Lesson cell div
-   */
-  function createLessonCell(topPx, heightPx, dateStr, eMin) {
-    const cell = document.createElement("div");
-    cell.className = "grid-lesson lesson";
-    cell.style.top = `${topPx}px`;
-    cell.style.height = `${heightPx}px`;
-    cell.setAttribute("data-date", dateStr);
-    cell.setAttribute("data-end-min", String(eMin));
-    return cell;
-  }
-
-  /** Text as a text node shows it: null and undefined become "" (as escapeHtml() did). */
-  function toText(value) {
-    return value === null || value === undefined ? "" : String(value);
-  }
-
-  /**
-   * A changed field: the new value, else the removed old one (struck through), else N/A.
-   */
-  function changedFieldNode(newName, oldName, naText) {
-    if (newName) return el("span", "lesson-changed-new", toText(newName));
-    if (oldName) return el("span", "lesson-changed-removed", toText(oldName));
-    return el("span", "lesson-changed-new", naText);
-  }
-
-  /** Break supervision cell: "BS"/"PA" plus the supervised area. */
-  function breakSupervisionContent(lesson, ctx) {
-    const label = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
-    const shortLabel = label === "Pausenaufsicht" ? "PA" : "BS";
-    const area = lesson.room || lesson.roomLong || "";
-    const displayText = area ? `${shortLabel} (${area})` : shortLabel;
-    const icon = iconSpan("wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon");
-    return el("div", "lesson-content break-supervision", el("span", "lesson-primary", icon, displayText));
-  }
-
-  /** Room line: the changed room, or the configured additional fields, each in brackets. */
-  function additionalLineNodes(lesson, displayParts, changedFields, naText) {
-    if (changedFields.has("room")) {
-      const room = changedFieldNode(lesson.rooms?.[0]?.name || "", getFirstFieldName(lesson.previousRooms), naText);
-      return [" ", el("span", "lesson-additional", "(", room, ")")];
-    }
-    const nodes = [];
-    for (const item of (displayParts.additional || []).filter(Boolean)) {
-      nodes.push(" ", el("span", "lesson-additional", `(${toText(item)})`));
-    }
-    return nodes;
-  }
-
-  /** Substitution text and lesson text; the lesson text only when it does not repeat a shown field. */
-  function lessonNoteNodes(lesson, displayParts) {
-    const lessonText = normalizeComparableText(lesson.text);
-    const repeatsField =
-      lessonText === normalizeComparableText(displayParts.primary) ||
-      lessonText === normalizeComparableText(displayParts.secondary) ||
-      (Array.isArray(displayParts.additional) &&
-        displayParts.additional.some((item) => lessonText === normalizeComparableText(item)));
-
-    const nodes = [];
-    if (lesson.substitutionText) {
-      nodes.push(el("span", "lesson-substitution-text", ...multilineNodes(lesson.substitutionText)));
-    }
-    if (lessonText !== "" && !repeatsField) {
-      nodes.push(el("span", "lesson-info-text", ...multilineNodes(lesson.text)));
-    }
-    return nodes;
-  }
-
-  /**
-   * Primary line, secondary line (teacher plus additional fields) and notes of a lesson cell.
-   * A changed field shows its new value, or the removed one struck through.
-   */
-  function lessonLineNodes(lesson, changedFields, naText, config, ctx) {
-    const displayParts = buildFlexibleLessonDisplay(lesson, config, { ctx });
-    const primary = changedFields.has("subject")
-      ? changedFieldNode(lesson.subjects?.[0]?.name || "", getFirstFieldName(lesson.previousSubjects), naText)
-      : toText(displayParts.primary || "");
-    const secondary = changedFields.has("teacher")
-      ? changedFieldNode(lesson.teachers?.[0]?.name || "", getFirstFieldName(lesson.previousTeachers), naText)
-      : toText(displayParts.secondary || "");
-
-    let additional = additionalLineNodes(lesson, displayParts, changedFields, naText);
-    const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
-    if (hasUnknownChangedDetails && additional.length === 0) {
-      additional = [" ", el("span", "lesson-additional", "(", el("span", "lesson-changed-new", naText), ")")];
-    }
-
-    const lines = [el("span", "lesson-primary", primary)];
-    if (secondary !== "" || additional.length > 0) {
-      lines.push(el("span", "lesson-secondary", secondary, ...additional));
-    }
-    return [...lines, ...lessonNoteNodes(lesson, displayParts)];
-  }
-
-  /**
-   * Content of a lesson cell: primary line (subject), secondary line (teacher plus additional
-   * fields), substitution and lesson text. Changes are marked inline rather than in extra rows so
-   * compact cells do not overflow; a moved lesson or a change without details gets a badge.
-   * Fields follow grid.fields (primary, secondary, additional); break supervision has its own cell.
-   * Built as DOM nodes: lesson data is only ever text, never markup.
-   *
-   * @param {Object} lesson - Lesson object with display fields
-   * @param {Object} ctx - Main module context (provides config)
-   * @param {Object} [lessonConfig] - Effective widget config
-   * @returns {HTMLElement} The .lesson-content element
-   */
-  function buildLessonContent(lesson, ctx, lessonConfig) {
-    if (lessonIsBreakSupervision(lesson)) {
-      return breakSupervisionContent(lesson, ctx);
-    }
-
-    const changedFields = getChangedFieldSet(lesson);
-    const badges = [
-      lessonIsMoved(lesson) && iconSpan("lesson-moved-badge"),
-      lesson.status === "CHANGED" && changedFields.size === 0 && iconSpan("lesson-changed-generic-badge"),
-    ].filter(Boolean);
-    const content = el("div", badges.length > 0 ? "lesson-content has-icons" : "lesson-content");
-    if (badges.length > 0) content.append(el("span", "lesson-icons", ...badges));
-    const naText = String(lessonConfig?.grid?.naText ?? "N/A");
-
-    try {
-      content.append(...lessonLineNodes(lesson, changedFields, naText, lessonConfig || ctx?.config, ctx));
-    } catch (err) {
-      log(
-        "error",
-        `[grid] buildLessonContent failed for lesson ${lesson?.id ?? lesson?.lessonId ?? "unknown"}: ${err?.message || err}`,
-      );
-      content.append(el("span", "lesson-primary", el("span", "lesson-changed-new", naText)));
-    }
-    return content;
-  }
-
-  /**
-   * Check whether a lesson carries the timetable homework icon.
-   *
-   * @param {Object} lesson - Lesson object
-   * @returns {boolean} True if the timetable marked this lesson with HOMEWORK
-   */
-  function checkHomeworkMatch(lesson) {
-    return lessonHasDisplayIcon(lesson, "HOMEWORK");
-  }
-
-  /**
-   * Add homework icon to lesson cell
-   * Displays configured homework icon when homework is due
-   *
-   * @param {HTMLElement} cell - Lesson cell element
-   */
-  function addHomeworkIcon(cell) {
-    const icon = document.createElement("span");
-    icon.className = "homework-icon";
-    icon.setAttribute("aria-hidden", "true");
-    if (cell?.hasChildNodes()) {
-      const iconContainer = cell.querySelector(".lesson-content") || cell;
-      let icons = iconContainer.querySelector(".lesson-icons");
-      if (!icons) {
-        icons = document.createElement("span");
-        icons.className = "lesson-icons";
-        iconContainer.appendChild(icons);
+      if (maxGridLessons < 1 || !Array.isArray(timeUnits) || timeUnits.length === 0) {
+        return dayLessons.filter((lesson) => {
+          if (lesson.status === "CANCELLED" || isIrregularStatus(lesson.status)) {
+            return true;
+          }
+          const s = lesson.startMin;
+          return s === undefined || s === null || Number.isNaN(s) || s < allEnd;
+        });
       }
-      iconContainer.classList.add("has-homework", "has-icons");
-      icons.appendChild(icon.cloneNode(true));
-    }
-  }
 
-  function getVisibleTimeBlockPlacement(startMin, endMin, allStart, allEnd, totalMinutes, totalHeight, options = {}) {
-    const { minHeightPx = 0 } = options;
-    const normalizedStart = Number(startMin);
-    const normalizedEnd = Number(endMin);
-
-    if (!Number.isFinite(normalizedStart) || !Number.isFinite(normalizedEnd)) {
-      return null;
-    }
-
-    if (normalizedStart >= allEnd || normalizedEnd <= allStart) {
-      return null;
-    }
-
-    const visibleStart = Math.max(normalizedStart, allStart);
-    const visibleEnd = Math.min(normalizedEnd, allEnd);
-    if (visibleEnd <= visibleStart) {
-      return null;
-    }
-
-    const safeTotalMinutes = Math.max(1, totalMinutes);
-    const topPx = Math.round(((visibleStart - allStart) / safeTotalMinutes) * totalHeight);
-    const rawHeightPx = Math.round(((visibleEnd - visibleStart) / safeTotalMinutes) * totalHeight);
-    const heightPx = Math.max(minHeightPx, rawHeightPx);
-
-    return {
-      visibleStart,
-      visibleEnd,
-      topPx,
-      heightPx,
-    };
-  }
-
-  /**
-   * Append a lesson cell to the grid container
-   *
-   * @param {HTMLElement} container - Container element to append the cell to
-   * @param {Object} lesson - Normalized lesson object
-   * @param {Object} timeConstraints - Time constraint parameters
-   * @param {number} timeConstraints.allStart - Grid start time in minutes since midnight
-   * @param {number} timeConstraints.allEnd - Grid end time in minutes since midnight
-   * @param {number} timeConstraints.totalMinutes - Total minutes in grid range
-   * @param {number} timeConstraints.totalHeight - Total height of grid in pixels
-   * @param {Object} rendering - Rendering context and configuration
-   * @param {Object} rendering.ctx - Module context
-   * @param {Object} rendering.lessonConfig - Lesson-specific configuration
-   * @param {Object} [options={}] - Optional rendering parameters
-   * @param {boolean} [options.isPast] - Whether the lesson is in the past
-   * @param {number} [options.nowYmd] - Current date as YYYYMMDD integer
-   * @param {number} [options.nowMin] - Current time in minutes since midnight
-   * @param {string[]} [options.additionalClasses] - Additional CSS classes to apply
-   * @returns {HTMLElement|null} Created lesson cell or null if not visible
-   */
-  function appendLessonCell(container, lesson, timeConstraints, rendering, options = {}) {
-    const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
-    const { ctx, lessonConfig } = rendering;
-    const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
-    const placement = getVisibleTimeBlockPlacement(
-      lesson.startMin,
-      lesson.endMin,
-      allStart,
-      allEnd,
-      totalMinutes,
-      totalHeight,
-      {
-        minHeightPx: 12,
-      },
-    );
-    if (!placement) return null;
-
-    const { visibleEnd, topPx, heightPx } = placement;
-    const lessonYmd = Number(lesson.dateStr) || 0;
-    const resolvedIsPast = typeof isPast === "boolean" ? isPast : calcIsPast(lessonYmd, visibleEnd, nowYmd, nowMin);
-
-    const cell = createLessonCell(topPx, heightPx, lesson.dateStr, visibleEnd);
-    applyLessonClasses(cell, lesson, {
-      hasExam: lessonHasExam(lesson),
-      isPast: resolvedIsPast,
-      additionalClasses,
-    });
-    cell.appendChild(buildLessonContent(lesson, ctx, lessonConfig));
-    cell.tabIndex = 0;
-    cell.setAttribute("role", "button");
-    cell.setAttribute("aria-label", `${getSubject(lesson, "long") || "Lesson"} details`);
-    cell.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openLessonPopover(cell, lesson, ctx);
-    });
-    cell.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      openLessonPopover(cell, lesson, ctx);
-    });
-    if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
-    container.appendChild(cell);
-    return cell;
-  }
-
-  /**
-   * Group lessons by overlapping time slots
-   * Groups are used to determine rendering strategy:
-   * - 1 lesson → full-width cell
-   * - 2+ overlapping lessons → ticker animation
-   * - Break supervisions → always separate (no overlap checking)
-   *
-   * @param {Array} lessonsToRender - Array of normalized lesson objects
-   * @returns {Map} Map of group key → lesson array
-   */
-  function groupLessonsByTimeSlot(lessonsToRender) {
-    const groups = new Map();
-    let groupId = 0;
-
-    for (const [dateStr, lessons] of groupByDate(lessonsToRender)) {
-      const regularLessons = lessons.filter((lesson) => !lessonIsBreakSupervision(lesson));
-      for (const overlappingGroup of collectOverlapGroups(regularLessons)) {
-        groups.set(`${dateStr}_group_${groupId++}`, overlappingGroup);
-      }
-      for (const supervision of lessons.filter(lessonIsBreakSupervision)) {
-        groups.set(`${dateStr}_supervision_${groupId++}`, [supervision]);
-      }
-    }
-
-    return groups;
-  }
-
-  /** Lessons by dateStr, in order of first appearance. */
-  function groupByDate(lessons) {
-    const byDate = new Map();
-    for (const lesson of lessons) {
-      if (!byDate.has(lesson.dateStr)) byDate.set(lesson.dateStr, []);
-      byDate.get(lesson.dateStr).push(lesson);
-    }
-    return byDate;
-  }
-
-  function lessonsOverlap(a, b) {
-    return a.startMin < b.endMin && a.endMin > b.startMin;
-  }
-
-  /**
-   * Overlap groups of one day's lessons, sorted by start: each group is a lesson plus every later
-   * lesson that overlaps any member, repeated until nothing joins any more. Deliberately not a
-   * single sweep: lessons without a valid time span (missing start, end before start) must keep
-   * their grouping.
-   */
-  function collectOverlapGroups(lessons) {
-    const sorted = lessons.slice().sort((a, b) => a.startMin - b.startMin);
-    const assigned = new Set();
-    const groups = [];
-    for (let i = 0; i < sorted.length; i++) {
-      if (assigned.has(i)) continue;
-      assigned.add(i);
-      groups.push(growOverlapGroup(sorted, i, assigned));
-    }
-    return groups;
-  }
-
-  /** Grows the group of sorted[start] by every later unassigned lesson overlapping a member. */
-  function growOverlapGroup(sorted, start, assigned) {
-    const group = [sorted[start]];
-    let foundNew = true;
-    while (foundNew) {
-      foundNew = false;
-      for (let j = start + 1; j < sorted.length; j++) {
-        if (assigned.has(j) || !group.some((member) => lessonsOverlap(sorted[j], member))) continue;
-        group.push(sorted[j]);
-        assigned.add(j);
-        foundNew = true;
-      }
-    }
-    return group;
-  }
-
-  /** Lessons of one ticker slot by subject and student group (or class). */
-  function groupTickerLessons(lessons) {
-    const groups = new Map();
-    for (const lesson of lessons) {
-      const subject = getSubject(lesson, "short") || null;
-      const group = getStudentGroup(lesson, "short") || getClass(lesson, "short") || null;
-      const key = `${subject || "unknown"}_${group || "noGroup"}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(lesson);
-    }
-    for (const groupLessons of groups.values()) {
-      groupLessons.sort(byStartThenEnd);
-    }
-    return groups;
-  }
-
-  function byStartThenEnd(a, b) {
-    return a.startMin - b.startMin || a.endMin - b.endMin;
-  }
-
-  /**
-   * Split view: every cancelled lesson next to the replacements overlapping it. Cancelled lessons
-   * with the same set of replacements share one pair.
-   */
-  function pairCancelledWithReplacements(tickerData) {
-    if (!tickerData?.hasSplitView || tickerData.cancelledLessons.length === 0) return [];
-    const pairs = new Map();
-    for (const cancelled of tickerData.cancelledLessons) {
-      const replacements = tickerData.replacements.filter(
-        (r) => r.startMin < cancelled.endMin && r.endMin > cancelled.startMin,
-      );
-      if (replacements.length === 0) continue;
-      const key = replacements
-        .map((r) => `${r.id ?? r.lessonId ?? "noId"}_${r.startMin}_${r.endMin}_${r.status || ""}`)
-        .sort()
-        .join("|");
-      if (!pairs.has(key)) pairs.set(key, { cancelledLessons: [], replacements });
-      pairs.get(key).cancelledLessons.push(cancelled);
-    }
-    const result = [...pairs.values()];
-    for (const pair of result) pair.cancelledLessons.sort(byStartThenEnd);
-    return result;
-  }
-
-  /** Drop lessons that a split-view pair already shows; groups left empty disappear. */
-  function removePairedLessons(groups, pairs) {
-    const paired = new Set(pairs.flatMap((pair) => [...pair.cancelledLessons, ...pair.replacements]));
-    for (const [key, groupLessons] of groups.entries()) {
-      const remaining = groupLessons.filter((lesson) => !paired.has(lesson));
-      if (remaining.length === 0) groups.delete(key);
-      else groups.set(key, remaining);
-    }
-  }
-
-  function createTickerItem(className, lessons, widthPercent) {
-    const item = document.createElement("div");
-    item.className = className;
-    if (lessons.some((lesson) => lessonHasExam(lesson))) item.classList.add("has-exam");
-    item.style.width = `${widthPercent}%`;
-    item.style.position = "relative";
-    item.style.height = "100%";
-    return item;
-  }
-
-  /**
-   * One lesson inside a ticker item, placed by percent of the item's time span.
-   * @param {Array<[string, string]>} sideStyles - Horizontal placement, in the order it is applied
-   */
-  function createTickerLesson(lesson, placement, sideStyles, splitClass, env) {
-    const div = document.createElement("div");
-    div.className = splitClass ? `lesson-content ${splitClass}` : "lesson-content";
-    div.style.position = "absolute";
-    div.style.top = `${placement.top}%`;
-    div.style.height = `${placement.height}%`;
-    for (const [property, value] of sideStyles) div.style[property] = value;
-
-    applyLessonClasses(div, lesson, {
-      hasExam: lessonHasExam(lesson),
-      nowYmd: env.nowYmd,
-      nowMin: env.nowMin,
-      ...(splitClass ? { additionalClasses: [splitClass] } : {}),
-    });
-    div.appendChild(buildLessonContent(lesson, env.ctx, env.lessonConfig));
-    if (checkHomeworkMatch(lesson)) addHomeworkIcon(div);
-    return div;
-  }
-
-  /** Ticker item for one subject group: its lessons stacked over the group's time span. */
-  function createGroupTickerItem(groupLessons, widthPercent, env) {
-    const item = createTickerItem("ticker-item", groupLessons, widthPercent);
-    const start = Math.min(...groupLessons.map((l) => l.startMin));
-    const total = Math.max(...groupLessons.map((l) => l.endMin)) - start;
-    for (const lesson of groupLessons) {
-      const placement =
-        total === 0
-          ? { top: 0, height: 100 }
-          : {
-              top: ((lesson.startMin - start) / total) * 100,
-              height: ((lesson.endMin - lesson.startMin) / total) * 100,
-            };
-      item.appendChild(
-        createTickerLesson(
-          lesson,
-          placement,
-          [
-            ["left", "0"],
-            ["right", "0"],
-          ],
-          null,
-          env,
-        ),
-      );
-    }
-    return item;
-  }
-
-  /** Ticker item for a split-view pair: replacements on the left, cancelled lessons on the right. */
-  function createSplitTickerItem(pair, widthPercent, env) {
-    const all = [...pair.cancelledLessons, ...pair.replacements];
-    const item = createTickerItem(
-      "ticker-item ticker-item-split",
-      [...pair.replacements, ...pair.cancelledLessons],
-      widthPercent,
-    );
-
-    const splitContainer = document.createElement("div");
-    splitContainer.className = "lesson-both-inner";
-    splitContainer.style.position = "absolute";
-    splitContainer.style.top = "0";
-    splitContainer.style.left = "0";
-    splitContainer.style.right = "0";
-    splitContainer.style.height = "100%";
-
-    const start = Math.min(...all.map((l) => l.startMin));
-    const total = Math.max(1, Math.max(...all.map((l) => l.endMin)) - start);
-    const placementOf = (lesson) => ({
-      top: ((lesson.startMin - start) / total) * 100,
-      height: ((lesson.endMin - lesson.startMin) / total) * 100,
-    });
-
-    for (const replacement of pair.replacements) {
-      const side = [
-        ["left", "0"],
-        ["width", "50%"],
-      ];
-      splitContainer.appendChild(createTickerLesson(replacement, placementOf(replacement), side, "split-left", env));
-    }
-    for (const cancelled of pair.cancelledLessons) {
-      const side = [
-        ["right", "0"],
-        ["width", "50%"],
-      ];
-      splitContainer.appendChild(createTickerLesson(cancelled, placementOf(cancelled), side, "split-right", env));
-    }
-
-    item.appendChild(splitContainer);
-    return item;
-  }
-
-  /**
-   * Overlapping lessons of one slot as a horizontally scrolling ticker: one item per subject
-   * group and per split-view pair, the whole track twice for a seamless loop. Lessons of one
-   * subject group are stacked by their time within the item.
-   *
-   * @param {Array} lessons - Overlapping lesson objects
-   * @param {number} topPx - Top position in pixels
-   * @param {number} heightPx - Height in pixels
-   * @param {HTMLElement} container - Day column container
-   * @param {Object} ctx - Main module context
-   * @param {number} nowYmd - Current date as YYYYMMDD integer
-   * @param {number} nowMin - Current time in minutes since midnight
-   * @param {Object} tickerData - Cancelled lessons, their replacements and whether to split
-   * @param {Object} lessonConfig - Effective widget config
-   */
-  function createTickerAnimation(lessons, topPx, heightPx, container, ctx, nowYmd, nowMin, tickerData, lessonConfig) {
-    const env = { ctx, nowYmd, nowMin, lessonConfig };
-    const groups = groupTickerLessons(lessons);
-    const pairs = pairCancelledWithReplacements(tickerData);
-    if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
-      removePairedLessons(groups, pairs);
-    }
-
-    const tickerWrapper = document.createElement("div");
-    tickerWrapper.className = "lesson-ticker-wrapper";
-    tickerWrapper.style.top = `${topPx}px`;
-    tickerWrapper.style.height = `${heightPx}px`;
-    tickerWrapper.style.position = "absolute";
-    tickerWrapper.style.left = "0.15rem";
-    tickerWrapper.style.right = "0.15rem";
-    tickerWrapper.style.zIndex = "10";
-    tickerWrapper.setAttribute("data-date", lessons[0].dateStr);
-    tickerWrapper.setAttribute("data-end-min", String(Math.max(...lessons.map((l) => l.endMin))));
-
-    const itemCount = groups.size + pairs.length;
-    const itemWidthPercent = 100 / (itemCount * 2);
-    const tickerTrack = document.createElement("div");
-    tickerTrack.className = "ticker-track";
-    tickerTrack.style.width = `${itemCount * 2 * 100}%`;
-
-    for (let copy = 0; copy < 2; copy++) {
-      for (const groupLessons of groups.values()) {
-        tickerTrack.appendChild(createGroupTickerItem(groupLessons, itemWidthPercent, env));
-      }
-      for (const pair of pairs) {
-        tickerTrack.appendChild(createSplitTickerItem(pair, itemWidthPercent, env));
-      }
-    }
-    tickerWrapper.appendChild(tickerTrack);
-
-    const prefersReducedMotion =
-      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!prefersReducedMotion) {
-      tickerTrack.style.animation = `ticker-scroll ${Math.max(10, itemCount * 3)}s linear infinite`;
-    }
-
-    container.appendChild(tickerWrapper);
-  }
-
-  /**
-   * Check whether a rendered lesson block has already ended.
-   *
-   * @param {number} ymd - Lesson date as YYYYMMDD.
-   * @param {number} endMin - Lesson end time in minutes since midnight.
-   * @param {number} nowYmd - Current date as YYYYMMDD.
-   * @param {number} nowMin - Current time in minutes since midnight.
-   * @returns {boolean} True when the lesson is in the past.
-   */
-  function calcIsPast(ymd, endMin, nowYmd, nowMin) {
-    if (ymd < nowYmd) return true;
-    if (ymd === nowYmd && typeof endMin === "number" && !Number.isNaN(endMin) && endMin <= nowMin) return true;
-    return false;
-  }
-
-  /**
-   * Detect whether a lesson carries class or student-group hints.
-   *
-   * @param {Object} lesson - Normalized lesson object.
-   * @returns {boolean} True when class/student-group metadata is present.
-   */
-  function lessonHasStudentGroupOrClassHint(lesson) {
-    const studentGroups = Array.isArray(lesson?.studentGroups) ? lesson.studentGroups : [];
-    const classes = Array.isArray(lesson?.classes) ? lesson.classes : [];
-    const hasStudentGroup = studentGroups.some((group) => (group?.name || group?.longname || "").trim().length > 0);
-    const hasClass = classes.some((group) => (group?.name || group?.longname || "").trim().length > 0);
-    return hasStudentGroup || hasClass;
-  }
-
-  function hasParallelOverlap(plannedParallelCandidates) {
-    if (plannedParallelCandidates.length < 2) return false;
-
-    for (let i = 0; i < plannedParallelCandidates.length; i++) {
-      for (let j = i + 1; j < plannedParallelCandidates.length; j++) {
-        const first = plannedParallelCandidates[i];
-        const second = plannedParallelCandidates[j];
-        if (first.startMin < second.endMin && first.endMin > second.startMin) {
+      const filtered = dayLessons.filter((lesson) => {
+        const s = lesson.startMin;
+        if (s === undefined || s === null || Number.isNaN(s)) {
           return true;
         }
+
+        // Always show break supervisions (they can occur outside regular periods, e.g., early morning supervision)
+        if (lessonIsBreakSupervision(lesson)) {
+          return true;
+        }
+
+        if (maxGridLessons >= 1) {
+          const periodIndex = findPeriodIndex(s, timeUnits);
+          return periodIndex !== -1 && periodIndex < maxGridLessons;
+        }
+
+        if (s >= allEnd) {
+          return false;
+        }
+
+        return true;
+      });
+
+      if (filtered.length < dayLessons.length) {
+        const hidden = dayLessons.length - filtered.length;
+        log(
+          ctx,
+          "debug",
+          `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
+            `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`,
+        );
+      }
+
+      return filtered;
+    }
+
+    function getPopoverFieldDisplayName(entry, format = "short") {
+      if (entry === null || entry === undefined) return "";
+      if (typeof entry === "string" || typeof entry === "number") return String(entry).trim();
+      if (typeof entry !== "object") return "";
+      const shortName = String(entry.name ?? "").trim();
+      const longName = String(entry.longname ?? "").trim();
+      return format === "long" ? longName || shortName : shortName || longName;
+    }
+
+    function joinNamedEntries(entries, format = "long") {
+      if (!Array.isArray(entries) || entries.length === 0) return "";
+      return entries
+        .map((entry) => getPopoverFieldDisplayName(entry, format))
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    function joinStringList(values) {
+      if (!Array.isArray(values) || values.length === 0) return "";
+      return values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    function describeLessonStatus(lesson, ctx) {
+      const status = String(lesson?.status || "")
+        .trim()
+        .toUpperCase();
+      if (!status) return "";
+
+      const key = `lesson_status_${status.toLowerCase()}`;
+      const translated = ctx?.translate?.(key);
+      if (translated && translated !== key) return translated;
+
+      return status
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function buildLessonPopoverSections(lesson, ctx) {
+      const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
+        .filter(Boolean)
+        .join(" - ");
+
+      const displayIcons = joinStringList(lesson?.displayIcons);
+      const changedFields = joinStringList(lesson?.changedFields);
+
+      return [
+        {
+          title: translate(ctx, "popover_section_general", "General"),
+          entries: [
+            {
+              label: translate(ctx, "popover_date", "Date"),
+              value: formatDisplayDate(lesson?.date, "EEEE, dd.MM.yyyy"),
+            },
+            { label: translate(ctx, "popover_time", "Time"), value: timeLabel },
+            { label: translate(ctx, "popover_period", "Period"), value: lesson?.periodText || "" },
+            { label: translate(ctx, "popover_status", "Status"), value: describeLessonStatus(lesson, ctx) },
+            { label: translate(ctx, "popover_activity", "Activity"), value: lesson?.activityType || "" },
+            { label: translate(ctx, "popover_icons", "Icons"), value: displayIcons },
+          ],
+        },
+        {
+          title: translate(ctx, "popover_section_people", "People & Context"),
+          entries: [
+            { label: translate(ctx, "popover_subject", "Subject"), value: joinNamedEntries(lesson?.subjects, "long") },
+            { label: translate(ctx, "popover_teacher", "Teacher"), value: joinNamedEntries(lesson?.teachers, "long") },
+            { label: translate(ctx, "popover_room", "Room"), value: joinNamedEntries(lesson?.rooms, "long") },
+            { label: translate(ctx, "popover_class", "Class"), value: joinNamedEntries(lesson?.classes, "long") },
+            {
+              label: translate(ctx, "popover_student_group", "Student Group"),
+              value: joinNamedEntries(lesson?.studentGroups, "long"),
+            },
+            { label: translate(ctx, "popover_info", "Info"), value: joinNamedEntries(lesson?.info, "long") },
+          ],
+        },
+        {
+          title: translate(ctx, "popover_section_changes", "Changes"),
+          entries: [
+            { label: translate(ctx, "popover_changed_fields", "Changed Fields"), value: changedFields },
+            {
+              label: translate(ctx, "popover_previous_subject", "Previous Subject"),
+              value: joinNamedEntries(lesson?.previousSubjects, "long"),
+            },
+            {
+              label: translate(ctx, "popover_previous_teacher", "Previous Teacher"),
+              value: joinNamedEntries(lesson?.previousTeachers, "long"),
+            },
+            {
+              label: translate(ctx, "popover_previous_room", "Previous Room"),
+              value: joinNamedEntries(lesson?.previousRooms, "long"),
+            },
+            {
+              label: translate(ctx, "popover_substitution_text", "Substitution Text"),
+              value: lesson?.substitutionText || "",
+            },
+            {
+              label: translate(ctx, "popover_lesson_text", "Lesson Text"),
+              value: lesson?.lessonText || lesson?.text || "",
+            },
+          ],
+        },
+      ];
+    }
+
+    function openLessonPopover(anchorEl, lesson, ctx) {
+      const popover = getSharedLessonPopoverController();
+      if (!popover || !lesson || !anchorEl) return;
+
+      const primaryTitle =
+        getSubject(lesson, "long") ||
+        getClass(lesson, "long") ||
+        getStudentGroup(lesson, "long") ||
+        describeLessonStatus(lesson, ctx) ||
+        translate(ctx, "popover_lesson_fallback_title", "Lesson");
+
+      const dateLabel = formatDisplayDate(lesson?.date, "EEE dd.MM.yyyy");
+      const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
+        .filter(Boolean)
+        .join(" - ");
+      const subtitle = [dateLabel, timeLabel].filter(Boolean).join(" • ");
+
+      popover.toggle({
+        anchorEl,
+        toggleKey: `${lesson?.id ?? lesson?.lessonId ?? "noid"}_${lesson?.date ?? ""}_${lesson?.startTime ?? ""}_${lesson?.endTime ?? ""}`,
+        title: primaryTitle,
+        subtitle,
+        sections: buildLessonPopoverSections(lesson, ctx),
+        rawData: lesson,
+        rawLabel: translate(ctx, "popover_raw_payload", "Raw lesson payload"),
+        emptyLabel: translate(ctx, "popover_empty", "No details available."),
+        closeLabel: translate(ctx, "popover_close", "Close details"),
+        className: "wu-shared-popover--grid",
+      });
+    }
+
+    /**
+     * Add horizontal grid lines to day column
+     * Renders either time unit boundaries or hourly lines
+     *
+     * @param {HTMLElement} inner - Day column inner container
+     * @param {Array} timeUnits - Array of time unit objects
+     * @param {number} allStart - Start time in minutes
+     * @param {number} allEnd - End time in minutes
+     * @param {number} totalMinutes - Total minutes span
+     * @param {number} totalHeight - Total height in pixels
+     */
+    function addHourLinesToColumn(inner, timeUnits, allStart, allEnd, totalMinutes, totalHeight) {
+      try {
+        if (Array.isArray(timeUnits) && timeUnits.length > 0) {
+          for (let ui = 0; ui < timeUnits.length; ui++) {
+            const { lineMin } = getTimeUnitBounds(timeUnits, ui);
+            if (lineMin === undefined || lineMin === null) continue;
+            if (lineMin < allStart || lineMin > allEnd) continue;
+
+            const top = Math.round(((lineMin - allStart) / totalMinutes) * totalHeight);
+            const line = document.createElement("div");
+            line.className = "grid-hourline";
+            line.style.top = `${top}px`;
+            inner.appendChild(line);
+          }
+        } else {
+          for (let m = Math.ceil(allStart / 60) * 60; m <= allEnd; m += 60) {
+            const top = Math.round(((m - allStart) / totalMinutes) * totalHeight);
+            const line = document.createElement("div");
+            line.className = "grid-hourline";
+            line.style.top = `${top}px`;
+            inner.appendChild(line);
+          }
+        }
+      } catch (e) {
+        log("debug", "failed to draw hour lines", e);
       }
     }
 
-    return false;
-  }
+    /**
+     * Add now-line placeholder to day column
+     * Creates hidden now-line element (visibility controlled by updateNowLinesAll)
+     * Stores time range and height for dynamic positioning
+     *
+     * @param {HTMLElement} inner - Day column inner container
+     * @param {number} allStart - Start time in minutes
+     * @param {number} allEnd - End time in minutes
+     * @param {number} totalHeight - Total height in pixels
+     */
+    function addNowLineToColumn(inner, allStart, allEnd, totalHeight) {
+      const nowLine = document.createElement("div");
+      nowLine.className = "grid-nowline";
+      nowLine.style.display = "none";
+      inner.appendChild(nowLine);
 
-  /**
-   * Classify an overlap group into the rendering mode used by the grid.
-   *
-   * @param {Array} lessons - Overlapping normalized lessons.
-   * @returns {Object} Rendering classification metadata.
-   */
-  function classifyLessonRenderGroup(lessons) {
-    const cancelledLessons = lessons.filter((lesson) => lesson.status === "CANCELLED");
-    const addedLessons = lessons.filter((lesson) => lesson.status === "ADDITIONAL");
-    const substLessons = lessons.filter((lesson) => lesson.status === "SUBSTITUTION");
-    const eventLessons = lessons.filter((lesson) => lessonIsEvent(lesson));
-    const tickerCandidates = lessons.filter((lesson) => !lessonIsEvent(lesson));
-    const plannedParallelCandidates = tickerCandidates.filter((lesson) => {
-      const status = String(lesson.status || "").toUpperCase();
-      return status === "REGULAR" || status === "CHANGED" || status === "CANCELLED";
-    });
-
-    const substitutionTriggersSplit = substLessons.some((lesson) => !lessonHasStudentGroupOrClassHint(lesson));
-    const isSplitView =
-      cancelledLessons.length >= 1 &&
-      (addedLessons.length >= 1 || substitutionTriggersSplit || eventLessons.length >= 1);
-
-    const tcGroupStart =
-      tickerCandidates.length > 0 ? Math.min(...tickerCandidates.map((lesson) => lesson.startMin)) : Infinity;
-    const tcGroupEnd =
-      tickerCandidates.length > 0 ? Math.max(...tickerCandidates.map((lesson) => lesson.endMin)) : -Infinity;
-    const spanningLessons = tickerCandidates.filter(
-      (lesson) => lesson.startMin <= tcGroupStart && lesson.endMin >= tcGroupEnd,
-    );
-    const subPeriodLessons = tickerCandidates.filter((lesson) => !spanningLessons.includes(lesson));
-    const isSpanSplitLayout =
-      !isSplitView &&
-      cancelledLessons.length === 0 &&
-      addedLessons.length === 0 &&
-      spanningLessons.length >= 1 &&
-      subPeriodLessons.length >= 1;
-
-    const isTickerGroup = hasParallelOverlap(plannedParallelCandidates);
-
-    return {
-      cancelledLessons,
-      addedLessons,
-      substLessons,
-      eventLessons,
-      tickerCandidates,
-      tcGroupEnd,
-      spanningLessons,
-      subPeriodLessons,
-      isSplitView,
-      isTickerGroup,
-      shouldUseSplitView: isSplitView && !isTickerGroup,
-      isSpanSplitLayout,
-    };
-  }
-
-  /**
-   * Convert the current YYYYMMDD marker into a Date instance.
-   *
-   * @param {number|string} currentTodayYmd - Current date marker.
-   * @returns {Date} Base date for grid rendering.
-   */
-  function getBaseDateFromYmd(currentTodayYmd, ctx = null) {
-    if (!currentTodayYmd) {
-      return getCurrentDayDate(ctx);
+      inner._nowLine = nowLine;
+      inner._allStart = allStart;
+      inner._allEnd = allEnd;
+      inner._totalHeight = totalHeight;
     }
 
-    const raw = String(currentTodayYmd);
-    const year = parseInt(raw.substring(0, 4), 10);
-    const month = parseInt(raw.substring(4, 6), 10) - 1;
-    const day = parseInt(raw.substring(6, 8), 10);
-    return new Date(year, month, day);
-  }
+    /**
+     * Add a day-wide notice (holiday or "no lessons")
+     * Creates a full-height notice with icon and text
+     *
+     * @param {HTMLElement} inner - Day column inner container
+     * @param {number} totalHeight - Total height in pixels
+     * @param {string} noticeType - Notice type ('holiday' or 'no-lessons')
+     * @param {string} text - Notice text (HTML allowed)
+     * @param {string} iconSize - Icon font size (default: '1.5em')
+     */
+    function addDayNotice(inner, totalHeight, noticeType, text, iconSize = "1.5em") {
+      const notice = document.createElement("div");
+      notice.className = "grid-lesson lesson lesson-content no-lesson";
+      notice.style.height = `${totalHeight}px`;
+      const icon = document.createElement("span");
+      icon.className = `day-notice-icon day-notice-icon-${noticeType}`;
+      icon.setAttribute("aria-hidden", "true");
+      icon.style.fontSize = iconSize;
 
-  /**
-   * Format a Date into the YYYYMMDD key used throughout the grid.
-   *
-   * @param {Date} date - Date to format.
-   * @returns {string} YYYYMMDD key.
-   */
-  function formatDateKey(date) {
-    return `${date.getFullYear()}${(`0${date.getMonth() + 1}`).slice(-2)}${(`0${date.getDate()}`).slice(-2)}`;
-  }
+      const label = document.createElement("div");
+      label.style.fontWeight = "bold";
+      label.appendChild(el("b", null, text));
 
-  function cloneDayDate(date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  }
+      notice.appendChild(icon);
+      notice.appendChild(label);
+      inner.appendChild(notice);
+    }
 
-  function isWeekendDay(date) {
-    const day = date.getDay();
-    return day === 0 || day === 6;
-  }
+    /**
+     * Add "more" badge to indicate hidden lessons
+     * Displayed when maxGridLessons limit is active
+     *
+     * @param {HTMLElement} inner - Day column inner container
+     * @param {number} hiddenCount - Number of hidden lessons
+     * @param {Object} ctx - Main module context (provides translate)
+     */
+    function addMoreBadge(inner, hiddenCount, ctx) {
+      const moreBadge = document.createElement("div");
+      moreBadge.className = "grid-more-badge";
+      moreBadge.textContent = ctx.translate("more");
+      const hiddenLessonsKey = hiddenCount > 1 ? "hidden_lessons_plural" : "hidden_lessons";
+      const hiddenLessonsLabel = ctx.translate
+        ? ctx.translate(hiddenLessonsKey)
+        : hiddenCount > 1
+          ? "more lessons"
+          : "more lesson";
+      moreBadge.title = `${hiddenCount} ${hiddenLessonsLabel}`;
+      inner.appendChild(moreBadge);
+    }
 
-  function buildRollingDisplayDates(baseDate, config, hasLessonsForDate) {
-    const shouldIncludeDate = (date) => {
-      if (!config.hideWeekends) return true;
-      if (!isWeekendDay(date)) return true;
-      return hasLessonsForDate(formatDateKey(date));
-    };
+    /**
+     * Apply CSS classes to lesson element
+     * Centralized function for consistent class assignment across all lesson rendering modes
+     *
+     * @param {HTMLElement} element - Lesson cell element
+     * @param {Object} lesson - Lesson object
+     * @param {Object} options - Options for class assignment
+     * @param {boolean} options.hasExam - True if lesson has exam
+     * @param {boolean} options.isPast - True if lesson is in the past (used when nowYmd/nowMin not provided)
+     * @param {Array<string>} options.additionalClasses - Additional classes (e.g., 'split-left', 'split-right')
+     * @param {number|null} options.nowYmd - Current date as YYYYMMDD integer (for individual isPast calculation)
+     * @param {number|null} options.nowMin - Current time in minutes (for individual isPast calculation)
+     */
+    function applyLessonClasses(element, lesson, options = {}) {
+      const { hasExam = false, isPast = false, additionalClasses = [], nowYmd = null, nowMin = null } = options;
 
-    const displayDates = [];
-    const visiblePastDates = [];
-    let pastOffset = 1;
-    while (visiblePastDates.length < config.pastDays && pastOffset <= 366) {
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() - pastOffset);
-      if (shouldIncludeDate(dayDate)) {
-        visiblePastDates.push(dayDate);
+      if (lessonIsBreakSupervision(lesson)) {
+        element.classList.add("lesson-break-supervision");
+      } else if (lesson.status === "CANCELLED") {
+        element.classList.add("lesson-cancelled");
+      } else if (isIrregularStatus(lesson.status)) {
+        // CHANGED lessons where only teacher and/or room differ are kept in the
+        // regular colour — the inline change markers still highlight the diff.
+        // Any other irregular status (ADDITIONAL, SUBSTITUTION, …) or CHANGED
+        // with a more significant field (subject, class, …) keeps the blue tint.
+        const changedFields = getChangedFieldSet(lesson);
+        const isMinorChange =
+          lesson.status === "CHANGED" &&
+          changedFields.size > 0 &&
+          [...changedFields].every((f) => f === "teacher" || f === "room");
+        element.classList.add(isMinorChange ? "lesson-regular" : "lesson-substitution");
+      } else {
+        element.classList.add("lesson-regular");
       }
-      pastOffset += 1;
-    }
 
-    for (const date of visiblePastDates.reverse()) {
-      displayDates.push(date);
-    }
-
-    let extraFutureDays = 0;
-    if (shouldIncludeDate(baseDate)) {
-      displayDates.push(cloneDayDate(baseDate));
-    } else {
-      extraFutureDays = 1;
-    }
-
-    const futureDaysNeeded = config.daysToShow + extraFutureDays;
-    let futureDaysAdded = 0;
-    let futureOffset = 1;
-    while (futureDaysAdded < futureDaysNeeded && futureOffset <= 366) {
-      const dayDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + futureOffset);
-      if (shouldIncludeDate(dayDate)) {
-        displayDates.push(dayDate);
-        futureDaysAdded += 1;
+      if (additionalClasses.length > 0) {
+        element.classList.add(...additionalClasses);
       }
-      futureOffset += 1;
+
+      let lessonIsPast = isPast;
+      if (nowYmd !== null && nowMin !== null) {
+        const lessonYmd = Number(lesson.dateStr) || 0;
+        lessonIsPast = false;
+        if (lessonYmd < nowYmd) {
+          lessonIsPast = true;
+        } else if (lessonYmd === nowYmd) {
+          if (lesson.endMin <= nowMin) lessonIsPast = true;
+        }
+      }
+
+      if (lessonIsPast) element.classList.add("past");
+      if (hasExam) element.classList.add("has-exam");
     }
 
-    return displayDates;
-  }
-
-  function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
-    const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
-    if (groupedRaw?.[dayYmdStr]) {
-      return groupedRaw[dayYmdStr];
+    /**
+     * Create a lesson cell container
+     * Base element for all lesson types(regular, cancelled, substitution, exam)
+     *
+     * @param { number } topPx - Top position in pixels
+     * @param { number } heightPx - Height in pixels
+     * @param { string } dateStr - Date string(YYYYMMDD)
+     * @param { number } eMin - End time in minutes
+     * @returns { HTMLElement } Lesson cell div
+     */
+    function createLessonCell(topPx, heightPx, dateStr, eMin) {
+      const cell = document.createElement("div");
+      cell.className = "grid-lesson lesson";
+      cell.style.top = `${topPx}px`;
+      cell.style.height = `${heightPx}px`;
+      cell.setAttribute("data-date", dateStr);
+      cell.setAttribute("data-end-min", String(eMin));
+      return cell;
     }
 
-    return (Array.isArray(timetable) ? timetable : [])
-      .filter((entry) => String(entry.date) === dayYmdStr)
-      .sort((left, right) => (left.startTime || 0) - (right.startTime || 0));
-  }
-
-  /**
-   * Create the DOM shell for a single grid day column.
-   *
-   * @param {number} col - CSS grid column number.
-   * @param {number} totalHeight - Column height in pixels.
-   * @param {boolean} isToday - Whether the column represents today.
-   * @returns {{bothWrap: HTMLElement, bothInner: HTMLElement}} Day column elements.
-   */
-  function createDayColumnWrapper(col, totalHeight, isToday) {
-    const bothWrap = document.createElement("div");
-    bothWrap.style.gridColumn = `${col}`;
-    bothWrap.style.gridRow = "1";
-
-    const bothInner = document.createElement("div");
-    bothInner.className = "day-column-inner";
-    bothInner.style.height = `${totalHeight}px`;
-    bothInner.style.position = "relative";
-    if (isToday) bothInner.classList.add("is-today");
-
-    bothWrap.appendChild(bothInner);
-    return { bothWrap, bothInner };
-  }
-
-  /**
-   * Render either lesson cells or the empty-day fallback notice.
-   *
-   * @param {Object} options - Render context.
-   */
-  function renderDayLessonsOrNotice({
-    lessonsToRender,
-    emptyDayState,
-    bothInner,
-    totalHeight,
-    allStart,
-    allEnd,
-    totalMinutes,
-    ctx,
-    studentConfig,
-  }) {
-    if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
-      const resolvedState = emptyDayState || { noticeType: "no-lessons", label: ctx.translate("no-lessons") };
-      const noticeType = resolvedState?.noticeType || "no-lessons";
-      const noticeText = toText(resolvedState?.label || ctx.translate("no-lessons"));
-      const iconSize = resolvedState?.type === "holiday" || resolvedState?.type === "unavailable" ? "2em" : "1.5em";
-      addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
-      return;
+    /** Text as a text node shows it: null and undefined become "" (as escapeHtml() did). */
+    function toText(value) {
+      return value === null || value === undefined ? "" : String(value);
     }
 
-    renderLessonCells(lessonsToRender, { bothInner }, allStart, allEnd, totalMinutes, totalHeight, ctx, studentConfig);
-  }
-
-  /**
-   * Render absence overlays for one rendered day column.
-   *
-   * @param {Array} absences - All absences for the current student.
-   * @param {string} dateStr - YYYYMMDD key for the column.
-   * @param {HTMLElement} bothInner - Day column inner element.
-   * @param {number} allStart - Visible start minute.
-   * @param {number} allEnd - Visible end minute.
-   * @param {number} totalHeight - Column height in pixels.
-   * @param {Object} ctx - Module context.
-   */
-  function addDayAbsenceOverlays(absences, dateStr, bothInner, allStart, allEnd, totalHeight, ctx) {
-    if (!Array.isArray(absences) || absences.length === 0) {
-      return;
+    /**
+     * A changed field: the new value, else the removed old one (struck through), else N/A.
+     */
+    function changedFieldNode(newName, oldName, naText) {
+      if (newName) return el("span", "lesson-changed-new", toText(newName));
+      if (oldName) return el("span", "lesson-changed-removed", toText(oldName));
+      return el("span", "lesson-changed-new", naText);
     }
 
-    const dayAbsences = absences.filter((absence) => String(absence?.date) === dateStr);
-    if (dayAbsences.length === 0) {
-      return;
+    /** Break supervision cell: "BS"/"PA" plus the supervised area. */
+    function breakSupervisionContent(lesson, ctx) {
+      const label = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
+      const shortLabel = label === "Pausenaufsicht" ? "PA" : "BS";
+      const area = lesson.room || lesson.roomLong || "";
+      const displayText = area ? `${shortLabel} (${area})` : shortLabel;
+      const icon = iconSpan("wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon");
+      return el("div", "lesson-content break-supervision", el("span", "lesson-primary", icon, displayText));
     }
 
-    addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
-  }
-
-  /**
-   * Render one complete day column including notices, lessons, and absences.
-   *
-   * @param {Object} options - Day render context.
-   */
-  function renderGridDayColumn({
-    grid,
-    ctx,
-    studentTitle,
-    studentConfig,
-    timetable,
-    timeUnits,
-    absences,
-    targetDate,
-    todayDateStr,
-    allStart,
-    allEnd,
-    totalMinutes,
-    totalHeight,
-    dayIndex,
-    maxGridLessons,
-  }) {
-    const dayYmdStr = formatDateKey(targetDate);
-    const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr);
-
-    let dayLessons = extractDayLessons(sourceForDay, ctx);
-    dayLessons = validateAndNormalizeLessons(dayLessons, log);
-
-    const lessonsToRender = filterLessonsByMaxPeriods(
-      dayLessons,
-      maxGridLessons,
-      timeUnits,
-      studentTitle,
-      dayYmdStr,
-      ctx,
-      allEnd,
-    );
-    const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
-    const hiddenCount = dayLessons.length - lessonsToRender.length;
-    const col = 2 + dayIndex;
-    const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
-
-    grid.appendChild(bothWrap);
-    addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
-    addNowLineToColumn(bothInner, allStart, allEnd, totalHeight);
-
-    if (hiddenCount > 0) {
-      addMoreBadge(bothInner, hiddenCount, ctx);
+    /** Room line: the changed room, or the configured additional fields, each in brackets. */
+    function additionalLineNodes(lesson, displayParts, changedFields, naText) {
+      if (changedFields.has("room")) {
+        const room = changedFieldNode(lesson.rooms?.[0]?.name || "", getFirstFieldName(lesson.previousRooms), naText);
+        return [" ", el("span", "lesson-additional", "(", room, ")")];
+      }
+      const nodes = [];
+      for (const item of (displayParts.additional || []).filter(Boolean)) {
+        nodes.push(" ", el("span", "lesson-additional", `(${toText(item)})`));
+      }
+      return nodes;
     }
 
-    renderDayLessonsOrNotice({
+    /** Substitution text and lesson text; the lesson text only when it does not repeat a shown field. */
+    function lessonNoteNodes(lesson, displayParts) {
+      const lessonText = normalizeComparableText(lesson.text);
+      const repeatsField =
+        lessonText === normalizeComparableText(displayParts.primary) ||
+        lessonText === normalizeComparableText(displayParts.secondary) ||
+        (Array.isArray(displayParts.additional) &&
+          displayParts.additional.some((item) => lessonText === normalizeComparableText(item)));
+
+      const nodes = [];
+      if (lesson.substitutionText) {
+        nodes.push(el("span", "lesson-substitution-text", ...multilineNodes(lesson.substitutionText)));
+      }
+      if (lessonText !== "" && !repeatsField) {
+        nodes.push(el("span", "lesson-info-text", ...multilineNodes(lesson.text)));
+      }
+      return nodes;
+    }
+
+    /**
+     * Primary line, secondary line (teacher plus additional fields) and notes of a lesson cell.
+     * A changed field shows its new value, or the removed one struck through.
+     */
+    function lessonLineNodes(lesson, changedFields, naText, config, ctx) {
+      const displayParts = buildFlexibleLessonDisplay(lesson, config, { ctx });
+      const primary = changedFields.has("subject")
+        ? changedFieldNode(lesson.subjects?.[0]?.name || "", getFirstFieldName(lesson.previousSubjects), naText)
+        : toText(displayParts.primary || "");
+      const secondary = changedFields.has("teacher")
+        ? changedFieldNode(lesson.teachers?.[0]?.name || "", getFirstFieldName(lesson.previousTeachers), naText)
+        : toText(displayParts.secondary || "");
+
+      let additional = additionalLineNodes(lesson, displayParts, changedFields, naText);
+      const hasUnknownChangedDetails = lesson.status === "CHANGED" && changedFields.size === 0;
+      if (hasUnknownChangedDetails && additional.length === 0) {
+        additional = [" ", el("span", "lesson-additional", "(", el("span", "lesson-changed-new", naText), ")")];
+      }
+
+      const lines = [el("span", "lesson-primary", primary)];
+      if (secondary !== "" || additional.length > 0) {
+        lines.push(el("span", "lesson-secondary", secondary, ...additional));
+      }
+      return [...lines, ...lessonNoteNodes(lesson, displayParts)];
+    }
+
+    /**
+     * Content of a lesson cell: primary line (subject), secondary line (teacher plus additional
+     * fields), substitution and lesson text. Changes are marked inline rather than in extra rows so
+     * compact cells do not overflow; a moved lesson or a change without details gets a badge.
+     * Fields follow grid.fields (primary, secondary, additional); break supervision has its own cell.
+     * Built as DOM nodes: lesson data is only ever text, never markup.
+     *
+     * @param {Object} lesson - Lesson object with display fields
+     * @param {Object} ctx - Main module context (provides config)
+     * @param {Object} [lessonConfig] - Effective widget config
+     * @returns {HTMLElement} The .lesson-content element
+     */
+    function buildLessonContent(lesson, ctx, lessonConfig) {
+      if (lessonIsBreakSupervision(lesson)) {
+        return breakSupervisionContent(lesson, ctx);
+      }
+
+      const changedFields = getChangedFieldSet(lesson);
+      const badges = [
+        lessonIsMoved(lesson) && iconSpan("lesson-moved-badge"),
+        lesson.status === "CHANGED" && changedFields.size === 0 && iconSpan("lesson-changed-generic-badge"),
+      ].filter(Boolean);
+      const content = el("div", badges.length > 0 ? "lesson-content has-icons" : "lesson-content");
+      if (badges.length > 0) content.append(el("span", "lesson-icons", ...badges));
+      const naText = String(lessonConfig?.grid?.naText ?? "N/A");
+
+      try {
+        content.append(...lessonLineNodes(lesson, changedFields, naText, lessonConfig || ctx?.config, ctx));
+      } catch (err) {
+        log(
+          "error",
+          `[grid] buildLessonContent failed for lesson ${lesson?.id ?? lesson?.lessonId ?? "unknown"}: ${err?.message || err}`,
+        );
+        content.append(el("span", "lesson-primary", el("span", "lesson-changed-new", naText)));
+      }
+      return content;
+    }
+
+    /**
+     * Check whether a lesson carries the timetable homework icon.
+     *
+     * @param {Object} lesson - Lesson object
+     * @returns {boolean} True if the timetable marked this lesson with HOMEWORK
+     */
+    function checkHomeworkMatch(lesson) {
+      return lessonHasDisplayIcon(lesson, "HOMEWORK");
+    }
+
+    /**
+     * Add homework icon to lesson cell
+     * Displays configured homework icon when homework is due
+     *
+     * @param {HTMLElement} cell - Lesson cell element
+     */
+    function addHomeworkIcon(cell) {
+      const icon = document.createElement("span");
+      icon.className = "homework-icon";
+      icon.setAttribute("aria-hidden", "true");
+      if (cell?.hasChildNodes()) {
+        const iconContainer = cell.querySelector(".lesson-content") || cell;
+        let icons = iconContainer.querySelector(".lesson-icons");
+        if (!icons) {
+          icons = document.createElement("span");
+          icons.className = "lesson-icons";
+          iconContainer.appendChild(icons);
+        }
+        iconContainer.classList.add("has-homework", "has-icons");
+        icons.appendChild(icon.cloneNode(true));
+      }
+    }
+
+    /**
+     * Append a lesson cell to the grid container
+     *
+     * @param {HTMLElement} container - Container element to append the cell to
+     * @param {Object} lesson - Normalized lesson object
+     * @param {Object} timeConstraints - Time constraint parameters
+     * @param {number} timeConstraints.allStart - Grid start time in minutes since midnight
+     * @param {number} timeConstraints.allEnd - Grid end time in minutes since midnight
+     * @param {number} timeConstraints.totalMinutes - Total minutes in grid range
+     * @param {number} timeConstraints.totalHeight - Total height of grid in pixels
+     * @param {Object} rendering - Rendering context and configuration
+     * @param {Object} rendering.ctx - Module context
+     * @param {Object} rendering.lessonConfig - Lesson-specific configuration
+     * @param {Object} [options={}] - Optional rendering parameters
+     * @param {boolean} [options.isPast] - Whether the lesson is in the past
+     * @param {number} [options.nowYmd] - Current date as YYYYMMDD integer
+     * @param {number} [options.nowMin] - Current time in minutes since midnight
+     * @param {string[]} [options.additionalClasses] - Additional CSS classes to apply
+     * @returns {HTMLElement|null} Created lesson cell or null if not visible
+     */
+    function appendLessonCell(container, lesson, timeConstraints, rendering, options = {}) {
+      const { allStart, allEnd, totalMinutes, totalHeight } = timeConstraints;
+      const { ctx, lessonConfig } = rendering;
+      const { isPast = null, nowYmd = 0, nowMin = 0, additionalClasses = [] } = options;
+      const placement = getVisibleTimeBlockPlacement(
+        lesson.startMin,
+        lesson.endMin,
+        allStart,
+        allEnd,
+        totalMinutes,
+        totalHeight,
+        {
+          minHeightPx: 12,
+        },
+      );
+      if (!placement) return null;
+
+      const { visibleEnd, topPx, heightPx } = placement;
+      const lessonYmd = Number(lesson.dateStr) || 0;
+      const resolvedIsPast = typeof isPast === "boolean" ? isPast : calcIsPast(lessonYmd, visibleEnd, nowYmd, nowMin);
+
+      const cell = createLessonCell(topPx, heightPx, lesson.dateStr, visibleEnd);
+      applyLessonClasses(cell, lesson, {
+        hasExam: lessonHasExam(lesson),
+        isPast: resolvedIsPast,
+        additionalClasses,
+      });
+      cell.appendChild(buildLessonContent(lesson, ctx, lessonConfig));
+      cell.tabIndex = 0;
+      cell.setAttribute("role", "button");
+      cell.setAttribute("aria-label", `${getSubject(lesson, "long") || "Lesson"} details`);
+      cell.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openLessonPopover(cell, lesson, ctx);
+      });
+      cell.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openLessonPopover(cell, lesson, ctx);
+      });
+      if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
+      container.appendChild(cell);
+      return cell;
+    }
+
+    /** Lessons of one ticker slot by subject and student group (or class). */
+    function groupTickerLessons(lessons) {
+      const groups = new Map();
+      for (const lesson of lessons) {
+        const subject = getSubject(lesson, "short") || null;
+        const group = getStudentGroup(lesson, "short") || getClass(lesson, "short") || null;
+        const key = `${subject || "unknown"}_${group || "noGroup"}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(lesson);
+      }
+      for (const groupLessons of groups.values()) {
+        groupLessons.sort(byStartThenEnd);
+      }
+      return groups;
+    }
+
+    function createTickerItem(className, lessons, widthPercent) {
+      const item = document.createElement("div");
+      item.className = className;
+      if (lessons.some((lesson) => lessonHasExam(lesson))) item.classList.add("has-exam");
+      item.style.width = `${widthPercent}%`;
+      item.style.position = "relative";
+      item.style.height = "100%";
+      return item;
+    }
+
+    /**
+     * One lesson inside a ticker item, placed by percent of the item's time span.
+     * @param {Array<[string, string]>} sideStyles - Horizontal placement, in the order it is applied
+     */
+    function createTickerLesson(lesson, placement, sideStyles, splitClass, env) {
+      const div = document.createElement("div");
+      div.className = splitClass ? `lesson-content ${splitClass}` : "lesson-content";
+      div.style.position = "absolute";
+      div.style.top = `${placement.top}%`;
+      div.style.height = `${placement.height}%`;
+      for (const [property, value] of sideStyles) div.style[property] = value;
+
+      applyLessonClasses(div, lesson, {
+        hasExam: lessonHasExam(lesson),
+        nowYmd: env.nowYmd,
+        nowMin: env.nowMin,
+        ...(splitClass ? { additionalClasses: [splitClass] } : {}),
+      });
+      div.appendChild(buildLessonContent(lesson, env.ctx, env.lessonConfig));
+      if (checkHomeworkMatch(lesson)) addHomeworkIcon(div);
+      return div;
+    }
+
+    /** Ticker item for one subject group: its lessons stacked over the group's time span. */
+    function createGroupTickerItem(groupLessons, widthPercent, env) {
+      const item = createTickerItem("ticker-item", groupLessons, widthPercent);
+      const start = Math.min(...groupLessons.map((l) => l.startMin));
+      const total = Math.max(...groupLessons.map((l) => l.endMin)) - start;
+      for (const lesson of groupLessons) {
+        const placement =
+          total === 0
+            ? { top: 0, height: 100 }
+            : {
+                top: ((lesson.startMin - start) / total) * 100,
+                height: ((lesson.endMin - lesson.startMin) / total) * 100,
+              };
+        item.appendChild(
+          createTickerLesson(
+            lesson,
+            placement,
+            [
+              ["left", "0"],
+              ["right", "0"],
+            ],
+            null,
+            env,
+          ),
+        );
+      }
+      return item;
+    }
+
+    /** Ticker item for a split-view pair: replacements on the left, cancelled lessons on the right. */
+    function createSplitTickerItem(pair, widthPercent, env) {
+      const all = [...pair.cancelledLessons, ...pair.replacements];
+      const item = createTickerItem(
+        "ticker-item ticker-item-split",
+        [...pair.replacements, ...pair.cancelledLessons],
+        widthPercent,
+      );
+
+      const splitContainer = document.createElement("div");
+      splitContainer.className = "lesson-both-inner";
+      splitContainer.style.position = "absolute";
+      splitContainer.style.top = "0";
+      splitContainer.style.left = "0";
+      splitContainer.style.right = "0";
+      splitContainer.style.height = "100%";
+
+      const start = Math.min(...all.map((l) => l.startMin));
+      const total = Math.max(1, Math.max(...all.map((l) => l.endMin)) - start);
+      const placementOf = (lesson) => ({
+        top: ((lesson.startMin - start) / total) * 100,
+        height: ((lesson.endMin - lesson.startMin) / total) * 100,
+      });
+
+      for (const replacement of pair.replacements) {
+        const side = [
+          ["left", "0"],
+          ["width", "50%"],
+        ];
+        splitContainer.appendChild(createTickerLesson(replacement, placementOf(replacement), side, "split-left", env));
+      }
+      for (const cancelled of pair.cancelledLessons) {
+        const side = [
+          ["right", "0"],
+          ["width", "50%"],
+        ];
+        splitContainer.appendChild(createTickerLesson(cancelled, placementOf(cancelled), side, "split-right", env));
+      }
+
+      item.appendChild(splitContainer);
+      return item;
+    }
+
+    /**
+     * Overlapping lessons of one slot as a horizontally scrolling ticker: one item per subject
+     * group and per split-view pair, the whole track twice for a seamless loop. Lessons of one
+     * subject group are stacked by their time within the item.
+     *
+     * @param {Array} lessons - Overlapping lesson objects
+     * @param {number} topPx - Top position in pixels
+     * @param {number} heightPx - Height in pixels
+     * @param {HTMLElement} container - Day column container
+     * @param {Object} ctx - Main module context
+     * @param {number} nowYmd - Current date as YYYYMMDD integer
+     * @param {number} nowMin - Current time in minutes since midnight
+     * @param {Object} tickerData - Cancelled lessons, their replacements and whether to split
+     * @param {Object} lessonConfig - Effective widget config
+     */
+    function createTickerAnimation(lessons, topPx, heightPx, container, ctx, nowYmd, nowMin, tickerData, lessonConfig) {
+      const env = { ctx, nowYmd, nowMin, lessonConfig };
+      const groups = groupTickerLessons(lessons);
+      const pairs = pairCancelledWithReplacements(tickerData);
+      if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
+        removePairedLessons(groups, pairs);
+      }
+
+      const tickerWrapper = document.createElement("div");
+      tickerWrapper.className = "lesson-ticker-wrapper";
+      tickerWrapper.style.top = `${topPx}px`;
+      tickerWrapper.style.height = `${heightPx}px`;
+      tickerWrapper.style.position = "absolute";
+      tickerWrapper.style.left = "0.15rem";
+      tickerWrapper.style.right = "0.15rem";
+      tickerWrapper.style.zIndex = "10";
+      tickerWrapper.setAttribute("data-date", lessons[0].dateStr);
+      tickerWrapper.setAttribute("data-end-min", String(Math.max(...lessons.map((l) => l.endMin))));
+
+      const itemCount = groups.size + pairs.length;
+      const itemWidthPercent = 100 / (itemCount * 2);
+      const tickerTrack = document.createElement("div");
+      tickerTrack.className = "ticker-track";
+      tickerTrack.style.width = `${itemCount * 2 * 100}%`;
+
+      for (let copy = 0; copy < 2; copy++) {
+        for (const groupLessons of groups.values()) {
+          tickerTrack.appendChild(createGroupTickerItem(groupLessons, itemWidthPercent, env));
+        }
+        for (const pair of pairs) {
+          tickerTrack.appendChild(createSplitTickerItem(pair, itemWidthPercent, env));
+        }
+      }
+      tickerWrapper.appendChild(tickerTrack);
+
+      const prefersReducedMotion =
+        typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!prefersReducedMotion) {
+        tickerTrack.style.animation = `wu-ticker-scroll ${Math.max(10, itemCount * 3)}s linear infinite`;
+      }
+
+      container.appendChild(tickerWrapper);
+    }
+
+    /**
+     * Convert the current YYYYMMDD marker into a Date instance.
+     *
+     * @param {number|string} currentTodayYmd - Current date marker.
+     * @returns {Date} Base date for grid rendering.
+     */
+    function getBaseDateFromYmd(currentTodayYmd, ctx = null) {
+      if (!currentTodayYmd) {
+        return getCurrentDayDate(ctx);
+      }
+
+      const raw = String(currentTodayYmd);
+      const year = parseInt(raw.substring(0, 4), 10);
+      const month = parseInt(raw.substring(4, 6), 10) - 1;
+      const day = parseInt(raw.substring(6, 8), 10);
+      return new Date(year, month, day);
+    }
+
+    function getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr) {
+      const groupedRaw = ctx.preprocessedByStudent?.[studentTitle]?.rawGroupedByDate;
+      if (groupedRaw?.[dayYmdStr]) {
+        return groupedRaw[dayYmdStr];
+      }
+
+      return (Array.isArray(timetable) ? timetable : [])
+        .filter((entry) => String(entry.date) === dayYmdStr)
+        .sort((left, right) => (left.startTime || 0) - (right.startTime || 0));
+    }
+
+    /**
+     * Create the DOM shell for a single grid day column.
+     *
+     * @param {number} col - CSS grid column number.
+     * @param {number} totalHeight - Column height in pixels.
+     * @param {boolean} isToday - Whether the column represents today.
+     * @returns {{bothWrap: HTMLElement, bothInner: HTMLElement}} Day column elements.
+     */
+    function createDayColumnWrapper(col, totalHeight, isToday) {
+      const bothWrap = document.createElement("div");
+      bothWrap.style.gridColumn = `${col}`;
+      bothWrap.style.gridRow = "1";
+
+      const bothInner = document.createElement("div");
+      bothInner.className = "day-column-inner";
+      bothInner.style.height = `${totalHeight}px`;
+      bothInner.style.position = "relative";
+      if (isToday) bothInner.classList.add("is-today");
+
+      bothWrap.appendChild(bothInner);
+      return { bothWrap, bothInner };
+    }
+
+    /**
+     * Render either lesson cells or the empty-day fallback notice.
+     *
+     * @param {Object} options - Render context.
+     */
+    function renderDayLessonsOrNotice({
       lessonsToRender,
       emptyDayState,
       bothInner,
@@ -2251,557 +1724,669 @@ function getModuleRootElement(ctx) {
       totalMinutes,
       ctx,
       studentConfig,
-    });
-
-    addDayAbsenceOverlays(absences, dayYmdStr, bothInner, allStart, allEnd, totalHeight, ctx);
-  }
-
-  /**
-   * Schedule post-render now-line and past-mask updates for the rendered grid.
-   *
-   * @param {Object} ctx - Module context.
-   * @param {HTMLElement} wrapper - Rendered grid wrapper.
-   */
-  function scheduleGridPostRenderUpdates(ctx, wrapper) {
-    setTimeout(() => {
-      try {
-        const gridWidget = ctx?._getWidgetApi?.()?.grid;
-        if (gridWidget && typeof gridWidget.updateNowLinesAll === "function") {
-          gridWidget.updateNowLinesAll(ctx, wrapper);
-        }
-        if (gridWidget && typeof gridWidget.refreshPastMasks === "function") {
-          gridWidget.refreshPastMasks(ctx, wrapper);
-        }
-      } catch (e) {
-        log("warn", "initial now-line/past-mask update failed", e);
+    }) {
+      if (!Array.isArray(lessonsToRender) || lessonsToRender.length === 0) {
+        const resolvedState = emptyDayState || { noticeType: "no-lessons", label: ctx.translate("no-lessons") };
+        const noticeType = resolvedState?.noticeType || "no-lessons";
+        const noticeText = toText(resolvedState?.label || ctx.translate("no-lessons"));
+        const iconSize = resolvedState?.type === "holiday" || resolvedState?.type === "unavailable" ? "2em" : "1.5em";
+        addDayNotice(bothInner, totalHeight, noticeType, noticeText, iconSize);
+        return;
       }
-    }, 0);
-  }
 
-  /**
-   * Render all lesson cells for a day column.
-   *
-   * The overlap classifier selects split-view, span-split, ticker, or plain
-   * individual cells depending on overlap structure and substitution metadata.
-   *
-   * @param {Array} lessonsToRender - Normalized lessons for one day.
-   * @param {Object} containers - Day column containers.
-   * @param {number} allStart - Grid start in minutes since midnight.
-   * @param {number} allEnd - Grid end in minutes since midnight.
-   * @param {number} totalMinutes - Total visible duration in minutes.
-   * @param {number} totalHeight - Total column height in pixels.
-   * @param {Object} ctx - Module context.
-   * @param {Object} lessonConfig - Grid rendering configuration.
-   */
-  function renderLessonCells(
-    lessonsToRender,
-    containers,
-    allStart,
-    allEnd,
-    totalMinutes,
-    totalHeight,
-    ctx,
-    lessonConfig,
-  ) {
-    const { bothInner } = containers;
-
-    const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
-
-    const nowContext = getModuleDateContext(ctx);
-    const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
-    const now = nowContext.date;
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-
-    /** Render a single lesson as a standalone full-width cell at its own time position. */
-    const renderSingleLesson = (lesson) => {
-      appendLessonCell(
-        bothInner,
-        lesson,
-        { allStart, allEnd, totalMinutes, totalHeight },
-        { ctx, lessonConfig },
-        { nowYmd, nowMin },
-      );
-    };
-
-    const renderTickerGroup = (lessons, group) => {
-      const { cancelledLessons, addedLessons, substLessons, eventLessons, tickerCandidates, isSplitView } = group;
-      const tickerData = {
-        cancelledLessons,
-        replacements: [...addedLessons, ...substLessons, ...eventLessons],
-        hasSplitView: isSplitView,
-      };
-
-      const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
-      const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
-
-      const placement = getVisibleTimeBlockPlacement(
-        tickerStart,
-        tickerEnd,
+      renderLessonCells(
+        lessonsToRender,
+        { bothInner },
         allStart,
         allEnd,
         totalMinutes,
         totalHeight,
-        {
-          minHeightPx: 12,
-        },
+        ctx,
+        studentConfig,
       );
-      if (placement) {
-        createTickerAnimation(
-          tickerCandidates,
-          placement.topPx,
-          placement.heightPx,
-          bothInner,
-          ctx,
-          nowYmd,
-          nowMin,
-          tickerData,
-          lessonConfig,
-        );
-      }
-
-      for (const lesson of lessons) {
-        if (tickerCandidates.includes(lesson)) continue;
-        if (cancelledLessons.includes(lesson)) continue;
-        const isReplacement = tickerData.replacements.includes(lesson);
-        const overlapsCancelled = cancelledLessons.some(
-          (c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin,
-        );
-        if (isReplacement && overlapsCancelled) continue;
-        renderSingleLesson(lesson);
-      }
-    };
-
-    const renderSplitGroup = (lessons, group) => {
-      const { cancelledLessons, addedLessons, substLessons, eventLessons } = group;
-      const replacements = [...addedLessons, ...substLessons, ...eventLessons];
-      const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
-      const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
-      const isPast = calcIsPast(allLessonsYmd, groupEMin, nowYmd, nowMin);
-
-      for (const repl of replacements) {
-        appendLessonCell(
-          bothInner,
-          repl,
-          { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, lessonConfig },
-          { isPast, additionalClasses: ["split-left"] },
-        );
-      }
-
-      for (const cancelled of cancelledLessons) {
-        appendLessonCell(
-          bothInner,
-          cancelled,
-          { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, lessonConfig },
-          { isPast, additionalClasses: ["split-right"] },
-        );
-      }
-
-      for (const lesson of lessons) {
-        if (cancelledLessons.includes(lesson) || replacements.includes(lesson)) continue;
-        renderSingleLesson(lesson);
-      }
-    };
-
-    const renderSpanSplitGroup = (lessons, group) => {
-      const { spanningLessons, subPeriodLessons, tcGroupEnd, tickerCandidates } = group;
-      const tYmd = Number(spanningLessons[0].dateStr) || 0;
-      const tEMin = Math.min(tcGroupEnd, allEnd);
-      const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
-
-      for (const spanning of spanningLessons) {
-        appendLessonCell(
-          bothInner,
-          spanning,
-          { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, lessonConfig },
-          { isPast, additionalClasses: ["split-left"] },
-        );
-      }
-
-      for (const sub of subPeriodLessons) {
-        appendLessonCell(
-          bothInner,
-          sub,
-          { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, lessonConfig },
-          { isPast, additionalClasses: ["split-right"] },
-        );
-      }
-
-      for (const lesson of lessons) {
-        if (tickerCandidates.includes(lesson)) continue;
-        renderSingleLesson(lesson);
-      }
-    };
-
-    for (const [, lessons] of timeSlotGroups.entries()) {
-      if (!lessons || lessons.length === 0) continue;
-      const group = classifyLessonRenderGroup(lessons);
-
-      if (group.isTickerGroup) {
-        renderTickerGroup(lessons, group);
-        continue;
-      }
-
-      if (group.shouldUseSplitView) {
-        renderSplitGroup(lessons, group);
-        continue;
-      }
-
-      if (group.isSpanSplitLayout) {
-        renderSpanSplitGroup(lessons, group);
-        continue;
-      }
-
-      for (const lesson of lessons) {
-        renderSingleLesson(lesson);
-      }
-    }
-  }
-
-  /**
-   * Create absence overlay element
-   * Visual indicator for absence periods (excused/unexcused)
-   *
-   * @param {Object} ctx - Main module context (provides translate)
-   * @param {number} topPx - Top position in pixels
-   * @param {number} heightPx - Height in pixels
-   * @param {string} dateStr - Date string (YYYYMMDD)
-   * @param {Object} absence - Absence object (reason, excused)
-   * @returns {HTMLElement} Absence overlay div
-   */
-  function createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence) {
-    const overlay = document.createElement("div");
-    overlay.className = "grid-absence-overlay";
-    overlay.style.top = `${topPx}px`;
-    overlay.style.height = `${heightPx}px`;
-    overlay.setAttribute("data-date", dateStr);
-
-    const excusedLabel = absence.excused ? ctx.translate("excused") : ctx.translate("unexcused");
-    const reasonText = absence.reason || ctx.translate("no_reason");
-    const absenceLabel = ctx.translate("absence_label");
-
-    overlay.setAttribute("title", `${absenceLabel}: ${reasonText} (${excusedLabel})`);
-
-    const icon = document.createElement("span");
-    icon.className = "absence-icon";
-    icon.setAttribute("aria-hidden", "true");
-    overlay.appendChild(icon);
-
-    if (absence.reason) {
-      const reasonText = document.createElement("span");
-      reasonText.className = "absence-reason";
-      reasonText.textContent = absence.reason;
-      overlay.appendChild(reasonText);
     }
 
-    return overlay;
-  }
+    /**
+     * Render absence overlays for one rendered day column.
+     *
+     * @param {Array} absences - All absences for the current student.
+     * @param {string} dateStr - YYYYMMDD key for the column.
+     * @param {HTMLElement} bothInner - Day column inner element.
+     * @param {number} allStart - Visible start minute.
+     * @param {number} allEnd - Visible end minute.
+     * @param {number} totalHeight - Column height in pixels.
+     * @param {Object} ctx - Module context.
+     */
+    function addDayAbsenceOverlays(absences, dateStr, bothInner, allStart, allEnd, totalHeight, ctx) {
+      if (!Array.isArray(absences) || absences.length === 0) {
+        return;
+      }
 
-  /**
-   * Renders semi-transparent overlays for each absence period
-   * Clamps overlays to visible time range
-   *
-   * @param { HTMLElement } bothInner - Day column inner container
-   * @param { Array } dayAbsences - Array of absence objects for this day
-   * @param { number } allStart - Start time in minutes
-   * @param { number } allEnd - End time in minutes
-   * @param { number } totalHeight - Total height in pixels
-   * @param { Object } ctx - Main module context
-   */
-  function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx) {
-    if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
-      return;
+      const dayAbsences = absences.filter((absence) => String(absence?.date) === dateStr);
+      if (dayAbsences.length === 0) {
+        return;
+      }
+
+      addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx);
     }
 
-    const totalMinutes = Math.max(1, allEnd - allStart);
+    /**
+     * Render one complete day column including notices, lessons, and absences.
+     *
+     * @param {Object} options - Day render context.
+     */
+    function renderGridDayColumn({
+      grid,
+      ctx,
+      studentTitle,
+      studentConfig,
+      timetable,
+      timeUnits,
+      absences,
+      targetDate,
+      todayDateStr,
+      allStart,
+      allEnd,
+      totalMinutes,
+      totalHeight,
+      dayIndex,
+      maxGridLessons,
+    }) {
+      const dayYmdStr = formatDateKey(targetDate);
+      const sourceForDay = getSourceLessonsForDay(ctx, studentTitle, timetable, dayYmdStr);
 
-    try {
-      for (const absence of dayAbsences) {
+      let dayLessons = extractDayLessons(sourceForDay, ctx);
+      dayLessons = validateAndNormalizeLessons(dayLessons, log);
+
+      const lessonsToRender = filterLessonsByMaxPeriods(
+        dayLessons,
+        maxGridLessons,
+        timeUnits,
+        studentTitle,
+        dayYmdStr,
+        ctx,
+        allEnd,
+      );
+      const emptyDayState = getEmptyDayState(ctx, studentTitle, targetDate);
+      const hiddenCount = dayLessons.length - lessonsToRender.length;
+      const col = 2 + dayIndex;
+      const { bothWrap, bothInner } = createDayColumnWrapper(col, totalHeight, dayYmdStr === todayDateStr);
+
+      grid.appendChild(bothWrap);
+      addHourLinesToColumn(bothInner, timeUnits, allStart, allEnd, totalMinutes, totalHeight);
+      addNowLineToColumn(bothInner, allStart, allEnd, totalHeight);
+
+      if (hiddenCount > 0) {
+        addMoreBadge(bothInner, hiddenCount, ctx);
+      }
+
+      renderDayLessonsOrNotice({
+        lessonsToRender,
+        emptyDayState,
+        bothInner,
+        totalHeight,
+        allStart,
+        allEnd,
+        totalMinutes,
+        ctx,
+        studentConfig,
+      });
+
+      addDayAbsenceOverlays(absences, dayYmdStr, bothInner, allStart, allEnd, totalHeight, ctx);
+    }
+
+    /**
+     * Schedule post-render now-line and past-mask updates for the rendered grid.
+     *
+     * @param {Object} ctx - Module context.
+     * @param {HTMLElement} wrapper - Rendered grid wrapper.
+     */
+    function scheduleGridPostRenderUpdates(ctx, wrapper) {
+      setTimeout(() => {
+        try {
+          const gridWidget = ctx?._getWidgetApi?.()?.grid;
+          if (gridWidget && typeof gridWidget.updateNowLinesAll === "function") {
+            gridWidget.updateNowLinesAll(ctx, wrapper);
+          }
+          if (gridWidget && typeof gridWidget.refreshPastMasks === "function") {
+            gridWidget.refreshPastMasks(ctx, wrapper);
+          }
+        } catch (e) {
+          log("warn", "initial now-line/past-mask update failed", e);
+        }
+      }, 0);
+    }
+
+    /**
+     * Render all lesson cells for a day column.
+     *
+     * The overlap classifier selects split-view, span-split, ticker, or plain
+     * individual cells depending on overlap structure and substitution metadata.
+     *
+     * @param {Array} lessonsToRender - Normalized lessons for one day.
+     * @param {Object} containers - Day column containers.
+     * @param {number} allStart - Grid start in minutes since midnight.
+     * @param {number} allEnd - Grid end in minutes since midnight.
+     * @param {number} totalMinutes - Total visible duration in minutes.
+     * @param {number} totalHeight - Total column height in pixels.
+     * @param {Object} ctx - Module context.
+     * @param {Object} lessonConfig - Grid rendering configuration.
+     */
+    function renderLessonCells(
+      lessonsToRender,
+      containers,
+      allStart,
+      allEnd,
+      totalMinutes,
+      totalHeight,
+      ctx,
+      lessonConfig,
+    ) {
+      const { bothInner } = containers;
+
+      const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
+
+      const nowContext = getModuleDateContext(ctx);
+      const nowYmd = ctx._currentTodayYmd ?? nowContext.ymd;
+      const now = nowContext.date;
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+
+      /** Render a single lesson as a standalone full-width cell at its own time position. */
+      const renderSingleLesson = (lesson) => {
+        appendLessonCell(
+          bothInner,
+          lesson,
+          { allStart, allEnd, totalMinutes, totalHeight },
+          { ctx, lessonConfig },
+          { nowYmd, nowMin },
+        );
+      };
+
+      const renderTickerGroup = (lessons, group) => {
+        const { cancelledLessons, addedLessons, substLessons, eventLessons, tickerCandidates, isSplitView } = group;
+        const tickerData = {
+          cancelledLessons,
+          replacements: [...addedLessons, ...substLessons, ...eventLessons],
+          hasSplitView: isSplitView,
+        };
+
+        const tickerStart = Math.max(Math.min(...tickerCandidates.map((l) => l.startMin)), allStart);
+        const tickerEnd = Math.min(Math.max(...tickerCandidates.map((l) => l.endMin)), allEnd);
+
         const placement = getVisibleTimeBlockPlacement(
-          ctx._toMinutes(absence?.startTime),
-          ctx._toMinutes(absence?.endTime),
+          tickerStart,
+          tickerEnd,
           allStart,
           allEnd,
           totalMinutes,
           totalHeight,
+          {
+            minHeightPx: 12,
+          },
         );
+        if (placement) {
+          createTickerAnimation(
+            tickerCandidates,
+            placement.topPx,
+            placement.heightPx,
+            bothInner,
+            ctx,
+            nowYmd,
+            nowMin,
+            tickerData,
+            lessonConfig,
+          );
+        }
 
-        if (!placement) {
+        for (const lesson of lessons) {
+          if (tickerCandidates.includes(lesson)) continue;
+          if (cancelledLessons.includes(lesson)) continue;
+          const isReplacement = tickerData.replacements.includes(lesson);
+          const overlapsCancelled = cancelledLessons.some(
+            (c) => lesson.startMin < c.endMin && lesson.endMin > c.startMin,
+          );
+          if (isReplacement && overlapsCancelled) continue;
+          renderSingleLesson(lesson);
+        }
+      };
+
+      const renderSplitGroup = (lessons, group) => {
+        const { cancelledLessons, addedLessons, substLessons, eventLessons } = group;
+        const replacements = [...addedLessons, ...substLessons, ...eventLessons];
+        const allLessonsYmd = Number((cancelledLessons[0] ?? replacements[0]).dateStr) || 0;
+        const groupEMin = Math.min(Math.max(...lessons.map((l) => l.endMin)), allEnd);
+        const isPast = calcIsPast(allLessonsYmd, groupEMin, nowYmd, nowMin);
+
+        for (const repl of replacements) {
+          appendLessonCell(
+            bothInner,
+            repl,
+            { allStart, allEnd, totalMinutes, totalHeight },
+            { ctx, lessonConfig },
+            { isPast, additionalClasses: ["split-left"] },
+          );
+        }
+
+        for (const cancelled of cancelledLessons) {
+          appendLessonCell(
+            bothInner,
+            cancelled,
+            { allStart, allEnd, totalMinutes, totalHeight },
+            { ctx, lessonConfig },
+            { isPast, additionalClasses: ["split-right"] },
+          );
+        }
+
+        for (const lesson of lessons) {
+          if (cancelledLessons.includes(lesson) || replacements.includes(lesson)) continue;
+          renderSingleLesson(lesson);
+        }
+      };
+
+      const renderSpanSplitGroup = (lessons, group) => {
+        const { spanningLessons, subPeriodLessons, tcGroupEnd, tickerCandidates } = group;
+        const tYmd = Number(spanningLessons[0].dateStr) || 0;
+        const tEMin = Math.min(tcGroupEnd, allEnd);
+        const isPast = calcIsPast(tYmd, tEMin, nowYmd, nowMin);
+
+        for (const spanning of spanningLessons) {
+          appendLessonCell(
+            bothInner,
+            spanning,
+            { allStart, allEnd, totalMinutes, totalHeight },
+            { ctx, lessonConfig },
+            { isPast, additionalClasses: ["split-left"] },
+          );
+        }
+
+        for (const sub of subPeriodLessons) {
+          appendLessonCell(
+            bothInner,
+            sub,
+            { allStart, allEnd, totalMinutes, totalHeight },
+            { ctx, lessonConfig },
+            { isPast, additionalClasses: ["split-right"] },
+          );
+        }
+
+        for (const lesson of lessons) {
+          if (tickerCandidates.includes(lesson)) continue;
+          renderSingleLesson(lesson);
+        }
+      };
+
+      for (const [, lessons] of timeSlotGroups.entries()) {
+        if (!lessons || lessons.length === 0) continue;
+        const group = classifyLessonRenderGroup(lessons);
+
+        if (group.isTickerGroup) {
+          renderTickerGroup(lessons, group);
           continue;
         }
 
-        const dateStr = String(absence?.date || "");
+        if (group.shouldUseSplitView) {
+          renderSplitGroup(lessons, group);
+          continue;
+        }
 
-        const overlay = createAbsenceOverlay(ctx, placement.topPx, placement.heightPx, dateStr, absence);
-        bothInner.appendChild(overlay);
+        if (group.isSpanSplitLayout) {
+          renderSpanSplitGroup(lessons, group);
+          continue;
+        }
+
+        for (const lesson of lessons) {
+          renderSingleLesson(lesson);
+        }
       }
-    } catch (e) {
-      log("debug", "failed to render absence overlays", e);
-    }
-  }
-
-  /**
-   * Render grid/calendar widget for a single student
-   * Main entry point for grid rendering
-   *
-   * Workflow:
-   * 1. Validate and extract configuration (week view / custom range)
-   * 2. Calculate time range (vertical axis)
-   * 3. Create header with day labels
-   * 4. Create time axis with period/hour labels
-   * 5. For each day:
-   *    - Extract and normalize lessons
-   *    - Filter by max periods / time cutoff
-   *    - Render lesson cells (full-width / ticker / split view)
-   *    - Add absence overlays
-   *    - Add holiday / no-lessons notices
-   * 6. Initialize now-line updater
-   *
-   * @param {Object} ctx - Main module context
-   * @param {string} studentTitle - Student name
-   * @param {Object} studentConfig - Student-specific configuration
-   * @param {Array} timetable - Array of lesson objects
-   * @param {Array} timeUnits - Array of time unit objects (periods)
-   * @param {Array} absences - Array of absence objects
-   * @returns {HTMLElement} Grid widget wrapper element
-   */
-  function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, timeUnits, absences) {
-    const config = validateAndExtractGridConfig(ctx, studentConfig);
-    const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
-    let { allStart, allEnd } = timeRange;
-    allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
-
-    const totalMinutes = allEnd - allStart;
-    const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
-    const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
-    const todayDateStr = formatDateKey(baseDate);
-    const hasLessonsForDate = (dateKey) => getSourceLessonsForDay(ctx, studentTitle, timetable, dateKey).length > 0;
-    const displayDates = config.weekView
-      ? Array.from({ length: config.totalDisplayDays }, (_, index) => {
-          const dayOffset = config.startOffset + index;
-          return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
-        })
-      : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
-    const wrapper = document.createElement("div");
-
-    const widgetCtx = createWidgetContext("grid", studentConfig, root.util || {}, ctx);
-    if (widgetCtx.isVerbose && studentTitle && typeof addHeader === "function") {
-      const headerContainer = document.createElement("div");
-      headerContainer.className = "wu-widget-container bright small light";
-      addHeader(headerContainer, buildWidgetHeaderTitle(ctx, "grid", widgetCtx, studentTitle));
-      wrapper.appendChild(headerContainer);
     }
 
-    const { header, gridTemplateColumns } = createGridHeader(displayDates, config.gridDateFormat, ctx, {
-      formatDisplayDate,
-      formatDisplayTime,
-      toMinutesSinceMidnight,
-    });
+    /**
+     * Create absence overlay element
+     * Visual indicator for absence periods (excused/unexcused)
+     *
+     * @param {Object} ctx - Main module context (provides translate)
+     * @param {number} topPx - Top position in pixels
+     * @param {number} heightPx - Height in pixels
+     * @param {string} dateStr - Date string (YYYYMMDD)
+     * @param {Object} absence - Absence object (reason, excused)
+     * @returns {HTMLElement} Absence overlay div
+     */
+    function createAbsenceOverlay(ctx, topPx, heightPx, dateStr, absence) {
+      const overlay = document.createElement("div");
+      overlay.className = "grid-absence-overlay";
+      overlay.style.top = `${topPx}px`;
+      overlay.style.height = `${heightPx}px`;
+      overlay.setAttribute("data-date", dateStr);
 
-    wrapper.appendChild(header);
+      const excusedLabel = absence.excused ? ctx.translate("excused") : ctx.translate("unexcused");
+      const reasonText = absence.reason || ctx.translate("no_reason");
+      const absenceLabel = ctx.translate("absence_label");
 
-    const grid = document.createElement("div");
-    grid.className = "grid-combined";
-    grid.style.gridTemplateColumns = gridTemplateColumns;
-    const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
-    grid.appendChild(timeAxis);
+      overlay.setAttribute("title", `${absenceLabel}: ${reasonText} (${excusedLabel})`);
 
-    displayDates.forEach((targetDate, dayIndex) => {
-      renderGridDayColumn({
-        grid,
-        ctx,
-        studentTitle,
-        studentConfig,
-        timetable,
-        timeUnits,
-        absences,
-        targetDate,
-        todayDateStr,
-        allStart,
-        allEnd,
-        totalMinutes,
-        totalHeight,
-        dayIndex,
-        maxGridLessons: config.maxGridLessons,
+      const icon = document.createElement("span");
+      icon.className = "absence-icon";
+      icon.setAttribute("aria-hidden", "true");
+      overlay.appendChild(icon);
+
+      if (absence.reason) {
+        const reasonText = document.createElement("span");
+        reasonText.className = "absence-reason";
+        reasonText.textContent = absence.reason;
+        overlay.appendChild(reasonText);
+      }
+
+      return overlay;
+    }
+
+    /**
+     * Renders semi-transparent overlays for each absence period
+     * Clamps overlays to visible time range
+     *
+     * @param { HTMLElement } bothInner - Day column inner container
+     * @param { Array } dayAbsences - Array of absence objects for this day
+     * @param { number } allStart - Start time in minutes
+     * @param { number } allEnd - End time in minutes
+     * @param { number } totalHeight - Total height in pixels
+     * @param { Object } ctx - Main module context
+     */
+    function addAbsenceOverlays(bothInner, dayAbsences, allStart, allEnd, totalHeight, ctx) {
+      if (!Array.isArray(dayAbsences) || dayAbsences.length === 0) {
+        return;
+      }
+
+      const totalMinutes = Math.max(1, allEnd - allStart);
+
+      try {
+        for (const absence of dayAbsences) {
+          const placement = getVisibleTimeBlockPlacement(
+            ctx._toMinutes(absence?.startTime),
+            ctx._toMinutes(absence?.endTime),
+            allStart,
+            allEnd,
+            totalMinutes,
+            totalHeight,
+          );
+
+          if (!placement) {
+            continue;
+          }
+
+          const dateStr = String(absence?.date || "");
+
+          const overlay = createAbsenceOverlay(ctx, placement.topPx, placement.heightPx, dateStr, absence);
+          bothInner.appendChild(overlay);
+        }
+      } catch (e) {
+        log("debug", "failed to render absence overlays", e);
+      }
+    }
+
+    /**
+     * Render grid/calendar widget for a single student
+     * Main entry point for grid rendering
+     *
+     * Workflow:
+     * 1. Validate and extract configuration (week view / custom range)
+     * 2. Calculate time range (vertical axis)
+     * 3. Create header with day labels
+     * 4. Create time axis with period/hour labels
+     * 5. For each day:
+     *    - Extract and normalize lessons
+     *    - Filter by max periods / time cutoff
+     *    - Render lesson cells (full-width / ticker / split view)
+     *    - Add absence overlays
+     *    - Add holiday / no-lessons notices
+     * 6. Initialize now-line updater
+     *
+     * @param {Object} ctx - Main module context
+     * @param {string} studentTitle - Student name
+     * @param {Object} studentConfig - Student-specific configuration
+     * @param {Array} timetable - Array of lesson objects
+     * @param {Array} timeUnits - Array of time unit objects (periods)
+     * @param {Array} absences - Array of absence objects
+     * @returns {HTMLElement} Grid widget wrapper element
+     */
+    function renderGridForStudent(ctx, studentTitle, studentConfig, timetable, timeUnits, absences) {
+      const config = validateAndExtractGridConfig(ctx, studentConfig);
+      const timeRange = calculateTimeRange(timetable, timeUnits, ctx);
+      let { allStart, allEnd } = timeRange;
+      allEnd = applyMaxLessonsLimit(allStart, allEnd, config.maxGridLessons, timeUnits);
+
+      const totalMinutes = allEnd - allStart;
+      const totalHeight = Math.max(120, Math.round(totalMinutes * config.pxPerMinute));
+      const baseDate = getBaseDateFromYmd(ctx._currentTodayYmd, ctx);
+      const todayDateStr = formatDateKey(baseDate);
+      const hasLessonsForDate = (dateKey) => getSourceLessonsForDay(ctx, studentTitle, timetable, dateKey).length > 0;
+      const displayDates = config.weekView
+        ? Array.from({ length: config.totalDisplayDays }, (_, index) => {
+            const dayOffset = config.startOffset + index;
+            return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + dayOffset);
+          })
+        : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
+      const wrapper = document.createElement("div");
+
+      const widgetCtx = createWidgetContext("grid", studentConfig, root.util || {}, ctx);
+      if (widgetCtx.isVerbose && studentTitle && typeof addHeader === "function") {
+        const headerContainer = document.createElement("div");
+        headerContainer.className = "wu-widget-container bright small light";
+        addHeader(headerContainer, buildWidgetHeaderTitle(ctx, "grid", widgetCtx, studentTitle));
+        wrapper.appendChild(headerContainer);
+      }
+
+      const { header, gridTemplateColumns } = createGridHeader(displayDates, config.gridDateFormat, ctx, {
+        formatDisplayDate,
+        formatDisplayTime,
+        toMinutesSinceMidnight,
       });
-    });
 
-    wrapper.appendChild(grid);
+      wrapper.appendChild(header);
 
-    scheduleGridPostRenderUpdates(ctx, wrapper);
+      const grid = document.createElement("div");
+      grid.className = "grid-combined";
+      grid.style.gridTemplateColumns = gridTemplateColumns;
+      const timeAxis = createTimeAxis(timeUnits, allStart, allEnd, totalHeight, totalMinutes, ctx);
+      grid.appendChild(timeAxis);
 
-    return wrapper;
-  }
-
-  /**
-   * Refresh past lesson masks
-   * Updates "past" CSS class on lesson cells based on current time
-   * Handles both regular lesson cells and ticker animations
-   * Called by now-line updater every minute and initially after rendering
-   *
-   * @param {Object} ctx - Main module context (provides _currentTodayYmd)
-   * @param {HTMLElement} rootEl - Root element to search (defaults to document)
-   */
-  function refreshPastMasks(ctx, rootEl = null) {
-    try {
-      if (!ctx) return;
-      const nowContext = getModuleDateContext(ctx);
-      const nowLocal = nowContext.date;
-      const todayYmd =
-        typeof ctx._currentTodayYmd === "number" && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
-      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-      const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
-
-      const getElementPastState = (element) => {
-        const dateValue = element?.getAttribute?.("data-date");
-        if (!dateValue) return null;
-        const rawEndMin = element.getAttribute("data-end-min");
-        const endMin = rawEndMin !== null && rawEndMin !== undefined ? Number(rawEndMin) : NaN;
-        return calcIsPast(Number(dateValue) || 0, endMin, todayYmd, nowMin);
-      };
-
-      const togglePastClass = (element, isPast) => {
-        if (!element?.classList || typeof isPast !== "boolean") return;
-        if (isPast) element.classList.add("past");
-        else element.classList.remove("past");
-      };
-
-      const lessons = scope.querySelectorAll(".grid-combined .grid-lesson");
-      lessons.forEach((ln) => {
-        togglePastClass(ln, getElementPastState(ln));
-      });
-
-      const tickers = scope.querySelectorAll(".grid-combined .lesson-ticker-wrapper");
-      tickers.forEach((ticker) => {
-        const isPast = getElementPastState(ticker);
-
-        // Update only top-level lesson cells within ticker.
-        // Nested `.lesson-content` nodes from buildLessonContent() must not receive
-        // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
-        const lessonDivs = Array.from(ticker.querySelectorAll(".lesson-content")).filter(
-          (div) => div.style.position === "absolute",
-        );
-        lessonDivs.forEach((div) => {
-          togglePastClass(div, isPast);
+      displayDates.forEach((targetDate, dayIndex) => {
+        renderGridDayColumn({
+          grid,
+          ctx,
+          studentTitle,
+          studentConfig,
+          timetable,
+          timeUnits,
+          absences,
+          targetDate,
+          todayDateStr,
+          allStart,
+          allEnd,
+          totalMinutes,
+          totalHeight,
+          dayIndex,
+          maxGridLessons: config.maxGridLessons,
         });
       });
-    } catch (e) {
-      log("warn", "failed to refresh past masks", e);
-    }
-  }
 
-  /**
-   * Update now-line position for all day columns
-   * Shows now-line only for today's column
-   * Hides now-line if showNowLine config is false
-   * Called by now-line updater every minute
-   *
-   * @param {Object} ctx - Main module context (provides studentConfig + defaults)
-   * @param {HTMLElement} rootEl - Root element to search (defaults to document)
-   * @returns {number} Number of now-lines updated
-   */
-  function updateNowLinesAll(ctx, rootEl = null) {
-    try {
-      if (!ctx) return;
-      const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, "grid", "showNowLine");
-      if (showNowLine === false) {
+      wrapper.appendChild(grid);
+
+      scheduleGridPostRenderUpdates(ctx, wrapper);
+
+      return wrapper;
+    }
+
+    /**
+     * Refresh past lesson masks
+     * Updates "past" CSS class on lesson cells based on current time
+     * Handles both regular lesson cells and ticker animations
+     * Called by now-line updater every minute and initially after rendering
+     *
+     * @param {Object} ctx - Main module context (provides _currentTodayYmd)
+     * @param {HTMLElement} rootEl - Root element to search (defaults to document)
+     */
+    function refreshPastMasks(ctx, rootEl = null) {
+      try {
+        if (!ctx) return;
+        const nowContext = getModuleDateContext(ctx);
+        const nowLocal = nowContext.date;
+        const todayYmd =
+          typeof ctx._currentTodayYmd === "number" && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
+        const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+        const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+
+        const getElementPastState = (element) => {
+          const dateValue = element?.getAttribute?.("data-date");
+          if (!dateValue) return null;
+          const rawEndMin = element.getAttribute("data-end-min");
+          const endMin = rawEndMin !== null && rawEndMin !== undefined ? Number(rawEndMin) : NaN;
+          return calcIsPast(Number(dateValue) || 0, endMin, todayYmd, nowMin);
+        };
+
+        const togglePastClass = (element, isPast) => {
+          if (!element?.classList || typeof isPast !== "boolean") return;
+          if (isPast) element.classList.add("past");
+          else element.classList.remove("past");
+        };
+
+        const lessons = scope.querySelectorAll(".grid-combined .grid-lesson");
+        lessons.forEach((ln) => {
+          togglePastClass(ln, getElementPastState(ln));
+        });
+
+        const tickers = scope.querySelectorAll(".grid-combined .lesson-ticker-wrapper");
+        tickers.forEach((ticker) => {
+          const isPast = getElementPastState(ticker);
+
+          // Update only top-level lesson cells within ticker.
+          // Nested `.lesson-content` nodes from buildLessonContent() must not receive
+          // `past`, otherwise a second pseudo-overlay is rendered in the inner content area.
+          const lessonDivs = Array.from(ticker.querySelectorAll(".lesson-content")).filter(
+            (div) => div.style.position === "absolute",
+          );
+          lessonDivs.forEach((div) => {
+            togglePastClass(div, isPast);
+          });
+        });
+      } catch (e) {
+        log("warn", "failed to refresh past masks", e);
+      }
+    }
+
+    /**
+     * Update now-line position for all day columns
+     * Shows now-line only for today's column
+     * Hides now-line if showNowLine config is false
+     * Called by now-line updater every minute
+     *
+     * @param {Object} ctx - Main module context (provides studentConfig + defaults)
+     * @param {HTMLElement} rootEl - Root element to search (defaults to document)
+     * @returns {number} Number of now-lines updated
+     */
+    function updateNowLinesAll(ctx, rootEl = null) {
+      try {
+        if (!ctx) return;
+        const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, "grid", "showNowLine");
+        if (showNowLine === false) {
+          const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+          const inners = scope.querySelectorAll(".day-column-inner");
+          inners.forEach((inner) => {
+            const nl = inner._nowLine;
+            if (nl) nl.style.display = "none";
+          });
+          return 0;
+        }
         const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
         const inners = scope.querySelectorAll(".day-column-inner");
+        const nowLocal = getModuleDateContext(ctx).date;
+        const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
+        let updated = 0;
         inners.forEach((inner) => {
+          if (!inner.classList?.contains("is-today")) {
+            const nl = inner._nowLine;
+            if (nl) nl.style.display = "none";
+            return;
+          }
           const nl = inner._nowLine;
-          if (nl) nl.style.display = "none";
+          const allS = inner._allStart;
+          const allE = inner._allEnd;
+          const h = inner._totalHeight;
+          if (!nl || allS === undefined || allE === undefined || h === undefined) return;
+          if (nowMin < allS || nowMin >= allE) {
+            nl.style.display = "none";
+            return;
+          }
+          nl.style.display = "block";
+          const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
+          nl.style.top = `${top}px`;
+          updated++;
         });
+        return updated;
+      } catch (e) {
+        log("warn", "updateNowLinesAll failed", e);
         return 0;
       }
-      const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
-      const inners = scope.querySelectorAll(".day-column-inner");
-      const nowLocal = getModuleDateContext(ctx).date;
-      const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-      let updated = 0;
-      inners.forEach((inner) => {
-        if (!inner.classList?.contains("is-today")) {
-          const nl = inner._nowLine;
-          if (nl) nl.style.display = "none";
-          return;
-        }
-        const nl = inner._nowLine;
-        const allS = inner._allStart;
-        const allE = inner._allEnd;
-        const h = inner._totalHeight;
-        if (!nl || allS === undefined || allE === undefined || h === undefined) return;
-        if (nowMin < allS || nowMin >= allE) {
-          nl.style.display = "none";
-          return;
-        }
-        nl.style.display = "block";
-        const top = Math.round(((nowMin - allS) / (allE - allS)) * h);
-        nl.style.top = `${top}px`;
-        updated++;
-      });
-      return updated;
-    } catch (e) {
-      log("warn", "updateNowLinesAll failed", e);
-      return 0;
     }
-  }
 
-  root.grid = {
-    refreshPastMasks,
-    updateNowLinesAll,
-    startNowLineUpdater,
-    stopNowLineUpdater,
-  };
-
-  const listOrEmpty = (value) => (Array.isArray(value) ? value : []);
-
-  /** The payload parts the grid draws from, each an array (empty when missing). */
-  function readGridData(studentSlice) {
-    const data = studentSlice?.data;
-    return {
-      lessons: listOrEmpty(data?.lessons),
-      timeUnits: listOrEmpty(data?.timeUnits),
-      absences: listOrEmpty(data?.absences),
-      holidays: listOrEmpty(data?.holidays?.ranges),
-      dayNotices: listOrEmpty(data?.dayNotices),
+    root.grid = {
+      refreshPastMasks,
+      updateNowLinesAll,
+      startNowLineUpdater,
+      stopNowLineUpdater,
     };
-  }
 
-  /** One student's grid, or null when there is nothing at all to draw. */
-  function renderStudentGrid(pluginContext, renderContext, studentSlice) {
-    const studentConfig = resolveStudentConfig(studentSlice);
-    const gridConfig = resolveGridConfig(studentConfig);
-    const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
-    const { lessons, timeUnits, absences, holidays, dayNotices } = readGridData(studentSlice);
+    const listOrEmpty = (value) => (Array.isArray(value) ? value : []);
 
-    if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
-      return null;
+    /** The payload parts the grid draws from, each an array (empty when missing). */
+    function readGridData(studentSlice) {
+      const data = studentSlice?.data;
+      return {
+        lessons: listOrEmpty(data?.lessons),
+        timeUnits: listOrEmpty(data?.timeUnits),
+        absences: listOrEmpty(data?.absences),
+        holidays: listOrEmpty(data?.holidays?.ranges),
+        dayNotices: listOrEmpty(data?.dayNotices),
+      };
     }
 
-    const pluginRuntimeContext = createGridPluginRuntimeContext(
-      pluginContext,
-      renderContext,
-      studentSlice,
-      effectiveStudentConfig,
-    );
-    const studentTitle = String(studentSlice?.student?.title || "").trim();
-    return renderGridForStudent(
-      pluginRuntimeContext,
-      studentTitle,
-      effectiveStudentConfig,
-      lessons,
-      timeUnits,
-      absences,
-    );
+    /** One student's grid, or null when there is nothing at all to draw. */
+    function renderStudentGrid(pluginContext, renderContext, studentSlice) {
+      const studentConfig = resolveStudentConfig(studentSlice);
+      const gridConfig = resolveGridConfig(studentConfig);
+      const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
+      const { lessons, timeUnits, absences, holidays, dayNotices } = readGridData(studentSlice);
+
+      if (timeUnits.length === 0 && holidays.length === 0 && dayNotices.length === 0 && lessons.length === 0) {
+        return null;
+      }
+
+      const pluginRuntimeContext = createGridPluginRuntimeContext(
+        pluginContext,
+        renderContext,
+        studentSlice,
+        effectiveStudentConfig,
+      );
+      const studentTitle = String(studentSlice?.student?.title || "").trim();
+      return renderGridForStudent(
+        pluginRuntimeContext,
+        studentTitle,
+        effectiveStudentConfig,
+        lessons,
+        timeUnits,
+        absences,
+      );
+    }
+
+    return { listOrEmpty, renderStudentGrid };
   }
 
   host.registerFrontendPlugin({
     id: "grid",
     hostApiVersion: 1,
+    // Not part of the host API (the host ignores it): lets tests reach the layout without a DOM.
+    layout: gridLayout,
 
     create(pluginContext) {
+      const { listOrEmpty, renderStudentGrid } = createGridRenderer(pluginContext.shared);
       return {
         render(renderContext) {
           const section = document.createElement("section");

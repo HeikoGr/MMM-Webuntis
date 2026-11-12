@@ -80,7 +80,7 @@ Files:
 - `lib/pluginLoader.js`, `lib/pluginHostBackend.js`, `lib/pluginCapabilityResolver.js`, `lib/pluginManifestValidator.js`, `lib/pluginValidationUtils.js`
 - `lib/webuntisClient.js` - public facade: fetch plan + core client + payload mapping
 - `lib/configValidator.js`
-- `lib/widgetConfigValidator.js` (student credentials only; plugin config is validated by the plugins)
+- `lib/studentConfigValidator.js` (student credentials only; plugin config is validated by the plugins)
 - `lib/runtime-utils.js`
 - `lib/mmm-shared/mmm-shared.js` (git submodule, see [Shared Submodule](#shared-submodule))
 

@@ -106,7 +106,7 @@ const nodeHelper = loadNodeHelper();
 
 function loadConfig(configPath) {
   if (!configPath) {
-    const candidates = ["./config/config.js", "../config/config.js", "../../config/config.js"];
+    const candidates = ["./config/.config.js", "./config/config.js", "../config/config.js", "../../config/config.js"];
     for (const candidate of candidates) {
       const abs = path.resolve(candidate);
       if (fs.existsSync(abs)) {

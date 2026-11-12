@@ -131,7 +131,7 @@ Warnings on the mirror are short user texts (`convertRestErrorToWarning()`); tec
 
 ### Configuration
 - 25 legacy config key mappings in `configValidator.js#applyLegacyMappings()` - don't break them
-- Widget-specific validation in `widgetConfigValidator.js` - check before assuming config structure
+- Student credential validation in `studentConfigValidator.js`; plugin config is validated by each plugin backend
 - Always validate config schema before using - see `MMM-Webuntis.js#defaultConfig`
 
 ### Logging Pattern
@@ -168,7 +168,9 @@ this._log('warn', '[feature] Warning:', error);
 - `lib/webuntis/dataFetchOrchestrator.js` - Timetable-first + parallel fetch (prevents silent token failures)
 - `lib/webuntis/dataOrchestration.js` - Data transformation + fetch range calculation (mapRestStatusToLegacyCode, normalizeDateToInteger, calculateFetchRanges)
 - `lib/configValidator.js` - Config schema + 25 legacy key mappings
-- `plugins/*/*.js` - first-party frontend/backend plugin implementations for all built-in widgets
+- `plugins/*/*.js` - first-party frontend/backend plugin implementations for all built-in widgets; a plugin
+  may split its frontend into several scripts (`entry.frontend` list, loaded in order) - the grid has
+  `layout.js` (pure layout arithmetic) before `frontend.js` (DOM)
 - `lib/frontendShared.js` - Shared frontend utilities and DOM helpers used by the module and plugins
 - `config/config.template.js` - Config schema with 90+ options (includes grid.fields for flexible display)
 - `tests/unit.test.js` - `node:test`-based unit tests, run via `node --run test`
@@ -183,7 +185,7 @@ this._log('warn', '[feature] Warning:', error);
 - `lib/webuntis/errorHandler.js` - Error mapping + warnings
 - `lib/webuntis/errorUtils.js` - Shared async/error helpers for internal API modules
 - `lib/webuntis/cookieJar.js` - Session cookie management
-- `lib/widgetConfigValidator.js` - Widget-specific config validation
+- `lib/studentConfigValidator.js` - Student credential validation (plugin config is validated by the plugins)
 
 Frontend date/time helpers (`formatHHMMTime`, `toMinutesSinceMidnight`, …) live in `lib/frontendShared.js`; there is no separate `dateTimeUtils.js`.
 

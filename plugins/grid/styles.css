@@ -442,7 +442,7 @@
   gap: var(--wu-ticker-stack-gap);
 }
 
-@keyframes ticker-scroll {
+@keyframes wu-ticker-scroll {
   0% {
     transform: translateX(0);
   }

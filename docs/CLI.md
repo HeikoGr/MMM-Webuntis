@@ -9,7 +9,7 @@ node --run debug
 ```
 
 That command:
-- auto-detects `config/config.js` when possible
+- auto-detects the config when possible: `config/.config.js` in the module folder, otherwise `config/config.js` (MagicMirror root)
 - loads all configured MMM-Webuntis modules
 - runs the real `node_helper.js` initialization and fetch flow
 - prints a backend-focused summary to the terminal

@@ -30,7 +30,16 @@
       "required": ["frontend"],
       "properties": {
         "frontend": {
-          "$ref": "#/$defs/relativePath"
+          "description": "One script, or several loaded in this order (e.g. a helper file before the one that registers the plugin).",
+          "oneOf": [
+            { "$ref": "#/$defs/relativePath" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/relativePath" },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          ]
         },
         "backend": {
           "$ref": "#/$defs/relativePath"

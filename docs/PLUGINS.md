@@ -49,6 +49,8 @@ plugins/
 
 Allowed variations:
 - `frontend.js` may point to a nested file such as `frontend/index.js`
+- `entry.frontend` may list several scripts, loaded one after another in that order: a helper file
+  first, the file that calls `registerFrontendPlugin()` last (the grid ships `["layout.js", "frontend.js"]`)
 - `backend.js` is optional
 - `styles.css` is optional and may be a list of CSS files
 - `translations/` is optional (see [Translations](#translations))
@@ -96,7 +98,7 @@ Required fields:
 - `version`
 - `title`
 - `type`
-- `entry.frontend`
+- `entry.frontend` (a path or a non-empty list of paths, each listed once)
 - `capabilities`
 - `compatibility.contractVersion`
 - `compatibility.hostApiVersion`
@@ -195,7 +197,9 @@ Backend discovery:
 Frontend loading:
 - receives the backend-built plugin registry
 - loads plugin CSS before first render
-- loads plugin frontend scripts on demand from the registry
+- loads plugin frontend scripts on demand from the registry, the scripts of one plugin in manifest
+  order, each after the previous one finished (`_loadPluginScripts`); the registry always sends
+  `entry.frontend` as a list
 - creates one frontend plugin instance per active plugin
 
 Plugins are sorted by `order`, then by `id`.
@@ -207,7 +211,7 @@ These are separate from the module-level `translations/` folder registered via `
 
 Load behavior (`MMM-Webuntis.js` → `_loadPluginTranslations`):
 
-- files are fetched relative to the plugin root derived from `entry.frontend`
+- files are fetched relative to the plugin root derived from the first `entry.frontend` script
 - load order is `en`, then the base language, then the full locale — for example
   `en` → `de` → `de-AT`
 - later files shallow-merge over earlier ones, so `en.json` acts as the fallback layer
@@ -300,9 +304,9 @@ The four namespaces are forwarded verbatim from `window.MMMWebuntisFrontendShare
 grouping (`lib/frontendShared.js`). `shared.util` continues to expose every helper, including those
 not surfaced in a namespace.
 
-Always prefer `pluginContext.*` over reaching for the global directly. The first-party plugins still
-use the global in places because these namespaces were empty placeholders until recently — that is
-legacy, not the pattern to copy.
+Always use `pluginContext.*` instead of reaching for the global directly. The first-party plugins do:
+the small ones take `dom`/`time`/`formatting` in each function, `lessons` and `grid` build their
+renderer per instance from `pluginContext.shared` (`createLessonsRenderer`, `createGridRenderer`).
 
 ### Building markup
 
@@ -402,7 +406,7 @@ from the backend host like in live operation, only the data is read from fixture
 (see [ARCHITECTURE.md](ARCHITECTURE.md#demo-mode)).
 
 Plugin config validation is fully owned by the plugins: each backend implements `validateConfig()`
-on top of the shared helpers in `lib/pluginValidationUtils.js`. `lib/widgetConfigValidator.js` only
+on top of the shared helpers in `lib/pluginValidationUtils.js`. `lib/studentConfigValidator.js` only
 covers student credentials, which belong to no single plugin.
 
 These are current implementation details, not separate legacy documentation targets.

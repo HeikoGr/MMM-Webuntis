@@ -66,7 +66,7 @@ Parameters:
   username    Username (supports spaces and umlauts, e.g., "P. Müller")
 
 Options:
-  --from-config   Read credentials from config/config.js
+  --from-config   Read credentials from config/.config.js
   --help          Show this help message
 
 EOF
@@ -90,10 +90,10 @@ check_dependencies() {
 }
 
 read_from_config() {
-  local config_file="$PROJECT_ROOT/config/config.js"
+  local config_file="$PROJECT_ROOT/config/.config.js"
 
   if [[ ! -f "$config_file" ]]; then
-    echo -e "${RED}Error: config/config.js not found${NC}" >&2
+    echo -e "${RED}Error: config/.config.js not found${NC}" >&2
     exit 1
   fi
 
@@ -129,7 +129,7 @@ read_from_config() {
 
   if [[ -z "$SCHOOL" || -z "$SERVER" || -z "$USER" || -z "$PASS" ]]; then
     echo -e "${RED}Error: Missing credentials in config.js${NC}" >&2
-    echo -e "${YELLOW}Make sure school, server, username, and password are set in config/config.js${NC}" >&2
+    echo -e "${YELLOW}Make sure school, server, username, and password are set in config/.config.js${NC}" >&2
     exit 1
   fi
 }

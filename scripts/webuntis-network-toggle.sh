@@ -50,7 +50,8 @@ show_pm2_logs_snapshot() {
     return
   fi
 
-  local snapshot_file="/tmp/mmm-webuntis-pm2-${HOST//[^a-zA-Z0-9._-]/_}-$(date +%s).log"
+  local snapshot_file
+  snapshot_file="/tmp/mmm-webuntis-pm2-${HOST//[^a-zA-Z0-9._-]/_}-$(date +%s).log"
 
   # --nostream avoids follow mode so the script never blocks indefinitely.
   if pm2 logs magicmirror --nostream --lines "${PM2_LINES}" >"${snapshot_file}" 2>&1; then
