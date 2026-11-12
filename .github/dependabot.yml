@@ -21,8 +21,15 @@ updates:
     # A fresh release waits 3 days: a compromised or broken one is usually pulled by then.
     cooldown:
       default-days: 3
+    # Split by dependency type: devDependencies merge themselves (dependabot-auto-merge.yml),
+    # runtime dependencies wait for a review - one group each, so a tooling bump never waits
+    # behind a runtime bump in the same PR.
     groups:
-      npm:
+      npm-development:
+        dependency-type: development
+        update-types: [minor, patch]
+      npm-production:
+        dependency-type: production
         update-types: [minor, patch]
 
   # lib/mmm-shared is a git submodule - this opens a PR whenever it moves on main.

@@ -1,11 +1,10 @@
 (function registerMessagesOfDayPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function") {
     return;
   }
 
-  const { addFullRow, addHeader, createContainer, createElement, el, headerTitleNodes, richTextNodes } = sharedDom;
+  // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
   const listOrEmpty = (value) => (Array.isArray(value) ? value : []);
 
@@ -14,6 +13,8 @@
     hostApiVersion: 1,
 
     create(pluginContext) {
+      const { addFullRow, addHeader, createContainer, createElement, el, headerTitleNodes, richTextNodes } =
+        pluginContext.dom;
       const translate = (key, fallback) => {
         if (typeof pluginContext?.translate !== "function") return fallback;
         const translated = pluginContext.translate(key, fallback);

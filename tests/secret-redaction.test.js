@@ -226,3 +226,38 @@ test("the mirror shows at most three warnings, critical ones first, the rest as 
     global.document = previousDocument;
   }
 });
+
+test("the normalized-config debug log redacts every credential-named field, at any depth", () => {
+  const { normalizeModuleConfig } = require("../lib/moduleConfig");
+  const lines = [];
+  const config = {
+    fetchInterval: 300000, // a legacy key makes the normalizer log the whole config
+    password: "module-password",
+    qrcode: "untis://setschool?key=ABCDEFGH",
+    students: [{ title: "Kid", password: "kid-password", sessionToken: "tok-123" }],
+    extra: { nested: { apiKey: "api-key-value", cookieString: "JSESSIONID=1" } },
+  };
+  normalizeModuleConfig(config, {
+    pluginHost: { plugins: [] },
+    logger: (level, _student, message) => lines.push(`${level} ${message}`),
+  });
+  const dump = lines.find((line) => line.startsWith("debug Normalized config"));
+  assert.ok(dump, "the normalized config is logged");
+  for (const secret of ["module-password", "ABCDEFGH", "kid-password", "tok-123", "api-key-value", "JSESSIONID=1"]) {
+    assert.ok(!dump.includes(secret), `${secret} must not be logged`);
+  }
+  assert.ok(dump.includes('"title": "Kid"'), "non-secret fields stay readable");
+  assert.equal(config.password, "module-password", "the running config is not changed");
+});
+
+test("request headers are redacted by name, whatever their case", () => {
+  const { redactSecretFields } = require("../lib/secretRedaction");
+  const headers = { Cookie: "a=1", authorization: "Bearer x", Authorization: "Bearer y", Accept: "application/json" };
+  redactSecretFields(headers);
+  assert.deepEqual(headers, {
+    Cookie: "<REDACTED>",
+    authorization: "<REDACTED>",
+    Authorization: "<REDACTED>",
+    Accept: "application/json",
+  });
+});

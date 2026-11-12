@@ -28,13 +28,13 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # lib/mmm-shared is a submodule; node_helper.js requires it at load time.
           submodules: recursive
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -50,6 +50,12 @@ jobs:
       - name: Lint
         run: node --run lint
 
+      # Shell scripts (devcontainer, diagnostics). Style notes do not fail the build, warnings do.
+      # shellcheck is preinstalled on the GitHub runner.
+      - name: Shellcheck
+        if: matrix.node == '22.22.2'
+        run: git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck --severity=warning
+
       # Run the suite twice. Date handling is the module's core job, and a bug in it is only
       # visible when the host clock differs from the school timezone - a UTC-only run cannot see
       # it. Europe/Berlin is the zone virtually every installation runs in; UTC is pinned
@@ -63,6 +69,21 @@ jobs:
         run: node --run test
         env:
           TZ: Europe/Berlin
+
+      # Coverage without a threshold: the table lands in the job summary and never fails the
+      # build. `node --run test:coverage` shows the same table locally.
+      - name: Coverage report
+        if: matrix.node == '22.22.2'
+        env:
+          TZ: UTC
+        run: |
+          node --run test:coverage > coverage.txt 2>&1 || true
+          {
+            echo "### Test coverage"
+            echo '```'
+            sed -n '/start of coverage report/,/end of coverage report/p' coverage.txt | sed 's/^ℹ //'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # The branch rulesets require this check by name; it passes only when every Node version passed.
   check:

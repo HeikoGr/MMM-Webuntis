@@ -36,7 +36,7 @@ jobs:
       # which is how 0.8.0 came to be skipped and how several releases ended up untagged.
       - name: Run release-please
         id: release-please
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
@@ -108,7 +108,7 @@ jobs:
       # lands on the release PR's commit on develop, which master now contains - so installs from
       # master and the tag agree.
       - name: Run release-please
-        uses: googleapis/release-please-action@v5
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json

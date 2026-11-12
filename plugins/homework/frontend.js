@@ -1,11 +1,10 @@
 (function registerHomeworkPlugin(root) {
   const host = root.MMMWebuntisPluginHost;
-  const sharedDom = root.MMMWebuntisFrontendShared?.dom;
-  if (!host || typeof host.registerFrontendPlugin !== "function" || !sharedDom) {
+  if (!host || typeof host.registerFrontendPlugin !== "function") {
     return;
   }
 
-  const { addHeader, addRow, createContainer, createElement, el, headerTitleNodes, multilineNodes } = sharedDom;
+  // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
   function translate(pluginContext, key, fallback, replacements) {
     if (typeof pluginContext?.translate !== "function") return fallback;
@@ -30,8 +29,8 @@
     return format === "long" ? longName || shortName : shortName || longName;
   }
 
-  function formatDisplayDateValue(ymd, format) {
-    const formatter = root.MMMWebuntisFrontendShared?.util?.formatDisplayDate;
+  function formatDisplayDateValue(pluginContext, ymd, format) {
+    const formatter = pluginContext.formatting?.formatDisplayDate;
     if (typeof formatter === "function") {
       return formatter(ymd, format);
     }
@@ -66,6 +65,7 @@
   }
 
   function buildHeaderTitle(pluginContext, studentName, homeworkConfig) {
+    const { headerTitleNodes } = pluginContext.dom;
     const title = translate(pluginContext, "homework", "Homework");
     const daysLabel = translate(pluginContext, "widget_filter_days", "days");
     const nextDays = normalizeDays(homeworkConfig?.nextDays, 0);
@@ -91,11 +91,12 @@
   }
 
   function homeworkLabel(pluginContext) {
-    return el("span", "wu-homework__label", translate(pluginContext, "homework", "Homework"));
+    return pluginContext.dom.el("span", "wu-homework__label", translate(pluginContext, "homework", "Homework"));
   }
 
   /** Right-hand cell: subject and text as configured, the widget label when both are off or empty. */
   function buildContentCell(pluginContext, homework, homeworkConfig) {
+    const { el, multilineNodes } = pluginContext.dom;
     const subjectLabel = homeworkConfig?.showSubject ? getFieldDisplayName(homework?.subject || null, "long") : "";
     const text = homeworkConfig?.showText ? String(homework?.text || "").trim() : "";
     const subject = subjectLabel ? el("b", "wu-homework__subject", subjectLabel) : null;
@@ -106,6 +107,7 @@
 
   /** "no homework" or "data unavailable" in place of the list. */
   function addEmptyRow(pluginContext, container, studentSlice, studentLabelText) {
+    const { addRow } = pluginContext.dom;
     const unavailable = studentSlice?.state?.collections?.homework?.status === "unavailable";
     addRow(
       container,
@@ -120,6 +122,7 @@
   }
 
   function renderStudent(pluginContext, studentSlice) {
+    const { addHeader, addRow, createContainer, el } = pluginContext.dom;
     const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
     const studentConfig = resolveStudentConfig(studentSlice);
     const homeworkConfig = resolveHomeworkConfig(studentConfig);
@@ -137,7 +140,9 @@
     }
 
     for (const homework of homeworks.slice().sort(compareHomework)) {
-      const due = homework?.dueDate ? formatDisplayDateValue(homework.dueDate, homeworkConfig?.dateFormat) : "";
+      const due = homework?.dueDate
+        ? formatDisplayDateValue(pluginContext, homework.dueDate, homeworkConfig?.dateFormat)
+        : "";
       const dateCell = due ? el("span", "wu-homework__date", due) : homeworkLabel(pluginContext);
       addRow(
         container,
@@ -157,7 +162,7 @@
     create(pluginContext) {
       return {
         render(renderContext) {
-          const wrapper = createElement("section", "wu-plugin wu-plugin-homework");
+          const wrapper = pluginContext.dom.createElement("section", "wu-plugin wu-plugin-homework");
           const students = Array.isArray(renderContext?.students) ? renderContext.students : [];
           for (const studentSlice of students) {
             wrapper.appendChild(renderStudent(pluginContext, studentSlice));

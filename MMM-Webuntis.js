@@ -234,7 +234,8 @@ Module.register("MMM-Webuntis", {
     }
     if (this._pluginTranslationsById.has(pluginId)) return;
 
-    const frontendEntry = String(pluginEntry?.entry?.frontend || "").trim();
+    // Translations sit next to the plugin's first frontend script.
+    const frontendEntry = String(pluginEntry?.entry?.frontend?.[0] || "").trim();
     const lastSlash = frontendEntry.lastIndexOf("/");
     const pluginRoot = lastSlash === -1 ? "" : frontendEntry.slice(0, lastSlash);
     if (!pluginRoot) {
@@ -402,14 +403,22 @@ Module.register("MMM-Webuntis", {
     });
   },
 
-  _loadPluginScript(pluginEntry) {
-    return new Promise((resolve, reject) => {
-      const scriptPath = pluginEntry?.entry?.frontend;
-      if (!scriptPath) {
-        reject(new Error(`Plugin ${pluginEntry?.id || "unknown"} is missing a frontend entry.`));
-        return;
-      }
+  /**
+   * Load a plugin's frontend scripts one after another, in manifest order: a later script may use
+   * what an earlier one defined (the grid's layout before its renderer).
+   */
+  async _loadPluginScripts(pluginEntry) {
+    const scriptPaths = Array.isArray(pluginEntry?.entry?.frontend) ? pluginEntry.entry.frontend : [];
+    if (scriptPaths.length === 0) {
+      throw new Error(`Plugin ${pluginEntry?.id || "unknown"} is missing a frontend entry.`);
+    }
+    for (const scriptPath of scriptPaths) {
+      await this._loadPluginScriptFile(scriptPath);
+    }
+  },
 
+  _loadPluginScriptFile(scriptPath) {
+    return new Promise((resolve, reject) => {
       const src = this.file(scriptPath);
       const existing = document.querySelector(`script[data-wu-plugin-script="${src}"]`);
       if (existing) {
@@ -455,7 +464,7 @@ Module.register("MMM-Webuntis", {
         .then(() => {
           this._loadPluginStyles(pluginEntry);
           // Texts and script load side by side; the widget renders once both are there (state.loaded).
-          return Promise.all([this._loadPluginTranslations(pluginEntry), this._loadPluginScript(pluginEntry)]);
+          return Promise.all([this._loadPluginTranslations(pluginEntry), this._loadPluginScripts(pluginEntry)]);
         })
         .then(() => {
           state.loaded = true;
@@ -518,8 +527,8 @@ Module.register("MMM-Webuntis", {
    * Build the context object handed to a frontend plugin's create().
    *
    * The dom/time/formatting/shared namespaces are forwarded from the shared frontend API
-   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. Some plugins still reach for
-   * the global directly; new plugin code should use `pluginContext.*`. See docs/PLUGINS.md.
+   * (`window.MMMWebuntisFrontendShared`), which owns their grouping. Plugins use these, never the
+   * global itself. See docs/PLUGINS.md.
    *
    * @param {Object} pluginEntry - Registry entry for the plugin
    * @returns {Object} Plugin context

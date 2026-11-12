@@ -86,10 +86,10 @@ function debugLog(message) {
 }
 
 // Load config
-const configPath = path.join(__dirname, "../config/config.js");
+const configPath = path.join(__dirname, "../config/.config.js");
 if (!fs.existsSync(configPath)) {
   throw new Error(
-    `Config file not found: ${configPath}. Please create config/config.js from config/config.template.js`,
+    `Config file not found: ${configPath}. Please create config/.config.js from config/config.template.js`,
   );
 }
 

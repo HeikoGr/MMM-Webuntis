@@ -140,12 +140,31 @@ function loadFrontendShared(extraGlobals = {}) {
 }
 
 /** Runs a frontend plugin file in a context from loadFrontendShared() and returns its definition. */
+/** Run a plugin's frontend scripts in manifest order, as the host does, and return what it registered. */
 function loadPlugin(context, pluginId) {
   let definition = null;
   context.MMMWebuntisPluginHost = { registerFrontendPlugin: (plugin) => (definition = plugin) };
-  const source = fs.readFileSync(path.join(__dirname, "..", "..", "plugins", pluginId, "frontend.js"), "utf8");
-  vm.runInContext(source, context);
+  const pluginRoot = path.join(__dirname, "..", "..", "plugins", pluginId);
+  const { frontend } = JSON.parse(fs.readFileSync(path.join(pluginRoot, "manifest.json"), "utf8")).entry;
+  for (const script of [].concat(frontend)) {
+    vm.runInContext(fs.readFileSync(path.join(pluginRoot, script), "utf8"), context);
+  }
   return definition;
 }
 
-module.exports = { FakeElement, FakeText, createFakeDocument, loadFrontendShared, loadPlugin };
+/**
+ * The pluginContext a plugin gets from the host (MMM-Webuntis.js, _createFrontendPluginContext): the shared
+ * namespaces of the given context plus whatever the test sets (translate, log, ...).
+ */
+function pluginContextFor(context, extra = {}) {
+  const shared = context.MMMWebuntisFrontendShared || {};
+  return {
+    dom: shared.dom || {},
+    time: shared.time || {},
+    formatting: shared.formatting || {},
+    shared,
+    ...extra,
+  };
+}
+
+module.exports = { FakeElement, FakeText, createFakeDocument, loadFrontendShared, loadPlugin, pluginContextFor };

@@ -820,16 +820,6 @@
   /* Gap between stacked lessons */
 }
 
-@keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
 /* Apply styling to ticker items based on lesson type */
 .MMM-Webuntis .lesson-ticker-wrapper .ticker-item .lesson-content.past::after {
   position: absolute;
@@ -1200,10 +1190,10 @@
   background-color: var(--wu-critical-bg);
   color: var(--wu-critical-color);
   font-weight: 600;
-  animation: pulse-warning 2s ease-in-out infinite;
+  animation: wu-pulse-warning 2s ease-in-out infinite;
 }
 
-@keyframes pulse-warning {
+@keyframes wu-pulse-warning {
   0%,
   100% {
     opacity: 1;

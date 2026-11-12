@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { richTextToPlainText, sanitizeRichText } = require("../lib/webuntis/dataOrchestration");
-const { FakeElement, FakeText, loadFrontendShared, loadPlugin } = require("./helpers/fake-dom");
+const { FakeElement, FakeText, loadFrontendShared, loadPlugin, pluginContextFor } = require("./helpers/fake-dom");
 
 /**
  * Renders messages with the real frontendShared.js and the real plugin. DOMParser does not exist in
@@ -18,7 +18,7 @@ function renderMessages(messages) {
   }
   const context = loadFrontendShared({ DOMParser });
   const plugin = loadPlugin(context, "messagesofday");
-  const section = plugin.create({ translate: (_key, fallback) => fallback }).render({
+  const section = plugin.create(pluginContextFor(context, { translate: (_key, fallback) => fallback })).render({
     students: [{ student: { title: "Kind" }, data: { messages } }],
   });
   return { section, parsed };
