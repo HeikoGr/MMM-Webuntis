@@ -162,6 +162,7 @@ function pluginContextFor(context, extra = {}) {
     dom: shared.dom || {},
     time: shared.time || {},
     formatting: shared.formatting || {},
+    widget: shared.widget || {},
     shared,
     ...extra,
   };

@@ -19,11 +19,9 @@
     const LESSON_ACTIVITY_TYPE = Object.freeze({
       EXAM: "EXAM",
     });
+    const { el, iconSpan, addRow } = root.dom;
     const {
       log,
-      el,
-      iconSpan,
-      addRow,
       initializeWidgetContextAndHeader,
       formatDisplayDate,
       currentTimeAsHHMM,
@@ -35,25 +33,7 @@
       getFieldDisplayName,
       getFirstFieldName,
       normalizeComparableText,
-    } = root.util?.resolveWidgetHelpers?.(root) || {};
-
-    function getCurrentDateContext(config) {
-      return root.time.getCurrentDateContext(config);
-    }
-
-    function translate(pluginContext, key, fallback, replacements) {
-      if (typeof pluginContext?.translate !== "function") return fallback;
-      const translated = pluginContext.translate(key, fallback, replacements);
-      return translated || fallback;
-    }
-
-    function buildHolidayMapFromRanges(holidays) {
-      return root.util.buildHolidayMapFromRanges(holidays);
-    }
-
-    function buildDayNoticeMap(dayNotices) {
-      return root.util.buildDayNoticeMap(dayNotices);
-    }
+    } = root.util;
 
     function normalizeHHMMValue(value) {
       if (value === null || value === undefined) return null;
@@ -189,12 +169,6 @@
       return findNextSchoolDay(today, lessonsByDate, holidayMap);
     }
 
-    function resolveStudentConfig(studentSlice) {
-      const config = studentSlice?.context?.config;
-      if (!config || typeof config !== "object" || Array.isArray(config)) return {};
-      return config;
-    }
-
     function resolveLessonsConfig(studentConfig) {
       const pluginConfig =
         studentConfig?.plugins?.lessons?.config && typeof studentConfig.plugins.lessons.config === "object"
@@ -236,28 +210,28 @@
         logLevel:
           renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
       };
-      const dateContext = getCurrentDateContext(effectiveConfig);
+      const dateContext = root.time.getCurrentDateContext(effectiveConfig);
 
       return {
         config: effectiveConfig,
         holidayMapByStudent: {
-          [studentTitle]: buildHolidayMapFromRanges(holidays),
+          [studentTitle]: root.util.buildHolidayMapFromRanges(holidays),
         },
         dayNoticeMapByStudent: {
-          [studentTitle]: buildDayNoticeMap(dayNotices),
+          [studentTitle]: root.util.buildDayNoticeMap(dayNotices),
         },
         collectionStateByStudent: {
           [studentTitle]: studentSlice?.state?.collections || {},
         },
         _currentTodayYmd: dateContext.ymd,
         getCurrentDateContext(configOverride = null) {
-          return getCurrentDateContext(configOverride || effectiveConfig);
+          return root.time.getCurrentDateContext(configOverride || effectiveConfig);
         },
         _computeTodayYmdValue() {
           return this._currentTodayYmd || this.getCurrentDateContext().ymd;
         },
         translate(key, replacements, fallback = key) {
-          return translate(pluginContext, key, fallback, replacements);
+          return pluginContext.translate(key, fallback, replacements);
         },
       };
     }
@@ -376,7 +350,7 @@
       const effectiveStudentTitle = String(studentTitle || studentConfig?.title || studentCellTitle || "");
       log("debug", `[LESSONS-DEBUG] renderLessonsForStudent called for ${effectiveStudentTitle}`);
 
-      const widgetCtx = createWidgetContext("lessons", studentConfig, root.util || {}, ctx);
+      const widgetCtx = createWidgetContext("lessons", studentConfig, root.util, ctx);
       const getLessonsConfig = (key, optionsOrFallback) => widgetCtx.getConfig(key, optionsOrFallback);
 
       const configuredNext = getLessonsConfig("nextDays");
@@ -706,7 +680,6 @@
       buildStartTimesMap,
       renderLessonsForStudent,
       resolveLessonsConfig,
-      resolveStudentConfig,
     };
   }
 
@@ -721,7 +694,6 @@
         buildStartTimesMap,
         renderLessonsForStudent,
         resolveLessonsConfig,
-        resolveStudentConfig,
       } = createLessonsRenderer(pluginContext.shared);
       return {
         render(renderContext) {
@@ -731,7 +703,7 @@
           let renderedContainers = 0;
 
           for (const studentSlice of students) {
-            const studentConfig = resolveStudentConfig(studentSlice);
+            const studentConfig = pluginContext.widget.resolveStudentConfig(studentSlice);
             const lessonsConfig = resolveLessonsConfig(studentConfig);
             const effectiveStudentConfig = buildEffectiveLessonsStudentConfig(studentConfig, lessonsConfig);
             const studentTitle = String(studentSlice?.student?.title || "").trim();

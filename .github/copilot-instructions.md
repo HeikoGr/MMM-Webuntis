@@ -161,7 +161,7 @@ this._log('warn', '[feature] Warning:', error);
 - `lib/secretRedaction.js` - `redactSecrets()` for every text leaving the backend (logs, warnings, FETCH_FAILED/CONFIG_INVALID), config secrets registered in `prepareConfig()`
 - `lib/studentDiscovery.js` - Parent-account student auto-discovery
 - `lib/warningUtils.js` - Warning classification (`classifyWarningMetaFromError`), group collectors, payload merge
-- `lib/webuntisClient.js` - Public WebUntis entry point for backend consumers
+- `lib/payloadClient.js` - fetch plan and `PayloadClient` (core client + payload mapping), used by `node_helper.js`
 - `lib/webuntis/authService.js` - Auth, QR code, token caching (JWT `exp`, 60s buffer)
 - `lib/webuntis/webuntisApiService.js` - Generic API caller for all 5 data types (returns { data, status })
 - `lib/webuntis/restClient.js` - REST wrapper (headers, error handling, retry, returns HTTP status)
@@ -190,9 +190,9 @@ this._log('warn', '[feature] Warning:', error);
 Frontend date/time helpers (`formatHHMMTime`, `toMinutesSinceMidnight`, …) live in `lib/frontendShared.js`; there is no separate `dateTimeUtils.js`.
 
 Boundary rule:
-- Only `lib/webuntisClient.js` is a public WebUntis API entry point at the lib root.
+- Fetching goes through `lib/payloadClient.js` (`buildFetchPlan`, `PayloadClient.fetchStudentData`); `node_helper.js` imports other `lib/webuntis/` modules directly only for auth, error formatting, the response cache, debug dumps and holiday extraction.
 - Everything under `lib/webuntis/` is internal implementation detail unless a change explicitly promotes it.
-- `lib/webuntis/` must not import `lib/mmm-adapter/`; the public facade composes core bundles with the MMM adapter.
+- `lib/webuntis/` must not import `lib/mmm-adapter/`; `lib/payloadClient.js` composes core bundles with the MMM adapter.
 
 **Documentation** (especially important for understanding decisions):
 - `docs/ARCHITECTURE.md` - Mermaid diagrams of data flows
@@ -472,7 +472,7 @@ Security note:
 
 **Frontend** (requires browser/display):
 - Widget rendering (`plugins/*/*.js`, plus `lib/frontendShared.js` for shared helpers)
-- CSS styling (MMM-Webuntis.css, custom.css)
+- CSS styling (MMM-Webuntis.css, plugins/*/styles.css, custom.css)
 - Socket message handling (MMM-Webuntis.js)
 - Browser console errors
 

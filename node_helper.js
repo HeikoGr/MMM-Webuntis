@@ -1,15 +1,12 @@
 const NodeHelper = require("node_helper");
+const { version: MODULE_VERSION } = require("./package.json");
 const Log = require("logger");
 const shared = require("./lib/mmm-shared/mmm-shared");
 const { createInstanceHub } = require("./lib/mmm-shared/backend-session");
 
-const {
-  AuthService,
-  WebUntisClient,
-  formatError,
-  convertRestErrorToWarning,
-  buildFetchPlan,
-} = require("./lib/webuntisClient");
+const AuthService = require("./lib/webuntis/authService");
+const { formatError, convertRestErrorToWarning, isNetworkError } = require("./lib/webuntis/errorHandler");
+const { PayloadClient, buildFetchPlan } = require("./lib/payloadClient");
 const { ApiStatusTracker, apiStatusKey, extractHttpStatus } = require("./lib/apiStatusTracker");
 const {
   buildEffectiveStudentConfig,
@@ -33,7 +30,6 @@ const {
   collectValidationWarnings,
   createGroupWarningCollector,
   createWarningMetaMap,
-  isNetworkError,
   mergeGroupWarningsIntoPayload,
   mergeUniqueWarnings,
   redactPayloadWarnings,
@@ -75,7 +71,7 @@ async function mapWithConcurrency(items, limit, fn) {
  * This file adds the WebUntis parts: config preparation, the per-credential fetch loop and the
  * demo mode. Everything else lives in lib/: config normalization (moduleConfig), student discovery
  * (studentDiscovery), auth (authSession + webuntis/authService), endpoint status and circuit
- * breaker (apiStatusTracker), WebUntis fetching (webuntisClient) and payload building
+ * breaker (apiStatusTracker), WebUntis fetching (payloadClient) and payload building
  * (mmm-adapter/mmmPayloadMapper).
  */
 module.exports = NodeHelper.create({
@@ -103,7 +99,7 @@ module.exports = NodeHelper.create({
     this.notifications = shared.buildNotifications("MMM-Webuntis");
     this._authService = new AuthService({ logger: (level, message) => log(level, null, `[lib] ${message}`) });
     this._apiStatus = new ApiStatusTracker({ logger: log });
-    this._client = new WebUntisClient({
+    this._client = new PayloadClient({
       mmLog: log,
       formatErr: formatError,
       apiStatus: this._apiStatus,
@@ -166,6 +162,8 @@ module.exports = NodeHelper.create({
       describe: (_identifier, config) => ({
         ...(this._configWarnings.get(config) || { warnings: [], warningMeta: [] }),
         plugins: buildFrontendPluginRegistry(config, this._pluginHost, __dirname),
+        // The frontend puts it on plugin asset URLs, so an update is not served from the browser cache.
+        moduleVersion: MODULE_VERSION,
       }),
       fetch: ({ identifier, config, reason }) => this.fetchInstance({ identifier, config, reason }),
     });

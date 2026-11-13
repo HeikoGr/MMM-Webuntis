@@ -116,3 +116,41 @@ test("every mapped legacy key gets a warning that names a different key", () => 
     assert.notEqual(from, to, warning);
   }
 });
+
+test("each warning points to exactly where the mapping puts the value", () => {
+  const keys = [
+    "fetchInterval",
+    "days",
+    "daysToShow",
+    "pastDaysToShow",
+    "mergeGapMin",
+    "mergeGapMinutes",
+    "maxGridLessons",
+    "showRegularLessons",
+    "showSubstitutionText",
+    "examsDays",
+    "examsDaysAhead",
+    "daysAhead",
+    "showExamSubject",
+    "showExamTeacher",
+    "examDateFormat",
+    "examsDaysBehind",
+    "homeworkDateFormat",
+    "absencesPastDays",
+    "absencesFutureDays",
+    "dateFormat",
+  ];
+  for (const key of keys) {
+    const { normalizedConfig } = applyLegacyMappings({ [key]: 3 });
+    const [warning] = generateDeprecationWarnings([key]);
+    const [, targets] = warning.match(/→ Use "([^"]+)" instead$/) || [];
+    assert.ok(targets, warning);
+    for (const target of targets.split(" / ")) {
+      const value = target.split(".").reduce((node, part) => node?.[part], normalizedConfig);
+      assert.equal(value, 3, `${key} → ${target}`);
+    }
+  }
+  const { normalizedConfig } = applyLegacyMappings({ enableDebug: true });
+  assert.equal(normalizedConfig.logLevel, "debug");
+  assert.match(generateDeprecationWarnings(["enableDebug"])[0], /"logLevel"/);
+});
