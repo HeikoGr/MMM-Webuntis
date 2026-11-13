@@ -6,70 +6,6 @@
 
   // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
-  function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== "function") return fallback;
-    const translated = pluginContext.translate(key, fallback, replacements);
-    return translated || fallback;
-  }
-
-  function normalizeDays(value, fallback = 0) {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.max(0, parsed);
-  }
-
-  function formatDisplayDateValue(pluginContext, ymd, format) {
-    const formatter = pluginContext.formatting?.formatDisplayDate;
-    if (typeof formatter === "function") {
-      return formatter(ymd, format);
-    }
-
-    const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, "0");
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
-    return `${fallbackDay}.${fallbackMonth}.`;
-  }
-
-  function formatDisplayTimeValue(pluginContext, value) {
-    const formatter = pluginContext.formatting?.formatDisplayTime;
-    if (typeof formatter === "function") {
-      return formatter(value);
-    }
-
-    const digits = String(value || "")
-      .replace(/\D/g, "")
-      .padStart(4, "0");
-    return digits.trim() ? `${digits.slice(0, 2)}:${digits.slice(2, 4)}` : "";
-  }
-
-  function compareByDateAndStartTime(left, right) {
-    const dateCompare = (Number(left?.date) || 0) - (Number(right?.date) || 0);
-    if (dateCompare !== 0) return dateCompare;
-    return (Number(left?.startTime) || 0) - (Number(right?.startTime) || 0);
-  }
-
-  function getFieldDisplayName(entry, format = "short") {
-    if (entry === null || entry === undefined) return "";
-    if (typeof entry === "string" || typeof entry === "number") {
-      return String(entry).trim();
-    }
-    if (typeof entry !== "object") return "";
-    const shortName = String(entry.name ?? "").trim();
-    const longName = String(entry.longname ?? "").trim();
-    return format === "long" ? longName || shortName : shortName || longName;
-  }
-
-  function getFirstFieldName(entries, format = "short") {
-    if (!Array.isArray(entries) || entries.length === 0) return "";
-    return getFieldDisplayName(entries[0], format);
-  }
-
-  function resolveStudentConfig(studentSlice) {
-    const config = studentSlice?.context?.config;
-    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
-    return config;
-  }
-
   function resolveAbsencesConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.absences?.config && typeof studentConfig.plugins.absences.config === "object"
@@ -79,20 +15,12 @@
     return { ...pluginConfig };
   }
 
-  function isVerboseMode(studentConfig) {
-    return (
-      String(studentConfig?.mode ?? "compact")
-        .trim()
-        .toLowerCase() === "verbose"
-    );
-  }
-
   function buildHeaderTitle(pluginContext, studentName, absencesConfig) {
     const { headerTitleNodes } = pluginContext.dom;
-    const title = translate(pluginContext, "absences", "Absences");
-    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
-    const nextDays = normalizeDays(absencesConfig?.nextDays, 0);
-    const pastDays = normalizeDays(absencesConfig?.pastDays, 0);
+    const title = pluginContext.translate("absences", "Absences");
+    const daysLabel = pluginContext.translate("widget_filter_days", "days");
+    const nextDays = pluginContext.widget.normalizeDays(absencesConfig?.nextDays, 0);
+    const pastDays = pluginContext.widget.normalizeDays(absencesConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -107,7 +35,7 @@
     infoDiv.replaceChildren(
       icon,
       document.createTextNode(
-        ` ${translate(pluginContext, "absences_unavailable_parent_account", "Absences unavailable for parent account")}`,
+        ` ${pluginContext.translate("absences_unavailable_parent_account", "Absences unavailable for parent account")}`,
       ),
     );
     return infoDiv;
@@ -135,16 +63,16 @@
   function describeExcuse(pluginContext, absence, showExcused) {
     if (!showExcused) return { label: "", className: "" };
     if (absence?.excused === true) {
-      return { label: translate(pluginContext, "excused", "excused"), className: "absence-excused" };
+      return { label: pluginContext.translate("excused", "excused"), className: "absence-excused" };
     }
     if (absence?.excused === false) {
-      return { label: translate(pluginContext, "unexcused", "unexcused"), className: "absence-unexcused" };
+      return { label: pluginContext.translate("unexcused", "unexcused"), className: "absence-unexcused" };
     }
     return { label: "", className: "" };
   }
 
   function absencesLabel(pluginContext) {
-    return pluginContext.dom.el("span", "wu-absence__label", translate(pluginContext, "absences", "Absences"));
+    return pluginContext.dom.el("span", "wu-absence__label", pluginContext.translate("absences", "Absences"));
   }
 
   /** Parts (each a node or node list) separated by single spaces. */
@@ -155,10 +83,13 @@
   /** Data cell of one absence: time range, subject with excuse note, reason. */
   function buildAbsenceDataNodes(pluginContext, absence, options) {
     const { el, multilineNodes } = pluginContext.dom;
-    const start = formatDisplayTimeValue(pluginContext, absence?.startTime);
-    const end = formatDisplayTimeValue(pluginContext, absence?.endTime);
+    const start = pluginContext.formatting.formatDisplayTime(absence?.startTime);
+    const end = pluginContext.formatting.formatDisplayTime(absence?.endTime);
     const timeRange = start && end ? `${start}-${end}` : start || end || "";
-    const subject = getFirstFieldName(Array.isArray(absence?.subjects) ? absence.subjects : [], "long");
+    const subject = pluginContext.widget.getFirstFieldName(
+      Array.isArray(absence?.subjects) ? absence.subjects : [],
+      "long",
+    );
     const reason = String(absence?.reason || "").trim();
     const excuse = describeExcuse(pluginContext, absence, options.showExcused);
 
@@ -185,8 +116,7 @@
       container,
       unavailable ? "absenceRowEmpty unavailable-notice" : "absenceRowEmpty",
       studentLabelText,
-      translate(
-        pluginContext,
+      pluginContext.translate(
         unavailable ? "unavailable" : "no_absences",
         unavailable ? "data unavailable" : "no absences",
       ),
@@ -197,10 +127,10 @@
   function renderStudent(pluginContext, studentSlice) {
     const { addHeader, addRow, createContainer, el } = pluginContext.dom;
     const absences = Array.isArray(studentSlice?.data?.absences) ? studentSlice.data.absences : [];
-    const studentConfig = resolveStudentConfig(studentSlice);
+    const studentConfig = pluginContext.widget.resolveStudentConfig(studentSlice);
     const absencesConfig = resolveAbsencesConfig(studentConfig);
     const studentTitle = String(studentSlice?.student?.title || "").trim();
-    const verboseMode = isVerboseMode(studentConfig);
+    const verboseMode = pluginContext.widget.isVerboseMode(studentConfig);
     const studentLabelText = verboseMode ? "" : studentTitle;
     const container = createContainer();
 
@@ -222,12 +152,12 @@
     };
     const visible = absences
       .filter((absence) => isWithinDayWindow(absence, nowYmd, absencesConfig?.pastDays, absencesConfig?.nextDays))
-      .sort(compareByDateAndStartTime)
+      .sort((left, right) => pluginContext.widget.compareByDateAndStartTime(left, right))
       .slice(0, limit);
 
     for (const absence of visible) {
       const dateStr = absence?.date
-        ? formatDisplayDateValue(pluginContext, absence.date, absencesConfig?.dateFormat)
+        ? pluginContext.formatting.formatDisplayDate(absence.date, absencesConfig?.dateFormat)
         : "";
       const meta = absencesConfig?.showDate && dateStr ? el("span", "wu-absence__date", dateStr) : "";
       addRow(

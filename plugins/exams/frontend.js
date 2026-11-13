@@ -6,60 +6,6 @@
 
   // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
-  function formatFallbackDate(ymd) {
-    const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, "0");
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
-    return `${fallbackDay}.${fallbackMonth}.`;
-  }
-
-  function formatDisplayDateValue(pluginContext, ymd, format) {
-    const formatter = pluginContext.formatting?.formatDisplayDate;
-    if (typeof formatter === "function") {
-      return formatter(ymd, format);
-    }
-    return formatFallbackDate(ymd);
-  }
-
-  function compareByDateAndStartTime(left, right) {
-    const dateCompare = (Number(left?.examDate) || 0) - (Number(right?.examDate) || 0);
-    if (dateCompare !== 0) return dateCompare;
-    return (Number(left?.startTime) || 0) - (Number(right?.startTime) || 0);
-  }
-
-  function getFieldDisplayName(entry, format = "short") {
-    if (entry === null || entry === undefined) return "";
-
-    if (typeof entry === "string" || typeof entry === "number") {
-      return String(entry).trim();
-    }
-
-    if (typeof entry !== "object") return "";
-
-    const shortName = String(entry.name ?? "").trim();
-    const longName = String(entry.longname ?? "").trim();
-    return format === "long" ? longName || shortName : shortName || longName;
-  }
-
-  function getFirstFieldName(entries, format = "short") {
-    if (!Array.isArray(entries) || entries.length === 0) return "";
-    return getFieldDisplayName(entries[0], format);
-  }
-
-  function normalizeDays(value, fallback = 0) {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.max(0, parsed);
-  }
-
-  function resolveStudentConfig(studentSlice) {
-    const config = studentSlice?.context?.config;
-    if (!config || typeof config !== "object" || Array.isArray(config)) {
-      return {};
-    }
-    return config;
-  }
-
   function resolveExamConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.exams?.config && typeof studentConfig.plugins.exams.config === "object"
@@ -69,25 +15,11 @@
     return { ...pluginConfig };
   }
 
-  function isVerboseMode(studentConfig) {
-    return (
-      String(studentConfig?.mode ?? "compact")
-        .trim()
-        .toLowerCase() === "verbose"
-    );
-  }
-
-  function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== "function") return fallback;
-    const translated = pluginContext.translate(key, fallback, replacements);
-    return translated || fallback;
-  }
-
   function buildHeaderTitle(pluginContext, studentName, examConfig) {
     const { headerTitleNodes } = pluginContext.dom;
-    const title = translate(pluginContext, "exams", "Exams");
-    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
-    const nextDays = normalizeDays(examConfig?.nextDays, 0);
+    const title = pluginContext.translate("exams", "Exams");
+    const daysLabel = pluginContext.translate("widget_filter_days", "days");
+    const nextDays = pluginContext.widget.normalizeDays(examConfig?.nextDays, 0);
     const filterLabel = `+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -107,7 +39,7 @@
     const name = el("span", "wu-exam__name", exam?.name);
     const cell = showSubject ? [el("span", "wu-exam__subject", exam?.subject), ": \u00a0", name] : [name];
 
-    const teacher = showTeacher ? getFirstFieldName(exam?.teachers, "short") : "";
+    const teacher = showTeacher ? pluginContext.widget.getFirstFieldName(exam?.teachers, "short") : "";
     if (teacher) {
       cell.push("\u00a0", el("span", "teacher-name wu-exam__teacher", `(${teacher})`));
     }
@@ -120,7 +52,7 @@
   /** Container with the verbose-mode header, for a student with something to show. */
   function createStudentContainer(pluginContext, studentSlice, studentConfig, examConfig) {
     const studentTitle = String(studentSlice?.student?.title || "").trim();
-    const verboseMode = isVerboseMode(studentConfig);
+    const verboseMode = pluginContext.widget.isVerboseMode(studentConfig);
     const { addHeader, createContainer } = pluginContext.dom;
     const container = createContainer();
     if (verboseMode && studentTitle) {
@@ -137,9 +69,9 @@
     const { addRow, el } = pluginContext.dom;
     const { currentTimeAsHHMM, getCurrentDateContext } = pluginContext.time;
     const exams = Array.isArray(studentSlice?.data?.exams) ? studentSlice.data.exams : [];
-    const studentConfig = resolveStudentConfig(studentSlice);
+    const studentConfig = pluginContext.widget.resolveStudentConfig(studentSlice);
     const examConfig = resolveExamConfig(studentConfig);
-    if (normalizeDays(examConfig?.nextDays, 0) <= 0) return null;
+    if (pluginContext.widget.normalizeDays(examConfig?.nextDays, 0) <= 0) return null;
 
     if (exams.length === 0) {
       if (studentSlice?.state?.collections?.exams?.status !== "unavailable") return null;
@@ -153,7 +85,7 @@
         container,
         "examRowEmpty unavailable-notice",
         studentLabelText,
-        translate(pluginContext, "unavailable", "data unavailable"),
+        pluginContext.translate("unavailable", "data unavailable"),
       );
       return container;
     }
@@ -163,7 +95,7 @@
     const nowHm = currentTimeAsHHMM(dateContext?.date);
     const visibleExams = exams
       .slice()
-      .sort(compareByDateAndStartTime)
+      .sort((left, right) => pluginContext.widget.compareByDateAndStartTime(left, right, { dateKey: "examDate" }))
       .filter((exam) => includePastExams || isUpcoming(exam, nowYmd, nowHm));
     if (visibleExams.length === 0) return null;
 
@@ -176,7 +108,10 @@
     const showSubject = Boolean(examConfig?.showSubject);
     const showTeacher = Boolean(examConfig?.showTeacher);
     for (const exam of visibleExams) {
-      const formattedDate = formatDisplayDateValue(pluginContext, Number(exam?.examDate) || 0, examConfig?.dateFormat);
+      const formattedDate = pluginContext.formatting.formatDisplayDate(
+        Number(exam?.examDate) || 0,
+        examConfig?.dateFormat,
+      );
       const dateTimeCell = formattedDate ? el("span", "wu-exam__date", formattedDate) : "";
       addRow(
         container,

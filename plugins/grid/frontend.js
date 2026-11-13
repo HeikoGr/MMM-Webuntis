@@ -57,12 +57,9 @@ function getModuleRootElement(ctx) {
   }
 
   function createGridRenderer(root) {
+    const { el, iconSpan, multilineNodes, addHeader } = root.dom;
     const {
       log,
-      el,
-      iconSpan,
-      multilineNodes,
-      addHeader,
       getWidgetConfigResolved,
       formatDisplayDate,
       formatDisplayTime,
@@ -81,7 +78,7 @@ function getModuleRootElement(ctx) {
       getChangedFieldSet,
       getFirstFieldName,
       normalizeComparableText,
-    } = root.util?.resolveWidgetHelpers?.(root) || {};
+    } = root.util;
     const {
       resolvePxPerMinute,
       rollingRange,
@@ -105,29 +102,8 @@ function getModuleRootElement(ctx) {
 
     function getSharedLessonPopoverController() {
       if (sharedLessonPopover) return sharedLessonPopover;
-      const createPopoverController = root?.util?.createPopoverController;
-      if (typeof createPopoverController !== "function") return null;
-      sharedLessonPopover = createPopoverController({
-        baseClassName: "wu-shared-popover wu-shared-popover--grid",
-        presentation: "modal",
-      });
+      sharedLessonPopover = root.util.createPopoverController();
       return sharedLessonPopover;
-    }
-
-    function getCurrentDateContext(config) {
-      return root.time.getCurrentDateContext(config);
-    }
-
-    function translate(pluginContext, key, fallback, replacements) {
-      if (typeof pluginContext?.translate !== "function") return fallback;
-      const translated = pluginContext.translate(key, fallback, replacements);
-      return translated || fallback;
-    }
-
-    function resolveStudentConfig(studentSlice) {
-      const config = studentSlice?.context?.config;
-      if (!config || typeof config !== "object" || Array.isArray(config)) return {};
-      return config;
     }
 
     function resolveGridConfig(studentConfig) {
@@ -192,14 +168,6 @@ function getModuleRootElement(ctx) {
       return grouped;
     }
 
-    function buildHolidayMapFromRanges(holidays) {
-      return root.util.buildHolidayMapFromRanges(holidays);
-    }
-
-    function buildDayNoticeMap(dayNotices) {
-      return root.util.buildDayNoticeMap(dayNotices);
-    }
-
     function createGridPluginRuntimeContext(pluginContext, renderContext, studentSlice, studentConfig) {
       const effectiveConfig = {
         ...studentConfig,
@@ -210,7 +178,7 @@ function getModuleRootElement(ctx) {
         logLevel:
           renderContext?.runtime?.logLevel || globalRoot.MMMWebuntisLogLevel || studentConfig?.logLevel || "info",
       };
-      const dateContext = getCurrentDateContext(effectiveConfig);
+      const dateContext = root.time.getCurrentDateContext(effectiveConfig);
       const studentTitle = String(studentSlice?.student?.title || "").trim();
       const holidays = Array.isArray(studentSlice?.data?.holidays?.ranges) ? studentSlice.data.holidays.ranges : [];
       const dayNotices = Array.isArray(studentSlice?.data?.dayNotices) ? studentSlice.data.dayNotices : [];
@@ -220,10 +188,10 @@ function getModuleRootElement(ctx) {
         config: effectiveConfig,
         studentConfig: effectiveConfig,
         holidayMapByStudent: {
-          [studentTitle]: buildHolidayMapFromRanges(holidays),
+          [studentTitle]: root.util.buildHolidayMapFromRanges(holidays),
         },
         dayNoticeMapByStudent: {
-          [studentTitle]: buildDayNoticeMap(dayNotices),
+          [studentTitle]: root.util.buildDayNoticeMap(dayNotices),
         },
         collectionStateByStudent: {
           [studentTitle]: studentSlice?.state?.collections || {},
@@ -234,34 +202,14 @@ function getModuleRootElement(ctx) {
           },
         },
         _currentTodayYmd: dateContext.ymd,
-        _hasWidget(name) {
-          return (
-            String(name || "")
-              .trim()
-              .toLowerCase() === "grid"
-          );
-        },
-        _getWidgetApi() {
-          return root || null;
-        },
-        _usesLiveClock(nowContext = this.getCurrentDateContext()) {
-          return nowContext?.isDebug !== true;
-        },
-        _handleClockDrivenDayRollover(nowContext = this.getCurrentDateContext()) {
-          const nextTodayYmd = Number(nowContext?.ymd);
-          if (!Number.isFinite(nextTodayYmd) || nextTodayYmd <= 0) return false;
-          if (nextTodayYmd === this._currentTodayYmd) return false;
-          this._currentTodayYmd = nextTodayYmd;
-          return true;
-        },
         _toMinutes(value) {
           return toMinutesSinceMidnight(value);
         },
         getCurrentDateContext(configOverride = null) {
-          return getCurrentDateContext(configOverride || effectiveConfig);
+          return root.time.getCurrentDateContext(configOverride || effectiveConfig);
         },
         translate(key, replacements, fallback = key) {
-          return translate(pluginContext, key, fallback, replacements);
+          return pluginContext.translate(key, fallback, replacements);
         },
       };
     }
@@ -275,99 +223,51 @@ function getModuleRootElement(ctx) {
       return new Date(nowContext.date.getFullYear(), nowContext.date.getMonth(), nowContext.date.getDate());
     }
 
-    /**
-     * Determine lesson display mode based on available fields
-     * Detects whether lesson is from teacher view (has class) or student view (has studentGroup)
-     *
-     * @param {Object} lesson - Lesson object from backend
-     * @returns {Object} Display mode object with flags:
-     *   - isTeacherView: boolean - Lesson has class info (teacher perspective)
-     *   - isStudentView: boolean - Lesson has studentGroup info (student perspective)
-     *   - hasTeacher/hasSubject/hasRoom/hasClass/hasStudentGroup: field availability flags
-     *   - primaryInfo/secondaryInfo: suggested field types for display
-     *   - showStudentGroup: boolean - Whether to show student group
-     */
-    function getLessonDisplayMode(lesson) {
-      const hasTeacher = Array.isArray(lesson?.teachers) && lesson.teachers.length > 0;
-      const hasSubject = Array.isArray(lesson?.subjects) && lesson.subjects.length > 0;
-      const hasRoom = Array.isArray(lesson?.rooms) && lesson.rooms.length > 0;
-      const hasClass = Array.isArray(lesson?.classes) && lesson.classes.length > 0;
-      const hasStudentGroup = Array.isArray(lesson?.studentGroups) && lesson.studentGroups.length > 0;
-
-      const isTeacherView = hasClass && !hasStudentGroup;
-      const isStudentView = hasStudentGroup && !hasClass;
-
-      return {
-        isTeacherView,
-        isStudentView,
-        hasTeacher,
-        hasSubject,
-        hasRoom,
-        hasClass,
-        hasStudentGroup,
-        primaryInfo: isTeacherView ? "class" : "subject",
-        secondaryInfo: isTeacherView ? "room" : "teacher",
-        showStudentGroup: hasStudentGroup && !isTeacherView,
-      };
-    }
+    const DEFAULT_FIELDS = Object.freeze({
+      primary: "subject",
+      secondary: "teacher",
+      additional: Object.freeze(["room"]),
+      format: Object.freeze({ subject: "long", teacher: "long", class: "short", room: "short", studentGroup: "short" }),
+    });
+    const FIELD_TYPES = ["subject", "teacher", "room", "class", "studentGroup", "info", "none"];
+    const FIELD_FORMATS = ["short", "long"];
+    // One resolution per student config, not one per lesson cell.
+    const fieldConfigCache = new WeakMap();
 
     /**
-     * Resolve field configuration from config
-     * Extracts grid.fields.{primary, secondary, additional, format} from student config
-     *
-     * Single source of truth: defaults are merged centrally in MMM-Webuntis.js / node_helper.js.
-     * This widget only validates values and applies minimal safety fallbacks for invalid/missing data.
+     * The grid's field layout (grid.fields: primary, secondary, additional, format). These are the
+     * defaults - the plugin manifest declares none - and an invalid entry falls back to them.
      *
      * @param {Object} config - Student configuration object
      * @returns {Object} Resolved field configuration
      */
     function resolveFieldConfig(config) {
-      const gridConfig = config?.grid?.fields || {};
-      const defaultFields = {
-        primary: "subject",
-        secondary: "teacher",
-        additional: ["room"],
-        format: {
-          subject: "long",
-          teacher: "long",
-          class: "short",
-          room: "short",
-          studentGroup: "short",
-        },
-      };
-      const validFieldTypes = ["subject", "teacher", "room", "class", "studentGroup", "info", "none"];
-      const validFormats = ["short", "long"];
+      if (config && fieldConfigCache.has(config)) return fieldConfigCache.get(config);
 
-      const normalizeFieldType = (value, fallback) => {
+      const fields = config?.grid?.fields || {};
+      const fieldType = (value, fallback) => {
         const normalized = typeof value === "string" ? value.trim() : "";
-        return validFieldTypes.includes(normalized) ? normalized : fallback;
+        return FIELD_TYPES.includes(normalized) ? normalized : fallback;
       };
 
-      const fallbackAdditional = Array.isArray(defaultFields.additional) ? defaultFields.additional : ["room"];
-      const inputAdditional = Array.isArray(gridConfig.additional) ? gridConfig.additional : fallbackAdditional;
-      const additional = inputAdditional
-        .map((field) => normalizeFieldType(field, null))
-        .filter((field) => typeof field === "string");
+      const additional = (Array.isArray(fields.additional) ? fields.additional : DEFAULT_FIELDS.additional)
+        .map((field) => fieldType(field, null))
+        .filter(Boolean);
 
-      const defaultFormat =
-        defaultFields.format && typeof defaultFields.format === "object" ? defaultFields.format : {};
-      const localFormat = gridConfig.format && typeof gridConfig.format === "object" ? gridConfig.format : {};
-      const rawFormat = { ...defaultFormat, ...localFormat };
-      const format = {};
-      Object.keys(rawFormat).forEach((key) => {
-        if (!validFieldTypes.includes(key)) return;
-        const value = String(rawFormat[key] || "").trim();
-        if (validFormats.includes(value)) {
-          format[key] = value;
-        }
-      });
+      const format = { ...DEFAULT_FIELDS.format };
+      for (const [key, value] of Object.entries(fields.format || {})) {
+        const normalized = String(value || "").trim();
+        if (FIELD_TYPES.includes(key) && FIELD_FORMATS.includes(normalized)) format[key] = normalized;
+      }
 
-      return {
-        primary: normalizeFieldType(gridConfig.primary, normalizeFieldType(defaultFields.primary, "subject")),
-        secondary: normalizeFieldType(gridConfig.secondary, normalizeFieldType(defaultFields.secondary, "teacher")),
-        additional: additional.length > 0 ? additional : fallbackAdditional,
+      const resolved = {
+        primary: fieldType(fields.primary, DEFAULT_FIELDS.primary),
+        secondary: fieldType(fields.secondary, DEFAULT_FIELDS.secondary),
+        additional: additional.length > 0 ? additional : [...DEFAULT_FIELDS.additional],
         format,
       };
+      if (config) fieldConfigCache.set(config, resolved);
+      return resolved;
     }
 
     /**
@@ -460,12 +360,9 @@ function getModuleRootElement(ctx) {
 
           ctx._handleClockDrivenDayRollover(nowContext);
 
-          const gridWidget = ctx._getWidgetApi()?.grid;
           const moduleRoot = getModuleRootElement(ctx);
-          if (gridWidget) {
-            if (typeof gridWidget.updateNowLinesAll === "function") gridWidget.updateNowLinesAll(ctx, moduleRoot);
-            if (typeof gridWidget.refreshPastMasks === "function") gridWidget.refreshPastMasks(ctx, moduleRoot);
-          }
+          updateNowLinesAll(ctx, moduleRoot);
+          refreshPastMasks(ctx, moduleRoot);
         } catch (err) {
           log("debug", "minute tick update failed", err);
         }
@@ -567,7 +464,7 @@ function getModuleRootElement(ctx) {
 
       const afterFridaySchool =
         dayOfWeek === 5 &&
-        ctx._usesLiveClock(nowContext) &&
+        root.time.usesLiveClock(nowContext) &&
         (currentHour >= 16 || (currentHour === 15 && currentMinute >= 45));
       const weekOffset = afterFridaySchool || dayOfWeek === 6 || dayOfWeek === 0 ? 1 : 0;
 
@@ -779,11 +676,11 @@ function getModuleRootElement(ctx) {
       const isEnglish = language === "en" || language.startsWith("en-");
 
       if (isEnglish) {
-        const periodUnit = translate(ctx, "period_unit", "period");
+        const periodUnit = ctx.translate("period_unit", null, "period");
         return `${formatEnglishOrdinal(normalizedUnitName)} ${periodUnit}`.trim();
       }
 
-      const periodSuffix = translate(ctx, "period_suffix", "").trim();
+      const periodSuffix = ctx.translate("period_suffix", null, "").trim();
       return periodSuffix ? `${normalizedUnitName}.${periodSuffix}` : normalizedUnitName;
     }
 
@@ -801,8 +698,6 @@ function getModuleRootElement(ctx) {
      */
     function extractDayLessons(sourceForDay, ctx) {
       return sourceForDay.map((el) => {
-        const displayMode = getLessonDisplayMode ? getLessonDisplayMode(el) : {};
-
         // IMPORTANT: Spread `el` first so ALL payload fields are forwarded automatically.
         // Explicit keys below override where the grid needs computed/normalized values.
         // Without the spread, any new field added to
@@ -815,20 +710,9 @@ function getModuleRootElement(ctx) {
           endMin: el.endTime ? ctx._toMinutes(el.endTime) : null,
           startTime: el.startTime ? String(el.startTime).padStart(4, "0") : "",
           endTime: el.endTime ? String(el.endTime).padStart(4, "0") : null,
-          subjectShort: getSubject(el, "short") || "N/A",
-          subject: getSubject(el, "long") || "N/A",
-          teacherInitial: getTeachers(el, "short")[0] || "N/A",
-          teacher: getTeachers(el, "long")[0] || "N/A",
-          room: getRoom(el, "short") || "",
-          roomLong: getRoom(el, "long") || "",
-          class: getClass(el, "short") || "",
-          classLong: getClass(el, "long") || "",
-          studentGroup: getStudentGroup(el, "short") || "",
-          studentGroupLong: getStudentGroup(el, "long") || "",
-          infoShort: getInfo(el, "short") || "",
-          infoLong: getInfo(el, "long") || "",
-          isTeacherView: displayMode.isTeacherView,
-          isStudentView: displayMode.isStudentView,
+          // Names are read through getSubject()/getRoom()/... from the arrays; only the room is
+          // also needed flat (the cell's room line).
+          room: getRoom(el, "short") || getRoom(el, "long") || "",
           code: el.code || "",
           substitutionText: el.substitutionText || "",
           text: el.lessonText || "",
@@ -848,8 +732,6 @@ function getModuleRootElement(ctx) {
      */
     function validateAndNormalizeLessons(dayLessons, log) {
       for (const curr of dayLessons) {
-        curr.lessonIds = curr.lessonIds || (curr.lessonId ? [String(curr.lessonId)] : []);
-
         if (curr.startMin === undefined || curr.startMin === null) {
           log(
             "debug",
@@ -910,16 +792,8 @@ function getModuleRootElement(ctx) {
           return true;
         }
 
-        if (maxGridLessons >= 1) {
-          const periodIndex = findPeriodIndex(s, timeUnits);
-          return periodIndex !== -1 && periodIndex < maxGridLessons;
-        }
-
-        if (s >= allEnd) {
-          return false;
-        }
-
-        return true;
+        const periodIndex = findPeriodIndex(s, timeUnits);
+        return periodIndex !== -1 && periodIndex < maxGridLessons;
       });
 
       if (filtered.length < dayLessons.length) {
@@ -928,7 +802,7 @@ function getModuleRootElement(ctx) {
           ctx,
           "debug",
           `Grid: hiding ${hidden} lesson(s) for ${studentTitle} on ${dateStr} due to grid.maxLessons=${maxGridLessons}. ` +
-            `Showing first ${maxGridLessons} period(s) plus all cancelled/irregular.`,
+            `Showing the first ${maxGridLessons} period(s) and break supervisions.`,
         );
       }
 
@@ -976,100 +850,100 @@ function getModuleRootElement(ctx) {
         .replace(/\b\w/g, (char) => char.toUpperCase());
     }
 
-    function buildLessonPopoverSections(lesson, ctx) {
-      const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
-        .filter(Boolean)
-        .join(" - ");
+    /** "08:00 - 08:45", or whichever end is known. */
+    function lessonTimeLabel(lesson) {
+      return [formatDisplayTime(lesson.startTime), formatDisplayTime(lesson.endTime)].filter(Boolean).join(" - ");
+    }
 
-      const displayIcons = joinStringList(lesson?.displayIcons);
-      const changedFields = joinStringList(lesson?.changedFields);
+    function buildLessonPopoverSections(lesson, ctx) {
+      const timeLabel = lessonTimeLabel(lesson);
+      const displayIcons = joinStringList(lesson.displayIcons);
+      const changedFields = joinStringList(lesson.changedFields);
 
       return [
         {
-          title: translate(ctx, "popover_section_general", "General"),
+          title: ctx.translate("popover_section_general", null, "General"),
           entries: [
             {
-              label: translate(ctx, "popover_date", "Date"),
-              value: formatDisplayDate(lesson?.date, "EEEE, dd.MM.yyyy"),
+              label: ctx.translate("popover_date", null, "Date"),
+              value: formatDisplayDate(lesson.date, "EEEE, dd.MM.yyyy"),
             },
-            { label: translate(ctx, "popover_time", "Time"), value: timeLabel },
-            { label: translate(ctx, "popover_period", "Period"), value: lesson?.periodText || "" },
-            { label: translate(ctx, "popover_status", "Status"), value: describeLessonStatus(lesson, ctx) },
-            { label: translate(ctx, "popover_activity", "Activity"), value: lesson?.activityType || "" },
-            { label: translate(ctx, "popover_icons", "Icons"), value: displayIcons },
+            { label: ctx.translate("popover_time", null, "Time"), value: timeLabel },
+            { label: ctx.translate("popover_period", null, "Period"), value: lesson.periodText || "" },
+            { label: ctx.translate("popover_status", null, "Status"), value: describeLessonStatus(lesson, ctx) },
+            { label: ctx.translate("popover_activity", null, "Activity"), value: lesson.activityType || "" },
+            { label: ctx.translate("popover_icons", null, "Icons"), value: displayIcons },
           ],
         },
         {
-          title: translate(ctx, "popover_section_people", "People & Context"),
+          title: ctx.translate("popover_section_people", null, "People & Context"),
           entries: [
-            { label: translate(ctx, "popover_subject", "Subject"), value: joinNamedEntries(lesson?.subjects, "long") },
-            { label: translate(ctx, "popover_teacher", "Teacher"), value: joinNamedEntries(lesson?.teachers, "long") },
-            { label: translate(ctx, "popover_room", "Room"), value: joinNamedEntries(lesson?.rooms, "long") },
-            { label: translate(ctx, "popover_class", "Class"), value: joinNamedEntries(lesson?.classes, "long") },
             {
-              label: translate(ctx, "popover_student_group", "Student Group"),
-              value: joinNamedEntries(lesson?.studentGroups, "long"),
+              label: ctx.translate("popover_subject", null, "Subject"),
+              value: joinNamedEntries(lesson.subjects, "long"),
             },
-            { label: translate(ctx, "popover_info", "Info"), value: joinNamedEntries(lesson?.info, "long") },
+            {
+              label: ctx.translate("popover_teacher", null, "Teacher"),
+              value: joinNamedEntries(lesson.teachers, "long"),
+            },
+            { label: ctx.translate("popover_room", null, "Room"), value: joinNamedEntries(lesson.rooms, "long") },
+            { label: ctx.translate("popover_class", null, "Class"), value: joinNamedEntries(lesson.classes, "long") },
+            {
+              label: ctx.translate("popover_student_group", null, "Student Group"),
+              value: joinNamedEntries(lesson.studentGroups, "long"),
+            },
+            { label: ctx.translate("popover_info", null, "Info"), value: joinNamedEntries(lesson.info, "long") },
           ],
         },
         {
-          title: translate(ctx, "popover_section_changes", "Changes"),
+          title: ctx.translate("popover_section_changes", null, "Changes"),
           entries: [
-            { label: translate(ctx, "popover_changed_fields", "Changed Fields"), value: changedFields },
+            { label: ctx.translate("popover_changed_fields", null, "Changed Fields"), value: changedFields },
             {
-              label: translate(ctx, "popover_previous_subject", "Previous Subject"),
-              value: joinNamedEntries(lesson?.previousSubjects, "long"),
+              label: ctx.translate("popover_previous_subject", null, "Previous Subject"),
+              value: joinNamedEntries(lesson.previousSubjects, "long"),
             },
             {
-              label: translate(ctx, "popover_previous_teacher", "Previous Teacher"),
-              value: joinNamedEntries(lesson?.previousTeachers, "long"),
+              label: ctx.translate("popover_previous_teacher", null, "Previous Teacher"),
+              value: joinNamedEntries(lesson.previousTeachers, "long"),
             },
             {
-              label: translate(ctx, "popover_previous_room", "Previous Room"),
-              value: joinNamedEntries(lesson?.previousRooms, "long"),
+              label: ctx.translate("popover_previous_room", null, "Previous Room"),
+              value: joinNamedEntries(lesson.previousRooms, "long"),
             },
             {
-              label: translate(ctx, "popover_substitution_text", "Substitution Text"),
-              value: lesson?.substitutionText || "",
+              label: ctx.translate("popover_substitution_text", null, "Substitution Text"),
+              value: lesson.substitutionText || "",
             },
             {
-              label: translate(ctx, "popover_lesson_text", "Lesson Text"),
-              value: lesson?.lessonText || lesson?.text || "",
+              label: ctx.translate("popover_lesson_text", null, "Lesson Text"),
+              value: lesson.lessonText || lesson.text || "",
             },
           ],
         },
       ];
     }
 
-    function openLessonPopover(anchorEl, lesson, ctx) {
-      const popover = getSharedLessonPopoverController();
-      if (!popover || !lesson || !anchorEl) return;
-
+    function openLessonPopover(lesson, ctx) {
       const primaryTitle =
         getSubject(lesson, "long") ||
         getClass(lesson, "long") ||
         getStudentGroup(lesson, "long") ||
         describeLessonStatus(lesson, ctx) ||
-        translate(ctx, "popover_lesson_fallback_title", "Lesson");
+        ctx.translate("popover_lesson_fallback_title", null, "Lesson");
 
-      const dateLabel = formatDisplayDate(lesson?.date, "EEE dd.MM.yyyy");
-      const timeLabel = [formatDisplayTime(lesson?.startTime), formatDisplayTime(lesson?.endTime)]
-        .filter(Boolean)
-        .join(" - ");
-      const subtitle = [dateLabel, timeLabel].filter(Boolean).join(" • ");
+      const dateLabel = formatDisplayDate(lesson.date, "EEE dd.MM.yyyy");
+      const subtitle = [dateLabel, lessonTimeLabel(lesson)].filter(Boolean).join(" • ");
 
-      popover.toggle({
-        anchorEl,
-        toggleKey: `${lesson?.id ?? lesson?.lessonId ?? "noid"}_${lesson?.date ?? ""}_${lesson?.startTime ?? ""}_${lesson?.endTime ?? ""}`,
+      getSharedLessonPopoverController().toggle({
+        toggleKey: `${lesson.id ?? lesson.lessonId ?? "noid"}_${lesson.date ?? ""}_${lesson.startTime ?? ""}_${lesson.endTime ?? ""}`,
         title: primaryTitle,
         subtitle,
         sections: buildLessonPopoverSections(lesson, ctx),
         rawData: lesson,
-        rawLabel: translate(ctx, "popover_raw_payload", "Raw lesson payload"),
-        emptyLabel: translate(ctx, "popover_empty", "No details available."),
-        closeLabel: translate(ctx, "popover_close", "Close details"),
-        className: "wu-shared-popover--grid",
+        rawLabel: ctx.translate("popover_raw_payload", null, "Raw lesson payload"),
+        emptyLabel: ctx.translate("popover_empty", null, "No details available."),
+        closeLabel: ctx.translate("popover_close", null, "Close details"),
       });
     }
 
@@ -1223,16 +1097,10 @@ function getModuleRootElement(ctx) {
         element.classList.add(...additionalClasses);
       }
 
-      let lessonIsPast = isPast;
-      if (nowYmd !== null && nowMin !== null) {
-        const lessonYmd = Number(lesson.dateStr) || 0;
-        lessonIsPast = false;
-        if (lessonYmd < nowYmd) {
-          lessonIsPast = true;
-        } else if (lessonYmd === nowYmd) {
-          if (lesson.endMin <= nowMin) lessonIsPast = true;
-        }
-      }
+      const lessonIsPast =
+        nowYmd !== null && nowMin !== null
+          ? calcIsPast(Number(lesson.dateStr) || 0, lesson.endMin, nowYmd, nowMin)
+          : isPast;
 
       if (lessonIsPast) element.classList.add("past");
       if (hasExam) element.classList.add("has-exam");
@@ -1276,7 +1144,7 @@ function getModuleRootElement(ctx) {
     function breakSupervisionContent(lesson, ctx) {
       const label = ctx.translate ? ctx.translate("break_supervision") : "Break Supervision";
       const shortLabel = label === "Pausenaufsicht" ? "PA" : "BS";
-      const area = lesson.room || lesson.roomLong || "";
+      const area = lesson.room || "";
       const displayText = area ? `${shortLabel} (${area})` : shortLabel;
       const icon = iconSpan("wu-inline-icon wu-inline-icon--lesson lesson-break-supervision-icon");
       return el("div", "lesson-content break-supervision", el("span", "lesson-primary", icon, displayText));
@@ -1465,12 +1333,12 @@ function getModuleRootElement(ctx) {
       cell.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        openLessonPopover(cell, lesson, ctx);
+        openLessonPopover(lesson, ctx);
       });
       cell.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        openLessonPopover(cell, lesson, ctx);
+        openLessonPopover(lesson, ctx);
       });
       if (checkHomeworkMatch(lesson)) addHomeworkIcon(cell);
       container.appendChild(cell);
@@ -1503,9 +1371,22 @@ function getModuleRootElement(ctx) {
       return item;
     }
 
+    /** Vertical placement of the given lessons within their common time span, in percent. */
+    function tickerPlacements(lessons) {
+      const start = Math.min(...lessons.map((l) => l.startMin));
+      const total = Math.max(...lessons.map((l) => l.endMin)) - start;
+      return (lesson) =>
+        total > 0
+          ? {
+              top: ((lesson.startMin - start) / total) * 100,
+              height: ((lesson.endMin - lesson.startMin) / total) * 100,
+            }
+          : { top: 0, height: 100 };
+    }
+
     /**
      * One lesson inside a ticker item, placed by percent of the item's time span.
-     * @param {Array<[string, string]>} sideStyles - Horizontal placement, in the order it is applied
+     * @param {Object} sideStyles - Horizontal placement (left/right/width)
      */
     function createTickerLesson(lesson, placement, sideStyles, splitClass, env) {
       const div = document.createElement("div");
@@ -1513,7 +1394,7 @@ function getModuleRootElement(ctx) {
       div.style.position = "absolute";
       div.style.top = `${placement.top}%`;
       div.style.height = `${placement.height}%`;
-      for (const [property, value] of sideStyles) div.style[property] = value;
+      Object.assign(div.style, sideStyles);
 
       applyLessonClasses(div, lesson, {
         hasExam: lessonHasExam(lesson),
@@ -1529,40 +1410,17 @@ function getModuleRootElement(ctx) {
     /** Ticker item for one subject group: its lessons stacked over the group's time span. */
     function createGroupTickerItem(groupLessons, widthPercent, env) {
       const item = createTickerItem("ticker-item", groupLessons, widthPercent);
-      const start = Math.min(...groupLessons.map((l) => l.startMin));
-      const total = Math.max(...groupLessons.map((l) => l.endMin)) - start;
+      const placementOf = tickerPlacements(groupLessons);
       for (const lesson of groupLessons) {
-        const placement =
-          total === 0
-            ? { top: 0, height: 100 }
-            : {
-                top: ((lesson.startMin - start) / total) * 100,
-                height: ((lesson.endMin - lesson.startMin) / total) * 100,
-              };
-        item.appendChild(
-          createTickerLesson(
-            lesson,
-            placement,
-            [
-              ["left", "0"],
-              ["right", "0"],
-            ],
-            null,
-            env,
-          ),
-        );
+        item.appendChild(createTickerLesson(lesson, placementOf(lesson), { left: "0", right: "0" }, null, env));
       }
       return item;
     }
 
     /** Ticker item for a split-view pair: replacements on the left, cancelled lessons on the right. */
     function createSplitTickerItem(pair, widthPercent, env) {
-      const all = [...pair.cancelledLessons, ...pair.replacements];
-      const item = createTickerItem(
-        "ticker-item ticker-item-split",
-        [...pair.replacements, ...pair.cancelledLessons],
-        widthPercent,
-      );
+      const all = [...pair.replacements, ...pair.cancelledLessons];
+      const item = createTickerItem("ticker-item ticker-item-split", all, widthPercent);
 
       const splitContainer = document.createElement("div");
       splitContainer.className = "lesson-both-inner";
@@ -1572,25 +1430,13 @@ function getModuleRootElement(ctx) {
       splitContainer.style.right = "0";
       splitContainer.style.height = "100%";
 
-      const start = Math.min(...all.map((l) => l.startMin));
-      const total = Math.max(1, Math.max(...all.map((l) => l.endMin)) - start);
-      const placementOf = (lesson) => ({
-        top: ((lesson.startMin - start) / total) * 100,
-        height: ((lesson.endMin - lesson.startMin) / total) * 100,
-      });
-
+      const placementOf = tickerPlacements(all);
       for (const replacement of pair.replacements) {
-        const side = [
-          ["left", "0"],
-          ["width", "50%"],
-        ];
+        const side = { left: "0", width: "50%" };
         splitContainer.appendChild(createTickerLesson(replacement, placementOf(replacement), side, "split-left", env));
       }
       for (const cancelled of pair.cancelledLessons) {
-        const side = [
-          ["right", "0"],
-          ["width", "50%"],
-        ];
+        const side = { right: "0", width: "50%" };
         splitContainer.appendChild(createTickerLesson(cancelled, placementOf(cancelled), side, "split-right", env));
       }
 
@@ -1603,23 +1449,17 @@ function getModuleRootElement(ctx) {
      * group and per split-view pair, the whole track twice for a seamless loop. Lessons of one
      * subject group are stacked by their time within the item.
      *
-     * @param {Array} lessons - Overlapping lesson objects
-     * @param {number} topPx - Top position in pixels
-     * @param {number} heightPx - Height in pixels
-     * @param {HTMLElement} container - Day column container
-     * @param {Object} ctx - Main module context
-     * @param {number} nowYmd - Current date as YYYYMMDD integer
-     * @param {number} nowMin - Current time in minutes since midnight
-     * @param {Object} tickerData - Cancelled lessons, their replacements and whether to split
-     * @param {Object} lessonConfig - Effective widget config
+     * @param {Array} lessons - Lessons the ticker cycles through
+     * @param {{topPx: number, heightPx: number}} placement - Vertical position in the column
+     * @param {HTMLElement} container - Column the ticker goes into
+     * @param {{ctx: Object, nowYmd: number, nowMin: number, lessonConfig: Object}} env - Render environment
+     * @param {Object} tickerData - { cancelledLessons, replacements, hasSplitView }
      */
-    function createTickerAnimation(lessons, topPx, heightPx, container, ctx, nowYmd, nowMin, tickerData, lessonConfig) {
-      const env = { ctx, nowYmd, nowMin, lessonConfig };
+    function createTickerAnimation(lessons, placement, container, env, tickerData) {
+      const { topPx, heightPx } = placement;
       const groups = groupTickerLessons(lessons);
       const pairs = pairCancelledWithReplacements(tickerData);
-      if (tickerData?.hasSplitView && tickerData.cancelledLessons.length > 0) {
-        removePairedLessons(groups, pairs);
-      }
+      removePairedLessons(groups, pairs);
 
       const tickerWrapper = document.createElement("div");
       tickerWrapper.className = "lesson-ticker-wrapper";
@@ -1736,11 +1576,8 @@ function getModuleRootElement(ctx) {
 
       renderLessonCells(
         lessonsToRender,
-        { bothInner },
-        allStart,
-        allEnd,
-        totalMinutes,
-        totalHeight,
+        bothInner,
+        { allStart, allEnd, totalMinutes, totalHeight },
         ctx,
         studentConfig,
       );
@@ -1844,13 +1681,8 @@ function getModuleRootElement(ctx) {
     function scheduleGridPostRenderUpdates(ctx, wrapper) {
       setTimeout(() => {
         try {
-          const gridWidget = ctx?._getWidgetApi?.()?.grid;
-          if (gridWidget && typeof gridWidget.updateNowLinesAll === "function") {
-            gridWidget.updateNowLinesAll(ctx, wrapper);
-          }
-          if (gridWidget && typeof gridWidget.refreshPastMasks === "function") {
-            gridWidget.refreshPastMasks(ctx, wrapper);
-          }
+          updateNowLinesAll(ctx, wrapper);
+          refreshPastMasks(ctx, wrapper);
         } catch (e) {
           log("warn", "initial now-line/past-mask update failed", e);
         }
@@ -1863,26 +1695,14 @@ function getModuleRootElement(ctx) {
      * The overlap classifier selects split-view, span-split, ticker, or plain
      * individual cells depending on overlap structure and substitution metadata.
      *
-     * @param {Array} lessonsToRender - Normalized lessons for one day.
-     * @param {Object} containers - Day column containers.
-     * @param {number} allStart - Grid start in minutes since midnight.
-     * @param {number} allEnd - Grid end in minutes since midnight.
-     * @param {number} totalMinutes - Total visible duration in minutes.
-     * @param {number} totalHeight - Total column height in pixels.
-     * @param {Object} ctx - Module context.
-     * @param {Object} lessonConfig - Grid rendering configuration.
+     * @param {Array} lessonsToRender - The day's lessons after filtering
+     * @param {HTMLElement} bothInner - Column the cells go into
+     * @param {{allStart: number, allEnd: number, totalMinutes: number, totalHeight: number}} geometry - Time axis of the column
+     * @param {Object} ctx - Grid runtime context
+     * @param {Object} lessonConfig - Effective student config
      */
-    function renderLessonCells(
-      lessonsToRender,
-      containers,
-      allStart,
-      allEnd,
-      totalMinutes,
-      totalHeight,
-      ctx,
-      lessonConfig,
-    ) {
-      const { bothInner } = containers;
+    function renderLessonCells(lessonsToRender, bothInner, geometry, ctx, lessonConfig) {
+      const { allStart, allEnd, totalMinutes, totalHeight } = geometry;
 
       const timeSlotGroups = groupLessonsByTimeSlot(lessonsToRender);
 
@@ -1893,13 +1713,7 @@ function getModuleRootElement(ctx) {
 
       /** Render a single lesson as a standalone full-width cell at its own time position. */
       const renderSingleLesson = (lesson) => {
-        appendLessonCell(
-          bothInner,
-          lesson,
-          { allStart, allEnd, totalMinutes, totalHeight },
-          { ctx, lessonConfig },
-          { nowYmd, nowMin },
-        );
+        appendLessonCell(bothInner, lesson, geometry, { ctx, lessonConfig }, { nowYmd, nowMin });
       };
 
       const renderTickerGroup = (lessons, group) => {
@@ -1927,14 +1741,10 @@ function getModuleRootElement(ctx) {
         if (placement) {
           createTickerAnimation(
             tickerCandidates,
-            placement.topPx,
-            placement.heightPx,
+            placement,
             bothInner,
-            ctx,
-            nowYmd,
-            nowMin,
+            { ctx, nowYmd, nowMin, lessonConfig },
             tickerData,
-            lessonConfig,
           );
         }
 
@@ -1961,7 +1771,7 @@ function getModuleRootElement(ctx) {
           appendLessonCell(
             bothInner,
             repl,
-            { allStart, allEnd, totalMinutes, totalHeight },
+            geometry,
             { ctx, lessonConfig },
             { isPast, additionalClasses: ["split-left"] },
           );
@@ -1971,7 +1781,7 @@ function getModuleRootElement(ctx) {
           appendLessonCell(
             bothInner,
             cancelled,
-            { allStart, allEnd, totalMinutes, totalHeight },
+            geometry,
             { ctx, lessonConfig },
             { isPast, additionalClasses: ["split-right"] },
           );
@@ -1993,7 +1803,7 @@ function getModuleRootElement(ctx) {
           appendLessonCell(
             bothInner,
             spanning,
-            { allStart, allEnd, totalMinutes, totalHeight },
+            geometry,
             { ctx, lessonConfig },
             { isPast, additionalClasses: ["split-left"] },
           );
@@ -2003,7 +1813,7 @@ function getModuleRootElement(ctx) {
           appendLessonCell(
             bothInner,
             sub,
-            { allStart, allEnd, totalMinutes, totalHeight },
+            geometry,
             { ctx, lessonConfig },
             { isPast, additionalClasses: ["split-right"] },
           );
@@ -2015,8 +1825,7 @@ function getModuleRootElement(ctx) {
         }
       };
 
-      for (const [, lessons] of timeSlotGroups.entries()) {
-        if (!lessons || lessons.length === 0) continue;
+      for (const lessons of timeSlotGroups.values()) {
         const group = classifyLessonRenderGroup(lessons);
 
         if (group.isTickerGroup) {
@@ -2166,8 +1975,8 @@ function getModuleRootElement(ctx) {
         : buildRollingDisplayDates(baseDate, config, hasLessonsForDate);
       const wrapper = document.createElement("div");
 
-      const widgetCtx = createWidgetContext("grid", studentConfig, root.util || {}, ctx);
-      if (widgetCtx.isVerbose && studentTitle && typeof addHeader === "function") {
+      const widgetCtx = createWidgetContext("grid", studentConfig, root.util, ctx);
+      if (widgetCtx.isVerbose && studentTitle) {
         const headerContainer = document.createElement("div");
         headerContainer.className = "wu-widget-container bright small light";
         addHeader(headerContainer, buildWidgetHeaderTitle(ctx, "grid", widgetCtx, studentTitle));
@@ -2232,7 +2041,7 @@ function getModuleRootElement(ctx) {
         const todayYmd =
           typeof ctx._currentTodayYmd === "number" && ctx._currentTodayYmd ? ctx._currentTodayYmd : nowContext.ymd;
         const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
-        const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+        const scope = rootEl || document;
 
         const getElementPastState = (element) => {
           const dateValue = element?.getAttribute?.("data-date");
@@ -2287,7 +2096,7 @@ function getModuleRootElement(ctx) {
         if (!ctx) return;
         const showNowLine = getWidgetConfigResolved(ctx.studentConfig, ctx, "grid", "showNowLine");
         if (showNowLine === false) {
-          const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+          const scope = rootEl || document;
           const inners = scope.querySelectorAll(".day-column-inner");
           inners.forEach((inner) => {
             const nl = inner._nowLine;
@@ -2295,7 +2104,7 @@ function getModuleRootElement(ctx) {
           });
           return 0;
         }
-        const scope = rootEl && typeof rootEl.querySelectorAll === "function" ? rootEl : document;
+        const scope = rootEl || document;
         const inners = scope.querySelectorAll(".day-column-inner");
         const nowLocal = getModuleDateContext(ctx).date;
         const nowMin = nowLocal.getHours() * 60 + nowLocal.getMinutes();
@@ -2327,9 +2136,8 @@ function getModuleRootElement(ctx) {
       }
     }
 
+    // The host starts and stops the minute tick (onVisible/onHidden).
     root.grid = {
-      refreshPastMasks,
-      updateNowLinesAll,
       startNowLineUpdater,
       stopNowLineUpdater,
     };
@@ -2350,7 +2158,7 @@ function getModuleRootElement(ctx) {
 
     /** One student's grid, or null when there is nothing at all to draw. */
     function renderStudentGrid(pluginContext, renderContext, studentSlice) {
-      const studentConfig = resolveStudentConfig(studentSlice);
+      const studentConfig = root.widget.resolveStudentConfig(studentSlice);
       const gridConfig = resolveGridConfig(studentConfig);
       const effectiveStudentConfig = buildEffectiveGridStudentConfig(studentConfig, gridConfig);
       const { lessons, timeUnits, absences, holidays, dayNotices } = readGridData(studentSlice);

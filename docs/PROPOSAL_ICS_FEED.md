@@ -133,7 +133,7 @@ Ziel ist ein robustes Feed-System, das tatsächlich stattfindende Stunden und Kl
 
 **Relevant files**
 - /opt/magic_mirror/modules/MMM-Webuntis/node_helper.js — Lifecycle, Session-Routing, Fetch-Orchestrierung, sinnvoller Integrationspunkt für Feed-Aktualisierung
-- /opt/magic_mirror/modules/MMM-Webuntis/lib/webuntisClient.js — Fassade zwischen Core-Bundle und MMM-Payload, geeigneter Ort für exportfreundliche Datenabgriffe
+- /opt/magic_mirror/modules/MMM-Webuntis/lib/payloadClient.js — zwischen Core-Bundle und MMM-Payload, geeigneter Ort für exportfreundliche Datenabgriffe
 - /opt/magic_mirror/modules/MMM-Webuntis/lib/mmm-adapter/mmmPayloadMapper.js — Kanonische Datenstruktur für lessons/exams, zentrale Grundlage fürs Mapping in VEVENT
 - /opt/magic_mirror/modules/MMM-Webuntis/lib/webuntis/webuntisApiService.js — Ursprung und Bedeutung der Lesson-/Exam-Felder inkl. Statussemantik
 - /opt/magic_mirror/modules/MMM-Webuntis/lib/webuntis/dataOrchestration.js — Datums-/Zeitnormalisierung und Range-Logik

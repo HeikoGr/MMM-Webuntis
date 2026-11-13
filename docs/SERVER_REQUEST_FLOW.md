@@ -4,7 +4,7 @@ Detailed reference for how MMM-Webuntis performs server requests against WebUnti
 
 Primary source files for this document:
 - `node_helper.js`
-- `lib/webuntisClient.js`
+- `lib/payloadClient.js`
 - `lib/webuntis/webuntisClient.js`
 - `lib/webuntis/dataFetchOrchestrator.js`
 - `lib/webuntis/webuntisApiService.js`
@@ -47,7 +47,7 @@ flowchart TD
     GROUP[Group students by credential key]
     AUTHSESSION[_createAuthSession]
 
-    FACADE[lib/webuntisClient.js facade]
+    FACADE[lib/payloadClient.js]
     CLIENT[webuntis/webuntisClient.fetchBundle]
     BUNDLE[fetchBundle]
     TARGETS[authService.buildRestTargets]
@@ -112,7 +112,7 @@ flowchart TD
 sequenceDiagram
     participant FE as Frontend
     participant NH as node_helper
-    participant WF as webuntisClient facade
+    participant WF as payloadClient
     participant WC as webuntis core client
     participant OR as dataFetchOrchestrator
     participant API as webuntisApiService
