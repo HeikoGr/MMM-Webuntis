@@ -27,7 +27,9 @@ person can tell whether a screenshot looks right.
 ## Requirements
 
 - A MagicMirror² installation this module lives in (`<MagicMirror>/modules/MMM-Webuntis`).
-  Set `MM_ROOT` if it is somewhere else.
+  Set `MM_ROOT` if it is somewhere else; without it and without a MagicMirror two levels up the
+  script uses `/opt/magic_mirror` (the devcontainers). The config is read from the module copy
+  under `<MM_ROOT>/modules`, because MagicMirror resolves it against its own root.
 - Playwright, either installed locally or globally (`npm i -g playwright`). The devcontainer already
   has it; there the script uses the installed Google Chrome, because the devcontainer skips the
   Playwright browser download.

@@ -9,21 +9,28 @@
  *   node scripts/take-screenshots.mjs
  *
  * Environment:
- *   MM_ROOT      MagicMirror installation (default: two levels above this module)
+ *   MM_ROOT      MagicMirror installation (default: two levels above this module, else
+ *                /opt/magic_mirror as in the devcontainers)
  *   MM_PORT      port for the throwaway server (default: 8081)
  *   SHOT_TIME    frozen browser clock (default: 2026-09-30T10:50:00+02:00, matches the fixture)
  */
 import { execSync, spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const moduleRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const mmRoot = process.env.MM_ROOT || path.resolve(moduleRoot, "..", "..");
+const parentInstall = path.resolve(moduleRoot, "..", "..");
+const mmRoot =
+  process.env.MM_ROOT || (existsSync(path.join(parentInstall, "serveronly")) ? parentInstall : "/opt/magic_mirror");
+// MagicMirror resolves the config against its own root. The workspace devcontainer mounts this
+// module a second time under <MM_ROOT>/modules, so the config is taken from there.
+const configFile = path.join(mmRoot, "modules", path.basename(moduleRoot), "demo", "screenshots", "config.js");
 const port = Number(process.env.MM_PORT || 8081);
 const shotTime = process.env.SHOT_TIME || "2026-09-30T10:50:00+02:00";
-const baseUrl = `http://localhost:${port}/`;
+// IPv4 on both sides: "localhost" may bind ::1 while fetch() resolves it to 127.0.0.1.
+const baseUrl = `http://127.0.0.1:${port}/`;
 
 // Playwright is not a module dependency; use a local install or the global one (devcontainer).
 function loadPlaywright() {
@@ -159,7 +166,7 @@ const server = spawn(process.execPath, ["serveronly"], {
   cwd: mmRoot,
   env: {
     ...process.env,
-    MM_CONFIG_FILE: path.join(moduleRoot, "demo", "screenshots", "config.js"),
+    MM_CONFIG_FILE: configFile,
     MM_PORT: String(port),
   },
   stdio: ["ignore", "ignore", "inherit"],

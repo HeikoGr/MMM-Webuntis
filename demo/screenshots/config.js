@@ -52,7 +52,7 @@ const shot = (id, plugins, config = {}) => ({
 });
 
 const config = {
-  address: "localhost",
+  address: "127.0.0.1", // scripts/take-screenshots.mjs connects over IPv4
   port: 8081,
   basePath: "/",
   ipWhitelist: [],
