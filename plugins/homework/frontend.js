@@ -6,47 +6,6 @@
 
   // DOM, time and formatting helpers come from pluginContext (docs/PLUGINS.md), not from the global.
 
-  function translate(pluginContext, key, fallback, replacements) {
-    if (typeof pluginContext?.translate !== "function") return fallback;
-    const translated = pluginContext.translate(key, fallback, replacements);
-    return translated || fallback;
-  }
-
-  function normalizeDays(value, fallback = 0) {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.max(0, parsed);
-  }
-
-  function getFieldDisplayName(entry, format = "short") {
-    if (entry === null || entry === undefined) return "";
-    if (typeof entry === "string" || typeof entry === "number") {
-      return String(entry).trim();
-    }
-    if (typeof entry !== "object") return "";
-    const shortName = String(entry.name ?? "").trim();
-    const longName = String(entry.longname ?? "").trim();
-    return format === "long" ? longName || shortName : shortName || longName;
-  }
-
-  function formatDisplayDateValue(pluginContext, ymd, format) {
-    const formatter = pluginContext.formatting?.formatDisplayDate;
-    if (typeof formatter === "function") {
-      return formatter(ymd, format);
-    }
-
-    const numeric = Number(ymd) || 0;
-    const fallbackDay = String(numeric % 100).padStart(2, "0");
-    const fallbackMonth = String(Math.floor(numeric / 100) % 100).padStart(2, "0");
-    return `${fallbackDay}.${fallbackMonth}.`;
-  }
-
-  function resolveStudentConfig(studentSlice) {
-    const config = studentSlice?.context?.config;
-    if (!config || typeof config !== "object" || Array.isArray(config)) return {};
-    return config;
-  }
-
   function resolveHomeworkConfig(studentConfig) {
     const pluginConfig =
       studentConfig?.plugins?.homework?.config && typeof studentConfig.plugins.homework.config === "object"
@@ -56,20 +15,12 @@
     return { ...pluginConfig };
   }
 
-  function isVerboseMode(studentConfig) {
-    return (
-      String(studentConfig?.mode ?? "compact")
-        .trim()
-        .toLowerCase() === "verbose"
-    );
-  }
-
   function buildHeaderTitle(pluginContext, studentName, homeworkConfig) {
     const { headerTitleNodes } = pluginContext.dom;
-    const title = translate(pluginContext, "homework", "Homework");
-    const daysLabel = translate(pluginContext, "widget_filter_days", "days");
-    const nextDays = normalizeDays(homeworkConfig?.nextDays, 0);
-    const pastDays = normalizeDays(homeworkConfig?.pastDays, 0);
+    const title = pluginContext.translate("homework", "Homework");
+    const daysLabel = pluginContext.translate("widget_filter_days", "days");
+    const nextDays = pluginContext.widget.normalizeDays(homeworkConfig?.nextDays, 0);
+    const pastDays = pluginContext.widget.normalizeDays(homeworkConfig?.pastDays, 0);
     const filterLabel = `-${pastDays}/+${nextDays} ${daysLabel}`;
     const normalizedStudent = String(studentName || "").trim();
     const meta = normalizedStudent ? `${normalizedStudent}, ${filterLabel}` : filterLabel;
@@ -80,24 +31,26 @@
    * Due date, then subject, then the homework id: WebUntis does not guarantee a stable order for
    * entries tied on the first two, and the id keeps it identical across refreshes (issue #89).
    */
-  function compareHomework(left, right) {
+  function compareHomework(pluginContext, left, right) {
     return (
       (Number(left?.dueDate) || 0) - (Number(right?.dueDate) || 0) ||
-      getFieldDisplayName(left?.subject || null, "short").localeCompare(
-        getFieldDisplayName(right?.subject || null, "short"),
-      ) ||
+      pluginContext.widget
+        .getFieldDisplayName(left?.subject || null, "short")
+        .localeCompare(pluginContext.widget.getFieldDisplayName(right?.subject || null, "short")) ||
       (Number(left?.id) || 0) - (Number(right?.id) || 0)
     );
   }
 
   function homeworkLabel(pluginContext) {
-    return pluginContext.dom.el("span", "wu-homework__label", translate(pluginContext, "homework", "Homework"));
+    return pluginContext.dom.el("span", "wu-homework__label", pluginContext.translate("homework", "Homework"));
   }
 
   /** Right-hand cell: subject and text as configured, the widget label when both are off or empty. */
   function buildContentCell(pluginContext, homework, homeworkConfig) {
     const { el, multilineNodes } = pluginContext.dom;
-    const subjectLabel = homeworkConfig?.showSubject ? getFieldDisplayName(homework?.subject || null, "long") : "";
+    const subjectLabel = homeworkConfig?.showSubject
+      ? pluginContext.widget.getFieldDisplayName(homework?.subject || null, "long")
+      : "";
     const text = homeworkConfig?.showText ? String(homework?.text || "").trim() : "";
     const subject = subjectLabel ? el("b", "wu-homework__subject", subjectLabel) : null;
     const textSpan = text ? el("span", "wu-homework__text", multilineNodes(text)) : null;
@@ -113,8 +66,7 @@
       container,
       unavailable ? "homeworkRowEmpty unavailable-notice" : "homeworkRowEmpty",
       studentLabelText,
-      translate(
-        pluginContext,
+      pluginContext.translate(
         unavailable ? "unavailable" : "no_homework",
         unavailable ? "data unavailable" : "no homework",
       ),
@@ -124,10 +76,10 @@
   function renderStudent(pluginContext, studentSlice) {
     const { addHeader, addRow, createContainer, el } = pluginContext.dom;
     const homeworks = Array.isArray(studentSlice?.data?.homework) ? studentSlice.data.homework : [];
-    const studentConfig = resolveStudentConfig(studentSlice);
+    const studentConfig = pluginContext.widget.resolveStudentConfig(studentSlice);
     const homeworkConfig = resolveHomeworkConfig(studentConfig);
     const studentTitle = String(studentSlice?.student?.title || "").trim();
-    const verboseMode = isVerboseMode(studentConfig);
+    const verboseMode = pluginContext.widget.isVerboseMode(studentConfig);
     const studentLabelText = verboseMode ? "" : studentTitle;
     const container = createContainer();
 
@@ -139,9 +91,9 @@
       return container;
     }
 
-    for (const homework of homeworks.slice().sort(compareHomework)) {
+    for (const homework of homeworks.slice().sort((left, right) => compareHomework(pluginContext, left, right))) {
       const due = homework?.dueDate
-        ? formatDisplayDateValue(pluginContext, homework.dueDate, homeworkConfig?.dateFormat)
+        ? pluginContext.formatting.formatDisplayDate(homework.dueDate, homeworkConfig?.dateFormat)
         : "";
       const dateCell = due ? el("span", "wu-homework__date", due) : homeworkLabel(pluginContext);
       addRow(

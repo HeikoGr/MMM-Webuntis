@@ -94,7 +94,7 @@ const warningUtils = require("../lib/warningUtils");
 const { getCredentialKey } = require("../lib/authSession");
 const { buildFetchFlags } = require("../lib/moduleConfig");
 const { buildStudentErrorPayload } = require("../lib/mmm-adapter/mmmPayloadMapper");
-const { calculateBaseNow } = require("../lib/webuntisClient");
+const { calculateBaseNow } = require("../lib/payloadClient");
 
 test("sanitizeRichText preserves the formatting whitelist and removes unsafe markup", () => {
   const result = sanitizeRichText(
@@ -356,8 +356,16 @@ test("frontendShared exposes the namespaces backing pluginContext", () => {
       "multilineNodes",
       "richTextNodes",
     ],
-    time: ["DEFAULT_TIMEZONE", "currentTimeAsHHMM", "getCurrentDateContext", "toMinutesSinceMidnight"],
+    time: ["DEFAULT_TIMEZONE", "currentTimeAsHHMM", "getCurrentDateContext", "toMinutesSinceMidnight", "usesLiveClock"],
     formatting: ["formatDisplayDate", "formatDisplayTime", "formatYmd"],
+    widget: [
+      "compareByDateAndStartTime",
+      "getFieldDisplayName",
+      "getFirstFieldName",
+      "isVerboseMode",
+      "normalizeDays",
+      "resolveStudentConfig",
+    ],
   };
 
   for (const [namespace, keys] of Object.entries(expected)) {
@@ -370,7 +378,6 @@ test("frontendShared exposes the namespaces backing pluginContext", () => {
 
   // util keeps exposing everything so existing plugin code stays working.
   assert.equal(typeof shared.util.formatDisplayDate, "function");
-  assert.equal(typeof shared.util.resolveWidgetHelpers, "function");
   assert.equal(typeof shared.util.buildHolidayMapFromRanges, "function");
   assert.equal(typeof shared.util.buildDayNoticeMap, "function");
 });
@@ -675,20 +682,16 @@ test("_processPayloadData flags a collection unavailable and keeps stale data on
   frontend.timeUnitsByStudent = {};
   frontend.timetableByStudent = {};
   frontend.dayNoticesByStudent = {};
-  frontend.dayNoticeMapByStudent = {};
-  frontend.periodNamesByStudent = {};
-  frontend.preprocessedByStudent = {};
   frontend.examsByStudent = {};
   frontend.homeworksByStudent = {};
   frontend.absencesByStudent = {};
   frontend.messagesOfDayByStudent = {};
   frontend.holidaysByStudent = {};
-  frontend.holidayMapByStudent = {};
   frontend.collectionStateByStudent = {};
   frontend._log = () => {};
-  frontend._buildDayNoticeMap = () => ({});
-  frontend._buildHolidayMapFromRanges = () => ({});
-  frontend._toMinutes = () => 0;
+  frontend._getWidgetApi = () => ({
+    util: { buildDayNoticeMap: () => ({}), buildHolidayMapFromRanges: () => ({}), toMinutesSinceMidnight: () => 0 },
+  });
 
   const failed = { status: "unavailable", httpStatus: 401, lastSuccessAt: null };
   const ok = { status: "ok", httpStatus: 200, lastSuccessAt: "2026-09-18T10:00:00.000Z" };
@@ -1048,7 +1051,7 @@ test('getEmptyDayState reports "unavailable" only when the lessons collection fa
 });
 
 test("AuthService logs exactly one info line per real login and one per invalidation", async () => {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const lines = [];
   const service = new AuthService({ logger: (level, message) => lines.push({ level, message }) });
 
@@ -1062,13 +1065,12 @@ test("AuthService logs exactly one info line per real login and one per invalida
     role: "STUDENT",
     appData: {},
   };
-  service._performAuth = async () => {
+  service._performAuthFromCredentials = async () => {
     service._authCache.set(cacheKey, {
       ...authResult,
       school: "s",
       server: "srv",
       expiresAt: Date.now() + 14 * 60 * 1000,
-      lastCookieValidation: Date.now(),
     });
     return authResult;
   };
@@ -1096,7 +1098,7 @@ test("AuthService logs exactly one info line per real login and one per invalida
 test("a request that hits its own timeout raises an error coded ETIMEDOUT", async () => {
   const fetchClient = require("../lib/webuntis/fetchClient");
   const { convertRestErrorToWarning } = require("../lib/webuntis/errorHandler");
-  const { isNetworkError } = warningUtils;
+  const { isNetworkError } = require("../lib/webuntis/errorHandler");
 
   const previousFetch = global.fetch;
   global.fetch = (_url, options) =>
@@ -1130,7 +1132,7 @@ test("a request that hits its own timeout raises an error coded ETIMEDOUT", asyn
 });
 
 test("a cached login lives until the token's exp, not a fixed 14 minutes", () => {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
   const jwt = (payload) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
 
@@ -1148,7 +1150,7 @@ test("a cached login lives until the token's exp, not a fixed 14 minutes", () =>
 });
 
 test("a token with more than the safety buffer left is reused, one about to expire is not", async () => {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
   const cacheKey = "test:rest";
   const entry = {
@@ -1162,7 +1164,7 @@ test("a token with more than the safety buffer left is reused, one about to expi
     appData: {},
   };
   let logins = 0;
-  service._performAuth = async () => {
+  service._performAuthFromCredentials = async () => {
     logins += 1;
     return entry;
   };
@@ -1180,8 +1182,8 @@ test("a token with more than the safety buffer left is reused, one about to expi
 });
 
 test("an empty REST target list surfaces its diagnosis as a config warning", () => {
-  const { WebUntisClient } = require("../lib/webuntisClient");
-  const client = new WebUntisClient({ mmLog: () => {} });
+  const { PayloadClient } = require("../lib/payloadClient");
+  const client = new PayloadClient({ mmLog: () => {} });
 
   // Parent credentials without studentId: the classic cause of an empty target list.
   const message = client._logEmptyTargets(
@@ -1626,6 +1628,7 @@ test("demo mode serves the fixtures through CONFIGURE and DATA without logging i
       emitted[0].data.plugins.some((plugin) => plugin.id === "grid"),
       true,
     );
+    assert.equal(emitted[0].data.moduleVersion, require("../package.json").version);
     const { students, allFailed } = emitted[1].data;
     assert.equal(allFailed, false);
     assert.equal(students.length, 1);
@@ -1838,7 +1841,7 @@ test("a missing demo fixture fails CONFIGURE with a config error", async () => {
 });
 
 test("a re-login logs the session it replaces out, but not one with the same cookies", async () => {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
   const logouts = [];
   service.httpClient.logout = async (server, school, cookies) => {
@@ -1856,7 +1859,7 @@ test("a re-login logs the session it replaces out, but not one with the same coo
 });
 
 test("a credentials login keeps school and server in the cache, so the session can be logged out later", async () => {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
   service.httpClient.authenticateWithCredentials = async () => ({ cookies: "c" });
   service.httpClient.getBearerToken = async () => "t";
@@ -1873,7 +1876,7 @@ test("a credentials login keeps school and server in the cache, so the session c
 });
 
 function createRenewalService({ renewToken }) {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const lines = [];
   const service = new AuthService({ logger: (level, message) => lines.push({ level, message }) });
   const calls = { renew: 0, login: 0 };
@@ -1881,7 +1884,7 @@ function createRenewalService({ renewToken }) {
     calls.renew += 1;
     return renewToken();
   };
-  service._performAuth = async () => {
+  service._performAuthFromCredentials = async () => {
     calls.login += 1;
     return { token: "login-token", cookieString: "c", school: "s", server: "srv" };
   };
@@ -1985,10 +1988,10 @@ test("auth failures do not feed the circuit breaker, other failures still do", (
 });
 
 function createFailingLoginService() {
-  const { AuthService } = require("../lib/webuntisClient");
+  const AuthService = require("../lib/webuntis/authService");
   const service = new AuthService({ logger: () => {} });
   const attempts = { count: 0, fail: true };
-  service._performAuth = async () => {
+  service._performAuthFromCredentials = async () => {
     attempts.count += 1;
     if (attempts.fail) throw new Error("Credentials authentication failed: 200 - bad credentials");
     return { token: "t", cookieString: "c", school: "s", server: "srv" };
@@ -2040,7 +2043,7 @@ test("a failed login does not block another account", async () => {
 
 test("the auth session keeps the password, so the login after a 401 is sent with real credentials", async () => {
   const { createAuthSession } = require("../lib/authSession");
-  const { WebUntisClient } = require("../lib/webuntisClient");
+  const WebUntisClient = require("../lib/webuntis/webuntisClient");
   const logins = [];
   const authService = {
     getAuth: async (params) => {
@@ -2080,4 +2083,24 @@ test("the default updateInterval keeps a single instance's WebUntis session warm
     updateInterval * 1.1 < 4.6 * 60 * 1000,
     `updateInterval ${updateInterval} ms can exceed the session's idle limit`,
   );
+});
+
+test("plugin translations are requested with the module version CONFIGURED reported", async (t) => {
+  const urls = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    urls.push(url);
+    return { status: 404, ok: false };
+  });
+  delete globalThis.MMMWebuntisPluginTranslations;
+  const instance = Object.create(frontend);
+  instance.file = (relative) => `/modules/MMM-Webuntis/${relative}`;
+  instance._log = () => {};
+  instance.lifecycle = { render() {} };
+  instance._initializeActivePlugins = async () => {};
+
+  instance._handleConfigured({ plugins: [], moduleVersion: "9.8.7" });
+  await instance._fetchPluginTranslationFile("exams", "plugins/exams", "de");
+
+  assert.deepEqual(urls, ["/modules/MMM-Webuntis/plugins/exams/translations/de.json?v=9.8.7"]);
+  delete globalThis.MMMWebuntisPluginTranslations;
 });

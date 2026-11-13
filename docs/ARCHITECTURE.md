@@ -25,7 +25,7 @@ flowchart LR
     NH[node_helper.js]
     PB[lib/pluginHostBackend.js]
     PL[lib/pluginLoader.js]
-    FACADE[lib/webuntisClient.js]
+    FACADE[lib/payloadClient.js]
     CORE[lib/webuntis/*]
     BUILD[lib/mmm-adapter/*]
     API[WebUntis REST and JSON-RPC]
@@ -56,7 +56,7 @@ Files:
 - `lib/mmm-shared/mmm-shared.js` (git submodule, see [Shared Submodule](#shared-submodule))
 - `plugins/*/frontend.js`
 - `plugins/*/translations/*.json`
-- `MMM-Webuntis.css`
+- `MMM-Webuntis.css` (variables, popover, warnings, shared rows) and `plugins/*/styles.css` (each widget's own rules)
 
 Responsibilities:
 - send `CONFIGURE` (full config, once) and `SESSION_STATE` (`active` / `paused`) - nothing else; the backend owns the fetch schedule
@@ -78,7 +78,7 @@ Files:
 - `lib/studentDiscovery.js` - parent-account student auto-discovery
 - `lib/warningUtils.js` - warning classification, group collectors, payload merge
 - `lib/pluginLoader.js`, `lib/pluginHostBackend.js`, `lib/pluginCapabilityResolver.js`, `lib/pluginManifestValidator.js`, `lib/pluginValidationUtils.js`
-- `lib/webuntisClient.js` - public facade: fetch plan + core client + payload mapping
+- `lib/payloadClient.js` - fetch plan (`buildFetchPlan`) + `PayloadClient` (core client plus payload mapping)
 - `lib/configValidator.js`
 - `lib/studentConfigValidator.js` (student credentials only; plugin config is validated by the plugins)
 - `lib/runtime-utils.js`
@@ -167,8 +167,8 @@ instance share one fetch cycle.
 4. On schedule the hub calls `fetchInstance()`. `lib/studentDiscovery.js` auto-discovers students for
    parent accounts first (may log in; retried by every fetch until it worked), then the students are
    grouped by credential key and each group is fetched.
-5. `webuntisClient` and `dataFetchOrchestrator` run the fetch flow.
-6. `lib/webuntisClient.js` maps the normalized bundle into one student payload, including
+5. `lib/webuntis/webuntisClient.js` and `dataFetchOrchestrator` run the fetch flow.
+6. `lib/payloadClient.js` maps the normalized bundle into one student payload, including
    `state.collections` (per-collection `ok` / `unavailable` / `disabled`).
 7. `fetchInstance()` returns `{ students, allFailed, warnings }`; the hub pushes it as `DATA`
    (or `FETCH_FAILED` when the fetch threw). `allFailed` counts as a failed fetch and grows the retry

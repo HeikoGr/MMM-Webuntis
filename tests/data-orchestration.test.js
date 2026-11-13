@@ -81,12 +81,11 @@ test("richTextToPlainText decodes entities once every tag is gone", () => {
   assert.equal(richTextToPlainText("&lt;b&gt;"), "<b>");
 });
 
-test("holidays come from app/data in either shape and are compacted", () => {
+test("holidays come from the compacted app/data and are compacted", () => {
   const raw = [{ id: 1, shortName: "HF", longName: "Herbstferien", start: "2026-10-26", end: "2026-10-30" }];
   const compacted = [{ id: 1, name: "HF", longName: "Herbstferien", startDate: 20261026, endDate: 20261030 }];
   assert.deepEqual(compactHolidays(raw), compacted);
   assert.deepEqual(extractHolidaysFromAppData({ holidays: raw }), compacted);
-  assert.deepEqual(extractHolidaysFromAppData({ data: { holidays: raw } }), compacted);
   assert.deepEqual(extractHolidaysFromAppData(null), []);
   assert.deepEqual(extractHolidaysFromAppData({}), []);
   assert.deepEqual(compactHolidays("nope"), []);
@@ -190,6 +189,11 @@ test("calculateFetchRanges: homework covers every range in use, at least four we
     homework({ fetchPlan: { fetchExams: true }, days: { examsNextDays: 40 } }).futureDays,
     40,
     "exam range is wider",
+  );
+  assert.equal(
+    homework({ fetchPlan: { fetchExams: true, wantsGridWidget: true }, days: { gridNextDays: 10 } }).futureDays,
+    21,
+    "the exams' three-week fallback counts too, not only a configured examsNextDays",
   );
   assert.deepEqual(
     (({ pastDays, futureDays }) => ({ pastDays, futureDays }))(

@@ -507,11 +507,6 @@
     0 1px 1px var(--wu-icon-chip-shadow);
 }
 
-.wu-plugin-grid .grid-combined .homework-icon,
-.wu-plugin-grid .lesson-content .homework-icon {
-  font-size: var(--wu-icon-glyph-size-emoji);
-}
-
 .wu-plugin-grid .lesson-changed-generic-badge,
 .wu-plugin-grid .lesson-moved-badge {
   vertical-align: middle;

@@ -52,7 +52,8 @@ Allowed variations:
 - `entry.frontend` may list several scripts, loaded one after another in that order: a helper file
   first, the file that calls `registerFrontendPlugin()` last (the grid ships `["layout.js", "frontend.js"]`)
 - `backend.js` is optional
-- `styles.css` is optional and may be a list of CSS files
+- `styles.css` is optional and may be a list of CSS files. It is loaded after `MMM-Webuntis.css`; a
+  widget's rules belong here only, not a second time in `MMM-Webuntis.css`
 - `translations/` is optional (see [Translations](#translations))
 
 All manifest entry paths must:
@@ -166,7 +167,7 @@ config.js (served by MagicMirror at page load)
 
 A new plugin option needs only its default in `getDefaultConfig()` (plus its check in
 `validateConfig()`). No mapping or whitelist has to learn it. A backend that reads it for fetching
-gets it from the same canonical map (`webuntisClient.buildFetchPlan()` → `pluginConfig(id)`).
+gets it from the same canonical map (`payloadClient.buildFetchPlan()` → `pluginConfig(id)`).
 
 **Pitfall: a changed `config.js` seems to be ignored.** The backend keeps the config of the
 first client that configures an instance. A later client with a different config is answered with
@@ -296,16 +297,17 @@ Frontend definition shape:
 | `translate(key, fallback, replacements)` | Plugin-scoped translation lookup, see [Translations](#translations) |
 | `log(level, message, meta)` | Logger prefixed with `[plugin:<id>]` |
 | `dom` | `el`, `createElement`, `iconSpan`, `multilineNodes`, `headerTitleNodes`, `richTextNodes`, `createContainer`, `addHeader`, `addRow`, `addFullRow` (see [Building markup](#building-markup)) |
-| `time` | `getCurrentDateContext`, `currentTimeAsHHMM`, `toMinutesSinceMidnight`, `DEFAULT_TIMEZONE` |
+| `time` | `getCurrentDateContext`, `usesLiveClock`, `currentTimeAsHHMM`, `toMinutesSinceMidnight`, `DEFAULT_TIMEZONE` |
 | `formatting` | `formatDisplayDate`, `formatDisplayTime`, `formatYmd` |
+| `widget` | `resolveStudentConfig`, `isVerboseMode`, `normalizeDays`, `getFieldDisplayName`, `getFirstFieldName`, `compareByDateAndStartTime` - what the widget plugins share instead of copying |
 | `shared` | The full `window.MMMWebuntisFrontendShared` object as an escape hatch |
 
-The four namespaces are forwarded verbatim from `window.MMMWebuntisFrontendShared`, which owns the
+The five namespaces are forwarded verbatim from `window.MMMWebuntisFrontendShared`, which owns the
 grouping (`lib/frontendShared.js`). `shared.util` continues to expose every helper, including those
 not surfaced in a namespace.
 
 Always use `pluginContext.*` instead of reaching for the global directly. The first-party plugins do:
-the small ones take `dom`/`time`/`formatting` in each function, `lessons` and `grid` build their
+the small ones take `dom`/`formatting`/`widget` in each function, `lessons` and `grid` build their
 renderer per instance from `pluginContext.shared` (`createLessonsRenderer`, `createGridRenderer`).
 
 ### Building markup
