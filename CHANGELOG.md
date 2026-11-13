@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.16.0...v0.16.1) (2026-11-13)
+
+
+### 🐛 Fixes
+
+* log failed logins, write the raw app/data dump, remove dead code paths ([#172](https://github.com/HeikoGr/MMM-Webuntis/issues/172)) ([b181a8a](https://github.com/HeikoGr/MMM-Webuntis/commit/b181a8ab15f5566814a78d4cd414a9abbdaf2697))
+
 ## [0.16.0](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.15.11...v0.16.0) (2026-11-12)
 
 
