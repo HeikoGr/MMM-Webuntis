@@ -8,7 +8,7 @@ const { FakeElement, FakeText, loadFrontendShared, loadPlugin, pluginContextFor 
  * Node: the stub records what the plugin hands to the rich-text parser and returns it as one text
  * node, so the test sees exactly which string would be parsed and nothing else is.
  */
-function renderMessages(messages) {
+function renderMessages(messages, translate = (_key, fallback) => fallback) {
   const parsed = [];
   class DOMParser {
     parseFromString(html) {
@@ -18,7 +18,7 @@ function renderMessages(messages) {
   }
   const context = loadFrontendShared({ DOMParser });
   const plugin = loadPlugin(context, "messagesofday");
-  const section = plugin.create(pluginContextFor(context, { translate: (_key, fallback) => fallback })).render({
+  const section = plugin.create(pluginContextFor(context, { translate })).render({
     students: [{ student: { title: "Kind" }, data: { messages } }],
   });
   return { section, parsed };
@@ -48,6 +48,14 @@ test("line breaks of a message of the day are rendered", () => {
   assert.equal(parsed.length, 1);
   assert.ok(parsed[0].startsWith("Zeile 1"));
   assert.ok(parsed[0].endsWith("<br>Zeile 3"), parsed[0]);
+});
+
+test("the header filter label is translated like the other widgets", () => {
+  const german = { messagesofday: "Tagesnachrichten", widget_filter_all: "alle" };
+  const { section } = renderMessages([], (key, fallback) => german[key] ?? fallback);
+
+  const header = section.findAll("div").find((div) => div.className.includes("wu-row-header"));
+  assert.equal(header.textContent, "Tagesnachrichten (alle)");
 });
 
 test("a message without text shows the placeholder, parsed by nobody", () => {
