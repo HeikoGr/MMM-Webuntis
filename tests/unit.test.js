@@ -1486,6 +1486,38 @@ test("DATA_UPDATE payload applies excludeLessons and addLessons (student overrid
   );
 });
 
+test("the browser payload carries no server details and no backend-only config keys", () => {
+  const payload = mapBundleToMmmPayload(
+    {
+      identifier: "mod1",
+      student: { title: "A", carouselId: "wu1", __legacyUsed: ["days"], password: "pw" },
+      config: {},
+      compactHolidays: [],
+      coreData: {
+        dateRanges: { timetable: { start: new Date(2026, 8, 21), end: new Date(2026, 8, 25) } },
+        todayYmd: 20260921,
+        activeHoliday: null,
+        fetchFlags: { fetchTimetable: true },
+        apiStatus: {},
+        apiRecords: {},
+        configWarnings: [],
+        data: { grid: [], timetable: [], rawExams: [], hwResult: [], rawAbsences: [], rawMessagesOfDay: [] },
+      },
+    },
+    { mmLog: () => {} },
+  );
+
+  for (const key of ["hostname", "pid", "platform", "arch", "nodeVersion", "fetchedAt"]) {
+    assert.equal(key in payload.meta, false, `meta.${key} stays in the debug dump`);
+  }
+  // Required by the plugin contract (docs/API_V3_MANIFEST.md).
+  assert.deepEqual(Object.keys(payload.meta).sort(), ["apiVersion", "generatedAt", "identifier", "moduleVersion"]);
+  assert.deepEqual(payload.context.range, { startYmd: 20260921, endYmd: 20260925 });
+  for (const key of ["carouselId", "__legacyUsed", "password"]) {
+    assert.equal(key in payload.context.config, false, `context.config.${key}`);
+  }
+});
+
 test("excludeLessons also hides homework and exams of the excluded subjects", () => {
   const payload = mapBundleToMmmPayload(
     {
