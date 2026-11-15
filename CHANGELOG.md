@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.16.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.16.1...v0.16.2) (2026-11-15)
+
+
+### 🐛 Fixes
+
+* resolve module translations without the core Translator global ([#175](https://github.com/HeikoGr/MMM-Webuntis/issues/175)) ([8e88cfc](https://github.com/HeikoGr/MMM-Webuntis/commit/8e88cfc32097b9fa92d3e6609246cb0ebf103d4d))
+
+
+### 🧱 Refactoring
+
+* keep server details out of the browser payload and drop fallback defaults ([#176](https://github.com/HeikoGr/MMM-Webuntis/issues/176)) ([b3503cc](https://github.com/HeikoGr/MMM-Webuntis/commit/b3503ccab5aea9d5bbae43887e3ae2ca999ac4eb))
+
+
+### 🔧 Maintenance
+
+* update mmm-shared and trust GitHub's published SSH host keys ([#177](https://github.com/HeikoGr/MMM-Webuntis/issues/177)) ([020666d](https://github.com/HeikoGr/MMM-Webuntis/commit/020666d9aa05e0885454273594345203bbb1cb20))
+
 ## [0.16.1](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.16.0...v0.16.1) (2026-11-13)
 
 
