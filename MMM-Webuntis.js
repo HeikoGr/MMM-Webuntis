@@ -155,29 +155,23 @@ Module.register("MMM-Webuntis", {
 
   /**
    * Whether MagicMirror knows a translation for `key` (module or core, any loaded language).
-   * translate() returns the key itself for a missing entry, so a translation that equals its key
-   * ("homework": "homework") can only be told apart by looking it up.
+   *
+   * translate() returns the key itself for a missing entry. The core's translation tables are not
+   * reachable from a module (the Translator is an ES module export, and in Chrome the global
+   * `Translator` is the browser's own translation API), so a translation that equals its key counts
+   * as missing. No module table has such an entry; plugin tables are looked up before this.
    *
    * @param {string} key - Translation key
    * @returns {boolean} True when a translation exists
    */
   _hasModuleTranslation(key) {
-    const translator = typeof Translator !== "undefined" ? Translator : null;
-    if (!translator) {
-      const translated = this.translate(key);
-      return Boolean(translated) && translated !== key;
-    }
-    return [
-      translator.translations?.[this.name],
-      translator.coreTranslations,
-      translator.translationsFallback?.[this.name],
-      translator.coreTranslationsFallback,
-    ].some((table) => table && Object.hasOwn(table, key));
+    const translated = this.translate(key);
+    return Boolean(translated) && translated !== key;
   },
 
   _getPluginTranslationLoadOrder() {
     const configuredLanguage = String(
-      // MagicMirror's config is a global `let` in the browser, not a globalThis property.
+      // MagicMirror's config is a browser global (`config`).
       (typeof config !== "undefined" && config?.language) || this.config?.language || navigator?.language || "en",
     ).trim();
     const normalizedLanguage = configuredLanguage || "en";

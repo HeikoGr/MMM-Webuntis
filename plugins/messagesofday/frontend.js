@@ -23,7 +23,11 @@
 
       const buildHeaderTitle = (studentTitle = "") => {
         const student = String(studentTitle || "").trim();
-        return headerTitleNodes(translate("messagesofday", "Messages of the Day"), student ? `${student}, all` : "all");
+        const all = translate("widget_filter_all", "all");
+        return headerTitleNodes(
+          translate("messagesofday", "Messages of the Day"),
+          student ? `${student}, ${all}` : all,
+        );
       };
 
       /** Container with header and a grid for its rows. */

@@ -107,16 +107,24 @@ test("instances in one window share the plugin translation requests and load the
   }
 });
 
-test("the host keeps a MagicMirror translation that equals its key and falls back only for missing keys", () => {
-  const definition = loadFrontend(
-    'const Translator = { translations: { "MMM-Webuntis": { homework: "homework" } }, coreTranslations: {} };',
-  );
-  const moduleInstance = {
-    ...definition,
-    name: "MMM-Webuntis",
-    translate: (key) => ({ homework: "homework" })[key] ?? key,
-  };
+// MagicMirror 2.38 keeps its Translator in an ES module; the only global `Translator` a module can
+// see is Chrome's own translation API (a function without translation tables).
+for (const [label, globals] of [
+  ["Chrome's built-in Translator API", "function Translator() {} Translator.create = () => {};"],
+  ["no global Translator", ""],
+]) {
+  test(`module translations reach plugins with ${label}, missing keys fall back`, () => {
+    const definition = loadFrontend(`let config = { language: "de" }; ${globals}`);
+    const german = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "translations", "de.json"), "utf8"));
+    const moduleInstance = {
+      ...definition,
+      name: "MMM-Webuntis",
+      // MagicMirror's Module.translate(): the key itself when there is no translation.
+      translate: (key) => german[key] ?? key,
+    };
 
-  assert.equal(moduleInstance._translatePluginKey("homework", "homework", "Homework"), "homework");
-  assert.equal(moduleInstance._translatePluginKey("homework", "missing_key", "Fallback"), "Fallback");
-});
+    assert.equal(moduleInstance._translatePluginKey("grid", "widget_timetable", "Timetable"), "Stundenplan");
+    assert.equal(moduleInstance._translatePluginKey("exams", "widget_filter_days", "days"), "Tage");
+    assert.equal(moduleInstance._translatePluginKey("grid", "missing_key", "Fallback"), "Fallback");
+  });
+}
