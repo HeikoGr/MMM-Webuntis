@@ -41,7 +41,7 @@
   },
   "dependencies": {
     "entities": "^9.0.0",
-    "sanitize-html": "^2.18.1"
+    "sanitize-html": "^2.18.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7"
