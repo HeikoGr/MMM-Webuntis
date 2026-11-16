@@ -1,6 +1,6 @@
 {
   "name": "mmm-webuntis",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "private": true,
   "description": "MagicMirror module to access Webuntis school timetables.",
   "keywords": [
@@ -41,9 +41,9 @@
   },
   "dependencies": {
     "entities": "^9.0.0",
-    "sanitize-html": "^2.18.1"
+    "sanitize-html": "^2.18.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.6"
+    "@biomejs/biome": "^2.6.7"
   }
 }

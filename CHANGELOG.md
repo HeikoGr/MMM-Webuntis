@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.3](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.16.2...v0.16.3) (2026-11-16)
+
+
+### 🔧 Maintenance
+
+* **deps-dev:** bump @biomejs/biome from 2.6.6 to 2.6.7 in the npm-development group ([#180](https://github.com/HeikoGr/MMM-Webuntis/issues/180)) ([576479e](https://github.com/HeikoGr/MMM-Webuntis/commit/576479e07919c616766ac84db270b056de1430a5))
+* **deps:** bump sanitize-html from 2.18.1 to 2.18.2 in the npm-production group across 1 directory ([#181](https://github.com/HeikoGr/MMM-Webuntis/issues/181)) ([ee7dafd](https://github.com/HeikoGr/MMM-Webuntis/commit/ee7dafd3d332407fc7456cf3666aa035aafed98a))
+
 ## [0.16.2](https://github.com/HeikoGr/MMM-Webuntis/compare/v0.16.1...v0.16.2) (2026-11-15)
 
 
