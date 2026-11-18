@@ -44,6 +44,6 @@
     "sanitize-html": "^2.18.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.7"
+    "@biomejs/biome": "^2.6.8"
   }
 }
